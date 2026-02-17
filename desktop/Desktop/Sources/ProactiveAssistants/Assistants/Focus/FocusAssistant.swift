@@ -87,6 +87,10 @@ actor FocusAssistant: ProactiveAssistant {
 
     // MARK: - Processing
 
+    private func removePendingTask(_ task: Task<Void, Never>) {
+        pendingTasks.remove(task)
+    }
+
     private func startProcessing() {
         isRunning = true
         processingTask = Task {
@@ -100,10 +104,16 @@ actor FocusAssistant: ProactiveAssistant {
         for await frame in frameStream {
             guard isRunning else { break }
             // Fire off analysis in background (don't wait) - like Python version
-            let task = Task {
-                await self.processFrame(frame)
+            let task = Task { [weak self] () -> Void in
+                await self?.processFrame(frame)
             }
             pendingTasks.insert(task)
+
+            // Remove the task from the set after it completes to prevent unbounded growth
+            Task { [weak self] in
+                _ = await task.result
+                await self?.removePendingTask(task)
+            }
         }
 
         // Wait for pending tasks on shutdown
@@ -276,6 +286,14 @@ actor FocusAssistant: ProactiveAssistant {
             FocusStorage.shared.updateCooldownEndTime(nil)
         }
     }
+
+    // MARK: - Diagnostics
+
+    /// Number of pending analysis tasks (for memory diagnostics)
+    var pendingTasksCount: Int { pendingTasks.count }
+
+    /// Number of analysis history entries retained
+    var analysisHistoryCount: Int { analysisHistory.count }
 
     // MARK: - Legacy API (for backward compatibility)
 

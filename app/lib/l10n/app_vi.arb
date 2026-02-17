@@ -2635,5 +2635,17 @@
   "wifiConfigurationSubtitle": "Nhập thông tin WiFi để thiết bị có thể tải xuống firmware.",
   "networkNameSsid": "Tên mạng (SSID)",
   "enterWifiNetworkName": "Nhập tên mạng WiFi",
-  "enterWifiPassword": "Nhập mật khẩu WiFi"
+  "enterWifiPassword": "Nhập mật khẩu WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Đang tải xuống từ thiết bị",
+  "reconnectingToInternet": "Đang kết nối lại internet...",
+  "uploadingToCloud": "Đang tải lên {current}/{total}",
+  "processedStatus": "Đã xử lý",
+  "corruptedStatus": "Bị hỏng",
+  "nPending": "{count} đang chờ",
+  "nProcessed": "{count} đã xử lý",
+  "synced": "Đã đồng bộ",
+  "noPendingRecordings": "Không có bản ghi đang chờ",
+  "noProcessedRecordings": "Chưa có bản ghi nào được xử lý",
+  "pending": "Đang chờ"
 }

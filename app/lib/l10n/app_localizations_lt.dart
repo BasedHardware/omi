@@ -8153,6 +8153,45 @@ class AppLocalizationsLt extends AppLocalizations {
       'Paspauskite ir palaikykite maitinimo mygtuką, kol LED pradės mirksėti. Įrenginys bus aptinkamas.';
 
   @override
+  String get downloadingFromDevice => 'Atsisiunčiama iš įrenginio';
+
+  @override
+  String get reconnectingToInternet => 'Jungiamasi prie interneto iš naujo...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Įkeliama $current iš $total';
+  }
+
+  @override
+  String get processedStatus => 'Apdorota';
+
+  @override
+  String get corruptedStatus => 'Sugadinta';
+
+  @override
+  String nPending(int count) {
+    return '$count laukiančių';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count apdorotų';
+  }
+
+  @override
+  String get synced => 'Sinchronizuota';
+
+  @override
+  String get noPendingRecordings => 'Nėra laukiančių įrašų';
+
+  @override
+  String get noProcessedRecordings => 'Dar nėra apdorotų įrašų';
+
+  @override
+  String get pending => 'Laukiama';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Kas naujo $version';
   }
@@ -8184,4 +8223,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Įveskite WiFi slaptažodį';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

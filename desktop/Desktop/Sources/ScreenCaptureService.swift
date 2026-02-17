@@ -84,6 +84,7 @@ final class ScreenCaptureService: Sendable {
     /// Force re-register this app with Launch Services to ensure it's the authoritative version
     /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
     /// about which app to grant permissions to.
+    /// Runs the process on a background thread to avoid blocking the main thread.
     static func ensureLaunchServicesRegistration() {
         guard let bundlePath = Bundle.main.bundlePath as String? else {
             log("Launch Services: Failed to get bundle path")
@@ -94,8 +95,28 @@ final class ScreenCaptureService: Sendable {
 
         let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
+        DispatchQueue.global(qos: .utility).async {
+            runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+        }
+    }
+
+    /// Synchronous version — call from a background thread when CGRequestScreenCaptureAccess()
+    /// must run after registration completes (e.g. permission trigger flow).
+    static func ensureLaunchServicesRegistrationSync() {
+        guard let bundlePath = Bundle.main.bundlePath as String? else {
+            log("Launch Services: Failed to get bundle path")
+            return
+        }
+
+        log("Launch Services: Re-registering (sync) \(bundlePath)...")
+
+        let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+    }
+
+    private static func runLsregister(path: String, bundlePath: String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: lsregisterPath)
+        process.executableURL = URL(fileURLWithPath: path)
         // -f = force registration even if already registered
         // This makes this specific app bundle authoritative
         process.arguments = ["-f", bundlePath]
@@ -194,39 +215,41 @@ final class ScreenCaptureService: Sendable {
             return
         }
 
-        // First ensure this app is the authoritative version in Launch Services
-        // This fixes issues where tccutil resets permission for a stale app registration
-        ensureLaunchServicesRegistration()
+        let bundleURL = Bundle.main.bundleURL
 
-        let success = resetScreenCapturePermission()
+        // Run blocking Process calls on a background thread
+        Task.detached {
+            // First ensure this app is the authoritative version in Launch Services
+            // This fixes issues where tccutil resets permission for a stale app registration
+            ensureLaunchServicesRegistration()
 
-        // Track reset completion
-        AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
+            let success = resetScreenCapturePermission()
 
-        if success {
-            log("Screen capture permission reset, restarting app...")
+            await MainActor.run {
+                // Track reset completion
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
 
-            guard let bundleURL = Bundle.main.bundleURL as URL? else {
-                log("Failed to get bundle URL for restart")
-                return
-            }
+                if success {
+                    log("Screen capture permission reset, restarting app...")
 
-            // Use a shell script to wait briefly, then relaunch the app
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/sh")
-            task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+                    // Use a shell script to wait briefly, then relaunch the app
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
 
-            do {
-                try task.run()
-                log("Restart scheduled, terminating current instance...")
-                DispatchQueue.main.async {
-                    NSApplication.shared.terminate(nil)
+                    do {
+                        try task.run()
+                        log("Restart scheduled, terminating current instance...")
+                        DispatchQueue.main.async {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    } catch {
+                        logError("Failed to schedule restart", error: error)
+                    }
+                } else {
+                    log("Screen capture permission reset failed")
                 }
-            } catch {
-                logError("Failed to schedule restart", error: error)
             }
-        } else {
-            log("Screen capture permission reset failed")
         }
     }
 
@@ -290,6 +313,9 @@ final class ScreenCaptureService: Sendable {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
+            if focusResult == .apiDisabled || focusResult == .cannotComplete {
+                log("ACCESSIBILITY_AX: getWindowInfoViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck")
+            }
             return nil
         }
 

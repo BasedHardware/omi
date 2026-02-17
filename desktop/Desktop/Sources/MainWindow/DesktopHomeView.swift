@@ -95,9 +95,14 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
                             }
 
-                            // Set up and show floating control bar
-                            FloatingControlBarManager.shared.setup(appState: appState)
-                            FloatingControlBarManager.shared.show()
+                            // Start Crisp chat in background for notifications
+                            CrispManager.shared.start()
+
+                            // Set up floating control bar (only show if user hasn't disabled it)
+                            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: viewModelContainer.chatProvider)
+                            if FloatingControlBarManager.shared.isEnabled {
+                                FloatingControlBarManager.shared.show()
+                            }
 
                             // Set up push-to-talk voice input
                             if let barState = FloatingControlBarManager.shared.barState {
@@ -117,11 +122,11 @@ struct DesktopHomeView: View {
                         }
                         // Refresh conversations when app becomes active (e.g. switching back from another app)
                         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-                            Task { await appState.loadConversations() }
+                            Task { await appState.refreshConversations() }
                         }
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
-                            Task { await appState.loadConversations() }
+                            Task { await appState.refreshConversations() }
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -254,43 +259,16 @@ struct DesktopHomeView: View {
                     .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
 
                 // Page content - switch recreates views on tab change
-                Group {
-                    switch selectedIndex {
-                    case 0:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 1:
-                        // Conversations moved into Dashboard — redirect
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 2:
-                        ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
-                    case 3:
-                        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-                    case 4:
-                        TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
-                    case 5:
-                        FocusPage()
-                    case 6:
-                        AdvicePage()
-                    case 7:
-                        RewindPage(appState: appState)
-                    case 8:
-                        AppsPage(appProvider: viewModelContainer.appProvider)
-                    case 9:
-                        SettingsPage(
-                            appState: appState,
-                            selectedSection: $selectedSettingsSection,
-                            selectedAdvancedSubsection: $selectedAdvancedSubsection
-                        )
-                    case 10:
-                        PermissionsPage(appState: appState)
-                    case 11:
-                        DeviceSettingsPage()
-                    case 12:
-                        HelpPage()
-                    default:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    }
-                }
+                // Extracted into a separate struct so that pages like TasksPage
+                // are not re-rendered when AppState publishes unrelated changes.
+                PageContentView(
+                    selectedIndex: selectedIndex,
+                    appState: appState,
+                    viewModelContainer: viewModelContainer,
+                    selectedSettingsSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    selectedTabIndex: $selectedIndex
+                )
                 .id(selectedIndex)
                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                 .animation(.easeInOut(duration: 0.2), value: selectedIndex)
@@ -324,6 +302,19 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.settings.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
+            selectedSettingsSection = .aiChat
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.settings.rawValue
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
             // Navigate to Rewind page (index 6) - triggered by global hotkey Cmd+Option+R
             log("DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))")
@@ -341,6 +332,58 @@ struct DesktopHomeView: View {
         }
         .onAppear {
             updateStoreActivity(for: selectedIndex)
+        }
+    }
+}
+
+/// Isolated page content switch — does NOT observe AppState or ViewModelContainer
+/// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
+/// AppState properties (conversations, permissions, etc.) change.
+private struct PageContentView: View {
+    let selectedIndex: Int
+    let appState: AppState
+    let viewModelContainer: ViewModelContainer
+    @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
+    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var selectedTabIndex: Int
+
+    var body: some View {
+        let _ = log("RENDER: PageContentView body evaluated (index=\(selectedIndex))")
+        Group {
+            switch selectedIndex {
+            case 0:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 1:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 2:
+                ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
+            case 3:
+                MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+            case 4:
+                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
+            case 5:
+                FocusPage()
+            case 6:
+                AdvicePage()
+            case 7:
+                RewindPage(appState: appState)
+            case 8:
+                AppsPage(appProvider: viewModelContainer.appProvider)
+            case 9:
+                SettingsPage(
+                    appState: appState,
+                    selectedSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                )
+            case 10:
+                PermissionsPage(appState: appState)
+            case 11:
+                DeviceSettingsPage()
+            case 12:
+                HelpPage()
+            default:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            }
         }
     }
 }

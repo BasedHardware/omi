@@ -2635,5 +2635,17 @@
   "wifiConfigurationSubtitle": "Zadajte prihlasovacie údaje WiFi, aby zariadenie mohlo stiahnuť firmvér.",
   "networkNameSsid": "Názov siete (SSID)",
   "enterWifiNetworkName": "Zadajte názov WiFi siete",
-  "enterWifiPassword": "Zadajte heslo WiFi"
+  "enterWifiPassword": "Zadajte heslo WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Sťahovanie zo zariadenia",
+  "reconnectingToInternet": "Opätovné pripájanie k internetu...",
+  "uploadingToCloud": "Nahrávanie {current} z {total}",
+  "processedStatus": "Spracované",
+  "corruptedStatus": "Poškodené",
+  "nPending": "{count} čakajúcich",
+  "nProcessed": "{count} spracovaných",
+  "synced": "Synchronizované",
+  "noPendingRecordings": "Žiadne čakajúce nahrávky",
+  "noProcessedRecordings": "Zatiaľ žiadne spracované nahrávky",
+  "pending": "Čakajúce"
 }

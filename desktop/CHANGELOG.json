@@ -1,6 +1,107 @@
 {
   "releases": [
     {
+      "version": "0.8.9",
+      "date": "2026-02-16",
+      "changes": [
+        "Compact floating bar: minimizes to a small circle icon, expands on hover for a less intrusive experience",
+        "Native Apple Sign In on macOS with automatic fallback to web-based OAuth",
+        "Real-time agent sync: local data continuously pushed to cloud agent every 3 seconds",
+        "Smarter task extraction: detects your commitments in messaging apps (e.g. 'Sure, I'll do it')",
+        "AI model selector moved from floating bar to Settings for a cleaner in-bar experience",
+        "Chat sessions retry up to 3 times with error state and Retry button on failure",
+        "Goal generation now triggers daily instead of every 100 conversations",
+        "Support chat unread badge on Help tab in sidebar",
+        "Agent sync flushes pending data before system sleep to prevent data loss",
+        "Accessibility permission prompt now opens System Settings directly on macOS Sequoia+"
+      ]
+    },
+    {
+      "version": "0.8.8",
+      "date": "2026-02-16",
+      "changes": [
+        "Accessibility permission reset: detects broken state after macOS updates and offers one-click fix",
+        "Database upgraded to connection pool for better performance during concurrent reads",
+        "Automation permission check now handles System Events not running (fixes -600 error)",
+        "Onboarding no longer blocks on permissions — grant them later from Settings",
+        "Hiding the floating bar now persists across app restarts",
+        "Native notifications when support replies in Help chat",
+        "Faster conversation sync by skipping unchanged sessions"
+      ]
+    },
+    {
+      "version": "0.8.7",
+      "date": "2026-02-16",
+      "changes": [
+        "Multi-turn conversations in floating bar: ask follow-ups and see full chat history with auto-scroll",
+        "Model picker: switch between Sonnet and Opus directly from the floating bar",
+        "Voice follow-up: use push-to-talk while viewing an AI response to continue the conversation",
+        "Batch transcription mode: record first, transcribe after for better accuracy (Settings > Shortcuts)",
+        "Customizable Ask Omi shortcut: choose ⌘Enter, ⌘⇧Enter, ⌘J, or ⌘O (Settings > Shortcuts)",
+        "Push-to-talk sounds can now be toggled off in settings",
+        "AI chat now includes your tasks for more context-aware responses",
+        "Long chat messages are auto-truncated with Show more/less toggle",
+        "Duplicate messages in chat are collapsed automatically",
+        "AI Chat settings gear button added to chat page for quick access",
+        "Shared chat provider between floating bar and sidebar for faster responses",
+        "Fixed constraint loop crash on macOS Tahoe (macOS 26+)"
+      ]
+    },
+    {
+      "version": "0.8.6",
+      "date": "2026-02-15",
+      "changes": [
+        "Ask Omi floating bar now has a follow-up input field for continuing conversations",
+        "Added settings gear icon on the floating bar for quick access to configuration",
+        "New solid background option for the floating bar (Settings > Advanced > Ask Omi Floating Bar)",
+        "Copy entire conversation to clipboard with one click in AI Chat",
+        "Text selection now works across the entire chat area",
+        "Conversations auto-refresh silently without flickering or scroll jumps",
+        "Added auto-install updates option in Settings",
+        "Improved settings search with more keywords and subsections",
+        "Agent bridge now supports read-only Playwright tools in Ask mode"
+      ]
+    },
+    {
+      "version": "0.8.5",
+      "date": "2026-02-15",
+      "changes": [
+        "AI-suggested tasks now clearly marked with a promotion indicator",
+        "Dashboard loads faster by querying tasks directly from local database",
+        "Fixed transcription sessions getting stuck in 'uploading' state after app crashes",
+        "Fixed duplicate conversations when recovering failed uploads",
+        "Improved sidebar performance during audio recording",
+        "Agent sessions now properly detect when coding tasks are complete",
+        "Fixed completed tasks taking up to 60 seconds to refresh in dashboard",
+        "Fixed cursor jumping bug when dismissing modals"
+      ]
+    },
+    {
+      "version": "0.8.4",
+      "date": "2026-02-15",
+      "changes": [
+        "Fixed audio recording quality on Bluetooth headphones (no more automatic switch to low-quality call mode)",
+        "All users now have access to all features",
+        "Improved app startup speed with optimized database checks",
+        "Simplified Rewind page controls",
+        "Fixed database corruption during user data migration",
+        "Fixed memory leaks in Focus Assistant and Live Notes",
+        "Fixed app not staying in menu bar when all windows closed",
+        "Fixed floating control bar auto-showing on startup",
+        "Improved screen capture permission reset reliability",
+        "Added memory diagnostics for performance troubleshooting"
+      ]
+    },
+    {
+      "version": "0.8.3",
+      "date": "2026-02-14",
+      "changes": [
+        "Notifications for promoted tasks so you know when AI discovers new action items",
+        "Fixed tooltip crash in sidebar",
+        "Faster, safer downloads served from Google Cloud Storage"
+      ]
+    },
+    {
       "version": "0.8.2",
       "date": "2026-02-14",
       "changes": [

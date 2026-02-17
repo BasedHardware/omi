@@ -178,6 +178,7 @@ struct SettingsContentView: View {
     @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
     // AI Chat settings
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
     @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
     @State private var aiChatClaudeMdContent: String?
     @State private var aiChatClaudeMdPath: String?
@@ -214,6 +215,7 @@ struct SettingsContentView: View {
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
+        case askOmiFloatingBar = "Ask Omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
 
@@ -227,6 +229,7 @@ struct SettingsContentView: View {
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
             }
@@ -334,6 +337,10 @@ struct SettingsContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
             selectedAdvancedSubsection = .taskAssistant
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -571,6 +578,14 @@ struct SettingsContentView: View {
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
+
+                    // Keyboard shortcuts for font size
+                    VStack(spacing: 6) {
+                        fontShortcutRow(label: "Increase font size", keys: "\u{2318}+")
+                        fontShortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
+                        fontShortcutRow(label: "Reset font size", keys: "\u{2318}0")
+                    }
+                    .padding(.top, 4)
 
                     HStack {
                         Spacer()
@@ -1407,6 +1422,32 @@ struct SettingsContentView: View {
 
     private var aiChatSection: some View {
         VStack(spacing: 20) {
+            // Ask Mode card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Ask Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $askModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+
+                    Text("When enabled, shows an Ask/Act toggle in the chat. Ask mode restricts the AI to read-only actions. When disabled, the AI always runs in Act mode.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
             // CLAUDE.md card
             settingsCard {
                 VStack(alignment: .leading, spacing: 12) {
@@ -1728,6 +1769,8 @@ struct SettingsContentView: View {
                 memoryAssistantSubsection
             case .analysisThrottle:
                 analysisThrottleSubsection
+            case .askOmiFloatingBar:
+                askOmiFloatingBarSubsection
             case .preferences:
                 preferencesSubsection
             case .troubleshooting:
@@ -2821,6 +2864,12 @@ struct SettingsContentView: View {
         }
     }
 
+    private var askOmiFloatingBarSubsection: some View {
+        VStack(spacing: 20) {
+            ShortcutsSettingsSection()
+        }
+    }
+
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
@@ -3250,6 +3299,14 @@ struct SettingsContentView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                     }
+
+                    if updaterViewModel.automaticallyChecksForUpdates {
+                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available") {
+                            Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                        }
+                    }
                 }
             }
 
@@ -3281,6 +3338,22 @@ struct SettingsContentView: View {
     }
 
     // MARK: - Helper Views
+
+    private func fontShortcutRow(label: String, keys: String) -> some View {
+        HStack {
+            Text(label)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            Text(keys)
+                .scaledMonospacedFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+                .cornerRadius(5)
+        }
+    }
 
     private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()

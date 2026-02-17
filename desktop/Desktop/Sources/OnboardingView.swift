@@ -220,7 +220,11 @@ struct OnboardingView: View {
         case 1: return "Click 'Grant Access' and allow Omi to use your microphone for live transcription."
         case 2: return "Click 'Grant Access' and allow notifications so Omi can keep you updated."
         case 3: return "Click 'Grant Access', then find Omi in System Settings and toggle the Accessibility switch ON."
-        case 4: return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
+        case 4:
+            if appState.automationPermissionError != 0 {
+                return "Having trouble? Open System Settings → Privacy & Security → Automation, find Omi and toggle it ON. If Omi isn't listed, try quitting and reopening the app."
+            }
+            return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
         case 5: return "Click 'Grant Access' to allow Omi to connect to Bluetooth wearable devices."
         default: return "All permissions granted! Click Continue to finish setup."
         }
@@ -706,27 +710,34 @@ struct OnboardingView: View {
 
     @ViewBuilder
     private var buttonSection: some View {
-        HStack(spacing: 16) {
-            // Back button (not shown on first step or name step)
-            if currentStep > 0 && currentStep != 1 {
-                Button(action: { currentStep -= 1 }) {
-                    Text("Back")
+        VStack(spacing: 8) {
+            HStack(spacing: 16) {
+                // Back button (not shown on first step or name step)
+                if currentStep > 0 && currentStep != 1 {
+                    Button(action: { currentStep -= 1 }) {
+                        Text("Back")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+
+                // Main action / Continue button
+                Button(action: handleMainAction) {
+                    Text(mainButtonTitle)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
             }
 
-            // Main action / Continue button
-            Button(action: handleMainAction) {
-                Text(mainButtonTitle)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+            if currentStep == 3 && !requiredPermissionsGranted {
+                Text("You can grant permissions later in Settings")
+                    .scaledFont(size: 12)
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(currentStep == 3 && !requiredPermissionsGranted)
         }
         .padding(.horizontal, 40)
         .padding(.bottom, 20)
@@ -798,6 +809,22 @@ struct OnboardingView: View {
             }
             if appState.hasBluetoothPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
+            }
+            // Log skipped permissions
+            if !appState.hasScreenRecordingPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "screen_recording")
+            }
+            if !appState.hasMicrophonePermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "microphone")
+            }
+            if !appState.hasNotificationPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "notifications")
+            }
+            if !appState.hasAccessibilityPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "accessibility")
+            }
+            if !appState.hasAutomationPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "automation")
             }
             // Trigger proactive monitoring if screen recording is granted
             if appState.hasScreenRecordingPermission {

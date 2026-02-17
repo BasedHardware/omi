@@ -442,7 +442,7 @@ struct ChatPrompts {
     <user_context>
     Current date/time in {user_name}'s timezone ({tz}): {current_datetime_str}
     {memories_section}
-    {goal_section}{ai_profile_section}
+    {goal_section}{tasks_section}{ai_profile_section}
     </user_context>
 
     <mentor_behavior>
@@ -818,6 +818,7 @@ struct ChatPromptBuilder {
         userName: String,
         memoriesSection: String = "",
         goalSection: String = "",
+        tasksSection: String = "",
         aiProfileSection: String = "",
         databaseSchema: String = ""
     ) -> String {
@@ -827,6 +828,7 @@ struct ChatPromptBuilder {
             memoriesSection: memoriesSection,
             goalSection: goalSection
         )
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: tasksSection)
         prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: aiProfileSection)
         prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
         return prompt

@@ -8145,6 +8145,45 @@ class AppLocalizationsFi extends AppLocalizations {
   String get pairingDescNeoOne => 'Pidä virtapainiketta painettuna, kunnes LED vilkkuu. Laite on löydettävissä.';
 
   @override
+  String get downloadingFromDevice => 'Ladataan laitteesta';
+
+  @override
+  String get reconnectingToInternet => 'Yhdistetään uudelleen internetiin...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Ladataan $current/$total';
+  }
+
+  @override
+  String get processedStatus => 'Käsitelty';
+
+  @override
+  String get corruptedStatus => 'Vioittunut';
+
+  @override
+  String nPending(int count) {
+    return '$count odottaa';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count käsiteltyä';
+  }
+
+  @override
+  String get synced => 'Synkronoitu';
+
+  @override
+  String get noPendingRecordings => 'Ei odottavia tallenteita';
+
+  @override
+  String get noProcessedRecordings => 'Ei vielä käsiteltyjä tallenteita';
+
+  @override
+  String get pending => 'Odottaa';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Uutta versiossa $version';
   }
@@ -8175,4 +8214,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Syötä WiFi-salasana';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

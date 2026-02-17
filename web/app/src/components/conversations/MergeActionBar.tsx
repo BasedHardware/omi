@@ -35,7 +35,8 @@ export function MergeActionBar({
       exit={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
       transition={inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
-        'flex items-center gap-3',
+        'flex items-center',
+        inline ? 'flex-wrap gap-2' : 'gap-3',
         'px-4 py-2.5 rounded-xl',
         'bg-bg-tertiary/80',
         'border border-bg-tertiary',
@@ -51,11 +52,12 @@ export function MergeActionBar({
         onClick={onCancel}
         disabled={isLoading}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-xl',
+          'flex items-center justify-center gap-2 px-3 py-2 rounded-xl',
           'text-sm font-medium text-text-secondary',
           'hover:bg-bg-tertiary hover:text-text-primary',
           'transition-colors duration-150',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+          inline && 'flex-1'
         )}
       >
         <X className="w-4 h-4" />
@@ -77,12 +79,13 @@ export function MergeActionBar({
           onClick={onMoveToFolder}
           disabled={!canMove || isLoading}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-xl',
+            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
             'text-sm font-medium',
             'transition-all duration-150',
             canMove && !isLoading
               ? 'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+            inline && 'flex-1'
           )}
         >
           <FolderInput className="w-4 h-4" />
@@ -96,12 +99,13 @@ export function MergeActionBar({
           onClick={onDelete}
           disabled={!canDelete || isLoading}
           className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-xl',
+            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
             'text-sm font-medium',
             'transition-all duration-150',
             canDelete && !isLoading
               ? 'bg-error/10 text-error hover:bg-error/20'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+            inline && 'flex-1'
           )}
         >
           <Trash2 className="w-4 h-4" />
@@ -114,12 +118,13 @@ export function MergeActionBar({
         onClick={onMerge}
         disabled={!canMerge || isLoading}
         className={cn(
-          'flex items-center gap-2 px-4 py-2 rounded-xl',
+          'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
           'text-sm font-medium',
           'transition-all duration-150',
           canMerge && !isLoading
             ? 'bg-purple-primary text-white hover:bg-purple-primary/90'
-            : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+            : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
+          inline && 'flex-1'
         )}
       >
         {isLoading ? (

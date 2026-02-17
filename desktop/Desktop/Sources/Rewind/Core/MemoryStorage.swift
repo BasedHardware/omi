@@ -6,7 +6,7 @@ import GRDB
 actor MemoryStorage {
     static let shared = MemoryStorage()
 
-    private var _dbQueue: DatabaseQueue?
+    private var _dbQueue: DatabasePool?
     private var isInitialized = false
 
     private init() {}
@@ -18,7 +18,7 @@ actor MemoryStorage {
     }
 
     /// Ensure database is initialized before use
-    private func ensureInitialized() async throws -> DatabaseQueue {
+    private func ensureInitialized() async throws -> DatabasePool {
         if let db = _dbQueue {
             return db
         }

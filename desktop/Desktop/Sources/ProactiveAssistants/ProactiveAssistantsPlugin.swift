@@ -15,6 +15,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var screenCaptureService: ScreenCaptureService?
     private var windowMonitor: WindowMonitor?
     private var focusAssistant: FocusAssistant?
+
+    /// Public read-only accessor for memory diagnostics
+    var currentFocusAssistant: FocusAssistant? { focusAssistant }
     private var taskAssistant: TaskAssistant?
     private var adviceAssistant: AdviceAssistant?
     private var memoryAssistant: MemoryAssistant?
@@ -30,6 +33,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var currentWindowTitle: String?
     private var lastStatus: FocusStatus?
     private var frameCount = 0
+
+    // Backpressure: prevents unbounded CGImage accumulation (~24MB each) when video
+    // encoding is slower than the capture rate — the primary cause of multi-GB memory growth.
+    private(set) var isProcessingRewindFrame = false
+    private(set) var droppedFrameCount = 0
 
     // Failure tracking for screen capture recovery
     private var consecutiveFailures = 0
@@ -171,39 +179,45 @@ public class ProactiveAssistantsPlugin: NSObject {
     /// Unregistering and re-registering clears the flag, then retries authorization.
     static func repairNotificationRegistration() {
         let appPath = Bundle.main.bundlePath
+        let bundleURL = Bundle.main.bundleURL
         log("Repairing LaunchServices registration for notifications: \(appPath)")
 
         let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-        // Unregister to clear stale/launch-disabled entries
-        let unregister = Process()
-        unregister.executableURL = URL(fileURLWithPath: lsregister)
-        unregister.arguments = ["-u", appPath]
-        try? unregister.run()
-        unregister.waitUntilExit()
+        // Run blocking Process calls on a background thread
+        DispatchQueue.global(qos: .utility).async {
+            // Unregister to clear stale/launch-disabled entries
+            let unregister = Process()
+            unregister.executableURL = URL(fileURLWithPath: lsregister)
+            unregister.arguments = ["-u", appPath]
+            try? unregister.run()
+            unregister.waitUntilExit()
 
-        // Force re-register
-        let register = Process()
-        register.executableURL = URL(fileURLWithPath: lsregister)
-        register.arguments = ["-f", appPath]
-        try? register.run()
-        register.waitUntilExit()
+            // Force re-register
+            let register = Process()
+            register.executableURL = URL(fileURLWithPath: lsregister)
+            register.arguments = ["-f", appPath]
+            try? register.run()
+            register.waitUntilExit()
 
-        // Also re-register via LSRegisterURL
-        if let cfURL = Bundle.main.bundleURL as CFURL? {
-            LSRegisterURL(cfURL, true)
-        }
+            DispatchQueue.main.async {
+                // Also re-register via LSRegisterURL (must be on main thread)
+                if let cfURL = bundleURL as CFURL? {
+                    LSRegisterURL(cfURL, true)
+                }
 
-        log("LaunchServices re-registration complete, retrying notification authorization...")
+                log("LaunchServices re-registration complete, retrying notification authorization...")
 
-        // Retry authorization after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            NSApp.activate(ignoringOtherApps: true)
-            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-                if let error = error {
-                    log("Notification retry after repair failed: \(error.localizedDescription)")
-                } else if granted {
-                    log("Notification permission granted after LaunchServices repair")
+                // Retry authorization after a short delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                        if let error = error {
+                            log("Notification retry after repair failed: \(error.localizedDescription)")
+                        } else if granted {
+                            log("Notification permission granted after LaunchServices repair")
+                        }
+                    }
                 }
             }
         }
@@ -362,6 +376,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         isMonitoring = false
         isStartingMonitoring = false  // Reset in case stop was called during startup
+        isProcessingRewindFrame = false
+        if droppedFrameCount > 0 {
+            log("RewindBackpressure: Session total dropped frames: \(droppedFrameCount)")
+        }
+        droppedFrameCount = 0
         currentApp = nil
         currentWindowID = nil
         currentWindowTitle = nil
@@ -558,14 +577,29 @@ public class ProactiveAssistantsPlugin: NSObject {
                 }
 
                 // Pass CGImage directly to RewindIndexer (only if not excluded from Rewind)
+                // Backpressure: skip this frame if the previous one is still being processed.
+                // Without this, fire-and-forget Tasks queue up holding CGImages (~24MB each),
+                // causing multi-GB memory growth when encoding can't keep up with capture rate.
                 if !isRewindExcluded {
-                    Task {
-                        await RewindIndexer.shared.processFrame(
-                            cgImage: cgImage,
-                            appName: appName,
-                            windowTitle: currentWindowTitle,
-                            captureTime: captureTime
-                        )
+                    if isProcessingRewindFrame {
+                        droppedFrameCount += 1
+                        if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+                            log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
+                        }
+                    } else {
+                        isProcessingRewindFrame = true
+                        let windowTitle = self.currentWindowTitle
+                        Task { [weak self] in
+                            await RewindIndexer.shared.processFrame(
+                                cgImage: cgImage,
+                                appName: appName,
+                                windowTitle: windowTitle,
+                                captureTime: captureTime
+                            )
+                            await MainActor.run {
+                                self?.isProcessingRewindFrame = false
+                            }
+                        }
                     }
                 }
             } else {
@@ -610,8 +644,19 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
             if !isRewindExcluded {
-                Task {
-                    await RewindIndexer.shared.processFrame(frame)
+                if isProcessingRewindFrame {
+                    droppedFrameCount += 1
+                    if droppedFrameCount == 1 || droppedFrameCount % 30 == 0 {
+                        log("RewindBackpressure: Dropped frame (encoder busy), total dropped: \(droppedFrameCount)")
+                    }
+                } else {
+                    isProcessingRewindFrame = true
+                    Task { [weak self] in
+                        await RewindIndexer.shared.processFrame(frame)
+                        await MainActor.run {
+                            self?.isProcessingRewindFrame = false
+                        }
+                    }
                 }
             }
         } else {

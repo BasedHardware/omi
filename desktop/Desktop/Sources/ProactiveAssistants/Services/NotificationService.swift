@@ -195,6 +195,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {
+        // Check permission before attempting delivery to avoid UNErrorDomain code 1 errors
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                guard settings.authorizationStatus == .authorized else {
+                    log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
+                    return
+                }
+
+                self?.deliverNotification(title: title, message: message, assistantId: assistantId, sound: sound)
+            }
+        }
+    }
+
+    private func deliverNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message

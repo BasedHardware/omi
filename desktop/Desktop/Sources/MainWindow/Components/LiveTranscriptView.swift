@@ -18,24 +18,21 @@ struct LiveTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                    ForEach(segments) { segment in
                         LiveSegmentView(
                             segment: segment,
                             formatTime: formatTime,
                             personName: speakerNames[segment.speaker],
                             onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
                         )
-                        .id(index)
                     }
                 }
                 .padding(16)
             }
             .onChange(of: segments.count) { _, _ in
                 // Auto-scroll to bottom when new segments arrive
-                if let lastIndex = segments.indices.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(lastIndex, anchor: .bottom)
-                    }
+                if let last = segments.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
         }

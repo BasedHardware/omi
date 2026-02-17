@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "Masukkan kelayakan WiFi anda untuk membenarkan peranti memuat turun perisian tegar.",
   "networkNameSsid": "Nama Rangkaian (SSID)",
   "enterWifiNetworkName": "Masukkan nama rangkaian WiFi",
-  "enterWifiPassword": "Masukkan kata laluan WiFi"
+  "enterWifiPassword": "Masukkan kata laluan WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Memuat turun dari peranti",
+  "reconnectingToInternet": "Menyambung semula ke internet...",
+  "uploadingToCloud": "Memuat naik {current} daripada {total}",
+  "processedStatus": "Diproses",
+  "corruptedStatus": "Rosak",
+  "nPending": "{count} belum selesai",
+  "nProcessed": "{count} diproses",
+  "synced": "Disegerakkan",
+  "noPendingRecordings": "Tiada rakaman yang belum selesai",
+  "noProcessedRecordings": "Belum ada rakaman yang diproses",
+  "pending": "Belum selesai"
 }

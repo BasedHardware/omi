@@ -5,7 +5,7 @@ import GRDB
 actor RewindDatabase {
     static let shared = RewindDatabase()
 
-    private var dbQueue: DatabaseQueue?
+    private var dbQueue: DatabasePool?
 
     /// Track if we recovered from corruption (for UI notification)
     private(set) var didRecoverFromCorruption = false
@@ -28,6 +28,12 @@ actor RewindDatabase {
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
 
+    /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
+    /// When this hits the threshold, we close the database so the next initialize() attempt
+    /// goes through the full recovery path (WAL cleanup, corruption detection, fresh DB).
+    private var consecutiveQueryIOErrors = 0
+    private let maxQueryIOErrorsBeforeRecovery = 5
+
     // MARK: - Initialization
 
     private init() {}
@@ -35,9 +41,38 @@ actor RewindDatabase {
     /// Whether the database has been successfully initialized
     var isInitialized: Bool { dbQueue != nil }
 
-    /// Get the database queue for other storage actors
-    func getDatabaseQueue() -> DatabaseQueue? {
+    /// Get the database pool for other storage actors
+    func getDatabaseQueue() -> DatabasePool? {
         return dbQueue
+    }
+
+    /// Report a query error from a storage actor or subsystem.
+    /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
+    /// closes the database so the next initialize() call triggers recovery.
+    func reportQueryError(_ error: Error) {
+        guard let dbError = error as? DatabaseError else { return }
+        let code = dbError.resultCode
+        let extendedCode = dbError.extendedResultCode.rawValue
+        let isIOError = code == .SQLITE_IOERR
+        let isCorrupt = code == .SQLITE_CORRUPT
+        let isCorruptFS = extendedCode == 6922
+
+        guard isIOError || isCorrupt || isCorruptFS else { return }
+
+        consecutiveQueryIOErrors += 1
+        if consecutiveQueryIOErrors >= maxQueryIOErrorsBeforeRecovery {
+            logError("RewindDatabase: \(consecutiveQueryIOErrors) consecutive I/O errors during queries, closing database for recovery")
+            close()
+            // Next getDatabaseQueue() returns nil → callers get databaseNotInitialized
+            // Next initialize() call will go through full recovery path
+        }
+    }
+
+    /// Report a successful query, resetting the runtime error counter.
+    func reportQuerySuccess() {
+        if consecutiveQueryIOErrors > 0 {
+            consecutiveQueryIOErrors = 0
+        }
     }
 
     /// Configure the database for a specific user.
@@ -97,6 +132,12 @@ actor RewindDatabase {
         let flagPath = userDir.appendingPathComponent(".omi_running").path
         try? FileManager.default.removeItem(atPath: flagPath)
         log("RewindDatabase: Clean shutdown flagged")
+    }
+
+    /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+    func hadUncleanShutdown() -> Bool {
+        let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
+        return FileManager.default.fileExists(atPath: flagPath)
     }
 
     /// Initialize the database with migrations.
@@ -204,27 +245,78 @@ actor RewindDatabase {
             try db.execute(sql: "PRAGMA busy_timeout = 5000")
         }
 
-        let queue: DatabaseQueue
+        let queue: DatabasePool
         do {
-            queue = try DatabaseQueue(path: dbPath, configuration: config)
+            queue = try DatabasePool(path: dbPath, configuration: config)
         } catch {
             // If opening fails (e.g. disk I/O error on WAL), try once more without WAL files
             log("RewindDatabase: Failed to open database: \(error), cleaning WAL and retrying...")
             removeWALFiles(at: dbPath)
-            queue = try DatabaseQueue(path: dbPath, configuration: config)
+            do {
+                queue = try DatabasePool(path: dbPath, configuration: config)
+            } catch let retryError {
+                // If still failing, check for database corruption:
+                //   - SQLITE_CORRUPT (error 11): malformed database
+                //   - SQLITE_IOERR_CORRUPTFS (extended code 6922): filesystem reports file
+                //     corruption, commonly caused by migrating WAL files to a new path
+                let isCorrupted: Bool
+                if let dbError = retryError as? DatabaseError {
+                    let isCorruptError = dbError.resultCode == .SQLITE_CORRUPT
+                    let isCorruptFS = dbError.extendedResultCode.rawValue == 6922 // SQLITE_IOERR_CORRUPTFS
+                    isCorrupted = isCorruptError || isCorruptFS
+                } else {
+                    isCorrupted = "\(retryError)".contains("malformed")
+                }
+
+                if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+                    log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
+                    try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+                    // Retry with recovered or fresh database
+                    queue = try DatabasePool(path: dbPath, configuration: config)
+                } else {
+                    throw retryError
+                }
+            }
         }
-        dbQueue = queue
+
+        // Post-open health check: verify we can actually run queries on the opened database.
+        // This catches cases where the DB opens successfully (PRAGMAs pass) but data queries
+        // fail with SQLITE_IOERR — e.g., stale WAL files from migration, page-level corruption.
+        var activeQueue = queue
+        do {
+            try await activeQueue.read { db in
+                _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
+            }
+        } catch {
+            if let dbError = error as? DatabaseError,
+               dbError.resultCode == .SQLITE_IOERR || dbError.resultCode == .SQLITE_CORRUPT {
+                log("RewindDatabase: Database opened but queries fail (\(error)), removing WAL and retrying...")
+                removeWALFiles(at: dbPath)
+                let retryQueue = try DatabasePool(path: dbPath, configuration: config)
+                try await retryQueue.read { db in
+                    _ = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master")
+                }
+                activeQueue = retryQueue
+            } else {
+                throw error
+            }
+        }
+
+        dbQueue = activeQueue
         openedForUserId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
+        consecutiveQueryIOErrors = 0
 
-        try migrate(queue)
+        try migrate(activeQueue)
 
-        // Only run expensive integrity check after unclean shutdown (saves ~1.7s on normal launch)
+        // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
+        // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
+        // (N only limits error reporting), so on large databases (e.g. 4+ GB) it can take 60-90s.
         if previousCrashed {
-            log("RewindDatabase: Running integrity check after unclean shutdown...")
-            try verifyDatabaseIntegrity(queue)
+            log("RewindDatabase: Running lightweight integrity check after unclean shutdown...")
+            try verifyDatabaseIntegrity(activeQueue)
         } else {
             // Still log journal mode on clean startup (cheap PRAGMA, no full check)
-            try await queue.read { db in
+            try await activeQueue.read { db in
                 let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
                 log("RewindDatabase: Journal mode is \(journalMode ?? "unknown")")
             }
@@ -276,11 +368,30 @@ actor RewindDatabase {
 
         log("RewindDatabase: Migrating data from \(sourceDir.path) to \(userDir.path)")
 
-        // Items to migrate: omi.db (+ WAL/SHM), Screenshots/, Videos/, .omi_running, backups/
+        // Items to migrate: omi.db, Screenshots/, Videos/, backups/
+        // IMPORTANT: Do NOT move omi.db-wal, omi.db-shm, or .omi_running:
+        //   - WAL/SHM files are path-bound. Moving them to a new directory makes them
+        //     invalid, causing SQLITE_IOERR_CORRUPTFS (error 6922) on the next open.
+        //     SQLite will cleanly recover without stale WAL files.
+        //   - .omi_running would falsely trigger unclean-shutdown recovery at the
+        //     destination, running an expensive integrity check on the migrated DB.
         let itemsToMove = [
-            "omi.db", "omi.db-wal", "omi.db-shm",
-            ".omi_running", "Screenshots", "Videos", "backups",
+            "omi.db", "Screenshots", "Videos", "backups",
         ]
+
+        // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
+        // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
+        // also cause SQLITE_IOERR_CORRUPTFS when SQLite opens the migrated DB.
+        for staleFile in ["omi.db-wal", "omi.db-shm", ".omi_running"] {
+            for dir in [sourceDir, userDir] {
+                let path = dir.appendingPathComponent(staleFile)
+                if fileManager.fileExists(atPath: path.path) {
+                    try? fileManager.removeItem(at: path)
+                    let label = dir == sourceDir ? "source" : "dest"
+                    log("RewindDatabase: Deleted \(staleFile) from \(label) (not migrating)")
+                }
+            }
+        }
 
         for name in itemsToMove {
             let source = sourceDir.appendingPathComponent(name)
@@ -644,13 +755,18 @@ actor RewindDatabase {
     }
 
     /// Verify database integrity after successful initialization
-    private func verifyDatabaseIntegrity(_ queue: DatabaseQueue) throws {
+    private func verifyDatabaseIntegrity(_ queue: DatabasePool) throws {
         try queue.read { db in
-            // Quick integrity check on first page
-            let result = try String.fetchOne(db, sql: "PRAGMA quick_check(1)")
-            if result?.lowercased() != "ok" {
-                throw RewindError.databaseCorrupted(message: result ?? "Unknown integrity error")
-            }
+            // Cheap schema-level check: verify we can read from a core table and the page count.
+            // Avoids PRAGMA quick_check which scans the entire DB (75s+ on 4 GB databases).
+            let pageCount = try Int.fetchOne(db, sql: "PRAGMA page_count") ?? 0
+            let pageSize = try Int.fetchOne(db, sql: "PRAGMA page_size") ?? 0
+            let dbSizeMB = (pageCount * pageSize) / (1024 * 1024)
+            log("RewindDatabase: Database size ~\(dbSizeMB) MB (\(pageCount) pages)")
+
+            // Verify schema is readable by querying sqlite_master
+            let tableCount = try Int.fetchOne(db, sql: "SELECT count(*) FROM sqlite_master WHERE type='table'") ?? 0
+            log("RewindDatabase: Schema OK (\(tableCount) tables)")
 
             // Log journal mode (WAL preferred, but may fall back to delete/rollback)
             let journalMode = try String.fetchOne(db, sql: "PRAGMA journal_mode")
@@ -665,7 +781,7 @@ actor RewindDatabase {
 
     // MARK: - Migrations
 
-    private func migrate(_ queue: DatabaseQueue) throws {
+    private func migrate(_ queue: DatabasePool) throws {
         var migrator = DatabaseMigrator()
 
         // Migration 1: Create screenshots table
@@ -1851,6 +1967,10 @@ actor RewindDatabase {
             """)
 
             print("[RewindDatabase] Migration: Deleted \(deleted) orphaned unsynced memories with synced duplicates")
+        }
+
+        migrator.registerMigration("addActionItemFromStaged") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN fromStaged BOOLEAN NOT NULL DEFAULT 0")
         }
 
         try migrator.migrate(queue)

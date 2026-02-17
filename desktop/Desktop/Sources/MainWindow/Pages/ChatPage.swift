@@ -109,6 +109,7 @@ struct ChatPage: View {
     @State private var selectedCitation: Citation?
     @State private var citedConversation: ServerConversation?
     @State private var isLoadingCitation = false
+    @State private var copied = false
 
     var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -301,6 +302,19 @@ struct ChatPage: View {
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(8)
 
+            // Copy conversation button
+            if !chatProvider.messages.isEmpty {
+                Button(action: {
+                    copyConversation()
+                }) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 14)
+                        .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy conversation")
+            }
+
             // Clear chat button
             if !chatProvider.messages.isEmpty {
                 Button(action: {
@@ -333,6 +347,17 @@ struct ChatPage: View {
                     )
                 }
             }
+
+            // AI Chat settings button
+            Button(action: {
+                NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
+            }) {
+                Image(systemName: "gear")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("AI Chat settings")
         }
     }
 
@@ -353,6 +378,8 @@ struct ChatPage: View {
             onCitationTap: { citation in
                 handleCitationTap(citation)
             },
+            sessionsLoadError: chatProvider.sessionsLoadError,
+            onRetry: { Task { await chatProvider.retryLoad() } },
             welcomeContent: { welcomeMessage }
         )
     }
@@ -414,7 +441,7 @@ struct ChatPage: View {
     private var inputArea: some View {
         ChatInputView(
             onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil)
+                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
                 Task { await chatProvider.sendMessage(text) }
             },
             onFollowUp: { text in
@@ -426,6 +453,22 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             mode: $chatProvider.chatMode
         )
+    }
+
+    /// Copy the entire conversation to clipboard
+    private func copyConversation() {
+        let text: String = chatProvider.messages.map { message in
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            return "\(sender): \(message.text)"
+        }.joined(separator: "\n\n")
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copied = false
+        }
     }
 
     /// Handle tapping on a citation card
@@ -465,8 +508,26 @@ struct ChatBubble: View {
     let app: OmiApp?
     let onRate: (Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var isDuplicate: Bool = false
 
     @State private var isHovering = false
+    @State private var isExpanded = false
+
+    /// Messages longer than this are truncated with a "Show more" button
+    private static let truncationThreshold = 500
+
+    /// Whether this message should be truncated
+    private var shouldTruncate: Bool {
+        !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    }
+
+    /// The text to display (truncated or full)
+    private var displayText: String {
+        if shouldTruncate {
+            return String(message.text.prefix(Self.truncationThreshold)) + "…"
+        }
+        return message.text
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -512,7 +573,6 @@ struct ChatBubble: View {
                             if !text.isEmpty {
                                 Markdown(text)
                                     .scaledMarkdownTheme(.ai)
-                                    .textSelection(.enabled)
                                     .if_available_writingToolsNone()
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
@@ -533,16 +593,45 @@ struct ChatBubble: View {
                             TypingIndicator()
                         }
                     }
+                } else if isDuplicate && !isExpanded {
+                    // Collapsed duplicate message
+                    Button(action: { isExpanded = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc")
+                                .scaledFont(size: 11)
+                            Text("Duplicate message")
+                                .scaledFont(size: 12)
+                            Image(systemName: "chevron.down")
+                                .scaledFont(size: 9)
+                        }
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .cornerRadius(18)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     // User messages or AI messages without content blocks (loaded from Firestore)
-                    Markdown(message.text)
-                        .scaledMarkdownTheme(message.sender)
-                        .textSelection(.enabled)
-                        .if_available_writingToolsNone()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                        .cornerRadius(18)
+                    VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+                        Markdown(displayText)
+                            .scaledMarkdownTheme(message.sender)
+                            .if_available_writingToolsNone()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                            .cornerRadius(18)
+
+                        // Show more / Show less toggle for long messages
+                        if message.text.count > Self.truncationThreshold {
+                            Button(action: { isExpanded.toggle() }) {
+                                Text(isExpanded ? "Show less" : "Show more (\(message.text.count) chars)")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.purplePrimary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 // Citation cards for AI messages with citations
@@ -700,7 +789,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(10)
-                                .textSelection(.enabled)
                         }
                     }
 
@@ -715,7 +803,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(15)
-                                .textSelection(.enabled)
                         }
                     }
                 }
@@ -773,7 +860,6 @@ struct ThinkingBlock: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .italic()
-                    .textSelection(.enabled)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .lineLimit(30)

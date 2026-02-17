@@ -44,12 +44,15 @@ struct TaskChatPanel: View {
                     onRate: { messageId, rating in
                         Task { await chatProvider.rateMessage(messageId, rating: rating) }
                     },
+                    sessionsLoadError: chatProvider.sessionsLoadError,
+                    onRetry: { Task { await chatProvider.retryLoad() } },
                     welcomeContent: { taskWelcome }
                 )
 
                 // Input area
                 ChatInputView(
                     onSend: { text in
+                        AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                         Task { await chatProvider.sendMessage(text) }
                     },
                     onFollowUp: { text in

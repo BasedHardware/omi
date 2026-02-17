@@ -64,6 +64,9 @@ pub struct ActionItemDB {
     /// Indent level (0-3)
     #[serde(default)]
     pub indent_level: Option<i32>,
+    /// Whether this task was promoted from staged_tasks
+    #[serde(default)]
+    pub from_staged: Option<bool>,
 }
 
 /// Request body for updating an action item

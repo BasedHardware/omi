@@ -263,7 +263,7 @@ enum ChatMode: String, CaseIterable {
 @MainActor
 class ChatProvider: ObservableObject {
     // MARK: - Published State
-    @Published var chatMode: ChatMode = .ask
+    @Published var chatMode: ChatMode = .act
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
@@ -271,6 +271,7 @@ class ChatProvider: ObservableObject {
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
     @Published var errorMessage: String?
+    @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
     @Published var hasMoreMessages = false
     @Published var isLoadingMoreMessages = false
@@ -289,6 +290,11 @@ class ChatProvider: ObservableObject {
     /// to the correct session instead of the default chat.
     var overrideAppId: String?
 
+    /// Override the Claude model for this provider's queries.
+    /// When set, the bridge uses this model instead of the default (Opus).
+    /// e.g. "claude-sonnet-4-5-20250929" for faster floating bar responses.
+    var modelOverride: String?
+
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
@@ -297,6 +303,15 @@ class ChatProvider: ObservableObject {
     private var bridgeStarted = false
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
+
+    // MARK: - Streaming Buffer
+    /// Accumulates text deltas during streaming and flushes them to the published
+    /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
+    private var streamingTextBuffer: String = ""
+    private var streamingThinkingBuffer: String = ""
+    private var streamingBufferMessageId: String?
+    private var streamingFlushWorkItem: DispatchWorkItem?
+    private let streamingFlushInterval: TimeInterval = 0.1
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
@@ -325,6 +340,8 @@ class ChatProvider: ObservableObject {
     private var memoriesLoaded = false
     private var cachedGoals: [Goal] = []
     private var goalsLoaded = false
+    private var cachedTasks: [TaskActionItem] = []
+    private var tasksLoaded = false
     private var cachedAIProfile: String = ""
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
@@ -364,6 +381,11 @@ class ChatProvider: ObservableObject {
             }
     }
 
+    /// Pre-start the Claude bridge so the first query doesn't wait for process launch
+    func warmupBridge() async {
+        _ = await ensureBridgeStarted()
+    }
+
     /// Ensure the Claude Agent bridge is started (restarts if the process died)
     private func ensureBridgeStarted() async -> Bool {
         // If we thought the bridge was started but the process died, reset so we restart
@@ -389,26 +411,40 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Session Management
 
-    /// Fetch all chat sessions for the current app
+    /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
     func fetchSessions() async {
         isLoadingSessions = true
         defer { isLoadingSessions = false }
 
-        do {
-            sessions = try await APIClient.shared.getChatSessions(
-                appId: selectedAppId,
-                starred: showStarredOnly ? true : nil
-            )
-            log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
 
-            // If we have sessions and no current session, select the most recent
-            if currentSession == nil, let mostRecent = sessions.first {
-                await selectSession(mostRecent)
+        for attempt in 1...maxAttempts {
+            do {
+                sessions = try await APIClient.shared.getChatSessions(
+                    appId: selectedAppId,
+                    starred: showStarredOnly ? true : nil
+                )
+                log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+                sessionsLoadError = nil
+
+                // If we have sessions and no current session, select the most recent
+                if currentSession == nil, let mostRecent = sessions.first {
+                    await selectSession(mostRecent)
+                }
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load chat sessions (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
             }
-        } catch {
-            logError("Failed to load chat sessions", error: error)
-            sessions = []
         }
+
+        sessions = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
     }
 
     /// Toggle the starred filter and reload sessions
@@ -513,19 +549,27 @@ class ChatProvider: ObservableObject {
 
     /// Load more (older) messages for the current session
     func loadMoreMessages() async {
-        guard let sessionId = currentSessionId,
-              hasMoreMessages,
+        guard hasMoreMessages,
               !isLoadingMoreMessages else { return }
 
         isLoadingMoreMessages = true
 
         do {
             let offset = messages.count
-            let olderMessages = try await APIClient.shared.getMessages(
-                sessionId: sessionId,
-                limit: messagesPageSize,
-                offset: offset
-            )
+            let olderMessages: [ChatMessageDB]
+            if let sessionId = currentSessionId {
+                olderMessages = try await APIClient.shared.getMessages(
+                    sessionId: sessionId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            } else {
+                olderMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            }
 
             let newMessages = olderMessages.map(ChatMessage.init(from:))
 
@@ -618,16 +662,16 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Context (Memories)
 
-    /// Fetches user memories from the backend for use in prompts
+    /// Loads user memories from local SQLite for use in prompts
     private func loadMemoriesIfNeeded() async {
         guard !memoriesLoaded else { return }
 
         do {
-            cachedMemories = try await APIClient.shared.getMemories(limit: 50)
+            cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
             memoriesLoaded = true
-            log("ChatProvider loaded \(cachedMemories.count) memories for context")
+            log("ChatProvider loaded \(cachedMemories.count) memories from local DB")
         } catch {
-            logError("Failed to load memories for chat context", error: error)
+            logError("Failed to load memories from local DB", error: error)
             // Continue without memories - non-critical
         }
     }
@@ -649,14 +693,14 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Goals
 
-    /// Fetches user goals from the backend for use in prompts
+    /// Loads user goals from local SQLite for use in prompts
     private func loadGoalsIfNeeded() async {
         guard !goalsLoaded else { return }
 
         do {
-            cachedGoals = try await APIClient.shared.getGoals()
+            cachedGoals = try await GoalStorage.shared.getLocalGoals(activeOnly: false)
             goalsLoaded = true
-            log("ChatProvider loaded \(cachedGoals.count) goals for context")
+            log("ChatProvider loaded \(cachedGoals.count) goals from local DB")
         } catch {
             logError("Failed to load goals for chat context", error: error)
         }
@@ -681,6 +725,50 @@ class ChatProvider: ObservableObject {
             lines.append(line)
         }
         lines.append("</user_goals>")
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Load Tasks
+
+    /// Fetches the latest 20 active tasks from local database for context
+    private func loadTasksIfNeeded() async {
+        guard !tasksLoaded else { return }
+
+        do {
+            cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: 20,
+                completed: false
+            )
+            tasksLoaded = true
+            log("ChatProvider loaded \(cachedTasks.count) tasks for context")
+        } catch {
+            logError("Failed to load tasks for chat context", error: error)
+            tasksLoaded = true
+        }
+    }
+
+    /// Formats cached tasks into a prompt section
+    private func formatTasksSection() -> String {
+        guard !cachedTasks.isEmpty else { return "" }
+
+        var lines: [String] = ["\n<user_tasks>", "Current tasks:"]
+        for task in cachedTasks {
+            var line = "- \(task.description)"
+            if let priority = task.priority {
+                line += " [priority: \(priority)]"
+            }
+            if let dueAt = task.dueAt {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                line += " [due: \(formatter.string(from: dueAt))]"
+            }
+            if let category = task.category {
+                line += " [category: \(category)]"
+            }
+            lines.append(line)
+        }
+        lines.append("</user_tasks>")
         return lines.joined(separator: "\n")
     }
 
@@ -856,6 +944,7 @@ class ChatProvider: ObservableObject {
 
         // Build individual sections
         let goalSection = formatGoalSection()
+        let tasksSection = formatTasksSection()
         let aiProfileSection = formatAIProfileSection()
         let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
         let historyCount = min(historyMessages.count, 20)
@@ -865,6 +954,7 @@ class ChatProvider: ObservableObject {
             userName: userName,
             memoriesSection: contextSection,
             goalSection: goalSection,
+            tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
             databaseSchema: cachedDatabaseSchema
         )
@@ -894,7 +984,7 @@ class ChatProvider: ObservableObject {
 
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), prompt_length: \(prompt.count) chars")
 
         return prompt
     }
@@ -983,6 +1073,7 @@ class ChatProvider: ObservableObject {
         }
         await loadMemoriesIfNeeded()
         await loadGoalsIfNeeded()
+        await loadTasksIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
         discoverClaudeConfig()
@@ -994,6 +1085,12 @@ class ChatProvider: ObservableObject {
         messages = []
         currentSession = nil
         isInDefaultChat = true
+        await initialize()
+    }
+
+    /// Retry loading after a failure — clears error state and re-runs initialize
+    func retryLoad() async {
+        sessionsLoadError = nil
         await initialize()
     }
 
@@ -1082,25 +1179,40 @@ class ChatProvider: ObservableObject {
     }
 
     /// Load messages for the default chat (no session filter - compatible with Flutter)
+    /// Retries up to 3 times on failure.
     private func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
 
-        do {
-            let persistedMessages = try await APIClient.shared.getMessages(
-                appId: selectedAppId,
-                limit: messagesPageSize
-            )
-            messages = persistedMessages.map(ChatMessage.init(from:))
-                .sorted(by: { $0.createdAt < $1.createdAt })
-            hasMoreMessages = persistedMessages.count == messagesPageSize
-            log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
-        } catch {
-            logError("Failed to load default chat messages", error: error)
-            messages = []
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                let persistedMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize
+                )
+                messages = persistedMessages.map(ChatMessage.init(from:))
+                    .sorted(by: { $0.createdAt < $1.createdAt })
+                hasMoreMessages = persistedMessages.count == messagesPageSize
+                sessionsLoadError = nil
+                log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
+                isLoading = false
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load default chat messages (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
+            }
         }
 
+        messages = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
         isLoading = false
     }
 
@@ -1161,7 +1273,10 @@ class ChatProvider: ObservableObject {
 
     /// Send a message and get AI response via Claude Agent SDK bridge
     /// Persists both user and AI messages to backend
-    func sendMessage(_ text: String) async {
+    /// - Parameters:
+    ///   - text: The message text
+    ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-5-20250929" for floating bar)
+    func sendMessage(_ text: String, model: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -1241,11 +1356,8 @@ class ChatProvider: ObservableObject {
         var toolStartTimes: [String: Date] = [:]
 
         do {
-            // Fetch context from backend (LLM determines if context is needed)
-            let contextString = await fetchContext(for: trimmedText)
-
-            // Build system prompt with fetched context
-            let systemPrompt = buildSystemPrompt(contextString: contextString)
+            // Build system prompt with locally cached memories (no backend Gemini call)
+            let systemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
 
             // Query the Claude Agent SDK bridge with streaming
             // Each query is standalone — conversation history is in the system prompt
@@ -1255,6 +1367,7 @@ class ChatProvider: ObservableObject {
                 systemPrompt: systemPrompt,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
+                model: model ?? modelOverride,
                 onTextDelta: { [weak self] delta in
                     Task { @MainActor [weak self] in
                         self?.appendToMessage(id: aiMessageId, text: delta)
@@ -1297,6 +1410,11 @@ class ChatProvider: ObservableObject {
                     }
                 }
             )
+
+            // Flush any remaining buffered streaming text before finalizing
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
 
             // Extract citations from the response and strip markers for display
             let citationSources = cachedContext?.citationSources ?? []
@@ -1367,6 +1485,11 @@ class ChatProvider: ObservableObject {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
+            // Flush any remaining buffered streaming text before handling the error
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
+
             // Only remove the AI message if it's still empty (no streamed text yet).
             // If text was already streamed and visible, keep it and just stop streaming.
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -1458,17 +1581,59 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append text to a streaming message, updating content blocks for visual separation
+    /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
+    /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
     private func appendToMessage(id: String, text: String) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[index].text += text
+        streamingBufferMessageId = id
+        streamingTextBuffer += text
 
-        // Update content blocks: append to last text block, or create new one after tool calls
-        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-           case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-            messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + text)
-        } else {
-            messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: text))
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        }
+    }
+
+    /// Flush accumulated text and thinking deltas to the published messages array.
+    private func flushStreamingBuffer() {
+        streamingFlushWorkItem = nil
+
+        guard let id = streamingBufferMessageId,
+              let index = messages.firstIndex(where: { $0.id == id }) else {
+            streamingTextBuffer = ""
+            streamingThinkingBuffer = ""
+            return
+        }
+
+        // Flush text buffer
+        if !streamingTextBuffer.isEmpty {
+            let buffered = streamingTextBuffer
+            streamingTextBuffer = ""
+
+            messages[index].text += buffered
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+            }
+        }
+
+        // Flush thinking buffer
+        if !streamingThinkingBuffer.isEmpty {
+            let buffered = streamingThinkingBuffer
+            streamingThinkingBuffer = ""
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
+            }
         }
     }
 
@@ -1532,16 +1697,18 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append thinking text to the streaming message
+    /// Append thinking text to the streaming message via the shared buffer.
     private func appendThinking(messageId: String, text: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        streamingBufferMessageId = messageId
+        streamingThinkingBuffer += text
 
-        // Append to the last thinking block if it exists, otherwise create new
-        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-           case .thinking(let id, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-            messages[index].contentBlocks[lastBlockIndex] = .thinking(id: id, text: existing + text)
-        } else {
-            messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: text))
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
         }
     }
 

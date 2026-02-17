@@ -2277,6 +2277,7 @@ impl FirestoreService {
         metadata: Option<&str>,
         category: Option<&str>,
         relevance_score: Option<i32>,
+        from_staged: Option<bool>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -2319,6 +2320,10 @@ impl FirestoreService {
 
         if let Some(score) = relevance_score {
             fields["relevance_score"] = json!({"integerValue": score.to_string()});
+        }
+
+        if let Some(staged) = from_staged {
+            fields["from_staged"] = json!({"booleanValue": staged});
         }
 
         let doc = json!({"fields": fields});
@@ -2867,7 +2872,7 @@ impl FirestoreService {
         Ok(migrated_count)
     }
 
-    /// Count active AI action items (source contains "screenshot", not completed, not deleted).
+    /// Count active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Used by the promotion system to determine if more tasks should be promoted.
     pub async fn count_active_ai_action_items(
         &self,
@@ -2875,7 +2880,7 @@ impl FirestoreService {
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        // Composite filter: source="screenshot" AND completed=false at Firestore level
+        // Composite filter: from_staged=true AND completed=false at Firestore level
         // so we don't miss items when users have thousands of action_items
         let query = json!({
             "structuredQuery": {
@@ -2893,9 +2898,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2925,19 +2930,16 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .count();
 
         Ok(count)
     }
 
-    /// Get active AI action items (source = "screenshot", not completed, not deleted).
+    /// Get active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Returns the actual items for dedup comparison during promotion.
-    /// Uses a composite filter to query source="screenshot" AND completed=false at the Firestore level.
+    /// Uses a composite filter to query from_staged=true AND completed=false at the Firestore level.
     pub async fn get_active_ai_action_items(
         &self,
         uid: &str,
@@ -2960,9 +2962,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2992,10 +2994,7 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .collect();
 
@@ -3863,6 +3862,7 @@ impl FirestoreService {
             relevance_score: self.parse_int(fields, "relevance_score"),
             sort_order: self.parse_int(fields, "sort_order"),
             indent_level: self.parse_int(fields, "indent_level"),
+            from_staged: self.parse_bool(fields, "from_staged").ok(),
         })
     }
 
@@ -4909,6 +4909,17 @@ impl FirestoreService {
 
         // Return merged state
         self.get_assistant_settings(uid).await
+    }
+
+    /// Get user email from Firestore profile
+    pub async fn get_user_email(
+        &self,
+        uid: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let empty = json!({});
+        let fields = doc.get("fields").unwrap_or(&empty);
+        Ok(self.parse_string(fields, "email"))
     }
 
     /// Get user language preference

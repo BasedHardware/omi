@@ -15219,6 +15219,72 @@ abstract class AppLocalizations {
   /// **'Press and hold the power button until the LED blinks. The device will be discoverable.'**
   String get pairingDescNeoOne;
 
+  /// No description provided for @downloadingFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from device'**
+  String get downloadingFromDevice;
+
+  /// No description provided for @reconnectingToInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to internet...'**
+  String get reconnectingToInternet;
+
+  /// No description provided for @uploadingToCloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {current} of {total}'**
+  String uploadingToCloud(int current, int total);
+
+  /// No description provided for @processedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Processed'**
+  String get processedStatus;
+
+  /// No description provided for @corruptedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Corrupted'**
+  String get corruptedStatus;
+
+  /// No description provided for @nPending.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} pending'**
+  String nPending(int count);
+
+  /// No description provided for @nProcessed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} processed'**
+  String nProcessed(int count);
+
+  /// Label for synced/processed recordings tab
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get synced;
+
+  /// Empty state when no pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'No pending recordings'**
+  String get noPendingRecordings;
+
+  /// Empty state when no processed recordings
+  ///
+  /// In en, this message translates to:
+  /// **'No processed recordings yet'**
+  String get noProcessedRecordings;
+
+  /// Pending tab label for sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pending;
+
   /// Title for changelog with version number
   ///
   /// In en, this message translates to:
@@ -15278,6 +15344,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter WiFi password'**
   String get enterWifiPassword;
+
+  /// No description provided for @appIconLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "Inserisci le credenziali WiFi per consentire al dispositivo di scaricare il firmware.",
   "networkNameSsid": "Nome rete (SSID)",
   "enterWifiNetworkName": "Inserisci il nome della rete WiFi",
-  "enterWifiPassword": "Inserisci la password WiFi"
+  "enterWifiPassword": "Inserisci la password WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Download dal dispositivo",
+  "reconnectingToInternet": "Riconnessione a internet...",
+  "uploadingToCloud": "Caricamento di {current} di {total}",
+  "processedStatus": "Elaborato",
+  "corruptedStatus": "Corrotto",
+  "nPending": "{count} in attesa",
+  "nProcessed": "{count} elaborati",
+  "synced": "Sincronizzato",
+  "noPendingRecordings": "Nessuna registrazione in attesa",
+  "noProcessedRecordings": "Nessuna registrazione elaborata ancora",
+  "pending": "In attesa"
 }

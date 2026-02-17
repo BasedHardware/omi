@@ -2,24 +2,26 @@ import SwiftUI
 
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {
+    @EnvironmentObject var state: FloatingControlBarState
     @Binding var userInput: String
-    @Binding var screenshotURL: URL?
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
 
     var onSend: ((String) -> Void)?
     var onCancel: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
-    var onCaptureScreenshot: (() -> Void)?
 
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
 
     var body: some View {
         VStack(spacing: 0) {
-            // Escape hint
+            // Top bar: escape hint (model picker moved to Settings)
             HStack {
                 Spacer()
+
+                // modelPicker — moved to Settings > Ask Omi Floating Bar
+
                 HStack(spacing: 4) {
                     Text("esc")
                         .scaledFont(size: 11)
@@ -31,46 +33,9 @@ struct AskAIInputView: View {
                         .scaledFont(size: 11)
                         .foregroundColor(.secondary)
                 }
-                .padding(.top, 8)
-                .padding(.trailing, 16)
             }
-
-            // Screenshot thumbnail
-            if let url = screenshotURL, let nsImage = NSImage(contentsOf: url) {
-                HStack(spacing: 8) {
-                    ZStack(alignment: .topTrailing) {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 50)
-                            .cornerRadius(8)
-                            .clipped()
-
-                        Button(action: { screenshotURL = nil }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .scaledFont(size: 14)
-                                .foregroundColor(.white)
-                                .shadow(radius: 2)
-                        }
-                        .buttonStyle(.plain)
-                        .offset(x: 4, y: -4)
-                    }
-                    Text("Screenshot attached")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
-                    Spacer()
-
-                    Button(action: { onCaptureScreenshot?() }) {
-                        Image(systemName: "arrow.clockwise")
-                            .scaledFont(size: 12)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Retake screenshot")
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-            }
+            .padding(.top, 8)
+            .padding(.trailing, 16)
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
@@ -96,7 +61,8 @@ struct AskAIInputView: View {
                             let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
                             onSend?(trimmed)
-                        }
+                        },
+                        focusOnAppear: true
                     )
                     .onChange(of: localInput) { _, newValue in
                         userInput = newValue
@@ -131,4 +97,9 @@ struct AskAIInputView: View {
             onCancel?()
         }
     }
+
+    // Model picker moved to Settings > Ask Omi Floating Bar
+    // private var modelPicker: some View { ... }
+    // private func showModelMenu() { ... }
+    // private var currentModelLabel: String { ... }
 }

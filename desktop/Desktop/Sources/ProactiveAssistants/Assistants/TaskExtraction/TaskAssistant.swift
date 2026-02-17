@@ -621,10 +621,20 @@ actor TaskAssistant: ProactiveAssistant {
 
         var prompt = "Screenshot from \(appName). Today is \(todayStr). Analyze this screenshot for any unaddressed request directed at the user.\n\n"
 
-        // For messaging apps, add an extra reminder about sidebars and outgoing vs incoming messages
+        // For messaging apps, add an extra reminder about conversation analysis
         let messagingApps: Set<String> = ["Telegram", "WhatsApp", "\u{200E}WhatsApp", "Messages", "Slack", "Discord"]
         if messagingApps.contains(appName) {
-            prompt += "REMINDER: If this screenshot shows a chat sidebar/conversation list rather than an open conversation, SKIP entirely — do not extract tasks from sidebar previews. If it shows an open conversation, only left-side/incoming messages from others can be requests; right-side/colored bubbles are the user's own messages.\n\n"
+            prompt += """
+            REMINDER — THIS IS A MESSAGING APP:
+            - If this screenshot shows a chat sidebar/conversation list rather than an open conversation, SKIP entirely.
+            - If it shows an open conversation, read the FULL conversation flow between the user and the other person.
+            - LEFT-SIDE messages = from the other person. RIGHT-SIDE/colored = from the user.
+            - PRIORITY: Look for where the user AGREED or COMMITTED to doing something the other person asked.
+              Example: Other person says "Can you send me the report?" → User replies "Sure, will do" → Extract task: "Send [person] the report"
+            - ALSO: Look for incoming requests the user hasn't responded to yet.
+            - The task title should describe what was asked for, naming the other person in the conversation.
+
+            """
         }
 
         // Inject AI user profile for context
@@ -733,7 +743,7 @@ actor TaskAssistant: ProactiveAssistant {
                         "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
                         "current_activity": .init(type: "string", description: "What the user is actively doing"),
                         "source_category": .init(type: "string", description: "Where the task originated", enumValues: ["direct_request", "self_generated", "calendar_driven", "reactive", "external_system", "other"]),
-                        "source_subcategory": .init(type: "string", description: "Specific origin within category", enumValues: ["message", "meeting", "mention", "idea", "reminder", "goal_subtask", "event_prep", "recurring", "deadline", "error", "notification", "observation", "project_tool", "alert", "documentation", "other"]),
+                        "source_subcategory": .init(type: "string", description: "Specific origin within category", enumValues: ["message", "meeting", "mention", "commitment", "idea", "reminder", "goal_subtask", "event_prep", "recurring", "deadline", "error", "notification", "observation", "project_tool", "alert", "documentation", "other"]),
                         "relevance_score": .init(type: "integer", description: "Where this task ranks relative to existing tasks. Look at the relevance_score values of existing active tasks and assign a score that places this task appropriately. 1 = most important/urgent, higher numbers = less important. Must be a positive integer.")
                     ],
                     required: ["title", "description", "priority", "tags", "source_app", "inferred_deadline", "confidence", "context_summary", "current_activity", "source_category", "source_subcategory", "relevance_score"]
@@ -1133,7 +1143,9 @@ actor TaskAssistant: ProactiveAssistant {
         var results: [TaskSearchResult] = []
 
         do {
-            let words = query.components(separatedBy: .whitespaces).filter { $0.count >= 3 }
+            let words = query.components(separatedBy: .whitespaces)
+                .map { $0.filter { $0.isLetter || $0.isNumber } }  // Strip FTS5 special chars (- : * " etc.)
+                .filter { $0.count >= 3 }
             let ftsQuery = words.map { "\($0)*" }.joined(separator: " OR ")
 
             if !ftsQuery.isEmpty {

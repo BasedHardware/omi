@@ -1,6 +1,22 @@
 import Cocoa
 import SwiftUI
 
+/// NSScrollView subclass that auto-focuses its NSTextView when added to a window.
+private class AutoFocusScrollView: NSScrollView {
+    var shouldFocusOnAppear = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard shouldFocusOnAppear, let window = self.window,
+              let textView = self.documentView as? NSTextView else { return }
+        shouldFocusOnAppear = false
+        DispatchQueue.main.async {
+            window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(textView)
+        }
+    }
+}
+
 /// Auto-resizing NSTextView wrapper for the floating control bar input.
 struct ResizableTextEditor: NSViewRepresentable {
     @Binding var text: String
@@ -8,13 +24,11 @@ struct ResizableTextEditor: NSViewRepresentable {
     let maxHeight: CGFloat
     let onHeightChange: (CGFloat) -> Void
     var onSubmit: (() -> Void)?
+    /// When true, the text view will request first-responder status after appearing.
+    var focusOnAppear: Bool = false
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else {
-            return scrollView
-        }
-
+        let textView = NSTextView()
         textView.font = .systemFont(ofSize: 13)
         textView.textColor = .white
         textView.backgroundColor = .clear
@@ -29,7 +43,14 @@ struct ResizableTextEditor: NSViewRepresentable {
         textView.textContainer?.lineFragmentPadding = 8
         textView.textContainerInset = NSSize(width: 0, height: 8)
         textView.textContainer?.widthTracksTextView = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
 
+        let scrollView = AutoFocusScrollView()
+        scrollView.shouldFocusOnAppear = focusOnAppear
+        scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true

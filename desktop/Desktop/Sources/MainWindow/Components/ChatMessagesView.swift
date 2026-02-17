@@ -13,7 +13,27 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     let onLoadMore: () async -> Void
     let onRate: (String, Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var sessionsLoadError: String? = nil
+    var onRetry: (() -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
+
+    /// IDs of messages that are near-duplicates of an earlier message in the same session.
+    /// Computed once per messages change to avoid O(n^2) per render.
+    private var duplicateMessageIds: Set<String> {
+        var seen: [String: String] = [:]  // truncated text → first message ID
+        var dupes = Set<String>()
+        for msg in messages {
+            guard msg.text.count > 200 else { continue }  // only dedup long messages
+            // Use first 200 chars as fingerprint (handles minor trailing diffs)
+            let fingerprint = String(msg.text.prefix(200))
+            if let _ = seen[fingerprint] {
+                dupes.insert(msg.id)
+            } else {
+                seen[fingerprint] = msg.id
+            }
+        }
+        return dupes
+    }
 
     @State private var isUserAtBottom = true
     /// Tracks whether we should follow new content (survives the race between
@@ -23,6 +43,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// True while a programmatic scroll is in-flight, so we can distinguish
     /// user-initiated scrolls from our own.
     @State private var isProgrammaticScroll = false
+    /// True for ~1s after the view appears, suppressing shouldFollowContent=false
+    /// during the LazyVStack/Markdown layout settling period. Without this guard,
+    /// content height changes from lazy rendering are misinterpreted as user scrolling.
+    @State private var isSettlingAfterAppear = false
     /// Throttle token for scrollToBottom — prevents the streaming + scroll
     /// detection feedback loop from saturating the main thread.
     @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -53,7 +77,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                             .padding(.vertical, 8)
                         }
 
-                        if isLoadingInitial && messages.isEmpty {
+                        if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
                             VStack(spacing: 12) {
                                 Spacer()
                                 ProgressView()
@@ -64,9 +88,44 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                 Spacer()
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else if let error = sessionsLoadError, messages.isEmpty {
+                            VStack(spacing: 16) {
+                                Spacer()
+                                Image(systemName: "exclamationmark.triangle")
+                                    .scaledFont(size: 40)
+                                    .foregroundColor(OmiColors.warning)
+
+                                Text("Failed to load chats")
+                                    .scaledFont(size: 16, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+
+                                Text(error)
+                                    .scaledFont(size: 14)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .multilineTextAlignment(.center)
+
+                                if let onRetry {
+                                    Button(action: onRetry) {
+                                        Text("Try Again")
+                                            .scaledFont(size: 14, weight: .medium)
+                                            .foregroundColor(OmiColors.textPrimary)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(OmiColors.purplePrimary)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(32)
                         } else if messages.isEmpty {
                             welcomeContent()
                         } else {
+                            let dupeIds = duplicateMessageIds
                             ForEach(messages) { message in
                                 ChatBubble(
                                     message: message,
@@ -76,21 +135,24 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                     },
                                     onCitationTap: { citation in
                                         onCitationTap?(citation)
-                                    }
+                                    },
+                                    isDuplicate: dupeIds.contains(message.id)
                                 )
                                 .id(message.id)
                             }
                         }
                     }
                     .padding()
+                    .textSelection(.enabled)
                     .background(
                         ScrollPositionDetector { atBottom in
                             isUserAtBottom = atBottom
                             if atBottom {
                                 shouldFollowContent = true
-                            } else if !isProgrammaticScroll {
+                            } else if !isProgrammaticScroll && !isSettlingAfterAppear {
                                 // Only stop following when the user actively scrolls up,
-                                // not when content grows past the viewport or we're mid-scroll.
+                                // not when content grows past the viewport, we're mid-scroll,
+                                // or the view is still settling after (re-)appearing.
                                 shouldFollowContent = false
                             }
                         }
@@ -126,10 +188,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     }
                 }
                 .onAppear {
-                    // Scroll immediately and again after layout settles
+                    // Suppress scroll-detection false positives while content settles
+                    isSettlingAfterAppear = true
+                    // Scroll immediately, after initial layout, and after full settle
                     scrollToBottom(proxy: proxy)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         scrollToBottom(proxy: proxy)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                        scrollToBottom(proxy: proxy)
+                    }
+                    // Allow normal scroll detection after content has settled
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        isSettlingAfterAppear = false
                     }
                 }
 

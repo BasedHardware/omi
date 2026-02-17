@@ -8181,6 +8181,45 @@ class AppLocalizationsBg extends AppLocalizations {
       'Натиснете и задръжте бутона за захранване, докато светодиодът мигне. Устройството ще бъде видимо.';
 
   @override
+  String get downloadingFromDevice => 'Изтегляне от устройството';
+
+  @override
+  String get reconnectingToInternet => 'Повторно свързване с интернет...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Качване на $current от $total';
+  }
+
+  @override
+  String get processedStatus => 'Обработено';
+
+  @override
+  String get corruptedStatus => 'Повредено';
+
+  @override
+  String nPending(int count) {
+    return '$count в изчакване';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count обработени';
+  }
+
+  @override
+  String get synced => 'Синхронизирано';
+
+  @override
+  String get noPendingRecordings => 'Няма записи в изчакване';
+
+  @override
+  String get noProcessedRecordings => 'Все още няма обработени записи';
+
+  @override
+  String get pending => 'В изчакване';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Какво ново във $version';
   }
@@ -8211,4 +8250,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Въведете парола за WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

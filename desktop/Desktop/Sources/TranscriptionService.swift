@@ -471,6 +471,80 @@ class TranscriptionService {
     }
 }
 
+// MARK: - Batch (Pre-Recorded) Transcription
+
+extension TranscriptionService {
+    /// Transcribe a complete audio buffer using Deepgram's pre-recorded REST API.
+    /// Returns the transcript string, or nil if transcription failed.
+    static func batchTranscribe(
+        audioData: Data,
+        language: String = "en",
+        apiKey: String? = nil
+    ) async throws -> String? {
+        guard let key = apiKey ?? ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] else {
+            throw TranscriptionError.missingAPIKey
+        }
+
+        var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
+        components.queryItems = [
+            URLQueryItem(name: "model", value: "nova-3"),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "diarize", value: "true"),
+            // Raw PCM parameters (same as streaming API uses)
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+        ]
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+
+        log("TranscriptionService: Batch transcribing \(audioData.count) bytes")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Batch transcription failed with status \(statusCode): \(body)", error: nil)
+            throw TranscriptionError.invalidResponse
+        }
+
+        // Parse the response — same structure as streaming but wrapped in "results"
+        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
+        let transcript = json.results?.channels.first?.alternatives.first?.transcript
+        log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
+        return transcript
+    }
+}
+
+/// Response model for Deepgram pre-recorded API
+private struct BatchResponse: Decodable {
+    let results: BatchResults?
+
+    struct BatchResults: Decodable {
+        let channels: [BatchChannel]
+    }
+
+    struct BatchChannel: Decodable {
+        let alternatives: [BatchAlternative]
+    }
+
+    struct BatchAlternative: Decodable {
+        let transcript: String
+        let confidence: Double
+    }
+}
+
 // MARK: - DeepGram Response Models
 
 private struct DeepgramResponse: Decodable {

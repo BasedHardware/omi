@@ -2652,5 +2652,17 @@
   "wifiConfigurationSubtitle": "输入您的WiFi凭据以允许设备下载固件。",
   "networkNameSsid": "网络名称 (SSID)",
   "enterWifiNetworkName": "输入WiFi网络名称",
-  "enterWifiPassword": "输入WiFi密码"
+  "enterWifiPassword": "输入WiFi密码",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "正在从设备下载",
+  "reconnectingToInternet": "正在重新连接互联网...",
+  "uploadingToCloud": "正在上传 {current}/{total}",
+  "processedStatus": "已处理",
+  "corruptedStatus": "已损坏",
+  "nPending": "{count} 个待处理",
+  "nProcessed": "{count} 个已处理",
+  "synced": "已同步",
+  "noPendingRecordings": "没有待处理的录音",
+  "noProcessedRecordings": "暂无已处理的录音",
+  "pending": "待处理"
 }
