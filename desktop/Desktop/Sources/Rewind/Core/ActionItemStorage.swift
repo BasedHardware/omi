@@ -475,11 +475,22 @@ actor ActionItemStorage {
                 }
                 return recordId
             } else {
-                let newRecord = try ActionItemRecord.from(item, conversationId: conversationId).inserted(database)
-                guard let recordId = newRecord.id else {
-                    throw ActionItemStorageError.syncFailed("Record ID is nil after insert")
+                // Insert new record, catching UNIQUE constraint from concurrent syncs
+                do {
+                    let newRecord = try ActionItemRecord.from(item, conversationId: conversationId).inserted(database)
+                    guard let recordId = newRecord.id else {
+                        throw ActionItemStorageError.syncFailed("Record ID is nil after insert")
+                    }
+                    return recordId
+                } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                    // Race: another sync path already inserted this backendId — update instead
+                    if var record = try ActionItemRecord.filter(Column("backendId") == item.id).fetchOne(database) {
+                        record.updateFrom(item)
+                        try record.update(database)
+                        return record.id ?? 0
+                    }
+                    throw dbError
                 }
-                return recordId
             }
         }
     }
@@ -496,8 +507,16 @@ actor ActionItemStorage {
                     existingRecord.updateFrom(item)
                     try existingRecord.update(database)
                 } else {
-                    let newRecord = ActionItemRecord.from(item)
-                    try newRecord.insert(database)
+                    do {
+                        let newRecord = ActionItemRecord.from(item)
+                        try newRecord.insert(database)
+                    } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                        // Race: record already exists — update instead
+                        if var record = try ActionItemRecord.filter(Column("backendId") == item.id).fetchOne(database) {
+                            record.updateFrom(item)
+                            try record.update(database)
+                        }
+                    }
                 }
             }
         }
