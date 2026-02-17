@@ -20,8 +20,9 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
+from utils.config import get_app_name
 
-MCP_CLIENT_NAME = "Omi"
+MCP_CLIENT_NAME = get_app_name()
 MCP_CLIENT_VERSION = "1.0.0"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 
