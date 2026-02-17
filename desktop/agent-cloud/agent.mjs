@@ -572,6 +572,7 @@ function startServer() {
         renameSync(tmpPath, DB_PATH);
 
         const finalSize = statSync(DB_PATH).size;
+        lastActivityAt = Date.now();
         log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
 
         // Re-open the database
@@ -730,6 +731,7 @@ function startServer() {
 
       switch (msg.type) {
         case "query": {
+          lastActivityAt = Date.now();
           // Cancel any prior query
           if (activeAbort) {
             activeAbort.abort();
