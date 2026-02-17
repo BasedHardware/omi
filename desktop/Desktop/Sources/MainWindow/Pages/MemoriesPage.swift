@@ -185,9 +185,6 @@ class MemoriesViewModel: ObservableObject {
     /// Cached tag counts - only recomputed when memories change
     @Published private(set) var tagCounts: [MemoryTag: Int] = [:]
 
-    /// Cached unread tips count - queried from SQLite for true totals
-    @Published private(set) var unreadTipsCount: Int = 0
-
     /// Total memory count from SQLite (not just loaded items)
     @Published private(set) var totalMemoriesCount: Int = 0
 
@@ -270,9 +267,6 @@ class MemoriesViewModel: ObservableObject {
             // Get total count (no filters) and store for "All" badge
             let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount()
             totalMemoriesCount = totalCount
-
-            // Get unread tips count from SQLite
-            unreadTipsCount = try await MemoryStorage.shared.getUnreadTipsCount()
 
             // Focus tags
             counts[.focus] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["focus"])
@@ -797,22 +791,6 @@ class MemoriesViewModel: ObservableObject {
             logError("Failed to update memory visibility", error: error)
         }
         isTogglingVisibility = false
-    }
-
-    func markAsRead(_ memory: ServerMemory) async {
-        do {
-            let updated = try await APIClient.shared.updateMemoryReadStatus(id: memory.id, isRead: true, isDismissed: nil)
-
-            // Sync to local SQLite cache so auto-refresh doesn't revert the change
-            try await MemoryStorage.shared.syncServerMemories([updated])
-
-            // Update in place instead of reloading everything
-            if let index = memories.firstIndex(where: { $0.id == memory.id }) {
-                memories[index] = updated
-            }
-        } catch {
-            logError("Failed to mark memory as read", error: error)
-        }
     }
 
     // MARK: - Bulk Operations
@@ -1754,92 +1732,11 @@ private struct MemoryCardView: View {
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-
-            // Footer - metadata
+            // Footer - date + info icon
             HStack(spacing: 6) {
                 // New badge
                 if isNewlyCreated {
                     NewBadge()
-                }
-
-                // Unread indicator
-                if memory.isTip && !memory.isRead {
-                    Circle()
-                        .fill(OmiColors.textPrimary)
-                        .frame(width: 6, height: 6)
-                }
-
-                // Category/Tags
-                if memory.isTip {
-                    HStack(spacing: 4) {
-                        Image(systemName: "lightbulb.fill")
-                            .scaledFont(size: 10)
-                        Text("Tips")
-                            .scaledFont(size: 11, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-
-                    if let tipCat = memory.tipCategory {
-                        HStack(spacing: 4) {
-                            Image(systemName: memory.tipCategoryIcon)
-                                .scaledFont(size: 10)
-                            Text(tipCat.capitalized)
-                                .scaledFont(size: 11, weight: .medium)
-                        }
-                        .foregroundColor(OmiColors.textSecondary)
-                    }
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: categoryIcon(memory.category))
-                            .scaledFont(size: 10)
-                        Text(memory.category.displayName)
-                            .scaledFont(size: 11, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-
-                // Tags (filter out redundant ones already shown as category/tip badges)
-                let displayTags = memory.tags.filter { tag in
-                    let lower = tag.lowercased()
-                    // Skip tags already represented by category badge or tip badges
-                    if lower == memory.category.rawValue { return false }
-                    if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
-                    if lower == "has-message" { return false }
-                    return true
-                }
-                if !displayTags.isEmpty {
-                    ForEach(Array(displayTags.prefix(3)), id: \.self) { tag in
-                        Text(tag)
-                            .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(tagColorFor(tag))
-                    }
-                    if displayTags.count > 3 {
-                        Text("+\(displayTags.count - 3)")
-                            .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                    }
-                }
-
-                // Source app or device
-                if let sourceApp = memory.sourceApp {
-                    HStack(spacing: 4) {
-                        Image(systemName: memory.sourceIcon)
-                            .scaledFont(size: 10)
-                        Text(sourceApp)
-                            .scaledFont(size: 11)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                    .help(memory.windowTitle ?? sourceApp)
-                } else if let sourceName = memory.sourceName {
-                    HStack(spacing: 4) {
-                        Image(systemName: memory.sourceIcon)
-                            .scaledFont(size: 10)
-                        Text(sourceName)
-                            .scaledFont(size: 11)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
                 }
 
                 Spacer()
@@ -1848,6 +1745,14 @@ private struct MemoryCardView: View {
                 Text(formatDate(memory.createdAt))
                     .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textSecondary)
+
+                // Info icon with hover popover for details
+                MemoryDetailButton(
+                    memory: memory,
+                    categoryIcon: categoryIcon,
+                    categoryColor: categoryColor,
+                    tagColorFor: tagColorFor
+                )
 
                 // Click hint on hover
                 if isHovered {
@@ -1863,7 +1768,7 @@ private struct MemoryCardView: View {
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(memory.isTip && !memory.isRead ? OmiColors.textPrimary.opacity(0.3) : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border), lineWidth: 1)
+                .stroke(isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -1878,6 +1783,160 @@ private struct MemoryCardView: View {
         }
         .onTapGesture {
             onTap()
+        }
+    }
+}
+
+// MARK: - Memory Detail Button (info icon with hover popover)
+
+/// Small inline info button with hover preview showing memory metadata.
+/// Follows the same pattern as TaskDetailButton in TaskDetailViews.swift.
+private struct MemoryDetailButton: View {
+    let memory: ServerMemory
+    let categoryIcon: (MemoryCategory) -> String
+    let categoryColor: (MemoryCategory) -> Color
+    let tagColorFor: (String) -> Color
+
+    @State private var showTooltip = false
+    @State private var isButtonHovered = false
+    @State private var isPopoverHovered = false
+    @State private var dismissWork: DispatchWorkItem?
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .scaledFont(size: 10)
+            .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isButtonHovered = hovering
+                scheduleHoverUpdate()
+            }
+            .popover(isPresented: $showTooltip, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+                MemoryDetailTooltip(
+                    memory: memory,
+                    categoryIcon: categoryIcon,
+                    categoryColor: categoryColor,
+                    tagColorFor: tagColorFor
+                )
+                .onHover { hovering in
+                    isPopoverHovered = hovering
+                    scheduleHoverUpdate()
+                }
+            }
+    }
+
+    private func scheduleHoverUpdate() {
+        dismissWork?.cancel()
+        if isButtonHovered || isPopoverHovered {
+            showTooltip = true
+        } else {
+            let work = DispatchWorkItem { showTooltip = false }
+            dismissWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
+    }
+}
+
+// MARK: - Memory Detail Tooltip
+
+/// Compact hover preview showing memory metadata (category, tags, source, etc.)
+private struct MemoryDetailTooltip: View {
+    let memory: ServerMemory
+    let categoryIcon: (MemoryCategory) -> String
+    let categoryColor: (MemoryCategory) -> Color
+    let tagColorFor: (String) -> Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Category
+            if memory.isTip {
+                tooltipRow("Category", "Tips")
+                if let tipCat = memory.tipCategory {
+                    tooltipRow("Subcategory", tipCat.capitalized)
+                }
+            } else {
+                tooltipRow("Category", memory.category.displayName)
+            }
+
+            // Tags
+            let displayTags = memory.tags.filter { tag in
+                let lower = tag.lowercased()
+                if lower == memory.category.rawValue { return false }
+                if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
+                if lower == "has-message" { return false }
+                return true
+            }
+            if !displayTags.isEmpty {
+                tooltipRow("Tags", displayTags.joined(separator: ", "))
+            }
+
+            // Source
+            if let sourceApp = memory.sourceApp {
+                tooltipRow("App", sourceApp)
+            }
+            if let sourceName = memory.sourceName {
+                tooltipRow("Source", sourceName)
+            }
+            if let window = memory.windowTitle {
+                tooltipRow("Window", window)
+            }
+
+            // Context
+            if let ctx = memory.contextSummary, !ctx.isEmpty {
+                tooltipBlock("Context", ctx)
+            }
+            if let activity = memory.currentActivity, !activity.isEmpty {
+                tooltipBlock("Activity", activity)
+            }
+
+            // Confidence
+            if let conf = memory.confidenceString {
+                tooltipRow("Confidence", conf)
+            }
+
+            // Reasoning
+            if let reasoning = memory.reasoning, !reasoning.isEmpty {
+                tooltipBlock("Reasoning", reasoning)
+            }
+
+            // Created date
+            tooltipRow("Created", {
+                let f = DateFormatter()
+                f.dateStyle = .medium
+                f.timeStyle = .short
+                return f.string(from: memory.createdAt)
+            }())
+        }
+        .padding(10)
+        .frame(maxWidth: 350, maxHeight: 400)
+    }
+
+    private func tooltipRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(label)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textTertiary)
+                .frame(width: 70, alignment: .trailing)
+
+            Text(value)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textPrimary)
+        }
+    }
+
+    private func tooltipBlock(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textTertiary)
+                .padding(.leading, 76)
+
+            Text(value)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.leading, 76)
+                .lineLimit(3)
         }
     }
 }
@@ -2142,24 +2201,6 @@ struct MemoryDetailSheet: View {
 
                 // Action Buttons
                 VStack(spacing: 10) {
-                    // Mark as read (for unread tips)
-                    if memory.isTip && !memory.isRead {
-                        MemoryActionRow(
-                            icon: "checkmark.circle",
-                            title: "Mark as Read",
-                            iconColor: OmiColors.textPrimary,
-                            textColor: OmiColors.textPrimary,
-                            backgroundColor: OmiColors.backgroundTertiary
-                        ) {
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 100_000_000)
-                                dismissSheet()
-                                await viewModel.markAsRead(memory)
-                            }
-                        }
-                    }
-
                     // View conversation (if linked)
                     if let conversationId = memory.conversationId {
                         MemoryActionRow(
