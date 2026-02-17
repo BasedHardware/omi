@@ -1,6 +1,22 @@
 {
   "releases": [
     {
+      "version": "0.8.9",
+      "date": "2026-02-16",
+      "changes": [
+        "Compact floating bar: minimizes to a small circle icon, expands on hover for a less intrusive experience",
+        "Native Apple Sign In on macOS with automatic fallback to web-based OAuth",
+        "Real-time agent sync: local data continuously pushed to cloud agent every 3 seconds",
+        "Smarter task extraction: detects your commitments in messaging apps (e.g. 'Sure, I'll do it')",
+        "AI model selector moved from floating bar to Settings for a cleaner in-bar experience",
+        "Chat sessions retry up to 3 times with error state and Retry button on failure",
+        "Goal generation now triggers daily instead of every 100 conversations",
+        "Support chat unread badge on Help tab in sidebar",
+        "Agent sync flushes pending data before system sleep to prevent data loss",
+        "Accessibility permission prompt now opens System Settings directly on macOS Sequoia+"
+      ]
+    },
+    {
       "version": "0.8.8",
       "date": "2026-02-16",
       "changes": [
