@@ -1244,12 +1244,7 @@ struct RewindPage: View {
 
     private func rewindRecordingBar(appState: AppState) -> some View {
         HStack(spacing: 12) {
-            // Left: always show "Audio" label
-            Text("Audio")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(.white)
-
-            // Middle content depends on state
+            // Content depends on state
             if appState.isTranscribing {
                 // Transcript text + chevron (clickable to expand/collapse)
                 Button {
