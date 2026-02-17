@@ -19,8 +19,7 @@ struct SettingsSearchItem: Identifiable {
 
     static let allSearchableItems: [SettingsSearchItem] = [
         // General
-        SettingsSearchItem(name: "Screen Analysis", keywords: ["monitor", "screenshot", "capture"], section: .general, advancedSubsection: nil, icon: "gearshape"),
-        SettingsSearchItem(name: "Transcription", keywords: ["audio", "recording", "microphone", "speech"], section: .general, advancedSubsection: nil, icon: "gearshape"),
+        SettingsSearchItem(name: "Rewind", keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Notifications", keywords: ["alerts", "notify"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Ask Omi", keywords: ["floating bar", "chat bar"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Font Size", keywords: ["text size", "zoom", "scale"], section: .general, advancedSubsection: nil, icon: "gearshape"),
@@ -36,6 +35,7 @@ struct SettingsSearchItem: Identifiable {
 
         // Rewind
         SettingsSearchItem(name: "Rewind", keywords: ["screen history", "screenshots", "recording"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+        SettingsSearchItem(name: "Storage", keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Excluded Apps", keywords: ["exclude", "ignore", "block apps", "blocklist"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Battery Optimization", keywords: ["battery", "power", "energy", "low power"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Data Retention", keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
