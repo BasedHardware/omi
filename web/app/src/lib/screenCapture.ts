@@ -76,8 +76,8 @@ export function createFrameCapture(
 ): FrameCapture {
     const { intervalMs, onFrame, onError } = options;
 
-    let captureInterval: number | null = null;
-    let startTimeout: number | null = null;
+    let captureInterval: ReturnType<typeof setInterval> | null = null;
+    let startTimeout: ReturnType<typeof setTimeout> | null = null;
     let isPaused = false;
     let videoElement: HTMLVideoElement | null = null;
     let canvas: HTMLCanvasElement | null = null;
