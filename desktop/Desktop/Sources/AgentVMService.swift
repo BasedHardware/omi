@@ -30,6 +30,7 @@ actor AgentVMService {
                     } else {
                         log("AgentVMService: VM already has database, skipping upload")
                     }
+                    await startIncrementalSync(vmIP: ip, authToken: status.authToken)
                     return
                 }
                 if let status = status, status.status == "provisioning" {
@@ -38,6 +39,7 @@ actor AgentVMService {
                        let ip = result.ip {
                         log("AgentVMService: VM became ready — ip=\(ip)")
                         await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        await startIncrementalSync(vmIP: ip, authToken: result.authToken)
                     }
                     return
                 }
@@ -101,6 +103,9 @@ actor AgentVMService {
 
         // Step 3: Check if DB exists and upload it
         await uploadDatabase(vmIP: ip, authToken: authToken)
+
+        // Step 4: Start incremental sync
+        await startIncrementalSync(vmIP: ip, authToken: authToken)
     }
 
     /// Poll GET /v2/agent/status until status is "ready" and IP is available.
@@ -215,6 +220,11 @@ actor AgentVMService {
         } catch {
             log("AgentVMService: Upload failed — \(error.localizedDescription)")
         }
+    }
+
+    /// Start incremental sync after VM is confirmed ready.
+    private func startIncrementalSync(vmIP: String, authToken: String) async {
+        await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
     }
 
     /// Gzip compress data using Apple's Compression framework.
