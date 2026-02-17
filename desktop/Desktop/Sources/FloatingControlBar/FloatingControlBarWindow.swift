@@ -147,11 +147,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 guard let self = self,
                       !self.state.showingAIConversation,
                       !self.state.isVoiceListening else { return }
-                if isHovering {
-                    self.resizeCentered(to: FloatingControlBarWindow.expandedBarSize, animated: true)
-                } else {
-                    self.resizeCentered(to: FloatingControlBarWindow.minBarSize, animated: true)
-                }
+                let size = isHovering ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
+                self.resizeAnchored(to: size, makeResizable: false, animated: true)
             }
     }
 
@@ -237,7 +234,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
-        resizeCentered(to: FloatingControlBarWindow.minBarSize, animated: true)
+        resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
     }
 
     private func hideBar() {
@@ -348,37 +345,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         )
     }
 
-    private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
-        NSPoint(
-            x: frame.midX - newSize.width / 2,
-            y: frame.midY - newSize.height / 2
-        )
-    }
-
-    /// Resize from center — used for hover expand/collapse so the circle grows outward.
-    private func resizeCentered(to size: NSSize, animated: Bool = false) {
-        resizeWorkItem?.cancel()
-        resizeWorkItem = nil
-
-        let constrainedSize = NSSize(
-            width: max(size.width, FloatingControlBarWindow.minBarSize.width),
-            height: max(size.height, FloatingControlBarWindow.minBarSize.height)
-        )
-        let newOrigin = originForCenterAnchor(newSize: constrainedSize)
-
-        styleMask.remove(.resizable)
-        isResizingProgrammatically = true
-
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = animated ? 0.25 : 0
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
-        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
-        NSAnimationContext.endGrouping()
-
-        self.isResizingProgrammatically = false
-    }
-
     private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false) {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
@@ -429,12 +395,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
-        if expanded {
-            let size = NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
-            resizeCentered(to: size, animated: true)
-        } else {
-            resizeCentered(to: FloatingControlBarWindow.minBarSize, animated: true)
-        }
+        let size = expanded
+            ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
+            : FloatingControlBarWindow.minBarSize
+        resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
