@@ -53,7 +53,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         if let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
             // Verify saved position is on a visible screen
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 100, y: origin.y + 30)) }
+            let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 18, y: origin.y + 18)) }
             if onScreen {
                 self.setFrameOrigin(origin)
             } else {

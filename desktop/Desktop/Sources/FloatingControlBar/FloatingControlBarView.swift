@@ -54,7 +54,7 @@ struct FloatingControlBarView: View {
             }
         }
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 isHovering = hovering
             }
             // Drive window resize via state (only when bar is in compact mode)
@@ -63,7 +63,7 @@ struct FloatingControlBarView: View {
             }
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground()
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 18)
     }
 
     private func openFloatingBarSettings() {
@@ -75,13 +75,12 @@ struct FloatingControlBarView: View {
     private var controlBarView: some View {
         Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
-                // Expanded view for voice listening
                 voiceListeningView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .frame(height: 50)
+                    .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
-                // Expanded view on hover — show labels
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
                         onAskAI()
@@ -95,25 +94,21 @@ struct FloatingControlBarView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .frame(height: 50)
+                .transition(.opacity)
             } else {
-                // Compact pill — minimal bar like Wispr Flow
-                compactPillView
+                compactCircleView
+                    .transition(.opacity)
             }
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isHovering)
     }
 
-    /// Minimal horizontal pill shown when not hovering
-    private var compactPillView: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(Color.white.opacity(0.5))
-                .frame(width: 6, height: 6)
-            Text("omi")
-                .scaledFont(size: 12, weight: .semibold)
-                .foregroundColor(.white.opacity(0.7))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .frame(height: 28)
+    /// Minimal circle shown when not hovering
+    private var compactCircleView: some View {
+        Image(systemName: "waveform")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.white.opacity(0.7))
+            .frame(width: 36, height: 36)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
