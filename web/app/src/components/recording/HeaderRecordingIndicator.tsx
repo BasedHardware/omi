@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Pause, Play, Square, ChevronDown, ExternalLink, PanelTop, FileText, Monitor } from 'lucide-react';
+import { Mic, Pause, Play, Square, ChevronDown, ExternalLink, PanelTop, FileText, Monitor, Settings, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRecordingContext } from './RecordingContext';
 import type { AudioMode } from './RecordingContext';
@@ -12,6 +12,9 @@ import { useNotificationContext } from '@/components/notifications/NotificationC
 import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { useProactiveNotifications } from '@/components/proactive';
+
+import { useToast } from '@/components/ui/Toast';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -41,8 +44,18 @@ export function HeaderRecordingIndicator() {
     stopRecording,
   } = useRecordingContext();
 
+  const {
+    isMonitoring,
+    startMonitoring,
+    stopMonitoring,
+    settings: proactiveSettings,
+    error: proactiveError,
+    clearError: clearProactiveError
+  } = useProactiveNotifications();
+
   const { isOpen: isNotificationOpen } = useNotificationContext();
   const { isOpen: isChatOpen } = useChat();
+  const { showToast } = useToast();
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [showModeSelector, setShowModeSelector] = useState(false);
@@ -56,6 +69,14 @@ export function HeaderRecordingIndicator() {
   const isInitializing = state === 'initializing';
   const isIdle = state === 'idle';
   const isActive = isRecording || isPaused;
+
+  // Show proactive errors
+  useEffect(() => {
+    if (proactiveError) {
+      showToast(proactiveError, 'error');
+      clearProactiveError();
+    }
+  }, [proactiveError, showToast, clearProactiveError]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -210,6 +231,47 @@ export function HeaderRecordingIndicator() {
                       </p>
                     </div>
                   </button>
+                </div>
+
+                {/* Proactive Assistant Section */}
+                <div className="pt-3 mt-3 border-t border-bg-tertiary mb-4">
+                  <h3 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                    Proactive Assistant
+                  </h3>
+
+                  <div className="flex items-center justify-between p-2 rounded-lg bg-bg-tertiary">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-2 h-2 rounded-full", isMonitoring ? "bg-green-500 animate-pulse" : "bg-gray-500")} />
+                      <span className="text-sm text-text-secondary">{isMonitoring ? 'Monitoring' : 'Off'}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          isMonitoring ? stopMonitoring() : startMonitoring();
+                        }}
+                        className={cn(
+                          "px-2 py-1 rounded text-xs font-medium transition-colors",
+                          isMonitoring
+                            ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                            : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                        )}
+                      >
+                        {isMonitoring ? 'Stop' : 'Start'}
+                      </button>
+
+                      <Link
+                        href="/settings?section=proactive"
+                        onClick={() => setShowModeSelector(false)}
+                        className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary"
+                        title="Settings"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Start button */}
@@ -368,6 +430,42 @@ export function HeaderRecordingIndicator() {
                     >
                       <Square className="w-4 h-4 fill-current" />
                     </button>
+                  </div>
+
+                  {/* Proactive Assistant Section (Active) */}
+                  <div className="mb-4 pt-3 border-t border-bg-tertiary">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-blue-400" />
+                        Proactive Assistant
+                      </h3>
+
+                      <Link
+                        href="/settings?section=proactive"
+                        onClick={() => setIsExpanded(false)}
+                        className="text-xs text-text-tertiary hover:text-text-primary"
+                      >
+                        <Settings className="w-3 h-3" />
+                      </Link>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-bg-tertiary/50">
+                      <span className="text-xs text-text-secondary">{isMonitoring ? 'Monitoring screen...' : 'Monitoring paused'}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          isMonitoring ? stopMonitoring() : startMonitoring();
+                        }}
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                          isMonitoring
+                            ? "bg-bg-quaternary text-text-secondary hover:text-text-primary"
+                            : "bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                        )}
+                      >
+                        {isMonitoring ? 'Pause' : 'Start'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* View full / Pop-out options */}
