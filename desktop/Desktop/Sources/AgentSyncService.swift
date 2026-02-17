@@ -39,14 +39,8 @@ actor AgentSyncService {
     // MARK: - Table definitions
 
     private let tables: [TableSpec] = [
-        // Append-only (cursor by id)
-        TableSpec(name: "screenshots", appendOnly: true, excludedColumns: [
-            "ocrDataJson",
-        ]),
-        TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-        TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-        TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
-        // Mutable (cursor by updatedAt)
+        // Mutable (cursor by updatedAt) — sessions before segments (FK dependency)
+        TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
         TableSpec(name: "action_items", appendOnly: false, excludedColumns: [
             "agentStatus", "agentSessionName", "agentPrompt", "agentPlan",
             "agentStartedAt", "agentCompletedAt", "agentEditedFilesJson",
@@ -54,8 +48,14 @@ actor AgentSyncService {
         ]),
         TableSpec(name: "memories", appendOnly: false, excludedColumns: []),
         TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
-        TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
         TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
+        // Append-only (cursor by id) — segments after sessions
+        TableSpec(name: "screenshots", appendOnly: true, excludedColumns: [
+            "ocrDataJson",
+        ]),
+        TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
+        TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
+        TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
     ]
 
     // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
