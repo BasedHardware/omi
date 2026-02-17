@@ -327,7 +327,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func originForTopLeftAnchor(newSize: NSSize) -> NSPoint {
         NSPoint(
-            x: frame.origin.x,
+            x: frame.midX - newSize.width / 2,
             y: frame.origin.y + (frame.height - newSize.height)
         )
     }
