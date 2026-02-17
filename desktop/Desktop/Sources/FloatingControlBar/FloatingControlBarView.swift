@@ -53,12 +53,19 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             }
         }
+        .clipped()
         .onHover { hovering in
+            // Resize window BEFORE updating SwiftUI state on expand so the expanded
+            // content never renders in a too-small window (which causes overflow).
+            if hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            }
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovering = hovering
             }
-            // Resize window directly — no Combine delay so content and frame change together
-            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: hovering)
+            if !hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+            }
         }
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 11)
