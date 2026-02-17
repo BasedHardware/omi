@@ -53,6 +53,7 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Advice Notifications", keywords: ["advice", "tips", "notify advice"], section: .notifications, advancedSubsection: nil, icon: "bell"),
         SettingsSearchItem(name: "Memory Notifications", keywords: ["memory", "facts", "notify memory"], section: .notifications, advancedSubsection: nil, icon: "bell"),
         SettingsSearchItem(name: "Daily Summary", keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, advancedSubsection: nil, icon: "bell"),
+        SettingsSearchItem(name: "Summary Time", keywords: ["time", "schedule", "when", "hour"], section: .notifications, advancedSubsection: nil, icon: "bell"),
 
         // Privacy
         SettingsSearchItem(name: "Privacy", keywords: ["data", "encryption", "cloud sync", "recordings"], section: .privacy, advancedSubsection: nil, icon: "lock.shield"),
@@ -67,6 +68,7 @@ struct SettingsSearchItem: Identifiable {
 
         // AI Chat
         SettingsSearchItem(name: "AI Chat", keywords: ["claude", "chat settings"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
+        SettingsSearchItem(name: "Ask Mode", keywords: ["ask", "act", "read only", "mode toggle"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
         SettingsSearchItem(name: "CLAUDE.md", keywords: ["claude md", "claude config", "instructions"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
         SettingsSearchItem(name: "Skills", keywords: ["skills", "plugins", "abilities"], section: .aiChat, advancedSubsection: nil, icon: "cpu"),
 
