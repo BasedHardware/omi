@@ -392,7 +392,7 @@ struct TaskTestRunnerView: View {
                     }
                 }
             } else {
-                Text("Select context switch count and click Run Test")
+                Text("Select a time range and click Run Test")
                     .scaledFont(size: 12)
                     .foregroundColor(.secondary.opacity(0.7))
             }
@@ -473,12 +473,12 @@ struct TaskTestRunnerView: View {
                 return
             }
 
-            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots from last 24h")
+            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots from selected range")
 
             guard allScreenshots.count >= 2 else {
                 log("TaskTestRunner: ERROR - Not enough screenshots (\(allScreenshots.count) < 2)")
                 await MainActor.run {
-                    statusMessage = "Not enough screenshots in last 24h to detect context switches"
+                    statusMessage = "Not enough screenshots in selected range to detect context switches"
                     isRunning = false
                 }
                 return
@@ -502,17 +502,17 @@ struct TaskTestRunnerView: View {
 
             guard !departingFrames.isEmpty else {
                 await MainActor.run {
-                    statusMessage = "No context switches found in \(allScreenshots.count) screenshots from last 24h"
+                    statusMessage = "No context switches found in \(allScreenshots.count) screenshots from selected range"
                     isRunning = false
                 }
                 return
             }
 
-            // Take the most recent N departing frames
-            let sampled = Array(departingFrames.suffix(screenshotCount))
+            let sampled = departingFrames
 
             await MainActor.run {
-                statusMessage = "Found \(departingFrames.count) context switches, testing \(sampled.count) most recent..."
+                totalContextSwitches = sampled.count
+                statusMessage = "Found \(sampled.count) context switches, testing all..."
             }
 
             // Process each departing frame
