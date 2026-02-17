@@ -1,13 +1,12 @@
 import Foundation
 
-/// Service that automatically generates goals every 100 conversations
+/// Service that automatically generates goals once per day
 /// and removes stale goals with no progress for 3+ days
 @MainActor
 class GoalGenerationService {
     static let shared = GoalGenerationService()
 
-    private static let kLastGenerationConversationCount = "goalGeneration_lastConversationCount"
-    private let conversationInterval = 100
+    private static let kLastGenerationDate = "goalGeneration_lastDate"
     private let maxActiveGoals = 3
     private let staleGoalDays: TimeInterval = 3 * 86400 // 3 days
 
@@ -16,11 +15,11 @@ class GoalGenerationService {
     // MARK: - Conversation Hook
 
     /// Called after each conversation is saved.
-    /// Removes stale goals and checks if we've hit the 100-conversation milestone.
+    /// Removes stale goals and checks if a day has passed since last generation.
     func onConversationCreated() {
         Task {
             await removeStaleGoals()
-            await checkConversationMilestone()
+            await checkDailyGeneration()
         }
     }
 
@@ -47,43 +46,37 @@ class GoalGenerationService {
         }
     }
 
-    // MARK: - Conversation Milestone Check
+    // MARK: - Daily Generation Check
 
-    /// Check if the user has crossed the next 100-conversation milestone
-    private func checkConversationMilestone() async {
-        do {
-            let totalCount = try await APIClient.shared.getConversationsCount()
-            let lastCount = UserDefaults.standard.integer(forKey: Self.kLastGenerationConversationCount)
+    /// Check if a new calendar day has started since last goal generation
+    private func checkDailyGeneration() async {
+        let lastDate = UserDefaults.standard.object(forKey: Self.kLastGenerationDate) as? Date
 
-            // First time: seed the count without generating
-            if lastCount == 0 {
-                UserDefaults.standard.set(totalCount, forKey: Self.kLastGenerationConversationCount)
-                log("GoalGenerationService: Seeded conversation count at \(totalCount)")
-                return
-            }
-
-            let conversationsSinceLast = totalCount - lastCount
-            if conversationsSinceLast < conversationInterval {
-                return
-            }
-
-            log("GoalGenerationService: Milestone reached — \(conversationsSinceLast) conversations since last generation (total: \(totalCount))")
-            await generateGoalIfNeeded(totalCount: totalCount)
-
-        } catch {
-            log("GoalGenerationService: Failed to check conversation count: \(error.localizedDescription)")
+        // First time: seed the date without generating
+        if lastDate == nil {
+            UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
+            log("GoalGenerationService: Seeded last generation date")
+            return
         }
+
+        let calendar = Calendar.current
+        guard let lastDate = lastDate, !calendar.isDateInToday(lastDate) else {
+            return
+        }
+
+        log("GoalGenerationService: New day — last generation was \(lastDate), triggering generation")
+        await generateGoalIfNeeded()
     }
 
     /// Generate a goal if the user has room for more
-    private func generateGoalIfNeeded(totalCount: Int) async {
+    private func generateGoalIfNeeded() async {
         do {
             let goals = try await APIClient.shared.getGoals()
             let activeGoals = goals.filter { $0.isActive }
 
             if activeGoals.count >= maxActiveGoals {
                 log("GoalGenerationService: User already has \(activeGoals.count) active goals (max \(maxActiveGoals)), skipping")
-                UserDefaults.standard.set(totalCount, forKey: Self.kLastGenerationConversationCount)
+                UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
                 return
             }
 
@@ -91,8 +84,8 @@ class GoalGenerationService {
 
             let goal = try await GoalsAIService.shared.generateGoal()
 
-            UserDefaults.standard.set(totalCount, forKey: Self.kLastGenerationConversationCount)
-            log("GoalGenerationService: Successfully created goal '\(goal.title)' at conversation #\(totalCount)")
+            UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
+            log("GoalGenerationService: Successfully created goal '\(goal.title)'")
 
             NotificationService.shared.sendNotification(
                 title: "New Goal",
@@ -107,11 +100,10 @@ class GoalGenerationService {
         }
     }
 
-    /// Manual trigger that bypasses the conversation count check
+    /// Manual trigger that bypasses the daily check
     func generateNow() async {
         log("GoalGenerationService: Manual generation triggered")
         await removeStaleGoals()
-        let totalCount = (try? await APIClient.shared.getConversationsCount()) ?? 0
-        await generateGoalIfNeeded(totalCount: totalCount)
+        await generateGoalIfNeeded()
     }
 }
