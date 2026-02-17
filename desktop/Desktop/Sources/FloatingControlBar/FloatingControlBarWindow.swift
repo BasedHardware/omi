@@ -72,12 +72,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     override var canBecomeMain: Bool { true }
 
     override func keyDown(with event: NSEvent) {
-        // Esc closes the AI conversation, or hides the bar if collapsed
+        // Esc closes the AI conversation only — never hides the entire bar
         if event.keyCode == 53 { // Escape
             if state.showingAIConversation {
                 closeAIConversation()
-            } else {
-                hideBar()
             }
             return
         }

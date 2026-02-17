@@ -104,14 +104,14 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal circle shown when not hovering
+    /// Minimal icon shown when not hovering
     private var compactCircleView: some View {
         Group {
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png")!) {
+            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "tray_icon", withExtension: "png")!) {
                 Image(nsImage: logoImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 16, height: 16)
+                    .frame(height: 22)
             } else {
                 Image(systemName: "waveform")
                     .font(.system(size: 12, weight: .medium))
