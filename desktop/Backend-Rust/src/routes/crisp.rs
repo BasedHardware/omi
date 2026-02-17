@@ -94,15 +94,20 @@ async fn get_unread_messages(
         StatusCode::SERVICE_UNAVAILABLE
     })?;
 
+    tracing::info!("Crisp unread check for user {}", user.uid);
+
     // Look up user email from Firestore
     let email = match state.firestore.get_user_email(&user.uid).await {
-        Ok(Some(e)) => e,
+        Ok(Some(e)) => {
+            tracing::info!("Crisp: user email = {}", e);
+            e
+        }
         Ok(None) => {
-            tracing::debug!("No email found for user {}", user.uid);
+            tracing::info!("Crisp: no email found for user {}", user.uid);
             return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
         }
         Err(e) => {
-            tracing::warn!("Failed to get user email: {}", e);
+            tracing::warn!("Crisp: failed to get user email: {}", e);
             return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
         }
     };
@@ -157,9 +162,12 @@ async fn get_unread_messages(
         .map(|c| c.session_id.clone());
 
     let session_id = match session_id {
-        Some(id) => id,
+        Some(id) => {
+            tracing::info!("Crisp: found session {} for {}", id, email);
+            id
+        }
         None => {
-            tracing::debug!("No Crisp conversation found for email {}", email);
+            tracing::info!("Crisp: no conversation found for email {}", email);
             return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
         }
     };

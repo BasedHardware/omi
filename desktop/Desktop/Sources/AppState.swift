@@ -1803,8 +1803,10 @@ class AppState: ObservableObject {
                 }
             }
 
-            // Check if we've hit the 100-conversation milestone for auto goal generation
+            // Check daily goal generation
+            log("GoalGenerationService: About to call onConversationCreated")
             Task { @MainActor in
+                log("GoalGenerationService: Inside Task, calling onConversationCreated")
                 GoalGenerationService.shared.onConversationCreated()
             }
 
