@@ -19,6 +19,7 @@ from models.chat import Message
 from models.conversation import Conversation, ConversationSource
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
+from utils.config import get_app_name
 from utils.notifications import send_notification
 from utils.llm.clients import generate_embedding, llm_mini
 from utils.llm.proactive_notification import get_proactive_message
@@ -446,12 +447,13 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
     mentor_results = {}
     mentor_notification = process_mentor_notification(uid, segments)
     if mentor_notification:
-        # Create a virtual "Omi" app for processing
+        app_name = get_app_name()
+        # Create a virtual app for processing
         mentor_app = App(
             id='mentor',
-            name='Omi',
+            name=app_name,
             category='productivity',
-            author='Omi',
+            author=app_name,
             description='AI providing real-time guidance during conversations',
             image='https://raw.githubusercontent.com/BasedHardware/Omi/main/assets/images/app_logo.png',
             capabilities={'proactive_notification'},
