@@ -81,11 +81,12 @@ struct FloatingControlBarView: View {
             HStack(spacing: 6) {
                 compactLabel("Hide", keys: ["\u{2318}", "\\"])
                 compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
-                if state.showingAIConversation {
-                    Spacer().frame(width: 2)
-                    compactToggle("Solid color", isOn: $shortcutSettings.solidBackground)
-                        .help("Toggle between solid dark background and semi-transparent blur")
-                }
+                // Solid color toggle moved to Settings > Ask Omi Floating Bar
+                // if state.showingAIConversation {
+                //     Spacer().frame(width: 2)
+                //     compactToggle("Solid color", isOn: $shortcutSettings.solidBackground)
+                //         .help("Toggle between solid dark background and semi-transparent blur")
+                // }
             }
         }
         .padding(.horizontal, 6)
