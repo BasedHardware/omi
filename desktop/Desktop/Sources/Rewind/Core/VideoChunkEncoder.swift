@@ -24,8 +24,11 @@ actor VideoChunkEncoder {
     private let aspectRatioChangeThreshold: CGFloat = 0.2
 
     /// Maximum frames to buffer before forcing a flush (memory safety)
-    /// At ~24MB per CGImage (3000px), 120 frames = ~2.9GB max
-    private let maxBufferFrames = 120
+    /// Calculated from chunk duration + frame rate + padding so the normal
+    /// duration-based finalization always fires before this safety limit.
+    private var maxBufferFrames: Int {
+        Int(chunkDuration * frameRate) + 20
+    }
 
     /// Maximum consecutive ffmpeg failures before emergency reset
     private let maxConsecutiveFailures = 5
