@@ -122,15 +122,13 @@ extension FlutterError: Error {}
   // MARK: - Silent Push for Apple Reminders Auto-Sync
 
   private let syncEventStore = EKEventStore()
-  private let syncQueue = DispatchQueue(label: "com.omi.apple-reminders-sync")
+  private static let syncedItemsKey = "omi_synced_action_items"
 
   override func application(
       _ application: UIApplication,
       didReceiveRemoteNotification userInfo: [AnyHashable: Any],
       fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      print("AppDelegate: Received remote notification: \(userInfo)")
-
       // Check if it's Apple Reminders sync
       if let type = userInfo["type"] as? String, type == "apple_reminders_sync" {
           handleAppleRemindersSync(userInfo: userInfo, completionHandler: completionHandler)
@@ -158,11 +156,11 @@ extension FlutterError: Error {}
           return
       }
 
-      // Check permission - must already have access (can't prompt from background)
+      // Check permission
       let status = EKEventStore.authorizationStatus(for: .reminder)
       let hasAccess: Bool
       if #available(iOS 17.0, *) {
-          hasAccess = status == .fullAccess
+          hasAccess = status == .fullAccess || status == .writeOnly || status == .authorized
       } else {
           hasAccess = status == .authorized
       }
@@ -171,64 +169,53 @@ extension FlutterError: Error {}
           return
       }
 
-      syncQueue.async {
-          let dedupTag = "omi:\(actionItemId)"
+      // Dedup via UserDefaults
+      var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppDelegate.syncedItemsKey) ?? [])
+      guard !syncedIds.contains(actionItemId) else {
+          completionHandler(.noData)
+          return
+      }
 
-          guard let calendar = self.syncEventStore.defaultCalendarForNewReminders() else {
-              completionHandler(.failed)
-              return
+      guard let calendar = syncEventStore.defaultCalendarForNewReminders() else {
+          completionHandler(.failed)
+          return
+      }
+
+      // Parse due date
+      let dueDate: Date? = {
+          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
+              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
           }
+          return nil
+      }()
 
-          let predicate = self.syncEventStore.predicateForReminders(in: [calendar])
-          let semaphore = DispatchSemaphore(value: 0)
-          var fetchResult: UIBackgroundFetchResult = .failed
+      // Create reminder
+      let reminder = EKReminder(eventStore: syncEventStore)
+      reminder.title = reminderTitle
+      reminder.notes = "From Omi"
+      reminder.calendar = calendar
 
-          self.syncEventStore.fetchReminders(matching: predicate) { existingReminders in
-              defer { semaphore.signal() }
+      if let due = dueDate {
+          reminder.dueDateComponents = Calendar.current.dateComponents(
+              [.year, .month, .day, .hour, .minute], from: due
+          )
+      }
 
-              if let reminders = existingReminders,
-                 reminders.contains(where: { $0.notes?.contains(dedupTag) == true }) {
-                  fetchResult = .noData
-                  return
-              }
-
-              // Parse due date
-              let dueDate: Date? = {
-                  if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-                      return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
-                  }
-                  return nil
-              }()
-
-              // Create reminder
-              let reminder = EKReminder(eventStore: self.syncEventStore)
-              reminder.title = reminderTitle
-              reminder.notes = "From Omi\n\(dedupTag)"
-              reminder.calendar = calendar
-
-              if let due = dueDate {
-                  reminder.dueDateComponents = Calendar.current.dateComponents(
-                      [.year, .month, .day, .hour, .minute], from: due
-                  )
-              }
-
-              do {
-                  try self.syncEventStore.save(reminder, commit: true)
-                  DispatchQueue.main.async {
-                      self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
-                  }
-                  fetchResult = .newData
-              } catch {
-                  fetchResult = .failed
-              }
+      do {
+          try syncEventStore.save(reminder, commit: true)
+          syncedIds.insert(actionItemId)
+          // Keep only the most recent 100 entries to avoid unbounded growth
+          var syncedArray = Array(syncedIds)
+          if syncedArray.count > 100 {
+              syncedArray = Array(syncedArray.suffix(100))
           }
-
-          let waitResult = semaphore.wait(timeout: .now() + 25.0)
-          if waitResult == .timedOut {
-              completionHandler(.failed)
-          } else {
-              completionHandler(fetchResult)
+          UserDefaults.standard.set(syncedArray, forKey: AppDelegate.syncedItemsKey)
+          DispatchQueue.main.async {
+              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
           }
+          completionHandler(.newData)
+      } catch {
+          completionHandler(.failed)
       }
   }
 
