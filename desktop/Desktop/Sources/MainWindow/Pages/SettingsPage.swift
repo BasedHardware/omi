@@ -189,6 +189,10 @@ struct SettingsContentView: View {
     @State private var fileViewerTitle = ""
     @State private var skillSearchQuery = ""
 
+    // Browser Extension settings
+    @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
+    @State private var playwrightExtensionToken: String = ""
+
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
@@ -1617,9 +1621,87 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Browser Extension card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "globe")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Browser Extension")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $playwrightUseExtension)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+
+                    Text("Connect to your Chrome browser with all your logged-in sessions. When disabled, the AI opens a standalone browser instead.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if playwrightUseExtension {
+                        Button(action: {
+                            if let url = URL(string: "https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.up.right.square")
+                                    .scaledFont(size: 12)
+                                Text("Install Chrome Extension")
+                                    .scaledFont(size: 13)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Auto-approve token (optional)")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            HStack(spacing: 8) {
+                                TextField("Paste token from extension", text: $playwrightExtensionToken)
+                                    .textFieldStyle(.plain)
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .padding(8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                                    )
+                                    .onChange(of: playwrightExtensionToken) { _, newValue in
+                                        UserDefaults.standard.set(newValue, forKey: "playwrightExtensionToken")
+                                    }
+
+                                if !playwrightExtensionToken.isEmpty {
+                                    Button(action: { playwrightExtensionToken = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .scaledFont(size: 14)
+                                            .foregroundColor(OmiColors.textTertiary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            Text("Set a token in the extension settings and paste it here to skip the approval popup for each action.")
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
             refreshAIChatConfig()
+            playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
         }
         .sheet(isPresented: $showFileViewer) {
             fileViewerSheet

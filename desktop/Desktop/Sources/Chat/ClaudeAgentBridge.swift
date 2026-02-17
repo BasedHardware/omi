@@ -98,6 +98,16 @@ actor ClaudeAgentBridge {
         if !existingPath.contains(nodeDir) {
             env["PATH"] = "\(nodeDir):\(existingPath)"
         }
+
+        // Playwright MCP extension mode
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "playwrightUseExtension") == nil || defaults.bool(forKey: "playwrightUseExtension") {
+            env["PLAYWRIGHT_USE_EXTENSION"] = "true"
+            if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
+                env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
+            }
+        }
+
         proc.environment = env
 
         let stdin = Pipe()
@@ -138,6 +148,12 @@ actor ClaudeAgentBridge {
         if case .`init`(let sessionId) = initMsg {
             log("ClaudeAgentBridge: bridge ready (sessionId=\(sessionId))")
         }
+    }
+
+    /// Restart the bridge process (stop then start)
+    func restart() async throws {
+        stop()
+        try await start()
     }
 
     /// Stop the bridge process
