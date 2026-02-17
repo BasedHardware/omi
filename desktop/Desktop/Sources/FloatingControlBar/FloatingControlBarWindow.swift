@@ -325,10 +325,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     // MARK: - Window Geometry
 
-    private func originForTopLeftAnchor(newSize: NSSize) -> NSPoint {
+    private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
         NSPoint(
             x: frame.midX - newSize.width / 2,
-            y: frame.origin.y + (frame.height - newSize.height)
+            y: frame.midY - newSize.height / 2
         )
     }
 
