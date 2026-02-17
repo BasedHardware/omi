@@ -1,9 +1,22 @@
 import { useProactiveContext } from '@/components/proactive/ProactiveContext';
+import { useProactiveNotifications } from '@/hooks/useProactiveNotifications';
 import { Card, Toggle, SettingRow, Dropdown } from '@/components/ui/settings-common';
 import { Sparkles, Brain, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_ANALYSIS_PROMPT } from '@/lib/proactiveAnalysis';
 import { DEFAULT_FOCUS_SYSTEM_PROMPT } from '@/lib/focusAnalysis';
+
+function ProactiveTester() {
+    const { testNotification } = useProactiveNotifications();
+    return (
+        <button
+            onClick={() => testNotification()}
+            className="text-xs text-text-tertiary hover:text-text-primary underline"
+        >
+            Test Notification
+        </button>
+    );
+}
 
 export function ProactiveSection() {
     const {
@@ -66,8 +79,8 @@ export function ProactiveSection() {
                         />
                     </SettingRow>
 
-                    <div className="mt-4 pt-4 border-t border-white/[0.06]">
-                        {/* Status section removed */}
+                    <div className="mt-4 pt-4 border-t border-white/[0.06] flex justify-end">
+                        <ProactiveTester />
                     </div>
                 </Card>
             </div>

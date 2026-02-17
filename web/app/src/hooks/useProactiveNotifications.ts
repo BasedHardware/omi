@@ -353,5 +353,17 @@ export function useProactiveNotifications() {
         clearAdviceHistory: () => setPreviousAdvice([]),
         clearFocusHistory: () => setFocusHistory([]),
         clearError: () => setError(null),
+        testNotification: async () => {
+            const hasPermission = await requestNotificationPermission();
+            if (hasPermission) {
+                // Force a notification, bypassing cooldown check for testing
+                if (Notification.permission === 'granted') {
+                    new Notification('Proactive Assistant Test', {
+                        body: 'This is a test notification to verify permissions and behavior.',
+                        icon: '/logo.png',
+                    });
+                }
+            }
+        }
     };
 }

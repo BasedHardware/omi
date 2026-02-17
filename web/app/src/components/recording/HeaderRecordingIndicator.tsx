@@ -13,6 +13,7 @@ import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
 import { useProactiveNotifications } from '@/components/proactive';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 import { useToast } from '@/components/ui/Toast';
 
