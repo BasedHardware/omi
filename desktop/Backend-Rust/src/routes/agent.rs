@@ -238,6 +238,64 @@ async fn get_agent_status(
                             last_query_at: vm.last_query_at,
                         })));
                     }
+                    Ok(gce_status) if gce_status == "RUNNING"
+                        && (vm.status == AgentVmStatus::Error
+                            || vm.status == AgentVmStatus::Stopped) =>
+                    {
+                        // VM is actually running but Firestore is stale — recover
+                        tracing::info!(
+                            "VM {} is RUNNING but Firestore says {:?}, recovering...",
+                            vm.vm_name,
+                            vm.status
+                        );
+                        // Get fresh IP and update Firestore
+                        let firestore = state.firestore.clone();
+                        let uid = user.uid.clone();
+                        let vm_name = vm.vm_name.clone();
+                        let zone = vm.zone.clone();
+                        let auth_token = vm.auth_token.clone();
+
+                        tokio::spawn(async move {
+                            let project = "based-hardware";
+                            let instance_url = format!(
+                                "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+                                project, zone, vm_name
+                            );
+                            if let Ok(resp) = firestore
+                                .build_compute_request(reqwest::Method::GET, &instance_url)
+                                .await
+                            {
+                                if let Ok(resp) = resp.send().await {
+                                    if let Ok(instance) = resp.json::<serde_json::Value>().await {
+                                        let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                                            .as_str()
+                                            .unwrap_or("unknown")
+                                            .to_string();
+                                        let now = chrono::Utc::now().to_rfc3339();
+                                        let _ = firestore
+                                            .set_agent_vm(
+                                                &uid, &vm_name, &zone,
+                                                Some(&ip), AgentVmStatus::Ready,
+                                                &auth_token, &now,
+                                            )
+                                            .await;
+                                        tracing::info!("VM {} recovered — ip={}", vm_name, ip);
+                                    }
+                                }
+                            }
+                        });
+
+                        // Return provisioning so client polls
+                        return Ok(Json(Some(AgentStatusResponse {
+                            vm_name: vm.vm_name,
+                            zone: vm.zone,
+                            ip: None,
+                            status: AgentVmStatus::Provisioning,
+                            auth_token: vm.auth_token,
+                            created_at: vm.created_at,
+                            last_query_at: vm.last_query_at,
+                        })));
+                    }
                     Ok(gce_status) => {
                         tracing::debug!("VM {} GCE status: {}", vm.vm_name, gce_status);
                     }
