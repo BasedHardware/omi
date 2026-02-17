@@ -87,7 +87,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
     private var isInRecoveryMode = false
     private var recoveryRetryCount = 0
-    private let maxRecoveryRetries = 30  // Try for 30 seconds before giving up
+    private let maxRecoveryRetries = 30  // Try up to 30 attempts before giving up
+    private let recoveryInterval: TimeInterval = 5.0  // Seconds between recovery attempts
 
     // Background polling state for extended recovery after initial retry fails
     private var isInBackgroundPolling = false
@@ -1056,8 +1057,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         captureTimer?.invalidate()
         captureTimer = nil
 
-        // Start recovery timer - check every 1 second if we can capture again
-        captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
+        // Start recovery timer - check every 5 seconds if we can capture again
+        // Using a slower interval than normal capture to reduce CPU overhead from repeated failed ScreenCaptureKit calls
+        captureTimer = Timer.scheduledTimer(withTimeInterval: recoveryInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.attemptRecovery()
             }
@@ -1072,7 +1074,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         if isInSpecialSystemMode() {
             // Still in Exposé/Mission Control, keep waiting
             if recoveryRetryCount % 5 == 0 {
-                log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (\(recoveryRetryCount)s)")
+                log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (attempt \(recoveryRetryCount))")
             }
 
             // Give up after max retries (likely a real issue)
@@ -1092,7 +1094,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         if let _ = await screenCaptureService.captureActiveWindowAsync() {
             // Success! Exit recovery mode
-            log("ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount)s, resuming normal capture (frontmost: \(getFrontmostAppInfo()))")
+            log("ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))")
             exitRecoveryMode(success: true)
         } else {
             // Still failing
