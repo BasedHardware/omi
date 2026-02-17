@@ -572,6 +572,12 @@ extension MixpanelManager {
         ])
     }
 
+    func taskPromoted(taskCount: Int) {
+        track("Task Promoted", properties: [
+            "task_count": taskCount
+        ])
+    }
+
     func memoryExtracted(memoryCount: Int) {
         track("Memory Extracted", properties: [
             "memory_count": memoryCount

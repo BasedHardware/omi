@@ -585,6 +585,11 @@ class AnalyticsManager {
         PostHogManager.shared.taskExtracted(taskCount: taskCount)
     }
 
+    func taskPromoted(taskCount: Int) {
+        MixpanelManager.shared.taskPromoted(taskCount: taskCount)
+        PostHogManager.shared.taskPromoted(taskCount: taskCount)
+    }
+
     func memoryExtracted(memoryCount: Int) {
         MixpanelManager.shared.memoryExtracted(memoryCount: memoryCount)
         PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
