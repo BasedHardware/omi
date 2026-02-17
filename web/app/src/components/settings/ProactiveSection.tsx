@@ -1,7 +1,7 @@
 import { useProactiveContext } from '@/components/proactive/ProactiveContext';
 import { useProactiveNotifications } from '@/hooks/useProactiveNotifications';
 import { Card, Toggle, SettingRow, Dropdown } from '@/components/ui/settings-common';
-import { Sparkles, Brain, Zap } from 'lucide-react';
+import { Sparkles, Brain, Zap, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_ANALYSIS_PROMPT } from '@/lib/proactiveAnalysis';
 import { DEFAULT_FOCUS_SYSTEM_PROMPT } from '@/lib/focusAnalysis';
@@ -79,7 +79,7 @@ export function ProactiveSection() {
                         />
                     </SettingRow>
 
-                    <div className="mt-4 pt-4 border-t border-white/[0.06] flex justify-end">
+                    <div className="mt-2 flex justify-end">
                         <ProactiveTester />
                     </div>
                 </Card>
@@ -141,6 +141,75 @@ export function ProactiveSection() {
                                     className="w-full h-24 px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500 resize-none font-mono"
                                 />
                             </div>
+                        </div>
+                    )}
+                </Card>
+            </div>
+
+            {/* Memory Assistant */}
+            <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Memory Assistant</h3>
+                    <BookOpen className="w-4 h-4 text-pink-400" />
+                </div>
+                <Card>
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <p className="text-text-primary font-medium">Enable Memory Assistant</p>
+                            <p className="text-xs text-text-tertiary">Automatically extract and save important facts</p>
+                        </div>
+                        <Toggle
+                            enabled={settings.memory.enabled}
+                            onChange={(enabled) => updateSettings(prev => ({
+                                ...prev,
+                                memory: { ...prev.memory, enabled }
+                            }))}
+                        />
+                    </div>
+
+                    {settings.memory.enabled && (
+                        <div className="space-y-4 pt-4 border-t border-white/[0.06] animate-in slide-in-from-top-2 fade-in duration-200">
+                            <SettingRow
+                                label="Confidence Threshold"
+                                description="Minimum confidence to save a memory"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-mono text-text-secondary">{(settings.memory.confidenceThreshold * 100).toFixed(0)}%</span>
+                                    <input
+                                        type="range"
+                                        min="0.5"
+                                        max="1.0"
+                                        step="0.05"
+                                        value={settings.memory.confidenceThreshold}
+                                        onChange={(e) => updateSettings(prev => ({
+                                            ...prev,
+                                            memory: { ...prev.memory, confidenceThreshold: parseFloat(e.target.value) }
+                                        }))}
+                                        className="w-32 accent-purple-500"
+                                    />
+                                </div>
+                            </SettingRow>
+
+                            <SettingRow
+                                label="Max Memories / Minute"
+                                description="Limit memory creation rate"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-sm font-mono text-text-secondary">{settings.memory.maxMemoriesPerMinute || 3}</span>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="10"
+                                        step="1"
+                                        value={settings.memory.maxMemoriesPerMinute || 3}
+                                        onChange={(e) => updateSettings(prev => ({
+                                            ...prev,
+                                            memory: { ...prev.memory, maxMemoriesPerMinute: parseInt(e.target.value) }
+                                        }))}
+                                        className="w-32 accent-purple-500"
+                                    />
+                                </div>
+                            </SettingRow>
                         </div>
                     )}
                 </Card>

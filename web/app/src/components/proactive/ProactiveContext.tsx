@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
 import type { ExtractedAdvice } from '@/lib/proactiveAnalysis';
+import type { ExtractedMemory } from '@/lib/memoryAnalysis';
 import type { FocusHistoryItem, FocusStatus } from '@/lib/focusAnalysis';
 
 // Types
@@ -27,6 +28,12 @@ export interface ProactiveSettings {
     // Focus Assistant
     focus: AssistantSettings;
 
+    // Memory Assistant
+    memory: AssistantSettings & {
+        confidenceThreshold: number;
+        maxMemoriesPerMinute: number;
+    };
+
     // Legacy support (to avoid full break during transition)
     enabled: boolean;
     confidenceThreshold?: number; // deprecated
@@ -46,6 +53,13 @@ const DEFAULT_SETTINGS: ProactiveSettings = {
 
     focus: {
         enabled: false,
+        systemPrompt: '',
+    },
+
+    memory: {
+        enabled: true,
+        confidenceThreshold: 0.6,
+        maxMemoriesPerMinute: 3,
         systemPrompt: '',
     },
 
@@ -126,6 +140,7 @@ interface ProactiveContextValue {
 
     // Data
     previousAdvice: ExtractedAdvice[];
+    previousMemories: ExtractedMemory[];
     focusHistory: FocusHistoryItem[];
     currentFocusStatus: FocusStatus | 'unknown';
 
@@ -136,9 +151,11 @@ interface ProactiveContextValue {
     setState: (state: ProactiveState) => void;
     updateSettings: (updates: Partial<ProactiveSettings> | ((prev: ProactiveSettings) => Partial<ProactiveSettings>)) => void;
     addAdvice: (advice: ExtractedAdvice) => void;
+    addMemory: (memory: ExtractedMemory) => void;
     addFocusEntry: (entry: FocusHistoryItem) => void;
     clearHistory: () => void;
     setPreviousAdvice: React.Dispatch<React.SetStateAction<ExtractedAdvice[]>>;
+    setPreviousMemories: React.Dispatch<React.SetStateAction<ExtractedMemory[]>>;
     setFocusHistory: React.Dispatch<React.SetStateAction<FocusHistoryItem[]>>;
     setLastNotificationTime: (time: number) => void;
     setError: (error: string | null) => void;
@@ -155,6 +172,7 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
     const [state, setState] = useState<ProactiveState>('idle');
     const [settings, setSettings] = useState<ProactiveSettings>(loadSettings);
     const [previousAdvice, setPreviousAdvice] = useState<ExtractedAdvice[]>([]);
+    const [previousMemories, setPreviousMemories] = useState<ExtractedMemory[]>([]);
     const [focusHistory, setFocusHistory] = useState<FocusHistoryItem[]>([]);
     const [currentFocusStatus, setCurrentFocusStatus] = useState<FocusStatus | 'unknown'>('unknown');
     const [lastNotificationTime, setLastNotificationTime] = useState(0);
@@ -172,6 +190,7 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
 
             if (newUpdates.advice) updated.advice = { ...prev.advice, ...newUpdates.advice };
             if (newUpdates.focus) updated.focus = { ...prev.focus, ...newUpdates.focus };
+            if (newUpdates.memory) updated.memory = { ...prev.memory, ...newUpdates.memory };
 
             saveSettings(updated);
             return updated;
@@ -183,6 +202,11 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
         setPreviousAdvice((prev) => [advice, ...prev].slice(0, MAX_PREVIOUS_ADVICE));
     }, []);
 
+    // Add memory to history
+    const addMemory = useCallback((memory: ExtractedMemory) => {
+        setPreviousMemories((prev) => [memory, ...prev].slice(0, 20)); // Keep slightly more memories
+    }, []);
+
     // Add focus entry
     const addFocusEntry = useCallback((entry: FocusHistoryItem) => {
         setFocusHistory((prev) => [entry, ...prev].slice(0, MAX_PREVIOUS_ADVICE));
@@ -191,6 +215,7 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
 
     const clearHistory = useCallback(() => {
         setPreviousAdvice([]);
+        setPreviousMemories([]);
         setFocusHistory([]);
         setCurrentFocusStatus('unknown');
     }, []);
@@ -201,6 +226,7 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
                 state,
                 settings,
                 previousAdvice,
+                previousMemories,
                 focusHistory,
                 currentFocusStatus,
                 lastNotificationTime,
@@ -208,9 +234,11 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
                 setState,
                 updateSettings,
                 addAdvice,
+                addMemory,
                 addFocusEntry,
                 clearHistory,
                 setPreviousAdvice,
+                setPreviousMemories,
                 setFocusHistory,
                 setLastNotificationTime,
                 setError,

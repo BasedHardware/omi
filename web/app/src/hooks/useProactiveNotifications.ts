@@ -13,6 +13,8 @@ import {
     DEFAULT_ANALYSIS_PROMPT,
 } from '@/lib/proactiveAnalysis';
 import { analyzeFocus } from '@/lib/focusAnalysis';
+import { extractMemories } from '@/lib/memoryAnalysis';
+import { createMemory } from '@/lib/api';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 
 /**
@@ -32,6 +34,7 @@ export function useProactiveNotifications() {
         state,
         settings,
         previousAdvice,
+        previousMemories,
         focusHistory,
         currentFocusStatus,
         lastNotificationTime,
@@ -39,9 +42,11 @@ export function useProactiveNotifications() {
         setState,
         updateSettings,
         addAdvice,
+        addMemory,
         addFocusEntry,
         clearHistory,
         setPreviousAdvice,
+        setPreviousMemories,
         setFocusHistory,
         setLastNotificationTime,
         setError,
@@ -53,6 +58,8 @@ export function useProactiveNotifications() {
     const frameCaptureRef = useRef<FrameCapture | null>(null);
     const isAnalyzingRef = useRef(false);
     const lastNotificationContentRef = useRef<string>('');
+    const recentMemoriesCountRef = useRef<number>(0);
+    const lastMemoryResetTimeRef = useRef<number>(Date.now());
 
     // Request notification permission
     const requestNotificationPermission = useCallback(async (): Promise<boolean> => {
@@ -203,6 +210,74 @@ export function useProactiveNotifications() {
                     );
                 }
 
+                // 3. Memory Assistant
+                if (settings.memory.enabled) {
+                    const now = Date.now();
+                    // Reset rate limit if a minute has passed
+                    if (now - lastMemoryResetTimeRef.current > 60000) {
+                        recentMemoriesCountRef.current = 0;
+                        lastMemoryResetTimeRef.current = now;
+                    }
+
+                    if (recentMemoriesCountRef.current >= settings.memory.maxMemoriesPerMinute) {
+                        console.log(`Proactive Memory: Rate limit reached (${settings.memory.maxMemoriesPerMinute}/min), skipping analysis.`);
+                    } else {
+                        promises.push(
+                            extractMemories({
+                                imageBase64,
+                                previousMemories: previousMemories,
+                                systemPrompt: settings.memory.systemPrompt || undefined,
+                            }).then(async result => {
+                                if (result?.has_new_memory && result.memories.length > 0) {
+                                    for (const memory of result.memories) {
+                                        // Rate limit check again (in case parallel processing)
+                                        if (recentMemoriesCountRef.current >= settings.memory.maxMemoriesPerMinute) break;
+
+                                        // Deduplication check (client-side backup)
+                                        const isDuplicate = previousMemories.some(m =>
+                                            m.content.toLowerCase() === memory.content.toLowerCase() ||
+                                            (m.content.length > 10 && memory.content.includes(m.content)) ||
+                                            (memory.content.length > 10 && m.content.includes(memory.content))
+                                        );
+
+                                        if (isDuplicate) {
+                                            console.log(`Proactive Memory: Duplicate detected, skipping: "${memory.content}"`);
+                                            continue;
+                                        }
+
+                                        if (memory.confidence >= settings.memory.confidenceThreshold) {
+                                            console.log(`Proactive Memory: [${Math.round(memory.confidence * 100)}%] ${memory.content}`);
+
+                                            // Increment counter
+                                            recentMemoriesCountRef.current += 1;
+
+                                            // Save to backend
+                                            try {
+                                                await createMemory({
+                                                    content: memory.content,
+                                                    category: memory.category === 'interesting' ? 'interesting' : 'system',
+                                                    sourceApp: memory.source_app,
+                                                    confidence: memory.confidence,
+                                                    contextSummary: result.context_summary,
+                                                    currentActivity: result.current_activity,
+                                                });
+
+                                                // Add to local context
+                                                addMemory(memory);
+
+                                                // Notify user
+                                                sendNotification('Omi Memory', `Saved: ${memory.content}`, 'proactive-memory');
+                                            } catch (err) {
+                                                console.error('Failed to save memory:', err);
+                                            }
+                                        }
+                                    }
+                                }
+                            })
+                        );
+                    }
+                }
+
                 await Promise.all(promises);
 
             } catch (err) {
@@ -217,11 +292,14 @@ export function useProactiveNotifications() {
         [
             settings.advice,
             settings.focus,
+            settings.memory,
             previousAdvice,
+            previousMemories,
             focusHistory,
             currentFocusStatus,
             setState,
             addAdvice,
+            addMemory,
             addFocusEntry,
             sendNotification,
             getRecentTranscript
@@ -341,6 +419,7 @@ export function useProactiveNotifications() {
         state,
         settings,
         previousAdvice,
+        previousMemories,
         focusHistory,
         currentFocusStatus,
         error,
@@ -351,6 +430,7 @@ export function useProactiveNotifications() {
         updateSettings,
         clearHistory,
         clearAdviceHistory: () => setPreviousAdvice([]),
+        clearMemoryHistory: () => setPreviousMemories([]),
         clearFocusHistory: () => setFocusHistory([]),
         clearError: () => setError(null),
         testNotification: async () => {

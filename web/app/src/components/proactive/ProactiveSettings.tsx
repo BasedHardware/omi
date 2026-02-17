@@ -9,7 +9,7 @@ interface ProactiveSettingsProps {
 }
 
 export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
-    const { settings, updateSettings, clearAdviceHistory, previousAdvice } = useProactiveNotifications();
+    const { settings, updateSettings, clearAdviceHistory, previousAdvice, clearMemoryHistory, previousMemories } = useProactiveNotifications();
 
     const [showPrompt, setShowPrompt] = useState(false);
 
@@ -42,7 +42,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
 
             {/* Enable toggle */}
             <div className="flex items-center justify-between">
-                <label id="proactive-toggle-label" className="text-sm font-medium text-gray-200">Enable Proactive Monitoring</label>
+                <label id="proactive-toggle-label" className="text-sm font-medium text-gray-200">Enable Advice Assistant</label>
                 <button
                     role="switch"
                     aria-checked={settings.advice.enabled}
@@ -171,6 +171,93 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                     </div>
                 )}
             </div>
+
+            {/* Memory Assistant Section */}
+            <div className="space-y-4 border-t border-gray-700 pt-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-gray-200">Memory Assistant</h3>
+                    <button
+                        role="switch"
+                        aria-checked={settings.memory.enabled}
+                        onClick={() => updateSettings(prev => ({ ...prev, memory: { ...prev.memory, enabled: !prev.memory.enabled } }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.memory.enabled ? 'bg-purple-600' : 'bg-gray-600'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.memory.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+
+                {settings.memory.enabled && (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-gray-400">Confidence Threshold</label>
+                                <span className="text-xs text-gray-400">
+                                    {Math.round((settings.memory.confidenceThreshold) * 100)}%
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0.5"
+                                max="1.0"
+                                step="0.05"
+                                value={settings.memory.confidenceThreshold}
+                                onChange={(e) => updateSettings({ memory: { ...settings.memory, confidenceThreshold: Number(e.target.value) } })}
+                                className="w-full"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-medium text-gray-400">Max Memories / Minute</label>
+                                <span className="text-xs text-gray-400">
+                                    {settings.memory.maxMemoriesPerMinute}
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                step="1"
+                                value={settings.memory.maxMemoriesPerMinute || 3}
+                                onChange={(e) => updateSettings({ memory: { ...settings.memory, maxMemoriesPerMinute: Number(e.target.value) } })}
+                                className="w-full"
+                            />
+                            <p className="text-[10px] text-gray-500">
+                                Limit the number of memories saved per minute.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Memory History */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-gray-200">
+                            Memory History ({previousMemories.length})
+                        </label>
+                        <button
+                            onClick={clearMemoryHistory}
+                            className="text-xs text-gray-400 hover:text-white"
+                            disabled={previousMemories.length === 0}
+                        >
+                            Clear
+                        </button>
+                    </div>
+                    {previousMemories.length > 0 && (
+                        <div className="max-h-32 overflow-y-auto rounded-md border border-gray-700 bg-gray-900 p-2">
+                            {previousMemories.map((memory, i) => (
+                                <div key={i} className="text-xs text-gray-400 py-1 border-b border-gray-800 last:border-0 pl-1 border-l-2 border-purple-500">
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-300 font-medium truncate pr-2">{memory.content}</span>
+                                        <span className="text-gray-600">[{Math.round(memory.confidence * 100)}%]</span>
+                                    </div>
+                                    <div className="text-gray-600 text-[10px]">{memory.source_app}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
             {/* Debugging Section */}
             <div className="space-y-2 border-t border-gray-700 pt-4">
                 <h3 className="text-sm font-medium text-gray-200">Debugging</h3>
@@ -211,6 +298,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 <div className="mt-2 text-xs text-gray-500 font-mono bg-black/20 p-2 rounded max-h-32 overflow-y-auto">
                     <div>API Key: Configured server-side (.env.local)</div>
                     <div>Advice: {settings.advice?.enabled ? 'Enabled' : 'Disabled'}</div>
+                    <div>Memory: {settings.memory?.enabled ? 'Enabled' : 'Disabled'}</div>
                     <div>Focus: {settings.focus?.enabled ? 'Enabled' : 'Disabled'}</div>
                     <div>Interval: {settings.analysisIntervalMs}ms</div>
                     <div>Threshold: {settings.advice?.confidenceThreshold ?? 0.6}</div>
