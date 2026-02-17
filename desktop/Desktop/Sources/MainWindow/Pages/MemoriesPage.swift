@@ -1106,23 +1106,6 @@ struct MemoriesPage: View {
             .buttonStyle(.plain)
             .help("Add Memory")
 
-            // Refresh button
-            Button {
-                Task { await viewModel.loadMemories() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(OmiColors.backgroundTertiary)
-                    .cornerRadius(8)
-                    .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                    .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isLoading)
-            .help("Refresh memories")
-
             // Management menu
             Button {
                 showManagementMenu = true
