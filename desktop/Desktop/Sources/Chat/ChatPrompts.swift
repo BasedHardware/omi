@@ -588,7 +588,7 @@ struct ChatPrompts {
         "proactive_extractions": "memories, advice, tasks extracted from screenshots",
         "focus_sessions": "focus tracking",
         "live_notes": "AI-generated notes during recording",
-        "memories": "user facts and extracted knowledge (bidirectional sync with backend)",
+        "memories": "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
         "ai_user_profiles": "daily AI-generated user profile summaries",
     ]
 
