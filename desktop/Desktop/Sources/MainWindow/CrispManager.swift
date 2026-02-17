@@ -79,6 +79,7 @@ class CrispManager: ObservableObject {
         Task {
             do {
                 let messages = try await fetchUnreadMessages()
+                log("CrispManager: poll returned \(messages.count) messages (since=\(self.lastSeenTimestamp))")
 
                 for msg in messages {
                     let key = String(msg.text.prefix(80)) + "_\(msg.timestamp)"
@@ -134,6 +135,7 @@ class CrispManager: ObservableObject {
             urlString += "?since=\(lastSeenTimestamp)"
         }
 
+        log("CrispManager: fetching \(urlString)")
         guard let url = URL(string: urlString) else {
             throw URLError(.badURL)
         }
