@@ -29,7 +29,7 @@ struct FloatingControlBarView: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                        .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
@@ -115,11 +115,11 @@ struct FloatingControlBarView: View {
         Group {
             if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png")!) {
                 Image(nsImage: logoImage)
-                    .renderingMode(.template)
                     .resizable()
+                    .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(height: 10)
-                    .foregroundColor(.white)
+                    .frame(height: 12)
+                    .colorInvert()
             } else {
                 Image(systemName: "waveform")
                     .font(.system(size: 12, weight: .medium))
