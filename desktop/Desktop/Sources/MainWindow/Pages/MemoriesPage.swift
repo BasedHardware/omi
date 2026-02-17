@@ -1724,46 +1724,44 @@ private struct MemoryCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
             // Content
             Text(memory.content)
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
-                .lineLimit(3)
+                .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
-            // Footer - date + info icon
-            HStack(spacing: 6) {
-                // New badge
-                if isNewlyCreated {
-                    NewBadge()
-                }
+            // New badge
+            if isNewlyCreated {
+                NewBadge()
+            }
 
-                Spacer()
+            Spacer(minLength: 4)
 
-                // Date
-                Text(formatDate(memory.createdAt))
-                    .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textSecondary)
+            // Date
+            Text(formatDate(memory.createdAt))
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textSecondary)
+                .fixedSize()
 
-                // Info icon with hover popover for details
-                MemoryDetailButton(
-                    memory: memory,
-                    categoryIcon: categoryIcon,
-                    categoryColor: categoryColor,
-                    tagColorFor: tagColorFor
-                )
+            // Info icon with hover popover for details
+            MemoryDetailButton(
+                memory: memory,
+                categoryIcon: categoryIcon,
+                categoryColor: categoryColor,
+                tagColorFor: tagColorFor
+            )
 
-                // Click hint on hover
-                if isHovered {
-                    Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
+            // Click hint on hover
+            if isHovered {
+                Image(systemName: "arrow.up.right")
+                    .scaledFont(size: 10, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary))
         .cornerRadius(8)
         .overlay(
