@@ -7,6 +7,7 @@ from agents.model_settings import Reasoning
 
 from models.app import App
 from models.chat import Message, ChatSession, MessageType
+from utils.config import get_app_name
 from utils.retrieval.graph import AsyncStreamingCallback
 from openai.types.responses import ResponseTextDeltaEvent
 
@@ -31,13 +32,14 @@ async def run(
     plugin: Optional[App] = None,
     stream_callback: Optional[AsyncStreamingCallback] = None,
 ):
+    app_name = get_app_name()
     docs_agent = Agent(
-        name="Omi Documentation Agent",
+        name=f"{app_name} Documentation Agent",
         instructions=omi_documentation_prompt,
         model="o4-mini",
     )
     omi_agent = Agent(
-        name="Omi Agent",
+        name=f"{app_name} Agent",
         instructions=f"You are a helpful assistant that answers questions from the user {uid}, using the tools you were provided.",
         mcp_servers=[mcp_server],
         model="o4-mini",
@@ -120,7 +122,7 @@ async def send_single_message():
         cache_tools_list=True,
         params={"command": "uvx", "args": ["mcp-server-omi"]},
     ) as server:
-        with trace(workflow_name="Omi Agent"):
+        with trace(workflow_name=f"{get_app_name()} Agent"):
             await run(
                 server,
                 "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",
@@ -130,7 +132,7 @@ async def send_single_message():
 
 
 async def interactive_chat_stream():
-    print("Starting interactive chat with Omi Agent. Type 'exit' to quit.")
+    print(f"Starting interactive chat with {get_app_name()} Agent. Type 'exit' to quit.")
     async with MCPServerStdio(
         cache_tools_list=True,
         params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
@@ -140,9 +142,9 @@ async def interactive_chat_stream():
             if user_input.lower() == "exit":
                 break
 
-            print("\nOmi: ", end="", flush=True)
+            print(f"\n{get_app_name()}: ", end="", flush=True)
 
-            with trace(workflow_name="Omi Agent"):
+            with trace(workflow_name=f"{get_app_name()} Agent"):
                 await run(
                     server,
                     "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",
