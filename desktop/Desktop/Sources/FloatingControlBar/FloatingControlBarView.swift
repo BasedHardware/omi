@@ -106,19 +106,11 @@ struct FloatingControlBarView: View {
 
     /// Minimal icon shown when not hovering
     private var compactCircleView: some View {
-        Group {
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "tray_icon", withExtension: "png")!) {
-                Image(nsImage: logoImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 22)
-            } else {
-                Image(systemName: "waveform")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .frame(width: 28, height: 28)
+        Text("Omi")
+            .scaledFont(size: 13, weight: .bold)
+            .foregroundColor(.white)
+            .frame(height: 28)
+            .padding(.horizontal, 4)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
