@@ -98,9 +98,31 @@ async fn main() {
         config.firebase_project_id.clone().unwrap_or_else(|| "based-hardware".to_string()),
     ));
 
-    // Refresh Firebase keys
-    if let Err(e) = firebase_auth.refresh_keys().await {
-        tracing::warn!("Failed to fetch Firebase keys: {} - auth may not work", e);
+    // Refresh Firebase keys with retry (transient network failures at startup)
+    {
+        let max_attempts = 3u32;
+        let mut last_err = None;
+        for attempt in 1..=max_attempts {
+            match firebase_auth.refresh_keys().await {
+                Ok(_) => {
+                    if attempt > 1 {
+                        tracing::info!("Firebase keys fetched on attempt {}", attempt);
+                    }
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    tracing::warn!("Firebase key fetch attempt {}/{} failed: {}", attempt, max_attempts, e);
+                    last_err = Some(e);
+                    if attempt < max_attempts {
+                        tokio::time::sleep(std::time::Duration::from_secs(1 << (attempt - 1))).await;
+                    }
+                }
+            }
+        }
+        if let Some(e) = last_err {
+            tracing::warn!("All {} Firebase key fetch attempts failed: {} - auth may not work", max_attempts, e);
+        }
     }
 
     // Initialize Firestore
