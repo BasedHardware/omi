@@ -746,6 +746,11 @@ class FloatingControlBarManager {
             show()
         }
 
+        // Save pre-chat center so closeAIConversation can restore the original position.
+        // Without this, Escape after a PTT query places the bar at the response window's
+        // center instead of where it was before the chat opened.
+        window.savePreChatCenterIfNeeded()
+
         // Set up state — go straight to response view (skip input view to avoid resize flicker)
         window.state.showingAIConversation = true
         window.state.showingAIResponse = true
@@ -859,5 +864,12 @@ class FloatingControlBarManager {
 extension FloatingControlBarWindow {
     func resizeToResponseHeightPublic(animated: Bool = false) {
         resizeToResponseHeight(animated: animated)
+    }
+
+    /// Save the current center point so closeAIConversation can restore position.
+    /// Only saves if preChatCenter is not already set (avoids overwriting during follow-ups).
+    func savePreChatCenterIfNeeded() {
+        guard preChatCenter == nil else { return }
+        preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
     }
 }
