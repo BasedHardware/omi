@@ -935,7 +935,7 @@ actor ActionItemStorage {
                 WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
             """) ?? 0
 
-            let unscoredIds = try String.fetchAll(database, sql: """
+            let unscoredIds = try Int64.fetchAll(database, sql: """
                 SELECT id FROM action_items
                 WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NULL
                 ORDER BY createdAt ASC
