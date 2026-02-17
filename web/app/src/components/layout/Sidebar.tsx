@@ -254,9 +254,11 @@ export function Sidebar({
                 height={showText ? 24 : 13}
                 className="object-contain"
               />
-              <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
-                Beta
-              </span>
+              {showText && (
+                <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                  Beta
+                </span>
+              )}
             </Link>
 
             {/* Mobile close button */}
