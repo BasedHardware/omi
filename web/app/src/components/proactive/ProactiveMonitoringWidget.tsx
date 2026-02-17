@@ -48,7 +48,7 @@ export function ProactiveMonitoringWidget() {
     return (
         <div className="relative">
             {/* Main widget button */}
-            <button
+            <div
                 onClick={handleToggle}
                 onContextMenu={(e) => {
                     e.preventDefault();
@@ -59,6 +59,13 @@ export function ProactiveMonitoringWidget() {
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                     }`}
                 title={isMonitoring ? 'Click to stop monitoring' : 'Click to start monitoring'}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        handleToggle();
+                    }
+                }}
             >
                 {/* Status indicator */}
                 <span className="relative flex h-2 w-2">
@@ -80,10 +87,11 @@ export function ProactiveMonitoringWidget() {
                         setShowSettings(!showSettings);
                     }}
                     className="ml-1 text-gray-500 hover:text-white"
+                    title="Settings"
                 >
                     ⚙️
                 </button>
-            </button>
+            </div>
 
             {/* Error tooltip */}
             {error && (

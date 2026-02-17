@@ -20,7 +20,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
     }
 
     function handleResetPrompt() {
-        updateSettings({ systemPrompt: '' });
+        updateSettings({ advice: { ...settings.advice, systemPrompt: '' } });
     }
 
     return (
@@ -94,7 +94,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                     max="1.0"
                     step="0.05"
                     value={settings.advice?.confidenceThreshold ?? 0.6}
-                    onChange={(e) => updateSettings({ confidenceThreshold: Number(e.target.value) })}
+                    onChange={(e) => updateSettings({ advice: { ...settings.advice!, confidenceThreshold: Number(e.target.value) } })}
                     className="w-full"
                 />
                 <p className="text-xs text-gray-500">
@@ -134,8 +134,8 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 {showPrompt && (
                     <>
                         <textarea
-                            value={settings.systemPrompt || DEFAULT_ANALYSIS_PROMPT}
-                            onChange={(e) => updateSettings({ systemPrompt: e.target.value })}
+                            value={settings.advice?.systemPrompt || DEFAULT_ANALYSIS_PROMPT}
+                            onChange={(e) => updateSettings({ advice: { ...settings.advice!, systemPrompt: e.target.value } })}
                             rows={10}
                             className="w-full rounded-md border border-gray-600 bg-gray-800 px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none font-mono"
                         />
@@ -210,9 +210,10 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 {/* Last Analysis Log */}
                 <div className="mt-2 text-xs text-gray-500 font-mono bg-black/20 p-2 rounded max-h-32 overflow-y-auto">
                     <div>API Key: Configured server-side (.env.local)</div>
-                    <div>Settings: {settings.enabled ? 'Enabled' : 'Disabled'}</div>
+                    <div>Advice: {settings.advice?.enabled ? 'Enabled' : 'Disabled'}</div>
+                    <div>Focus: {settings.focus?.enabled ? 'Enabled' : 'Disabled'}</div>
                     <div>Interval: {settings.analysisIntervalMs}ms</div>
-                    <div>Threshold: {settings.confidenceThreshold}</div>
+                    <div>Threshold: {settings.advice?.confidenceThreshold ?? 0.6}</div>
                 </div>
             </div>
 
