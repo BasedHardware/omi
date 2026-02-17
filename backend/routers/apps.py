@@ -29,6 +29,7 @@ from utils.mcp_client import (
 from database.apps import (
     change_app_approval_status,
     get_unapproved_public_apps_db,
+    get_all_unapproved_apps_db,
     get_app_by_id_db,
     add_app_to_db,
     update_app_in_db,
@@ -459,6 +460,15 @@ def get_all_apps_admin(secret_key: str = Header(...)):
     unapproved_apps = get_unapproved_public_apps_db()
     all_apps = approved_apps + unapproved_apps
     return all_apps
+
+
+@router.get('/v1/apps/admin/unapproved', tags=['v1'])
+def get_all_unapproved_apps(secret_key: str = Header(..., alias='x-admin-key')):
+    """Get all unapproved apps (public and private) for admin review."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    apps = get_all_unapproved_apps_db()
+    return apps
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -1800,13 +1810,16 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
 
 
 @router.post('/v1/apps/{app_id}/approve', tags=['v1'])
-def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
+def approve_app(app_id: str, secret_key: str = Header(..., alias='x-admin-key')):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    app = get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    uid = app.get('uid')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)
-    app = get_available_app_by_id(app_id, uid)
     send_notification(
         uid,
         'App Approved 🎉',
@@ -1816,19 +1829,22 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'])
-def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
+def reject_app(app_id: str, reason: Optional[str] = Query(None), secret_key: str = Header(..., alias='x-admin-key')):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    change_app_approval_status(app_id, False)
+    app = get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    uid = app.get('uid')
+    change_app_approval_status(app_id, False, rejection_reason=reason)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
-    app = get_available_app_by_id(app_id, uid)
-    # TODO: Add reason for rejection in payload and also redirect to the app page
-    send_notification(
-        uid,
-        'App Rejected 😔',
-        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
-    )
+    notification_body = f'Your app {app["name"]} has been rejected.'
+    if reason:
+        notification_body += f' Reason: {reason}'
+    else:
+        notification_body += ' Please make the necessary changes and resubmit for approval.'
+    send_notification(uid, 'App Rejected 😔', notification_body)
     return {'status': 'ok'}
 
 
