@@ -463,12 +463,31 @@ class AppState: ObservableObject {
         // after registration completes. CGRequestScreenCaptureAccess() requires the app to be
         // registered in Launch Services first, otherwise the app won't appear in System Settings.
         Task.detached {
+            // Reset any stale TCC "denied" entries for this app's Screen Recording permission.
+            // After rebuilds with new code signing, the old TCC entry can block
+            // CGRequestScreenCaptureAccess() from showing a dialog or adding the app to the list.
+            if let bundleId = Bundle.main.bundleIdentifier {
+                let reset = Process()
+                reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+                reset.arguments = ["reset", "ScreenCapture", bundleId]
+                reset.standardOutput = FileHandle.nullDevice
+                reset.standardError = FileHandle.nullDevice
+                do {
+                    try reset.run()
+                    reset.waitUntilExit()
+                    log("TCC reset ScreenCapture for \(bundleId): exit \(reset.terminationStatus)")
+                } catch {
+                    log("TCC reset failed: \(error.localizedDescription)")
+                }
+            }
+
             // Register synchronously on background thread (lsregister must finish first)
             ScreenCaptureService.ensureLaunchServicesRegistrationSync()
 
             await MainActor.run {
                 // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list
-                CGRequestScreenCaptureAccess()
+                let result = CGRequestScreenCaptureAccess()
+                log("CGRequestScreenCaptureAccess() returned \(result)")
 
                 // Request ScreenCaptureKit permission too (macOS 14+)
                 if #available(macOS 14.0, *) {

@@ -266,6 +266,11 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 $LSREGISTER -u "$APP_BUNDLE" 2>/dev/null || true
 $LSREGISTER -f "$APP_BUNDLE" 2>/dev/null || true
 
+step "Resetting stale TCC entries for Screen Recording..."
+# After rebuilds with new code signing, old TCC "denied" entries block
+# CGRequestScreenCaptureAccess() from showing a dialog or adding the app to the list.
+tccutil reset ScreenCapture "$BUNDLE_ID" 2>/dev/null || true
+
 step "Starting app..."
 
 # Print summary
