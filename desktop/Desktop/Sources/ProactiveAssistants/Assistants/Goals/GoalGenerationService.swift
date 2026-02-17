@@ -60,6 +60,7 @@ class GoalGenerationService {
 
         let calendar = Calendar.current
         guard let lastDate = lastDate, !calendar.isDateInToday(lastDate) else {
+            log("GoalGenerationService: Already generated today (lastDate: \(lastDate!)), skipping")
             return
         }
 
