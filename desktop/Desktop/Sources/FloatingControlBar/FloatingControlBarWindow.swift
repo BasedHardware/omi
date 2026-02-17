@@ -775,6 +775,13 @@ class FloatingControlBarManager {
         }
 
         await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel)
+
+        // Handle errors: if sendMessage completed but no response was delivered to the bar,
+        // something went wrong (bridge error, session creation failed, etc.)
+        if barWindow.state.aiResponseText.isEmpty {
+            barWindow.state.isAILoading = false
+            barWindow.state.aiResponseText = provider.errorMessage ?? "Failed to get a response. Please try again."
+        }
     }
 }
 
