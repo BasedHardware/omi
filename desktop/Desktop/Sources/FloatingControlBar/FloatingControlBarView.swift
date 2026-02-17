@@ -61,7 +61,7 @@ struct FloatingControlBarView: View {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: hovering)
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 14)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 11)
     }
 
     private func openFloatingBarSettings() {
@@ -111,7 +111,7 @@ struct FloatingControlBarView: View {
                     .renderingMode(.template)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(height: 14)
+                    .frame(height: 10)
                     .foregroundColor(.white)
             } else {
                 Image(systemName: "waveform")
@@ -119,8 +119,8 @@ struct FloatingControlBarView: View {
                     .foregroundColor(.white.opacity(0.6))
             }
         }
-        .frame(height: 28)
-        .padding(.horizontal, 6)
+        .frame(height: 22)
+        .padding(.horizontal, 8)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
