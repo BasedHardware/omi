@@ -2677,5 +2677,6 @@
   "synced": "Senkronize edildi",
   "noPendingRecordings": "Bekleyen kayıt yok",
   "noProcessedRecordings": "Henüz işlenmiş kayıt yok",
-  "pending": "Beklemede"
+  "pending": "Beklemede",
+  "officialTeamName": "Nooto Team"
 }

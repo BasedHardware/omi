@@ -2642,5 +2642,6 @@
   "synced": "동기화됨",
   "noPendingRecordings": "대기 중인 녹음이 없습니다",
   "noProcessedRecordings": "아직 처리된 녹음이 없습니다",
-  "pending": "대기 중"
+  "pending": "대기 중",
+  "officialTeamName": "Nooto Team"
 }

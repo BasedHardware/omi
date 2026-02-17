@@ -2651,5 +2651,6 @@
   "synced": "Synkroniseret",
   "noPendingRecordings": "Ingen afventende optagelser",
   "noProcessedRecordings": "Ingen behandlede optagelser endnu",
-  "pending": "Afventende"
+  "pending": "Afventende",
+  "officialTeamName": "Nooto Team"
 }

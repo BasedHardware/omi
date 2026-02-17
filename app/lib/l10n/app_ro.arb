@@ -2642,5 +2642,6 @@
   "synced": "Sincronizat",
   "noPendingRecordings": "Nu există înregistrări în așteptare",
   "noProcessedRecordings": "Nu există încă înregistrări procesate",
-  "pending": "În așteptare"
+  "pending": "În așteptare",
+  "officialTeamName": "Nooto Team"
 }

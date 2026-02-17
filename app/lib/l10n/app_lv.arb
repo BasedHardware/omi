@@ -2642,5 +2642,6 @@
   "synced": "Sinhronizēts",
   "noPendingRecordings": "Nav gaidošu ierakstu",
   "noProcessedRecordings": "Vēl nav apstrādātu ierakstu",
-  "pending": "Gaida"
+  "pending": "Gaida",
+  "officialTeamName": "Nooto Team"
 }

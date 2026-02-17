@@ -2642,5 +2642,6 @@
   "synced": "Sünkroonitud",
   "noPendingRecordings": "Ootel salvestisi pole",
   "noProcessedRecordings": "Töödeldud salvestisi pole veel",
-  "pending": "Ootel"
+  "pending": "Ootel",
+  "officialTeamName": "Nooto Team"
 }

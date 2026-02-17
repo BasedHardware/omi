@@ -2738,5 +2738,6 @@
   "synced": "Szinkronizálva",
   "noPendingRecordings": "Nincsenek függőben lévő felvételek",
   "noProcessedRecordings": "Még nincsenek feldolgozott felvételek",
-  "pending": "Függőben"
+  "pending": "Függőben",
+  "officialTeamName": "Nooto Team"
 }

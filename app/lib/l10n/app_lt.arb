@@ -2642,5 +2642,6 @@
   "synced": "Sinchronizuota",
   "noPendingRecordings": "Nėra laukiančių įrašų",
   "noProcessedRecordings": "Dar nėra apdorotų įrašų",
-  "pending": "Laukiama"
+  "pending": "Laukiama",
+  "officialTeamName": "Nooto Team"
 }

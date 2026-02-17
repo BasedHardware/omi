@@ -2611,5 +2611,6 @@
   "synced": "Sincronitzat",
   "noPendingRecordings": "No hi ha enregistraments pendents",
   "noProcessedRecordings": "Encara no hi ha enregistraments processats",
-  "pending": "Pendent"
+  "pending": "Pendent",
+  "officialTeamName": "Nooto Team"
 }

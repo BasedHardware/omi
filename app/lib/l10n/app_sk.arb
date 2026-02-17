@@ -2647,5 +2647,6 @@
   "synced": "Synchronizované",
   "noPendingRecordings": "Žiadne čakajúce nahrávky",
   "noProcessedRecordings": "Zatiaľ žiadne spracované nahrávky",
-  "pending": "Čakajúce"
+  "pending": "Čakajúce",
+  "officialTeamName": "Nooto Team"
 }

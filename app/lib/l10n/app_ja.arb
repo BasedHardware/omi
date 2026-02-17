@@ -2643,5 +2643,6 @@
   "synced": "同期済み",
   "noPendingRecordings": "保留中の録音はありません",
   "noProcessedRecordings": "処理済みの録音はまだありません",
-  "pending": "保留中"
+  "pending": "保留中",
+  "officialTeamName": "Nooto Team"
 }

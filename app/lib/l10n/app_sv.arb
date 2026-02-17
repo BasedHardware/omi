@@ -2642,5 +2642,6 @@
   "synced": "Synkroniserad",
   "noPendingRecordings": "Inga väntande inspelningar",
   "noProcessedRecordings": "Inga bearbetade inspelningar ännu",
-  "pending": "Väntande"
+  "pending": "Väntande",
+  "officialTeamName": "Nooto Team"
 }

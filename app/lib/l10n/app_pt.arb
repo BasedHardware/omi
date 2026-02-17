@@ -2678,5 +2678,6 @@
   "synced": "Sincronizado",
   "noPendingRecordings": "Nenhuma gravação pendente",
   "noProcessedRecordings": "Nenhuma gravação processada ainda",
-  "pending": "Pendente"
+  "pending": "Pendente",
+  "officialTeamName": "Nooto Team"
 }

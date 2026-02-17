@@ -2642,5 +2642,6 @@
   "synced": "Синхронізовано",
   "noPendingRecordings": "Немає очікуючих записів",
   "noProcessedRecordings": "Ще немає оброблених записів",
-  "pending": "Очікування"
+  "pending": "Очікування",
+  "officialTeamName": "Nooto Team"
 }

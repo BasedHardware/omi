@@ -10024,5 +10024,6 @@
   "networkNameSsid": "Network Name (SSID)",
   "enterWifiNetworkName": "Enter WiFi network name",
   "enterWifiPassword": "Enter WiFi password",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "officialTeamName": "Nooto Team"
 }

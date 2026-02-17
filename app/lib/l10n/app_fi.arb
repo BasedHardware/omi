@@ -2642,5 +2642,6 @@
   "synced": "Synkronoitu",
   "noPendingRecordings": "Ei odottavia tallenteita",
   "noProcessedRecordings": "Ei vielä käsiteltyjä tallenteita",
-  "pending": "Odottaa"
+  "pending": "Odottaa",
+  "officialTeamName": "Nooto Team"
 }

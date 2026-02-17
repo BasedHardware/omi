@@ -2642,5 +2642,6 @@
   "synced": "Disegerakkan",
   "noPendingRecordings": "Tiada rakaman yang belum selesai",
   "noProcessedRecordings": "Belum ada rakaman yang diproses",
-  "pending": "Belum selesai"
+  "pending": "Belum selesai",
+  "officialTeamName": "Nooto Team"
 }

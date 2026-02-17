@@ -2642,5 +2642,6 @@
   "synced": "Συγχρονισμένο",
   "noPendingRecordings": "Δεν υπάρχουν εκκρεμείς εγγραφές",
   "noProcessedRecordings": "Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα",
-  "pending": "Εκκρεμεί"
+  "pending": "Εκκρεμεί",
+  "officialTeamName": "Nooto Team"
 }

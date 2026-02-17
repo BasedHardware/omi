@@ -2643,5 +2643,6 @@
   "synced": "सिंक हो गया",
   "noPendingRecordings": "कोई लंबित रिकॉर्डिंग नहीं",
   "noProcessedRecordings": "अभी तक कोई संसाधित रिकॉर्डिंग नहीं",
-  "pending": "लंबित"
+  "pending": "लंबित",
+  "officialTeamName": "Nooto Team"
 }

@@ -2609,5 +2609,6 @@
   "synced": "تمت المزامنة",
   "noPendingRecordings": "لا توجد تسجيلات قيد الانتظار",
   "noProcessedRecordings": "لا توجد تسجيلات معالجة بعد",
-  "pending": "قيد الانتظار"
+  "pending": "قيد الانتظار",
+  "officialTeamName": "Nooto Team"
 }

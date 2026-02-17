@@ -2642,5 +2642,6 @@
   "synced": "Gesynchroniseerd",
   "noPendingRecordings": "Geen wachtende opnames",
   "noProcessedRecordings": "Nog geen verwerkte opnames",
-  "pending": "In afwachting"
+  "pending": "In afwachting",
+  "officialTeamName": "Nooto Team"
 }

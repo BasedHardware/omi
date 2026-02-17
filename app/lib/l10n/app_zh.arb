@@ -2664,5 +2664,6 @@
   "synced": "已同步",
   "noPendingRecordings": "没有待处理的录音",
   "noProcessedRecordings": "暂无已处理的录音",
-  "pending": "待处理"
+  "pending": "待处理",
+  "officialTeamName": "Nooto Team"
 }

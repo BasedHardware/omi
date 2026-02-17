@@ -2642,5 +2642,6 @@
   "synced": "ซิงค์แล้ว",
   "noPendingRecordings": "ไม่มีการบันทึกที่รอดำเนินการ",
   "noProcessedRecordings": "ยังไม่มีการบันทึกที่ประมวลผลแล้ว",
-  "pending": "รอดำเนินการ"
+  "pending": "รอดำเนินการ",
+  "officialTeamName": "Nooto Team"
 }

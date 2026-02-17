@@ -2647,5 +2647,6 @@
   "synced": "Đã đồng bộ",
   "noPendingRecordings": "Không có bản ghi đang chờ",
   "noProcessedRecordings": "Chưa có bản ghi nào được xử lý",
-  "pending": "Đang chờ"
+  "pending": "Đang chờ",
+  "officialTeamName": "Nooto Team"
 }
