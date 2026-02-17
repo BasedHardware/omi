@@ -457,27 +457,25 @@ class AppState: ObservableObject {
 
     /// Trigger screen recording permission prompt
     func triggerScreenRecordingPermission() {
-        // First ensure Launch Services registration completes, then request access,
-        // then open System Settings after the app has been added to the TCC list.
+        // Register in Launch Services first so macOS knows which app bundle to grant permission to
         ScreenCaptureService.ensureLaunchServicesRegistration()
 
-        // Small delay to let Launch Services registration complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list in System Settings
-            CGRequestScreenCaptureAccess()
+        // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list in System Settings.
+        // On macOS Sequoia+ it may not show a visible dialog, so we also open System Settings explicitly.
+        CGRequestScreenCaptureAccess()
 
-            // Request ScreenCaptureKit permission too (macOS 14+)
-            if #available(macOS 14.0, *) {
-                Task {
-                    _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
-                }
+        // Request ScreenCaptureKit permission too (macOS 14+)
+        if #available(macOS 14.0, *) {
+            Task {
+                _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
             }
+        }
 
-            // Open System Settings after a brief delay so the app appears in the list
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if !CGPreflightScreenCaptureAccess() {
-                    ScreenCaptureService.openScreenRecordingPreferences()
-                }
+        // Open System Settings after a delay to give CGRequestScreenCaptureAccess() time
+        // to register the app in the TCC database so it appears in the list
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if !CGPreflightScreenCaptureAccess() {
+                ScreenCaptureService.openScreenRecordingPreferences()
             }
         }
     }
