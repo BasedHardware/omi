@@ -16,6 +16,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var isUserDragging = false
+    /// Suppresses hover resizes during close animation to prevent position drift.
+    private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -235,6 +237,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
+        // Suppress hover resizes while the close animation plays, otherwise onHover
+        // fires mid-animation, reads an intermediate frame, and causes position drift.
+        suppressHoverResize = true
+
         // Restore to saved center so hover expand/collapse stays consistent (no drift).
         if let center = preChatCenter {
             let size = FloatingControlBarWindow.minBarSize
@@ -253,6 +259,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             preChatCenter = nil
         } else {
             resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
+        }
+
+        // Allow hover resizes again after the animation settles.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.suppressHoverResize = false
         }
     }
 
@@ -433,7 +444,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
