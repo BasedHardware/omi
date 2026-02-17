@@ -89,7 +89,7 @@ struct FloatingControlBarView: View {
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Hide", keys: ["\u{2318}", "\\"])
+                        compactLabel("Escape to Close", keys: ["esc"])
                         compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
                     }
                 }
