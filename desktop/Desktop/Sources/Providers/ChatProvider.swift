@@ -605,10 +605,15 @@ class ChatProvider: ObservableObject {
         isLoadingMoreMessages = false
     }
 
+    /// Track which sessions are currently being deleted
+    @Published var deletingSessionIds: Set<String> = []
+
     /// Delete a chat session
     func deleteSession(_ session: ChatSession) async {
+        deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
+            deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
             // If deleted the current session, select another or clear
@@ -624,6 +629,7 @@ class ChatProvider: ObservableObject {
             log("Deleted chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionDeleted()
         } catch {
+            deletingSessionIds.remove(session.id)
             logError("Failed to delete chat session", error: error)
             errorMessage = "Failed to delete chat"
         }

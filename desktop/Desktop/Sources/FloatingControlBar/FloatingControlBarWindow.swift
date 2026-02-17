@@ -253,8 +253,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
             NSAnimationContext.endGrouping()
-            self.isResizingProgrammatically = false
+            // Keep isResizingProgrammatically true until animation finishes to prevent
+            // intermediate frames from triggering unwanted side effects.
+            let targetFrame = NSRect(origin: restoreOrigin, size: size)
             preChatCenter = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.isResizingProgrammatically = false
+                // Safety net: if the frame drifted during animation, snap to the correct position.
+                if let self = self, self.frame != targetFrame {
+                    self.setFrame(targetFrame, display: true, animate: false)
+                }
+            }
         } else {
             resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
         }
