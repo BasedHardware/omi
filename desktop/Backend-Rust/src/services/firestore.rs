@@ -4911,6 +4911,17 @@ impl FirestoreService {
         self.get_assistant_settings(uid).await
     }
 
+    /// Get user email from Firestore profile
+    pub async fn get_user_email(
+        &self,
+        uid: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let empty = json!({});
+        let fields = doc.get("fields").unwrap_or(&empty);
+        Ok(self.parse_string(fields, "email"))
+    }
+
     /// Get user language preference
     pub async fn get_user_language(
         &self,

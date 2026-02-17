@@ -74,6 +74,7 @@ struct SettingsSearchItem: Identifiable {
 
         // About
         SettingsSearchItem(name: "Software Updates", keywords: ["update", "auto update", "sparkle", "version", "check for updates"], section: .about, advancedSubsection: nil, icon: "info.circle"),
+        SettingsSearchItem(name: "Automatic Updates", keywords: ["auto check", "background updates", "check automatically"], section: .about, advancedSubsection: nil, icon: "info.circle"),
         SettingsSearchItem(name: "Auto-Install Updates", keywords: ["auto install", "automatic install", "download updates", "install updates"], section: .about, advancedSubsection: nil, icon: "info.circle"),
         SettingsSearchItem(name: "Version Info", keywords: ["version", "build", "app version", "build number"], section: .about, advancedSubsection: nil, icon: "info.circle"),
         SettingsSearchItem(name: "Report an Issue", keywords: ["bug", "feedback", "report", "issue"], section: .about, advancedSubsection: nil, icon: "info.circle"),
