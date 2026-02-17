@@ -8253,4 +8253,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

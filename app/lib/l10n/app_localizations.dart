@@ -15350,6 +15350,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'App Icon'**
   String get appIconLabel;
+
+  /// No description provided for @officialTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Nooto Team'**
+  String get officialTeamName;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
