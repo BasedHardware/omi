@@ -140,7 +140,7 @@ class CrispManager: NSObject, ObservableObject, WKScriptMessageHandler {
     private func startKeepAlive() {
         keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.webView?.evaluateJavaScript("1+1") { _, _ in }
+                _ = try? await self?.webView?.evaluateJavaScript("1+1")
             }
         }
     }
