@@ -305,6 +305,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
+    // Timestamp markers: list of (frameIndex, epoch) for segment splitting
+    List<MapEntry<int, int>> timestampMarkers = [];
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
@@ -365,22 +367,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                 (value[packageOffset + 4] << 24);
             packageOffset += 5;
             if (epoch > 0) {
-              // Flush accumulated frames as a segment before switching timestamp
-              if (bytesData.length > bytesLeft) {
-                var chunk = bytesData.sublist(bytesLeft);
-                var chunkFrames = chunk.length;
-                bytesLeft = bytesData.length;
-                try {
-                  var file = await _flushToDisk(wal, chunk, timerStart);
-                  await callback(file, offset, timerStart, chunkFrames);
-                } catch (e) {
-                  Logger.debug('Error flushing segment at timestamp: $e');
-                  hasError = true;
-                  if (!completer.isCompleted) completer.completeError(e);
-                }
-              }
-              timerStart = epoch;
-              Logger.debug('Timestamp marker: epoch=$epoch');
+              timestampMarkers.add(MapEntry(bytesData.length, epoch));
+              Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
             }
             continue;
           }
@@ -394,7 +382,17 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         offset += value.length;
       }
 
-      if (bytesData.length - bytesLeft >= chunkSize) {
+      // Find the next marker boundary (if any) after bytesLeft
+      int nextMarkerIdx = bytesData.length;
+      for (var m in timestampMarkers) {
+        if (m.key > bytesLeft) {
+          nextMarkerIdx = m.key;
+          break;
+        }
+      }
+
+      // Chunk up to the next marker boundary or chunkSize, whichever comes first
+      while (bytesData.length - bytesLeft >= chunkSize && bytesLeft + chunkSize <= nextMarkerIdx) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         var chunkFrames = chunk.length;
         var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
@@ -410,6 +408,35 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         }
         timerStart += chunkSecs;
+      }
+
+      // If we've reached a marker boundary, flush remaining frames before it and advance timerStart
+      if (nextMarkerIdx <= bytesData.length && bytesLeft < nextMarkerIdx) {
+        // Only flush if there are enough frames to be meaningful (> 0)
+        var chunk = bytesData.sublist(bytesLeft, nextMarkerIdx);
+        var chunkFrames = chunk.length;
+        if (chunkFrames > 0) {
+          var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
+          bytesLeft = nextMarkerIdx;
+          try {
+            var file = await _flushToDisk(wal, chunk, timerStart);
+            await callback(file, offset, timerStart, chunkFrames);
+          } catch (e) {
+            Logger.debug('Error flushing segment at marker: $e');
+            hasError = true;
+            if (!completer.isCompleted) completer.completeError(e);
+          }
+          timerStart += chunkSecs;
+        } else {
+          bytesLeft = nextMarkerIdx;
+        }
+        // Apply the marker's epoch
+        for (var m in timestampMarkers) {
+          if (m.key == nextMarkerIdx) {
+            timerStart = m.value;
+            break;
+          }
+        }
       }
     });
 
@@ -433,13 +460,36 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       timeoutTimer.cancel();
     }
 
-    if (!hasError && bytesLeft < bytesData.length - 1) {
-      var chunk = bytesData.sublist(bytesLeft);
-      var chunkFrames = chunk.length;
-      var chunkSecs = chunkFrames ~/ wal.codec.getFramesPerSecond();
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await callback(file, offset, timerStart, chunkFrames);
-      timerStart += chunkSecs;
+    // Flush remaining data, respecting any unprocessed timestamp markers
+    if (!hasError && bytesLeft < bytesData.length) {
+      // Build segment boundaries from any remaining markers
+      List<List<int>> segments = [];
+      int segStart = bytesLeft;
+      int segEpoch = timerStart;
+      for (var marker in timestampMarkers) {
+        if (marker.key > bytesLeft && marker.key < bytesData.length) {
+          if (marker.key > segStart) {
+            segments.add([segStart, marker.key, segEpoch]);
+          }
+          segStart = marker.key;
+          segEpoch = marker.value;
+        }
+      }
+      if (segStart < bytesData.length) {
+        segments.add([segStart, bytesData.length, segEpoch]);
+      }
+
+      for (var seg in segments) {
+        int sStart = seg[0];
+        int sEnd = seg[1];
+        int sEpoch = seg[2];
+        var chunk = bytesData.sublist(sStart, sEnd);
+        var chunkFrames = chunk.length;
+        if (chunkFrames > 0) {
+          var file = await _flushToDisk(wal, chunk, sEpoch);
+          await callback(file, offset, sEpoch, chunkFrames);
+        }
+      }
     }
 
     return;
