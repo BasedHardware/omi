@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
   "@@last_modified": "2024-12-26",
-  "appTitle": "Nooto",
+  "appTitle": "Omi",
   "@appTitle": {
     "description": "The app title displayed in various places"
   },
@@ -155,7 +155,7 @@
   "@editPerson": {
     "description": "Title for edit person dialog"
   },
-  "createPersonHint": "Create a new person and train Nooto to recognize their speech too!",
+  "createPersonHint": "Create a new person and train Omi to recognize their speech too!",
   "@createPersonHint": {
     "description": "Hint text for creating a person"
   },
@@ -209,9 +209,9 @@
   "@couldNotAccessFile": {
     "description": "Error when file access fails"
   },
-  "askOmi": "Ask Nooto",
+  "askOmi": "Ask Omi",
   "@askOmi": {
-    "description": "Shortcut to ask Nooto a question"
+    "description": "Shortcut to ask Omi a question"
   },
   "done": "Done",
   "@done": {
@@ -347,7 +347,7 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Deleting your messages from Nooto's memory...",
+  "deletingMessages": "Deleting your messages from Omi's memory...",
   "@deletingMessages": {
     "description": "Loading text when clearing chat"
   },
@@ -387,7 +387,7 @@
   "@maxFilesLimit": {
     "description": "Max files upload warning"
   },
-  "chatWithOmi": "Chat with Nooto",
+  "chatWithOmi": "Chat with Omi",
   "@chatWithOmi": {
     "description": "Chat share subject"
   },
@@ -427,7 +427,7 @@
   "@unableToFetchApps": {
     "description": "Error when apps fail to load"
   },
-  "aboutOmi": "About Nooto",
+  "aboutOmi": "About Omi",
   "@aboutOmi": {
     "description": "About page title"
   },
@@ -575,7 +575,7 @@
   "@developerSettings": {
     "description": "Title for developer settings page"
   },
-  "getOmiForMac": "Get Nooto for Mac",
+  "getOmiForMac": "Get Omi for Mac",
   "@getOmiForMac": {
     "description": "Mac app download link"
   },
@@ -599,7 +599,7 @@
   "@yourPrivacyYourControl": {
     "description": "Data privacy page heading"
   },
-  "privacyIntro": "At Nooto, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.",
+  "privacyIntro": "At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.",
   "@privacyIntro": {
     "description": "Data privacy page introduction"
   },
@@ -691,7 +691,7 @@
   "@unpairAndForget": {
     "description": "Unpair and forget device button"
   },
-  "deviceDisconnectedMessage": "Your Nooto has been disconnected 😔",
+  "deviceDisconnectedMessage": "Your Omi has been disconnected 😔",
   "@deviceDisconnectedMessage": {
     "description": "Message shown when device is disconnected"
   },
@@ -711,7 +711,7 @@
   "@deviceNotConnected": {
     "description": "Device not connected header"
   },
-  "connectDeviceMessage": "Connect your Nooto device to access\ndevice settings and customization",
+  "connectDeviceMessage": "Connect your Omi device to access\ndevice settings and customization",
   "@connectDeviceMessage": {
     "description": "Message encouraging user to connect device"
   },
@@ -887,7 +887,7 @@
   "@docs": {
     "description": "Documentation button text"
   },
-  "yourOmiInsights": "Your Nooto Insights",
+  "yourOmiInsights": "Your Omi Insights",
   "@yourOmiInsights": {
     "description": "Usage page title"
   },
@@ -911,7 +911,7 @@
   "@noActivityYet": {
     "description": "Empty state title"
   },
-  "startConversationToSeeInsights": "Start a conversation with Nooto\nto see your usage insights here.",
+  "startConversationToSeeInsights": "Start a conversation with Omi\nto see your usage insights here.",
   "@startConversationToSeeInsights": {
     "description": "Empty state description"
   },
@@ -919,7 +919,7 @@
   "@listening": {
     "description": "Listening stat title"
   },
-  "listeningSubtitle": "Total time Nooto has actively listened.",
+  "listeningSubtitle": "Total time Omi has actively listened.",
   "@listeningSubtitle": {
     "description": "Listening stat subtitle"
   },
@@ -1011,23 +1011,23 @@
       }
     }
   },
-  "shareStatsMessage": "Sharing my Nooto stats! (nooto.ai - your always-on AI assistant)",
+  "shareStatsMessage": "Sharing my Omi stats! (omi.me - your always-on AI assistant)",
   "@shareStatsMessage": {
     "description": "Share stats base message"
   },
-  "sharePeriodToday": "Today, nooto has:",
+  "sharePeriodToday": "Today, omi has:",
   "@sharePeriodToday": {
     "description": "Share stats period: Today"
   },
-  "sharePeriodMonth": "This month, nooto has:",
+  "sharePeriodMonth": "This month, omi has:",
   "@sharePeriodMonth": {
     "description": "Share stats period: Month"
   },
-  "sharePeriodYear": "This year, nooto has:",
+  "sharePeriodYear": "This year, omi has:",
   "@sharePeriodYear": {
     "description": "Share stats period: Year"
   },
-  "sharePeriodAllTime": "So far, nooto has:",
+  "sharePeriodAllTime": "So far, omi has:",
   "@sharePeriodAllTime": {
     "description": "Share stats period: All Time"
   },
@@ -1075,7 +1075,7 @@
   "debugLogsAutoDelete": "Auto-deletes after 3 days.",
   "debugLogsDesc": "Helps diagnose issues",
   "noLogFilesFound": "No log files found.",
-  "omiDebugLog": "Nooto debug log",
+  "omiDebugLog": "Omi debug log",
   "logShared": "Log shared",
   "selectLogFile": "Select Log File",
   "shareLogs": "Share Logs",
@@ -1083,7 +1083,7 @@
   "exportStarted": "Export started. This may take a few seconds...",
   "exportAllData": "Export All Data",
   "exportDataDesc": "Export conversations to a JSON file",
-  "exportedConversations": "Exported Conversations from Nooto",
+  "exportedConversations": "Exported Conversations from Omi",
   "exportShared": "Export shared",
   "deleteKnowledgeGraphTitle": "Delete Knowledge Graph?",
   "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
@@ -1194,7 +1194,7 @@
   "customVocabularyTitle": "Custom Vocabulary",
   "addWords": "Add Words",
   "addWordsDesc": "Names, terms, or uncommon words",
-  "vocabularyHint": "Nooto, Callie, OpenAI",
+  "vocabularyHint": "Omi, Callie, OpenAI",
   "connect": "Connect",
   "comingSoon": "Coming Soon",
   "integrationsFooter": "Connect your apps to view data and metrics in chat.",
@@ -1240,7 +1240,7 @@
       }
     }
   },
-  "authAccessMessage": "You'll need to authorize Nooto to access your {appName} data. This will open your browser for authentication.",
+  "authAccessMessage": "You'll need to authorize Omi to access your {appName} data. This will open your browser for authentication.",
   "@authAccessMessage": {
     "placeholders": {
       "appName": {
@@ -1277,7 +1277,7 @@
   "permissionRevokedMessage": "Do you want us to remove all your existing recordings too?",
   "yes": "Yes",
   "editName": "Edit Name",
-  "howShouldOmiCallYou": "How should Nooto call you?",
+  "howShouldOmiCallYou": "How should Omi call you?",
   "enterYourName": "Enter your name",
   "nameCannotBeEmpty": "Name cannot be empty",
   "nameUpdatedSuccessfully": "Name updated successfully!",
@@ -1461,7 +1461,7 @@
       }
     }
   },
-  "authorizeOmiForTasks": "You'll need to authorize Nooto to create tasks in your {appName} account. This will open your browser for authentication.",
+  "authorizeOmiForTasks": "You'll need to authorize Omi to create tasks in your {appName} account. This will open your browser for authentication.",
   "@authorizeOmiForTasks": {
     "placeholders": {
       "appName": {
@@ -1492,9 +1492,9 @@
   "importConfiguration": "Import Configuration",
   "exportConfiguration": "Export configuration",
   "bringYourOwn": "Bring your own",
-  "payYourSttProvider": "Freely use nooto. You only pay your STT provider directly.",
+  "payYourSttProvider": "Freely use omi. You only pay your STT provider directly.",
   "freeMinutesMonth": "1,200 free minutes/month included. Unlimited with ",
-  "omiUnlimited": "Nooto Unlimited",
+  "omiUnlimited": "Omi Unlimited",
   "hostRequired": "Host is required",
   "validPortRequired": "Valid port is required",
   "validWebsocketUrlRequired": "Valid WebSocket URL is required (wss://)",
@@ -1552,7 +1552,7 @@
   "logs": "Logs",
   "logsCopied": "Logs copied",
   "noLogsYet": "No logs yet. Start recording to see custom STT activity.",
-  "deviceUsesCodec": "{device} uses {reason}. Nooto will be used.",
+  "deviceUsesCodec": "{device} uses {reason}. Omi will be used.",
   "@deviceUsesCodec": {
     "description": "Warning about device codec compatibility",
     "placeholders": {
@@ -1564,7 +1564,7 @@
       }
     }
   },
-  "omiTranscription": "Nooto Transcription",
+  "omiTranscription": "Omi Transcription",
   "bestInClassTranscription": "Best in class transcription with zero setup",
   "instantSpeakerLabels": "Instant speaker labels",
   "languageTranslation": "100+ language translation",
@@ -1646,7 +1646,7 @@
   "@enableBluetooth": {
     "description": "Title for dialog prompting user to enable Bluetooth"
   },
-  "bluetoothNeeded": "Nooto needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.",
+  "bluetoothNeeded": "Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.",
   "@bluetoothNeeded": {
     "description": "Explanation text for why Bluetooth is required"
   },
@@ -1666,7 +1666,7 @@
   "@backgroundActivity": {
     "description": "Title for background activity permission"
   },
-  "backgroundActivityDesc": "Let Nooto run in the background for better stability",
+  "backgroundActivityDesc": "Let Omi run in the background for better stability",
   "@backgroundActivityDesc": {
     "description": "Description for background activity permission"
   },
@@ -1705,7 +1705,7 @@
   "@backgroundLocationDeniedDesc": {
     "description": "Instructions to grant background location permission"
   },
-  "lovingOmi": "Loving Nooto?",
+  "lovingOmi": "Loving Omi?",
   "@lovingOmi": {
     "description": "Title for the app review prompt"
   },
@@ -1729,7 +1729,7 @@
   "@maybeLater": {
     "description": "Button text to defer action"
   },
-  "speechProfileIntro": "Nooto needs to learn your goals and your voice. You'll be able to modify it later.",
+  "speechProfileIntro": "Omi needs to learn your goals and your voice. You'll be able to modify it later.",
   "@speechProfileIntro": {
     "description": "Introduction text for speech profile setup"
   },
@@ -1797,7 +1797,7 @@
   "@tryAgain": {
     "description": "Button text to retry an action"
   },
-  "connectOmiOmiGlass": "Connect Nooto / NootoGlass",
+  "connectOmiOmiGlass": "Connect Omi / OmiGlass",
   "@connectOmiOmiGlass": {
     "description": "Button text to connect specific device models"
   },
@@ -1848,7 +1848,7 @@
   "@termsOfUse": {
     "description": "Link text for Terms of Use"
   },
-  "omiYourAiCompanion": "Nooto – Your AI Companion",
+  "omiYourAiCompanion": "Omi – Your AI Companion",
   "@omiYourAiCompanion": {
     "description": "App title or branding on onboarding screen"
   },
@@ -1868,7 +1868,7 @@
   "@microphonePermission": {
     "description": "Title for microphone permission section"
   },
-  "permissionGrantedNow": "Permission granted! Now:\n\nOpen the Nooto app on your watch and tap \"Continue\" below",
+  "permissionGrantedNow": "Permission granted! Now:\n\nOpen the Omi app on your watch and tap \"Continue\" below",
   "@permissionGrantedNow": {
     "description": "Instructions after permission is granted"
   },
@@ -1884,7 +1884,7 @@
   "@needHelp": {
     "description": "Link to help dialog"
   },
-  "troubleshootingSteps": "Troubleshooting:\n\n1. Ensure Nooto is installed on your watch\n2. Open the Nooto app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone",
+  "troubleshootingSteps": "Troubleshooting:\n\n1. Ensure Omi is installed on your watch\n2. Open the Omi app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone",
   "@troubleshootingSteps": {
     "description": "Troubleshooting instructions for watch setup"
   },
@@ -1941,7 +1941,7 @@
   },
   "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
   "@personalGrowthJourney": {
-    "description": "Subtitle describing Nooto on auth screen"
+    "description": "Subtitle describing Omi on auth screen"
   },
   "actionItemsTitle": "To-Do's",
   "@actionItemsTitle": {
@@ -2114,11 +2114,11 @@
   "@addFirstMemory": {
     "description": "Button to add first memory"
   },
-  "clearMemoryTitle": "Clear Nooto's Memory",
+  "clearMemoryTitle": "Clear Omi's Memory",
   "@clearMemoryTitle": {
     "description": "Dialog title for clearing memory"
   },
-  "clearMemoryMessage": "Are you sure you want to clear Nooto's memory? This action cannot be undone.",
+  "clearMemoryMessage": "Are you sure you want to clear Omi's memory? This action cannot be undone.",
   "@clearMemoryMessage": {
     "description": "Dialog content for clearing memory"
   },
@@ -2126,7 +2126,7 @@
   "@clearMemoryButton": {
     "description": "Button text to confirm clearing all memories"
   },
-  "memoryClearedSuccess": "Nooto's memory about you has been cleared",
+  "memoryClearedSuccess": "Omi's memory about you has been cleared",
   "@memoryClearedSuccess": {
     "description": "Snackbar success message"
   },
@@ -2323,7 +2323,7 @@
   "@translationNotice": {
     "description": "Title for dialog explaining that conversations are translated"
   },
-  "translationNoticeMessage": "Nooto translates conversations into your primary language. Update it anytime in Settings → Profiles.",
+  "translationNoticeMessage": "Omi translates conversations into your primary language. Update it anytime in Settings → Profiles.",
   "@translationNoticeMessage": {
     "description": "Message explaining how translation works and where to change language settings"
   },
@@ -2571,9 +2571,9 @@
   "@privacyPolicyTitle": {
     "description": "Title for privacy policy page"
   },
-  "omiSttProvider": "Nooto",
+  "omiSttProvider": "Omi",
   "@omiSttProvider": {
-    "description": "Label for default Nooto STT provider"
+    "description": "Label for default Omi STT provider"
   },
   "labelCopied": "{label} copied",
   "@labelCopied": {
@@ -2881,7 +2881,7 @@
   "@checksForAudioFiles": {
     "description": "Step 1: Checking for audio files"
   },
-  "omiSyncsAudioFiles": "Nooto then syncs the audio files with the server",
+  "omiSyncsAudioFiles": "Omi then syncs the audio files with the server",
   "@omiSyncsAudioFiles": {
     "description": "Step 2: Syncing audio files"
   },
@@ -2893,11 +2893,11 @@
   "@youreAllSet": {
     "description": "Completion message when onboarding is finished"
   },
-  "welcomeToOmiDescription": "Welcome to Nooto! Your AI companion is ready to assist you with conversations, tasks, and more.",
+  "welcomeToOmiDescription": "Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.",
   "@welcomeToOmiDescription": {
     "description": "Welcome message on completion screen"
   },
-  "startUsingOmi": "Start Using Nooto",
+  "startUsingOmi": "Start Using Omi",
   "@startUsingOmi": {
     "description": "Button to complete onboarding and start using the app"
   },
@@ -3006,7 +3006,7 @@
   "@reviewAndManageConversations": {
     "description": "Subtitle explaining what users can do on conversations page"
   },
-  "startCapturingConversations": "Start capturing conversations with your Nooto device to see them here.",
+  "startCapturingConversations": "Start capturing conversations with your Omi device to see them here.",
   "@startCapturingConversations": {
     "description": "Message explaining how to get started with conversations"
   },
@@ -3026,7 +3026,7 @@
   "@showAll": {
     "description": "Button text to show all items"
   },
-  "noTasksForToday": "No tasks for today.\\nAsk Nooto for more tasks or create manually.",
+  "noTasksForToday": "No tasks for today.\\nAsk Omi for more tasks or create manually.",
   "@noTasksForToday": {
     "description": "Message shown when there are no tasks due today"
   },
@@ -3225,7 +3225,7 @@
   "@createNewApp": {
     "description": "Title for the create new app page"
   },
-  "buildSubmitCustomOmiApp": "Build and submit your custom Nooto app",
+  "buildSubmitCustomOmiApp": "Build and submit your custom Omi app",
   "@buildSubmitCustomOmiApp": {
     "description": "Subtitle describing the purpose of the create app page"
   },
@@ -3285,7 +3285,7 @@
   "@makeMyAppPublic": {
     "description": "Checkbox label for making app publicly available"
   },
-  "submitAppTermsAgreement": "By submitting this app, I agree to the Nooto AI Terms of Service and Privacy Policy",
+  "submitAppTermsAgreement": "By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy",
   "@submitAppTermsAgreement": {
     "description": "Terms and conditions agreement checkbox text"
   },
@@ -3341,7 +3341,7 @@
   "@dataAccessNotice": {
     "description": "Dialog title warning about app data access"
   },
-  "dataAccessWarning": "This app will access your data. Nooto AI is not responsible for how your data is used, modified, or deleted by this app",
+  "dataAccessWarning": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "@dataAccessWarning": {
     "description": "Warning message about app data access in confirmation dialog"
   },
@@ -3817,7 +3817,7 @@
   "@upgradeToPro": {
     "description": "Subscription banner button text"
   },
-  "getOmiDevice": "Get Nooto Device",
+  "getOmiDevice": "Get Omi Device",
   "@getOmiDevice": {
     "description": "Widget title for device promotion"
   },
@@ -3920,7 +3920,7 @@
   "@setAllMemoriesToPublic": {
     "description": "Description for making all memories public"
   },
-  "permanentlyRemoveAllMemories": "Permanently remove all memories from Nooto",
+  "permanentlyRemoveAllMemories": "Permanently remove all memories from Omi",
   "@permanentlyRemoveAllMemories": {
     "description": "Description for deleting all memories"
   },
@@ -3932,11 +3932,11 @@
   "@allMemoriesAreNowPublic": {
     "description": "Success message after making all memories public"
   },
-  "clearOmisMemory": "Clear Nooto's Memory",
+  "clearOmisMemory": "Clear Omi's Memory",
   "@clearOmisMemory": {
     "description": "Confirmation dialog title for clearing all memories"
   },
-  "clearMemoryConfirmation": "Are you sure you want to clear Nooto's memory? This action cannot be undone and will permanently delete all {count} memories.",
+  "clearMemoryConfirmation": "Are you sure you want to clear Omi's memory? This action cannot be undone and will permanently delete all {count} memories.",
   "@clearMemoryConfirmation": {
     "description": "Confirmation message for clearing all memories",
     "placeholders": {
@@ -3945,11 +3945,11 @@
       }
     }
   },
-  "omisMemoryCleared": "Nooto's memory about you has been cleared",
+  "omisMemoryCleared": "Omi's memory about you has been cleared",
   "@omisMemoryCleared": {
     "description": "Success message after clearing all memories"
   },
-  "welcomeToOmi": "Welcome to Nooto",
+  "welcomeToOmi": "Welcome to Omi",
   "@welcomeToOmi": {
     "description": "Welcome message on auth screen"
   },
@@ -4003,13 +4003,13 @@
   },
   "pleaseSelectYourPrimaryLanguage": "Please select your primary language",
   "chooseYourLanguage": "Choose your language",
-  "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Nooto experience",
+  "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
   "searchLanguages": "Search languages...",
   "selectALanguage": "Select a language",
   "tryDifferentSearchTerm": "Try a different search term",
   "pleaseEnterYourName": "Please enter your name",
   "nameMustBeAtLeast2Characters": "Name must be at least 2 characters",
-  "tellUsHowYouWouldLikeToBeAddressed": "Tell us how you'd like to be addressed. This helps personalize your Nooto experience.",
+  "tellUsHowYouWouldLikeToBeAddressed": "Tell us how you'd like to be addressed. This helps personalize your Omi experience.",
   "charactersCount": "{count} characters",
   "@charactersCount": {
     "placeholders": {
@@ -4018,16 +4018,16 @@
       }
     }
   },
-  "enableFeaturesForBestExperience": "Enable features for the best Nooto experience on your device.",
+  "enableFeaturesForBestExperience": "Enable features for the best Omi experience on your device.",
   "microphoneAccess": "Microphone Access",
   "recordAudioConversations": "Record audio conversations",
-  "microphoneAccessDescription": "Nooto needs microphone access to record your conversations and provide transcriptions.",
+  "microphoneAccessDescription": "Omi needs microphone access to record your conversations and provide transcriptions.",
   "screenRecording": "Screen Recording",
   "captureSystemAudioFromMeetings": "Capture system audio from meetings",
-  "screenRecordingDescription": "Nooto needs screen recording permission to capture system audio from your browser-based meetings.",
+  "screenRecordingDescription": "Omi needs screen recording permission to capture system audio from your browser-based meetings.",
   "accessibility": "Accessibility",
   "detectBrowserBasedMeetings": "Detect browser-based meetings",
-  "accessibilityDescription": "Nooto needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
+  "accessibilityDescription": "Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
   "pleaseWait": "Please wait...",
   "joinTheCommunity": "Join the community!",
   "loadingProfile": "Loading profile...",
@@ -4037,14 +4037,14 @@
   "yourInformation": "Your Information",
   "setYourName": "Set Your Name",
   "changeYourName": "Change Your Name",
-  "manageYourOmiPersona": "Manage your Nooto persona",
+  "manageYourOmiPersona": "Manage your Omi persona",
   "voiceAndPeople": "Voice & People",
-  "teachOmiYourVoice": "Teach Nooto your voice",
-  "tellOmiWhoSaidIt": "Tell Nooto who said it 🗣️",
+  "teachOmiYourVoice": "Teach Omi your voice",
+  "tellOmiWhoSaidIt": "Tell Omi who said it 🗣️",
   "payment": "Payment",
   "addOrChangeYourPaymentMethod": "Add or change your payment method",
   "preferences": "Preferences",
-  "helpImproveOmiBySharing": "Help improve Nooto by sharing anonymized analytics data",
+  "helpImproveOmiBySharing": "Help improve Omi by sharing anonymized analytics data",
   "deleteAccount": "Delete Account",
   "deleteYourAccountAndAllData": "Delete your account and all data",
   "clearLogs": "Clear logs",
@@ -4052,7 +4052,7 @@
   "exportConversations": "Export Conversations",
   "exportAllConversationsToJson": "Export all your conversations to a JSON file.",
   "conversationsExportStarted": "Conversations Export Started. This may take a few seconds, please wait.",
-  "mcpDescription": "To connect Nooto with other applications to read, search, and manage your memories and conversations. Create a key to get started.",
+  "mcpDescription": "To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.",
   "apiKeys": "API Keys",
   "errorLabel": "Error: {error}",
   "@errorLabel": {
@@ -4070,7 +4070,7 @@
   "triggersWhenAudioBytesReceived": "Triggers when audio bytes are received.",
   "everyXSeconds": "Every x seconds",
   "triggersWhenDaySummaryGenerated": "Triggers when day summary is generated.",
-  "tryLatestExperimentalFeatures": "Try the latest experimental features from Nooto Team.",
+  "tryLatestExperimentalFeatures": "Try the latest experimental features from Omi Team.",
   "transcriptionServiceDiagnosticStatus": "Transcription service diagnostic status",
   "enableDetailedDiagnosticMessages": "Enable detailed diagnostic messages from the transcription service",
   "autoCreateAndTagNewSpeakers": "Auto-create and tag new speakers",
@@ -4106,7 +4106,7 @@
       }
     }
   },
-  "letOmiChooseAutomatically": "Let Nooto choose the best app automatically",
+  "letOmiChooseAutomatically": "Let Omi choose the best app automatically",
   "deleteConversationConfirmation": "Are you sure you want to delete this conversation? This action cannot be undone.",
   "conversationDeleted": "Conversation deleted",
   "generatingLink": "Generating link...",
@@ -4257,7 +4257,7 @@
       }
     }
   },
-  "translatedByOmi": "translated by nooto",
+  "translatedByOmi": "translated by omi",
   "@translatedByOmi": {
     "description": "Credit line for translations"
   },
@@ -4373,7 +4373,7 @@
   "@customVocabularyHeader": {
     "description": "Custom vocabulary section header"
   },
-  "addWordsDescription": "Add words that Nooto should recognize during transcription.",
+  "addWordsDescription": "Add words that Omi should recognize during transcription.",
   "@addWordsDescription": {
     "description": "Custom vocabulary description"
   },
@@ -4435,7 +4435,7 @@
   "clearNodesDescription": "Clear all nodes and connections",
   "deleteKnowledgeGraphQuestion": "Delete Knowledge Graph?",
   "deleteKnowledgeGraphWarning": "This will delete all derived knowledge graph data. Your original memories remain safe.",
-  "connectOmiWithAI": "Connect Nooto with AI assistants",
+  "connectOmiWithAI": "Connect Omi with AI assistants",
   "noAPIKeys": "No API keys. Create one to get started.",
   "autoCreateWhenDetected": "Auto-create when name detected",
   "trackPersonalGoals": "Track personal goals on homepage",
@@ -4456,7 +4456,7 @@
   "@holdOnPreparingForm": {
     "description": "Loading message while preparing form"
   },
-  "bySubmittingYouAgreeToOmi": "By submitting, you agree to Nooto ",
+  "bySubmittingYouAgreeToOmi": "By submitting, you agree to Omi ",
   "@bySubmittingYouAgreeToOmi": {
     "description": "Text before Terms & Privacy Policy link"
   },
@@ -4668,7 +4668,7 @@
   "@issueActivatingApp": {
     "description": "Dialog description for activation error"
   },
-  "dataAccessNoticeDescription": "This app will access your data. Nooto AI is not responsible for how your data is used, modified, or deleted by this app",
+  "dataAccessNoticeDescription": "This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app",
   "@dataAccessNoticeDescription": {
     "description": "Description for data access notice dialog"
   },
@@ -4800,15 +4800,15 @@
       }
     }
   },
-  "omiApiKeys": "Nooto API Keys",
+  "omiApiKeys": "Omi API Keys",
   "@omiApiKeys": {
     "description": "Dialog title for API keys info"
   },
-  "apiKeysDescription": "API Keys are used for authentication when your app communicates with the nooto server. They allow your application to create memories and access other nooto services securely.",
+  "apiKeysDescription": "API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.",
   "@apiKeysDescription": {
     "description": "Description of what API keys are used for"
   },
-  "aboutOmiApiKeys": "About Nooto API Keys",
+  "aboutOmiApiKeys": "About Omi API Keys",
   "@aboutOmiApiKeys": {
     "description": "Tooltip for API keys info button"
   },
@@ -5018,7 +5018,7 @@
   "@maximumSecurityE2ee": {
     "description": "Title for End-to-End Encryption dialog"
   },
-  "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Nooto, can access your content.",
+  "e2eeDescription": "End-to-end encryption is the gold standard for privacy. When enabled, your data is encrypted on your device before it's sent to our servers. This means no one, not even Omi, can access your content.",
   "@e2eeDescription": {
     "description": "Description of E2EE encryption explaining its benefits"
   },
@@ -5074,7 +5074,7 @@
   "@secureEncryption": {
     "description": "Title for secure encryption card"
   },
-  "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Nooto staff or Google, directly from the database.",
+  "secureEncryptionDescription": "Your data is encrypted with a key unique to you on our servers, hosted on Google Cloud. This means your raw content is inaccessible to anyone, including Omi staff or Google, directly from the database.",
   "@secureEncryptionDescription": {
     "description": "Description of secure encryption explaining how data is protected"
   },
@@ -5171,23 +5171,23 @@
       }
     }
   },
-  "omiTraining": "Nooto Training",
+  "omiTraining": "Omi Training",
   "@omiTraining": {
-    "description": "Title for the Nooto Training page/section"
+    "description": "Title for the Omi Training page/section"
   },
   "trainingDataProgram": "Training Data Program",
   "@trainingDataProgram": {
     "description": "Label for training data program"
   },
-  "getOmiUnlimitedFree": "Get Nooto Unlimited for free by contributing your data to train AI models.",
+  "getOmiUnlimitedFree": "Get Omi Unlimited for free by contributing your data to train AI models.",
   "@getOmiUnlimitedFree": {
-    "description": "Description for getting Nooto Unlimited free by contributing data"
+    "description": "Description for getting Omi Unlimited free by contributing data"
   },
   "trainingDataBullets": "• Your data helps improve AI models\n• Only non-sensitive data is shared\n• Fully transparent process",
   "@trainingDataBullets": {
     "description": "Bullet points explaining training data program benefits"
   },
-  "learnMoreAtOmiTraining": "Learn more at nooto.ai/training",
+  "learnMoreAtOmiTraining": "Learn more at omi.me/training",
   "@learnMoreAtOmiTraining": {
     "description": "Link text to learn more about training"
   },
@@ -5293,7 +5293,7 @@
   "@youAreOnUnlimitedPlan": {
     "description": "Message showing user is on unlimited plan"
   },
-  "yourOmiUnleashed": "Your Nooto, unleashed. Go unlimited for endless possibilities.",
+  "yourOmiUnleashed": "Your Omi, unleashed. Go unlimited for endless possibilities.",
   "@yourOmiUnleashed": {
     "description": "Marketing text for unlimited plan"
   },
@@ -5335,11 +5335,11 @@
   "@unlimitedConversations": {
     "description": "Feature: unlimited conversations"
   },
-  "askOmiAnything": "Ask Nooto anything about your life",
+  "askOmiAnything": "Ask Omi anything about your life",
   "@askOmiAnything": {
-    "description": "Feature: ask Nooto anything"
+    "description": "Feature: ask Omi anything"
   },
-  "unlockOmiInfiniteMemory": "Unlock Nooto's infinite memory",
+  "unlockOmiInfiniteMemory": "Unlock Omi's infinite memory",
   "@unlockOmiInfiniteMemory": {
     "description": "Feature: unlock infinite memory"
   },
@@ -5413,7 +5413,7 @@
   "@yourPrivacyMattersToUs": {
     "description": "Privacy page - yourPrivacyMattersToUs"
   },
-  "privacyIntroText": "At Nooto, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here's what you need to know:",
+  "privacyIntroText": "At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here's what you need to know:",
   "@privacyIntroText": {
     "description": "Privacy page - privacyIntroText"
   },
@@ -5433,11 +5433,11 @@
   "@ourCommitment": {
     "description": "Privacy page - ourCommitment"
   },
-  "commitmentText": "We are committed to using the data we collect only to make Nooto a better product for you. Your privacy and trust are paramount to us.",
+  "commitmentText": "We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.",
   "@commitmentText": {
     "description": "Privacy page - commitmentText"
   },
-  "thankYouText": "Thank you for being a valued user of Nooto. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.",
+  "thankYouText": "Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.",
   "@thankYouText": {
     "description": "Privacy page - thankYouText"
   },
@@ -5598,7 +5598,7 @@
   "@minutes": {
     "description": "Unit label for minutes"
   },
-  "omiHas": "Nooto has:",
+  "omiHas": "Omi has:",
   "@omiHas": {
     "description": "Fallback text for share stats when period is unknown"
   },
@@ -5731,7 +5731,7 @@
   "@howItWorksTitle": {
     "description": "Help dialog title"
   },
-  "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Nooto will be able to recognize their speech too!",
+  "howPeopleWorks": "Once a person is created, you can go to a conversation transcript, and assign them their corresponding segments, that way Omi will be able to recognize their speech too!",
   "@howPeopleWorks": {
     "description": "Explanation of how people/speech recognition works"
   },
@@ -6092,9 +6092,9 @@
   "@enableApps": {
     "description": "Menu item text to navigate to apps page and enable more chat apps"
   },
-  "omiAppName": "Nooto",
+  "omiAppName": "Omi",
   "@omiAppName": {
-    "description": "The Nooto app/assistant name shown in chat app selection"
+    "description": "The Omi app/assistant name shown in chat app selection"
   },
   "showMore": "show more ↓",
   "@showMore": {
@@ -6124,21 +6124,21 @@
   "@checkingAppleWatch": {
     "description": "Loading text while checking Apple Watch status"
   },
-  "installOmiOnAppleWatch": "Install Nooto on your\nApple Watch",
+  "installOmiOnAppleWatch": "Install Omi on your\nApple Watch",
   "@installOmiOnAppleWatch": {
-    "description": "Title prompting user to install Nooto on Apple Watch"
+    "description": "Title prompting user to install Omi on Apple Watch"
   },
-  "installOmiOnAppleWatchDescription": "To use your Apple Watch with Nooto, you need to install the Nooto app on your watch first.",
+  "installOmiOnAppleWatchDescription": "To use your Apple Watch with Omi, you need to install the Omi app on your watch first.",
   "@installOmiOnAppleWatchDescription": {
-    "description": "Description explaining need to install Nooto app on watch"
+    "description": "Description explaining need to install Omi app on watch"
   },
-  "openOmiOnAppleWatch": "Open Nooto on your\nApple Watch",
+  "openOmiOnAppleWatch": "Open Omi on your\nApple Watch",
   "@openOmiOnAppleWatch": {
-    "description": "Title prompting user to open Nooto on Apple Watch"
+    "description": "Title prompting user to open Omi on Apple Watch"
   },
-  "openOmiOnAppleWatchDescription": "The Nooto app is installed on your Apple Watch. Open it and tap Start to begin.",
+  "openOmiOnAppleWatchDescription": "The Omi app is installed on your Apple Watch. Open it and tap Start to begin.",
   "@openOmiOnAppleWatchDescription": {
-    "description": "Description explaining Nooto is installed and user should open it"
+    "description": "Description explaining Omi is installed and user should open it"
   },
   "openWatchApp": "Open Watch App",
   "@openWatchApp": {
@@ -6148,7 +6148,7 @@
   "@iveInstalledAndOpenedTheApp": {
     "description": "Button text confirming user has installed and opened the app"
   },
-  "unableToOpenWatchApp": "Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Nooto from the \"Available Apps\" section.",
+  "unableToOpenWatchApp": "Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.",
   "@unableToOpenWatchApp": {
     "description": "Error message when Watch app cannot be opened automatically"
   },
@@ -6156,7 +6156,7 @@
   "@appleWatchConnectedSuccessfully": {
     "description": "Success message when Apple Watch connects"
   },
-  "appleWatchNotReachable": "Apple Watch still not reachable. Please make sure the Nooto app is open on your watch.",
+  "appleWatchNotReachable": "Apple Watch still not reachable. Please make sure the Omi app is open on your watch.",
   "@appleWatchNotReachable": {
     "description": "Error message when Apple Watch is not reachable"
   },
@@ -6274,9 +6274,9 @@
   "@noSummary": {
     "description": "Message when no summary is available"
   },
-  "updateOmiFirmware": "Update nooto firmware",
+  "updateOmiFirmware": "Update omi firmware",
   "@updateOmiFirmware": {
-    "description": "Button text to update Nooto device firmware"
+    "description": "Button text to update Omi device firmware"
   },
   "anErrorOccurredTryAgain": "An error occurred. Please try again.",
   "@anErrorOccurredTryAgain": {
@@ -6286,7 +6286,7 @@
   "@welcomeBackSimple": {
     "description": "Simple welcome message without user name"
   },
-  "addVocabularyDescription": "Add words that Nooto should recognize during transcription.",
+  "addVocabularyDescription": "Add words that Omi should recognize during transcription.",
   "@addVocabularyDescription": {
     "description": "Description for custom vocabulary section"
   },
@@ -6519,7 +6519,7 @@
   "@wrappedNoDataAvailable": {
     "description": "Shown when wrapped result is null"
   },
-  "wrappedOmiLifeRecap": "Nooto Life Recap",
+  "wrappedOmiLifeRecap": "Omi Life Recap",
   "@wrappedOmiLifeRecap": {
     "description": "Subtitle on the intro card"
   },
@@ -6527,7 +6527,7 @@
   "@wrappedSwipeUpToBegin": {
     "description": "Instruction text on intro card"
   },
-  "wrappedShareText": "My 2025, remembered by Nooto ✨ nooto.ai/wrapped",
+  "wrappedShareText": "My 2025, remembered by Omi ✨ omi.me/wrapped",
   "@wrappedShareText": {
     "description": "Text shared when sharing wrapped images"
   },
@@ -6555,7 +6555,7 @@
   "@wrappedMy2025": {
     "description": "Title text for shareable image"
   },
-  "wrappedRememberedByOmi": "remembered by Nooto",
+  "wrappedRememberedByOmi": "remembered by Omi",
   "@wrappedRememberedByOmi": {
     "description": "Subtitle text for shareable image"
   },
@@ -6839,7 +6839,7 @@
   "@notificationFrequency": {
     "description": "Section header for notification frequency settings"
   },
-  "controlNotificationFrequency": "Control how often Nooto sends you proactive notifications.",
+  "controlNotificationFrequency": "Control how often Omi sends you proactive notifications.",
   "@controlNotificationFrequency": {
     "description": "Description for notification frequency control"
   },
@@ -6871,7 +6871,7 @@
   "@dailyScoreExplanation": {
     "description": "Explanation of how daily score is calculated"
   },
-  "notificationFrequencyDescription": "Control how often Nooto sends you proactive notifications and reminders.",
+  "notificationFrequencyDescription": "Control how often Omi sends you proactive notifications and reminders.",
   "@notificationFrequencyDescription": {
     "description": "Description text for notification frequency section"
   },
@@ -7208,7 +7208,7 @@
   "@noRecordings": {
     "description": "Empty state title when there are no recordings"
   },
-  "audioFromOmiWillAppearHere": "Audio from your Nooto device will appear here",
+  "audioFromOmiWillAppearHere": "Audio from your Omi device will appear here",
   "@audioFromOmiWillAppearHere": {
     "description": "Empty state description for recordings"
   },
@@ -7388,7 +7388,7 @@
   "@batteryUsageHigher": {
     "description": "Warning about battery usage"
   },
-  "considerOmiCloud": "Consider using Nooto Cloud for better performance.",
+  "considerOmiCloud": "Consider using Omi Cloud for better performance.",
   "@considerOmiCloud": {
     "description": "Suggestion to use cloud transcription"
   },
@@ -7615,9 +7615,9 @@
       }
     }
   },
-  "omiTranscriptionOptimized": "Nootos built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
+  "omiTranscriptionOptimized": "Omis built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.",
   "@omiTranscriptionOptimized": {
-    "description": "Description of Nooto transcription features"
+    "description": "Description of Omi transcription features"
   },
   "reset": "Reset",
   "@reset": {
@@ -7737,7 +7737,7 @@
   "@writeReviewOptional": {
     "description": "Hint text for review input field"
   },
-  "setupQuestionsIntro": "Help us improve Nooto by answering a few questions.  🫶 💜",
+  "setupQuestionsIntro": "Help us improve Omi by answering a few questions.  🫶 💜",
   "@setupQuestionsIntro": {
     "description": "Intro text for setup questions page"
   },
@@ -7745,9 +7745,9 @@
   "@setupQuestionProfession": {
     "description": "Question about profession"
   },
-  "setupQuestionUsage": "2. Where do you plan to use your Nooto?",
+  "setupQuestionUsage": "2. Where do you plan to use your Omi?",
   "@setupQuestionUsage": {
-    "description": "Question about Nooto usage location"
+    "description": "Question about Omi usage location"
   },
   "setupQuestionAge": "3. What's your age range?",
   "@setupQuestionAge": {
@@ -8037,8 +8037,8 @@
   "disconnectTwitter": "Disconnect Twitter",
   "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
   "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
-  "getOmi": "Get Nooto",
-  "iHaveOmiDevice": "I have Nooto device",
+  "getOmi": "Get Omi",
+  "iHaveOmiDevice": "I have Omi device",
   "goal": "GOAL",
   "tapToTrackThisGoal": "Tap to track this goal",
   "tapToSetAGoal": "Tap to set a goal",
@@ -8228,7 +8228,7 @@
     "placeholders": {
       "deviceName": {
         "type": "String",
-        "example": "Nooto"
+        "example": "Omi"
       }
     }
   },
@@ -8238,7 +8238,7 @@
     "placeholders": {
       "deviceName": {
         "type": "String",
-        "example": "Nooto"
+        "example": "Omi"
       }
     }
   },
@@ -8248,7 +8248,7 @@
     "placeholders": {
       "deviceName": {
         "type": "String",
-        "example": "Nooto"
+        "example": "Omi"
       }
     }
   },
@@ -8402,7 +8402,7 @@
   "@enableFastTransfer": {
     "description": "Dialog title for enabling fast transfer"
   },
-  "fastTransferDescription": "Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Nooto device's WiFi network during transfer.",
+  "fastTransferDescription": "Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device's WiFi network during transfer.",
   "@fastTransferDescription": {
     "description": "Description of fast transfer feature in dialog"
   },
@@ -8410,7 +8410,7 @@
   "@internetAccessPausedDuringTransfer": {
     "description": "Warning that internet is paused during transfer"
   },
-  "chooseTransferMethodDescription": "Choose how recordings are transferred from your Nooto device to your phone.",
+  "chooseTransferMethodDescription": "Choose how recordings are transferred from your Omi device to your phone.",
   "@chooseTransferMethodDescription": {
     "description": "Description text on transfer method page"
   },
@@ -8422,7 +8422,7 @@
   "@fiveTimesFaster": {
     "description": "Badge label for faster transfer method"
   },
-  "fastTransferMethodDescription": "Creates a direct WiFi connection to your Nooto device. Your phone temporarily disconnects from your regular WiFi during transfer.",
+  "fastTransferMethodDescription": "Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.",
   "@fastTransferMethodDescription": {
     "description": "Description of fast transfer method card"
   },
@@ -8454,11 +8454,11 @@
   "@lowBatteryAlertBody": {
     "description": "Body text for low battery notification"
   },
-  "deviceDisconnectedNotificationTitle": "Your Nooto Device Disconnected",
+  "deviceDisconnectedNotificationTitle": "Your Omi Device Disconnected",
   "@deviceDisconnectedNotificationTitle": {
     "description": "Title for device disconnected notification"
   },
-  "deviceDisconnectedNotificationBody": "Please reconnect to continue using your Nooto.",
+  "deviceDisconnectedNotificationBody": "Please reconnect to continue using your Omi.",
   "@deviceDisconnectedNotificationBody": {
     "description": "Body text for device disconnected notification"
   },
@@ -8466,7 +8466,7 @@
   "@firmwareUpdateAvailable": {
     "description": "Title for firmware update available dialog"
   },
-  "firmwareUpdateAvailableDescription": "A new firmware update ({version}) is available for your Nooto device. Would you like to update now?",
+  "firmwareUpdateAvailableDescription": "A new firmware update ({version}) is available for your Omi device. Would you like to update now?",
   "@firmwareUpdateAvailableDescription": {
     "description": "Description for firmware update dialog with version parameter",
     "placeholders": {
@@ -8521,9 +8521,9 @@
   "@almostDone": {
     "description": "Migration is almost complete"
   },
-  "omiSays": "nooto says",
+  "omiSays": "omi says",
   "@omiSays": {
-    "description": "Notification title for nooto app messages"
+    "description": "Notification title for omi app messages"
   },
   "analyzingYourData": "Analyzing your data...",
   "@analyzingYourData": {
@@ -8774,7 +8774,7 @@
   "@personaFailedToCreate": {
     "description": "Error shown when creating persona fails"
   },
-  "personaConnectKnowledgeSource": "Please connect at least one knowledge data source (Nooto or Twitter)",
+  "personaConnectKnowledgeSource": "Please connect at least one knowledge data source (Omi or Twitter)",
   "@personaConnectKnowledgeSource": {
     "description": "Error shown when no knowledge source is connected"
   },
@@ -8922,7 +8922,7 @@
   "@xHandleTitle": {
     "description": "Title asking user for their X (Twitter) handle"
   },
-  "xHandleDescription": "We will pre-train your Nooto clone\nbased on your account's activity",
+  "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
   "@xHandleDescription": {
     "description": "Description explaining why X handle is needed"
   },
@@ -8942,9 +8942,9 @@
   "@nextButton": {
     "description": "Button text to proceed to next step"
   },
-  "connectOmiDevice": "Connect Nooto Device",
+  "connectOmiDevice": "Connect Omi Device",
   "@connectOmiDevice": {
-    "description": "Button text to connect Nooto device"
+    "description": "Button text to connect Omi device"
   },
   "planSwitchingDescriptionWithTitle": "You're switching your Unlimited Plan to the {title}. Are you sure you want to proceed?",
   "@planSwitchingDescriptionWithTitle": {
@@ -8983,9 +8983,9 @@
   "@transcriptionJsonPlaceholder": {
     "description": "JSON configuration placeholder hint text in transcription settings"
   },
-  "transcriptionSourceOmi": "Nooto",
+  "transcriptionSourceOmi": "Omi",
   "@transcriptionSourceOmi": {
-    "description": "Tab title for Nooto transcription source option"
+    "description": "Tab title for Omi transcription source option"
   },
   "pricePlaceholder": "0.00",
   "@pricePlaceholder": {
@@ -9033,7 +9033,7 @@
   "@dailyReflectionNotificationBody": {
     "description": "Body text for the daily reflection notification"
   },
-  "actionItemReminderTitle": "Nooto Reminder",
+  "actionItemReminderTitle": "Omi Reminder",
   "@actionItemReminderTitle": {
     "description": "Title for action item reminder notifications"
   },
@@ -9043,7 +9043,7 @@
     "placeholders": {
       "deviceName": {
         "type": "String",
-        "example": "Nooto"
+        "example": "Omi"
       }
     }
   },
@@ -9053,7 +9053,7 @@
     "placeholders": {
       "deviceName": {
         "type": "String",
-        "example": "Nooto"
+        "example": "Omi"
       }
     }
   },
@@ -9077,7 +9077,7 @@
   "@onboardingComplete": {
     "description": "Onboarding step title for completion"
   },
-  "onboardingWelcomeToOmi": "Welcome to Nooto",
+  "onboardingWelcomeToOmi": "Welcome to Omi",
   "@onboardingWelcomeToOmi": {
     "description": "Onboarding step description for sign in"
   },
@@ -9846,18 +9846,8 @@
     "description": "Menu option to add a new task"
   },
   "addMcpServer": "Add MCP Server",
-  "appStore": "App Store",
-  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
-  "audioPlaybackUnavailable": "Audio file is not available for playback",
-  "authorizingMcpServer": "Authorizing...",
   "connectExternalAiTools": "Connect external AI tools",
-  "coworker": "Coworker",
-  "event": "Event",
-  "friendWordOfMouth": "Friend",
-  "googleSearch": "Google Search",
-  "instagram": "Instagram",
-  "linkedIn": "LinkedIn",
-  "mcpConnectionFailed": "Failed to connect to MCP server",
+  "mcpServerUrl": "MCP Server URL",
   "mcpServerConnected": "{count} tools connected successfully",
   "@mcpServerConnected": {
     "placeholders": {
@@ -9866,13 +9856,173 @@
       }
     }
   },
-  "mcpServerUrl": "MCP Server URL",
+  "mcpConnectionFailed": "Failed to connect to MCP server",
+  "authorizingMcpServer": "Authorizing...",
+  "whereDidYouHearAboutOmi": "How did you find us?",
+  "tiktok": "TikTok",
+  "youtube": "YouTube",
+  "instagram": "Instagram",
+  "xTwitter": "X (Twitter)",
+  "reddit": "Reddit",
+  "friendWordOfMouth": "Friend",
   "otherSource": "Other",
   "pleaseSpecify": "Please specify",
-  "reddit": "Reddit",
-  "tiktok": "TikTok",
-  "whereDidYouHearAboutOmi": "How did you find us?",
-  "xTwitter": "X (Twitter)",
-  "youtube": "YouTube",
-  "officialTeamName": "Nooto Team"
+  "event": "Event",
+  "coworker": "Coworker",
+  "linkedIn": "LinkedIn",
+  "appStore": "App Store",
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Audio file is not available for playback",
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
+  "connectionGuide": "Connection Guide",
+  "iveDoneThis": "I've done this",
+  "pairNewDevice": "Pair new device",
+  "dontSeeYourDevice": "Don't see your device?",
+  "reportAnIssue": "Report an issue",
+  "pairingTitleOmi": "Turn On Omi",
+  "@pairingTitleOmi": {
+    "description": "Pairing title for Omi device"
+  },
+  "pairingDescOmi": "Press and hold the device until it vibrates to turn it on.",
+  "@pairingDescOmi": {
+    "description": "Pairing description for Omi device"
+  },
+  "pairingTitleOmiDevkit": "Put Omi DevKit in Pairing Mode",
+  "@pairingTitleOmiDevkit": {
+    "description": "Pairing title for Omi DevKit"
+  },
+  "pairingDescOmiDevkit": "Press the button once to turn on. The LED will blink purple when in pairing mode.",
+  "@pairingDescOmiDevkit": {
+    "description": "Pairing description for Omi DevKit"
+  },
+  "pairingTitleOmiGlass": "Turn On Omi Glass",
+  "@pairingTitleOmiGlass": {
+    "description": "Pairing title for Omi Glass"
+  },
+  "pairingDescOmiGlass": "Power on by pressing the side button for 3 seconds.",
+  "@pairingDescOmiGlass": {
+    "description": "Pairing description for Omi Glass"
+  },
+  "pairingTitlePlaudNote": "Put Plaud Note in Pairing Mode",
+  "@pairingTitlePlaudNote": {
+    "description": "Pairing title for Plaud Note"
+  },
+  "pairingDescPlaudNote": "Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.",
+  "@pairingDescPlaudNote": {
+    "description": "Pairing description for Plaud Note"
+  },
+  "pairingTitleBee": "Put Bee in Pairing Mode",
+  "@pairingTitleBee": {
+    "description": "Pairing title for Bee device"
+  },
+  "pairingDescBee": "Press the button 5 times continuously. The light will start blinking blue and green.",
+  "@pairingDescBee": {
+    "description": "Pairing description for Bee device"
+  },
+  "pairingTitleLimitless": "Put Limitless in Pairing Mode",
+  "@pairingTitleLimitless": {
+    "description": "Pairing title for Limitless device"
+  },
+  "pairingDescLimitless": "When any light is visible, press once and then press and hold until the device shows a pink light, then release.",
+  "@pairingDescLimitless": {
+    "description": "Pairing description for Limitless device"
+  },
+  "pairingTitleFriendPendant": "Put Friend Pendant in Pairing Mode",
+  "@pairingTitleFriendPendant": {
+    "description": "Pairing title for Friend Pendant"
+  },
+  "pairingDescFriendPendant": "Press the button on the pendant to turn it on. It will enter pairing mode automatically.",
+  "@pairingDescFriendPendant": {
+    "description": "Pairing description for Friend Pendant"
+  },
+  "pairingTitleFieldy": "Put Fieldy in Pairing Mode",
+  "@pairingTitleFieldy": {
+    "description": "Pairing title for Fieldy device"
+  },
+  "pairingDescFieldy": "Press and hold the device until the light appears to turn it on.",
+  "@pairingDescFieldy": {
+    "description": "Pairing description for Fieldy device"
+  },
+  "pairingTitleAppleWatch": "Connect Apple Watch",
+  "@pairingTitleAppleWatch": {
+    "description": "Pairing title for Apple Watch"
+  },
+  "pairingDescAppleWatch": "Install and open the Omi app on your Apple Watch, then tap Connect in the app.",
+  "@pairingDescAppleWatch": {
+    "description": "Pairing description for Apple Watch"
+  },
+  "pairingTitleNeoOne": "Put Neo One in Pairing Mode",
+  "@pairingTitleNeoOne": {
+    "description": "Pairing title for Neo One device"
+  },
+  "pairingDescNeoOne": "Press and hold the power button until the LED blinks. The device will be discoverable.",
+  "@pairingDescNeoOne": {
+    "description": "Pairing description for Neo One device"
+  },
+  "downloadingFromDevice": "Downloading from device",
+  "reconnectingToInternet": "Reconnecting to internet...",
+  "uploadingToCloud": "Uploading {current} of {total}",
+  "@uploadingToCloud": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "processedStatus": "Processed",
+  "corruptedStatus": "Corrupted",
+  "nPending": "{count} pending",
+  "@nPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nProcessed": "{count} processed",
+  "@nProcessed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "synced": "Synced",
+  "@synced": {
+    "description": "Label for synced/processed recordings tab"
+  },
+  "noPendingRecordings": "No pending recordings",
+  "@noPendingRecordings": {
+    "description": "Empty state when no pending recordings"
+  },
+  "noProcessedRecordings": "No processed recordings yet",
+  "@noProcessedRecordings": {
+    "description": "Empty state when no processed recordings"
+  },
+  "pending": "Pending",
+  "@pending": {
+    "description": "Pending tab label for sync page"
+  },
+  "whatsNewInVersion": "What's New in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Add to your task list?",
+  "failedToCreateShareLink": "Failed to create share link",
+  "deleteGoal": "Delete Goal",
+  "deviceUpToDate": "Your device is up to date",
+  "wifiConfiguration": "WiFi Configuration",
+  "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
+  "networkNameSsid": "Network Name (SSID)",
+  "enterWifiNetworkName": "Enter WiFi network name",
+  "enterWifiPassword": "Enter WiFi password",
+  "appIconLabel": "App Icon"
 }

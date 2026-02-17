@@ -9,7 +9,7 @@ class AppLocalizationsCa extends AppLocalizations {
   AppLocalizationsCa([String locale = 'ca']) : super(locale);
 
   @override
-  String get appTitle => 'Nooto';
+  String get appTitle => 'Omi';
 
   @override
   String get conversationTab => 'Conversa';
@@ -123,7 +123,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get editPerson => 'Editar persona';
 
   @override
-  String get createPersonHint => 'Creeu una nova persona i ensenyeu a Nooto a reconèixer la seva veu també!';
+  String get createPersonHint => 'Creeu una nova persona i ensenyeu a Omi a reconèixer la seva veu també!';
 
   @override
   String get speechProfile => 'Perfil de Veu';
@@ -162,7 +162,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get couldNotAccessFile => 'No s\'ha pogut accedir al fitxer seleccionat';
 
   @override
-  String get askOmi => 'Pregunta a Nooto';
+  String get askOmi => 'Pregunta a Omi';
 
   @override
   String get done => 'Fet';
@@ -263,7 +263,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noMessagesYet => 'Encara no hi ha missatges!\nPer què no comenceu una conversa?';
 
   @override
-  String get deletingMessages => 'Suprimint els teus missatges de la memòria d\'Nooto...';
+  String get deletingMessages => 'Suprimint els teus missatges de la memòria d\'Omi...';
 
   @override
   String get messageCopied => '✨ Missatge copiat al porta-retalls';
@@ -293,7 +293,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get maxFilesLimit => 'Només podeu pujar 4 fitxers alhora';
 
   @override
-  String get chatWithOmi => 'Xatejar amb Nooto';
+  String get chatWithOmi => 'Xatejar amb Omi';
 
   @override
   String get apps => 'Aplicacions';
@@ -324,7 +324,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'No s\'han pogut obtenir les aplicacions :(\n\nComproveu la vostra connexió a internet i torneu-ho a provar.';
 
   @override
-  String get aboutOmi => 'Sobre Nooto';
+  String get aboutOmi => 'Sobre Omi';
 
   @override
   String get privacyPolicy => 'Política de privadesa';
@@ -439,7 +439,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get developerSettings => 'Configuració de desenvolupador';
 
   @override
-  String get getOmiForMac => 'Obtenir Nooto per a Mac';
+  String get getOmiForMac => 'Obtenir Omi per a Mac';
 
   @override
   String get referralProgram => 'Programa de recomanacions';
@@ -458,7 +458,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get privacyIntro =>
-      'A Nooto, estem compromesos a protegir la vostra privadesa. Aquesta pàgina us permet controlar com s\'emmagatzemen i utilitzen les vostres dades.';
+      'A Omi, estem compromesos a protegir la vostra privadesa. Aquesta pàgina us permet controlar com s\'emmagatzemen i utilitzen les vostres dades.';
 
   @override
   String get learnMore => 'Més informació...';
@@ -529,7 +529,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get unpairAndForget => 'Desvincular i oblidar dispositiu';
 
   @override
-  String get deviceDisconnectedMessage => 'El vostre Nooto s\'ha desconnectat 😔';
+  String get deviceDisconnectedMessage => 'El vostre Omi s\'ha desconnectat 😔';
 
   @override
   String get deviceUnpairedMessage =>
@@ -547,7 +547,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get connectDeviceMessage =>
-      'Connecteu el vostre dispositiu Nooto per accedir\na la configuració i personalització del dispositiu';
+      'Connecteu el vostre dispositiu Omi per accedir\na la configuració i personalització del dispositiu';
 
   @override
   String get deviceInfoSection => 'Informació del dispositiu';
@@ -680,7 +680,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get docs => 'Documentació';
 
   @override
-  String get yourOmiInsights => 'Les vostres estadístiques d\'Nooto';
+  String get yourOmiInsights => 'Les vostres estadístiques d\'Omi';
 
   @override
   String get today => 'Avui';
@@ -699,13 +699,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get startConversationToSeeInsights =>
-      'Comenceu una conversa amb Nooto\nper veure les vostres estadístiques d\'ús aquí.';
+      'Comenceu una conversa amb Omi\nper veure les vostres estadístiques d\'ús aquí.';
 
   @override
   String get listening => 'Escoltant';
 
   @override
-  String get listeningSubtitle => 'Temps total que Nooto ha estat escoltant activament.';
+  String get listeningSubtitle => 'Temps total que Omi ha estat escoltant activament.';
 
   @override
   String get understanding => 'Entenent';
@@ -762,19 +762,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get shareStatsMessage =>
-      'Compartint les meves estadístiques d\'Nooto! (nooto.ai - el vostre assistent d\'IA sempre actiu)';
+      'Compartint les meves estadístiques d\'Omi! (omi.me - el vostre assistent d\'IA sempre actiu)';
 
   @override
-  String get sharePeriodToday => 'Avui, nooto ha:';
+  String get sharePeriodToday => 'Avui, omi ha:';
 
   @override
-  String get sharePeriodMonth => 'Aquest mes, nooto ha:';
+  String get sharePeriodMonth => 'Aquest mes, omi ha:';
 
   @override
-  String get sharePeriodYear => 'Enguany, nooto ha:';
+  String get sharePeriodYear => 'Enguany, omi ha:';
 
   @override
-  String get sharePeriodAllTime => 'Fins ara, nooto ha:';
+  String get sharePeriodAllTime => 'Fins ara, omi ha:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -809,7 +809,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noLogFilesFound => 'No s\'han trobat fitxers de registre.';
 
   @override
-  String get omiDebugLog => 'Registre de depuració d\'Nooto';
+  String get omiDebugLog => 'Registre de depuració d\'Omi';
 
   @override
   String get logShared => 'Registre compartit';
@@ -833,7 +833,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get exportDataDesc => 'Exportar converses a un fitxer JSON';
 
   @override
-  String get exportedConversations => 'Converses exportades d\'Nooto';
+  String get exportedConversations => 'Converses exportades d\'Omi';
 
   @override
   String get exportShared => 'Exportació compartida';
@@ -1015,10 +1015,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get addWordsDesc => 'Noms, termes o paraules poc comunes';
 
   @override
-  String get vocabularyHint => 'Nooto, Callie, OpenAI';
+  String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connectar';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Properament';
@@ -1060,7 +1060,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String authAccessMessage(String appName) {
-    return 'Haureu d\'autoritzar Nooto per accedir a les vostres dades de $appName. Això obrirà el vostre navegador per a l\'autenticació.';
+    return 'Haureu d\'autoritzar Omi per accedir a les vostres dades de $appName. Això obrirà el vostre navegador per a l\'autenticació.';
   }
 
   @override
@@ -1157,7 +1157,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get editName => 'Editar nom';
 
   @override
-  String get howShouldOmiCallYou => 'Com hauria d\'anomenar-vos Nooto?';
+  String get howShouldOmiCallYou => 'Com hauria d\'anomenar-vos Omi?';
 
   @override
   String get enterYourName => 'Introduïu el vostre nom';
@@ -1431,7 +1431,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Haureu d\'autoritzar Nooto per crear tasques al vostre compte de $appName. Això obrirà el vostre navegador per a l\'autenticació.';
+    return 'Haureu d\'autoritzar Omi per crear tasques al vostre compte de $appName. Això obrirà el vostre navegador per a l\'autenticació.';
   }
 
   @override
@@ -1466,13 +1466,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get bringYourOwn => 'Utilitzeu el vostre propi';
 
   @override
-  String get payYourSttProvider => 'Utilitzeu nooto lliurement. Només pagueu directament al vostre proveïdor STT.';
+  String get payYourSttProvider => 'Utilitzeu omi lliurement. Només pagueu directament al vostre proveïdor STT.';
 
   @override
   String get freeMinutesMonth => '1.200 minuts gratuïts/mes inclosos. Il·limitat amb ';
 
   @override
-  String get omiUnlimited => 'Nooto Il·limitat';
+  String get omiUnlimited => 'Omi Il·limitat';
 
   @override
   String get hostRequired => 'Cal un amfitrió';
@@ -1591,11 +1591,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device utilitza $reason. Sutilitzarà Nooto.';
+    return '$device utilitza $reason. Sutilitzarà Omi.';
   }
 
   @override
-  String get omiTranscription => 'Transcripció d\'Nooto';
+  String get omiTranscription => 'Transcripció d\'Omi';
 
   @override
   String get bestInClassTranscription => 'Transcripció de millor qualitat sense configuració';
@@ -1664,7 +1664,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get whatShouldWeMake => 'Què hauríem de fer?';
 
   @override
-  String get appName => 'Nom de l\'aplicació';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Descripció';
@@ -1747,7 +1747,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get bluetoothNeeded =>
-      'Nooto necessita Bluetooth per connectar-se al vostre dispositiu portàtil. Activeu Bluetooth i torneu-ho a provar.';
+      'Omi necessita Bluetooth per connectar-se al vostre dispositiu portàtil. Activeu Bluetooth i torneu-ho a provar.';
 
   @override
   String get contactSupport => 'Contactar amb suport?';
@@ -1762,7 +1762,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get backgroundActivity => 'Activitat en segon pla';
 
   @override
-  String get backgroundActivityDesc => 'Deixeu que Nooto s\'executi en segon pla per a una millor estabilitat';
+  String get backgroundActivityDesc => 'Deixeu que Omi s\'executi en segon pla per a una millor estabilitat';
 
   @override
   String get locationAccess => 'Accés a la ubicació';
@@ -1791,7 +1791,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Aneu a la configuració del dispositiu i establiu el permís d\'ubicació a \"Permetre sempre\"';
 
   @override
-  String get lovingOmi => 'T\'agrada Nooto?';
+  String get lovingOmi => 'T\'agrada Omi?';
 
   @override
   String get leaveReviewIos =>
@@ -1812,7 +1812,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get speechProfileIntro =>
-      'Nooto necessita aprendre els vostres objectius i la vostra veu. Podreu modificar-ho més tard.';
+      'Omi necessita aprendre els vostres objectius i la vostra veu. Podreu modificar-ho més tard.';
 
   @override
   String get getStarted => 'Començar';
@@ -1867,7 +1867,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tryAgain => 'Tornar a provar';
 
   @override
-  String get connectOmiOmiGlass => 'Connectar Nooto / NootoGlass';
+  String get connectOmiOmiGlass => 'Connectar Omi / OmiGlass';
 
   @override
   String get continueWithoutDevice => 'Continuar sense dispositiu';
@@ -1904,7 +1904,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get termsOfUse => 'Condicions d\'ús';
 
   @override
-  String get omiYourAiCompanion => 'Nooto – El vostre company d\'IA';
+  String get omiYourAiCompanion => 'Omi – El vostre company d\'IA';
 
   @override
   String get captureEveryMoment => 'Captureu cada moment. Obteniu resums\nimpulsats per IA. No prengueu més notes.';
@@ -1920,7 +1920,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get permissionGrantedNow =>
-      'Permís atorgat! Ara:\n\nObriu l\'aplicació Nooto al vostre rellotge i toqueu \"Continuar\" a continuació';
+      'Permís atorgat! Ara:\n\nObriu l\'aplicació Omi al vostre rellotge i toqueu \"Continuar\" a continuació';
 
   @override
   String get needMicrophonePermission =>
@@ -1934,7 +1934,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get troubleshootingSteps =>
-      'Resolució de problemes:\n\n1. Assegureu-vos que Nooto està instal·lat al vostre rellotge\n2. Obriu l\'aplicació Nooto al vostre rellotge\n3. Busqueu la finestra emergent de permisos\n4. Toqueu \"Permetre\" quan se us demani\n5. L\'aplicació al vostre rellotge es tancarà - torneu a obrir-la\n6. Torneu i toqueu \"Continuar\" al vostre iPhone';
+      'Resolució de problemes:\n\n1. Assegureu-vos que Omi està instal·lat al vostre rellotge\n2. Obriu l\'aplicació Omi al vostre rellotge\n3. Busqueu la finestra emergent de permisos\n4. Toqueu \"Permetre\" quan se us demani\n5. L\'aplicació al vostre rellotge es tancarà - torneu a obrir-la\n6. Torneu i toqueu \"Continuar\" al vostre iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Enregistrament iniciat correctament!';
@@ -2087,17 +2087,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get addFirstMemory => 'Afegiu el vostre primer record';
 
   @override
-  String get clearMemoryTitle => 'Esborrar la memòria d\'Nooto';
+  String get clearMemoryTitle => 'Esborrar la memòria d\'Omi';
 
   @override
-  String get clearMemoryMessage =>
-      'Esteu segur que voleu esborrar la memòria d\'Nooto? Aquesta acció no es pot desfer.';
+  String get clearMemoryMessage => 'Esteu segur que voleu esborrar la memòria d\'Omi? Aquesta acció no es pot desfer.';
 
   @override
   String get clearMemoryButton => 'Esborrar memòria';
 
   @override
-  String get memoryClearedSuccess => 'La memòria d\'Nooto sobre vós s\'ha esborrat';
+  String get memoryClearedSuccess => 'La memòria d\'Omi sobre vós s\'ha esborrat';
 
   @override
   String get noMemoriesToDelete => 'No hi ha records per eliminar';
@@ -2245,7 +2244,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get translationNoticeMessage =>
-      'Nooto tradueix les converses al teu idioma principal. Actualitza-ho en qualsevol moment a Configuració → Perfils.';
+      'Omi tradueix les converses al teu idioma principal. Actualitza-ho en qualsevol moment a Configuració → Perfils.';
 
   @override
   String get pleaseCheckInternetConnection => 'Si us plau, comprova la teva connexió a Internet i torna-ho a intentar';
@@ -2280,7 +2279,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get folderName => 'Nom de la carpeta';
 
   @override
-  String get descriptionOptional => 'Descripció (opcional)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'No s\'ha pogut eliminar la carpeta';
@@ -2425,7 +2424,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get privacyPolicyTitle => 'Política de privadesa';
 
   @override
-  String get omiSttProvider => 'Nooto';
+  String get omiSttProvider => 'Omi';
 
   @override
   String labelCopied(String label) {
@@ -2582,7 +2581,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get checksForAudioFiles => 'Comprova els fitxers d\'àudio a la targeta SD';
 
   @override
-  String get omiSyncsAudioFiles => 'Nooto després sincronitza els fitxers d\'àudio amb el servidor';
+  String get omiSyncsAudioFiles => 'Omi després sincronitza els fitxers d\'àudio amb el servidor';
 
   @override
   String get serverProcessesAudio => 'El servidor processa els fitxers d\'àudio i crea records';
@@ -2592,10 +2591,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get welcomeToOmiDescription =>
-      'Benvingut a Nooto! El teu company d\'IA està preparat per ajudar-te amb converses, tasques i molt més.';
+      'Benvingut a Omi! El teu company d\'IA està preparat per ajudar-te amb converses, tasques i molt més.';
 
   @override
-  String get startUsingOmi => 'Comença a utilitzar Nooto';
+  String get startUsingOmi => 'Comença a utilitzar Omi';
 
   @override
   String get back => 'Enrere';
@@ -2672,7 +2671,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get startCapturingConversations =>
-      'Comença a capturar converses amb el teu dispositiu Nooto per veure-les aquí.';
+      'Comença a capturar converses amb el teu dispositiu Omi per veure-les aquí.';
 
   @override
   String get useMobileAppToCapture => 'Utilitza la teva aplicació mòbil per capturar àudio';
@@ -2687,7 +2686,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get showAll => 'Mostra-ho tot →';
 
   @override
-  String get noTasksForToday => 'No hi ha tasques per avui.\\nDemana a Nooto més tasques o crea-les manualment.';
+  String get noTasksForToday => 'No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.';
 
   @override
   String get dailyScore => 'PUNTUACIÓ DIÀRIA';
@@ -2837,7 +2836,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get createNewApp => 'Crear nova aplicació';
 
   @override
-  String get buildSubmitCustomOmiApp => 'Construeix i envia la teva aplicació Nooto personalitzada';
+  String get buildSubmitCustomOmiApp => 'Construeix i envia la teva aplicació Omi personalitzada';
 
   @override
   String get submittingYourApp => 'Enviant la teva aplicació...';
@@ -2885,7 +2884,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get submitAppTermsAgreement =>
-      'En enviar aquesta aplicació, accepto les Condicions de Servei i la Política de Privadesa d\'Nooto AI';
+      'En enviar aquesta aplicació, accepto les Condicions de Servei i la Política de Privadesa d\'Omi AI';
 
   @override
   String get submitApp => 'Enviar aplicació';
@@ -2930,7 +2929,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dataAccessWarning =>
-      'Aquesta aplicació accedirà a les teves dades. Nooto AI no és responsable de com s\'utilitzen, modifiquen o eliminen les teves dades per aquesta aplicació';
+      'Aquesta aplicació accedirà a les teves dades. Omi AI no és responsable de com s\'utilitzen, modifiquen o eliminen les teves dades per aquesta aplicació';
 
   @override
   String get installApp => 'Instal·la l\'aplicació';
@@ -3282,7 +3281,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get upgradeToPro => 'Actualitza a Pro';
 
   @override
-  String get getOmiDevice => 'Obtenir dispositiu Nooto';
+  String get getOmiDevice => 'Obtenir dispositiu Omi';
 
   @override
   String get wearableAiCompanion => 'Company d\'IA portàtil';
@@ -3349,7 +3348,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get setAllMemoriesToPublic => 'Establir tots els records com a públics';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Eliminar permanentment tots els records d\'Nooto';
+  String get permanentlyRemoveAllMemories => 'Eliminar permanentment tots els records d\'Omi';
 
   @override
   String get allMemoriesAreNowPrivate => 'Tots els records són ara privats';
@@ -3358,18 +3357,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get allMemoriesAreNowPublic => 'Tots els records són ara públics';
 
   @override
-  String get clearOmisMemory => 'Esborrar la memòria d\'Nooto';
+  String get clearOmisMemory => 'Esborrar la memòria d\'Omi';
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Estàs segur que vols esborrar la memòria d\'Nooto? Aquesta acció no es pot desfer i eliminarà permanentment tots els $count records.';
+    return 'Estàs segur que vols esborrar la memòria d\'Omi? Aquesta acció no es pot desfer i eliminarà permanentment tots els $count records.';
   }
 
   @override
-  String get omisMemoryCleared => 'S\'ha esborrat la memòria d\'Nooto sobre tu';
+  String get omisMemoryCleared => 'S\'ha esborrat la memòria d\'Omi sobre tu';
 
   @override
-  String get welcomeToOmi => 'Benvingut a Nooto';
+  String get welcomeToOmi => 'Benvingut a Omi';
 
   @override
   String get continueWithApple => 'Continua amb Apple';
@@ -3416,7 +3415,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get selectPreferredLanguageForBestExperience =>
-      'Seleccioneu el vostre idioma preferit per a la millor experiència Nooto';
+      'Seleccioneu el vostre idioma preferit per a la millor experiència Omi';
 
   @override
   String get searchLanguages => 'Cerca idiomes...';
@@ -3435,7 +3434,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get tellUsHowYouWouldLikeToBeAddressed =>
-      'Digueu-nos com us agradaria que us adrecem. Això ajuda a personalitzar la vostra experiència Nooto.';
+      'Digueu-nos com us agradaria que us adrecem. Això ajuda a personalitzar la vostra experiència Omi.';
 
   @override
   String charactersCount(int count) {
@@ -3444,7 +3443,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get enableFeaturesForBestExperience =>
-      'Activeu les funcions per a la millor experiència Nooto al vostre dispositiu.';
+      'Activeu les funcions per a la millor experiència Omi al vostre dispositiu.';
 
   @override
   String get microphoneAccess => 'Accés al micròfon';
@@ -3454,7 +3453,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get microphoneAccessDescription =>
-      'Nooto necessita accés al micròfon per enregistrar les vostres converses i proporcionar transcripcions.';
+      'Omi necessita accés al micròfon per enregistrar les vostres converses i proporcionar transcripcions.';
 
   @override
   String get screenRecording => 'Gravació de pantalla';
@@ -3464,7 +3463,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get screenRecordingDescription =>
-      'Nooto necessita permís de gravació de pantalla per capturar l\'àudio del sistema de les vostres reunions basades en el navegador.';
+      'Omi necessita permís de gravació de pantalla per capturar l\'àudio del sistema de les vostres reunions basades en el navegador.';
 
   @override
   String get accessibility => 'Accessibilitat';
@@ -3474,7 +3473,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get accessibilityDescription =>
-      'Nooto necessita permís d\'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.';
+      'Omi necessita permís d\'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.';
 
   @override
   String get pleaseWait => 'Si us plau, espereu...';
@@ -3504,16 +3503,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get changeYourName => 'Canvia el vostre nom';
 
   @override
-  String get manageYourOmiPersona => 'Gestiona la teva persona Nooto';
+  String get manageYourOmiPersona => 'Gestiona la teva persona Omi';
 
   @override
   String get voiceAndPeople => 'Veu i Persones';
 
   @override
-  String get teachOmiYourVoice => 'Ensenya a Nooto la teva veu';
+  String get teachOmiYourVoice => 'Ensenya a Omi la teva veu';
 
   @override
-  String get tellOmiWhoSaidIt => 'Digues a Nooto qui ho va dir 🗣️';
+  String get tellOmiWhoSaidIt => 'Digues a Omi qui ho va dir 🗣️';
 
   @override
   String get payment => 'Pagament';
@@ -3525,7 +3524,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get preferences => 'Preferències';
 
   @override
-  String get helpImproveOmiBySharing => 'Ajuda a millorar Nooto compartint dades d\'anàlisi anonimitzades';
+  String get helpImproveOmiBySharing => 'Ajuda a millorar Omi compartint dades d\'anàlisi anonimitzades';
 
   @override
   String get deleteAccount => 'Eliminar Compte';
@@ -3551,7 +3550,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get mcpDescription =>
-      'Per connectar Nooto amb altres aplicacions per llegir, cercar i gestionar els vostres records i converses. Creeu una clau per començar.';
+      'Per connectar Omi amb altres aplicacions per llegir, cercar i gestionar els vostres records i converses. Creeu una clau per començar.';
 
   @override
   String get apiKeys => 'Claus API';
@@ -3586,7 +3585,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get triggersWhenDaySummaryGenerated => 'S\'activa quan es genera un resum del dia.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'Proveu les últimes funcions experimentals de l\'equip d\'Nooto.';
+  String get tryLatestExperimentalFeatures => 'Proveu les últimes funcions experimentals de l\'equip d\'Omi.';
 
   @override
   String get transcriptionServiceDiagnosticStatus => 'Estat de diagnòstic del servei de transcripció';
@@ -3658,7 +3657,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'Deixeu que Nooto esculli automàticament la millor aplicació';
+  String get letOmiChooseAutomatically => 'Deixeu que Omi esculli automàticament la millor aplicació';
 
   @override
   String get deleteConversationConfirmation =>
@@ -3796,7 +3795,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'traduït per nooto';
+  String get translatedByOmi => 'traduït per omi';
 
   @override
   String get backToConversations => 'Tornar a Converses';
@@ -3857,7 +3856,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get customVocabularyHeader => 'VOCABULARI PERSONALITZAT';
 
   @override
-  String get addWordsDescription => 'Afegeix paraules que Nooto hauria de reconèixer durant la transcripció.';
+  String get addWordsDescription => 'Afegeix paraules que Omi hauria de reconèixer durant la transcripció.';
 
   @override
   String get enterWordsHint => 'Introdueix paraules (separades per comes)';
@@ -3945,7 +3944,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Això eliminarà totes les dades derivades del gràfic de coneixement. Els teus records originals romanen segurs.';
 
   @override
-  String get connectOmiWithAI => 'Connecta Nooto amb assistents d\'IA';
+  String get connectOmiWithAI => 'Connecta Omi amb assistents d\'IA';
 
   @override
   String get noAPIKeys => 'No hi ha claus API. Crea\'n una per començar.';
@@ -3982,7 +3981,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get holdOnPreparingForm => 'Espera, estem preparant el formulari per a tu';
 
   @override
-  String get bySubmittingYouAgreeToOmi => 'En enviar, acceptes Nooto ';
+  String get bySubmittingYouAgreeToOmi => 'En enviar, acceptes Omi ';
 
   @override
   String get termsAndPrivacyPolicy => 'Termes i Política de Privacitat';
@@ -4146,7 +4145,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'Aquesta aplicació accedirà a les teves dades. Nooto AI no és responsable de com s\'utilitzen les teves dades.';
+      'Aquesta aplicació accedirà a les teves dades. Omi AI no és responsable de com s\'utilitzen les teves dades.';
 
   @override
   String get copyUrl => 'Copia l\'URL';
@@ -4231,14 +4230,14 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get omiApiKeys => 'Claus API d\'Nooto';
+  String get omiApiKeys => 'Claus API d\'Omi';
 
   @override
   String get apiKeysDescription =>
-      'Les claus API s\'utilitzen per a l\'autenticació quan la teva aplicació es comunica amb el servidor nooto. Permeten que la teva aplicació creï records i accedeixi a altres serveis d\'nooto de manera segura.';
+      'Les claus API s\'utilitzen per a l\'autenticació quan la teva aplicació es comunica amb el servidor OMI. Permeten que la teva aplicació creï records i accedeixi a altres serveis d\'OMI de manera segura.';
 
   @override
-  String get aboutOmiApiKeys => 'Sobre les claus API d\'Nooto';
+  String get aboutOmiApiKeys => 'Sobre les claus API d\'Omi';
 
   @override
   String get yourNewKey => 'La teva nova clau:';
@@ -4382,7 +4381,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get e2eeDescription =>
-      'El xifratge d\'extrem a extrem és l\'estàndard d\'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d\'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Nooto, pot accedir al teu contingut.';
+      'El xifratge d\'extrem a extrem és l\'estàndard d\'or per a la privacitat. Quan està activat, les teves dades es xifren al teu dispositiu abans d\'enviar-se als nostres servidors. Això significa que ningú, ni tan sols Omi, pot accedir al teu contingut.';
 
   @override
   String get importantTradeoffs => 'Compensacions importants:';
@@ -4419,7 +4418,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get secureEncryptionDescription =>
-      'Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d\'Nooto o Google, directament des de la base de dades.';
+      'Les teves dades es xifren amb una clau única per a tu als nostres servidors, allotjats a Google Cloud. Això significa que el teu contingut en brut és inaccessible per a qualsevol, inclòs el personal d\'Omi o Google, directament des de la base de dades.';
 
   @override
   String get endToEndEncryption => 'Xifratge d\'extrem a extrem';
@@ -4489,21 +4488,21 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Entrenament Nooto';
+  String get omiTraining => 'Entrenament Omi';
 
   @override
   String get trainingDataProgram => 'Programa de dades d\'entrenament';
 
   @override
   String get getOmiUnlimitedFree =>
-      'Obtén Nooto Il·limitat gratis contribuint les teves dades per entrenar models d\'IA.';
+      'Obtén Omi Il·limitat gratis contribuint les teves dades per entrenar models d\'IA.';
 
   @override
   String get trainingDataBullets =>
       '• Les teves dades ajuden a millorar els models d\'IA\n• Només es comparteixen dades no sensibles\n• Procés totalment transparent';
 
   @override
-  String get learnMoreAtOmiTraining => 'Aprèn més a nooto.ai/training';
+  String get learnMoreAtOmiTraining => 'Aprèn més a omi.me/training';
 
   @override
   String get agreeToContributeData => 'Entenc i accepto contribuir amb les meves dades per a l\'entrenament d\'IA';
@@ -4583,7 +4582,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Estàs al pla Il·limitat.';
 
   @override
-  String get yourOmiUnleashed => 'El teu Nooto, deslliurat. Fes-te il·limitat per a possibilitats infinites.';
+  String get yourOmiUnleashed => 'El teu Omi, deslliurat. Fes-te il·limitat per a possibilitats infinites.';
 
   @override
   String planEndedOn(String date) {
@@ -4608,10 +4607,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get unlimitedConversations => 'Converses il·limitades';
 
   @override
-  String get askOmiAnything => 'Pregunta a Nooto qualsevol cosa sobre la teva vida';
+  String get askOmiAnything => 'Pregunta a Omi qualsevol cosa sobre la teva vida';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Desbloqueja la memòria infinita d\'Nooto';
+  String get unlockOmiInfiniteMemory => 'Desbloqueja la memòria infinita d\'Omi';
 
   @override
   String get youreOnAnnualPlan => 'Estàs al pla anual';
@@ -4666,7 +4665,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get privacyIntroText =>
-      'A Nooto, ens prenem molt seriosament la teva privadesa. Volem ser transparents sobre les dades que recollim i com les utilitzem per millorar el producte. Això és el que has de saber:';
+      'A Omi, ens prenem molt seriosament la teva privadesa. Volem ser transparents sobre les dades que recollim i com les utilitzem per millorar el producte. Això és el que has de saber:';
 
   @override
   String get whatWeTrack => 'Què fem seguiment';
@@ -4682,11 +4681,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get commitmentText =>
-      'Estem compromesos a utilitzar les dades que recollim només per fer d\'Nooto un producte millor per a tu. La teva privadesa i confiança són primordials per a nosaltres.';
+      'Estem compromesos a utilitzar les dades que recollim només per fer d\'Omi un producte millor per a tu. La teva privadesa i confiança són primordials per a nosaltres.';
 
   @override
   String get thankYouText =>
-      'Gràcies per ser un usuari valorat d\'Nooto. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
+      'Gràcies per ser un usuari valorat d\'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'Configuració de sincronització WiFi';
@@ -4798,7 +4797,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get minutes => 'minuts';
 
   @override
-  String get omiHas => 'Nooto té:';
+  String get omiHas => 'Omi té:';
 
   @override
   String get premiumMinutesUsed => 'Minuts premium utilitzats.';
@@ -4891,7 +4890,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get howPeopleWorks =>
-      'Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Nooto també podrà reconèixer la seva parla!';
+      'Un cop creada una persona, pots anar a una transcripció de conversa i assignar-li els segments corresponents, així Omi també podrà reconèixer la seva parla!';
 
   @override
   String get tapToDelete => 'Toca per eliminar';
@@ -5175,7 +5174,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get enableApps => 'Activar aplicacions';
 
   @override
-  String get omiAppName => 'Nooto';
+  String get omiAppName => 'Omi';
 
   @override
   String get showMore => 'mostra més ↓';
@@ -5199,18 +5198,18 @@ class AppLocalizationsCa extends AppLocalizations {
   String get checkingAppleWatch => 'Comprovant Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Instal·la Nooto al teu\nApple Watch';
+  String get installOmiOnAppleWatch => 'Instal·la Omi al teu\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
-      'Per utilitzar el teu Apple Watch amb Nooto, primer has d\'instal·lar l\'aplicació Nooto al teu rellotge.';
+      'Per utilitzar el teu Apple Watch amb Omi, primer has d\'instal·lar l\'aplicació Omi al teu rellotge.';
 
   @override
-  String get openOmiOnAppleWatch => 'Obre Nooto al teu\nApple Watch';
+  String get openOmiOnAppleWatch => 'Obre Omi al teu\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
-      'L\'aplicació Nooto està instal·lada al teu Apple Watch. Obre-la i toca Iniciar per començar.';
+      'L\'aplicació Omi està instal·lada al teu Apple Watch. Obre-la i toca Iniciar per començar.';
 
   @override
   String get openWatchApp => 'Obre l\'aplicació Watch';
@@ -5220,14 +5219,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get unableToOpenWatchApp =>
-      'No s\'ha pogut obrir l\'aplicació Apple Watch. Obre manualment l\'aplicació Watch al teu Apple Watch i instal·la Nooto des de la secció \"Aplicacions disponibles\".';
+      'No s\'ha pogut obrir l\'aplicació Apple Watch. Obre manualment l\'aplicació Watch al teu Apple Watch i instal·la Omi des de la secció \"Aplicacions disponibles\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch connectat correctament!';
 
   @override
   String get appleWatchNotReachable =>
-      'Apple Watch encara no és accessible. Assegura\'t que l\'aplicació Nooto estigui oberta al teu rellotge.';
+      'Apple Watch encara no és accessible. Assegura\'t que l\'aplicació Omi estigui oberta al teu rellotge.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5305,7 +5304,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noSummary => 'Sense resum';
 
   @override
-  String get updateOmiFirmware => 'Actualitza el firmware d\'nooto';
+  String get updateOmiFirmware => 'Actualitza el firmware d\'omi';
 
   @override
   String get anErrorOccurredTryAgain => 'S\'ha produït un error. Si us plau, torna-ho a provar.';
@@ -5314,7 +5313,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get welcomeBackSimple => 'Benvingut de nou';
 
   @override
-  String get addVocabularyDescription => 'Afegeix paraules que Nooto hauria de reconèixer durant la transcripció.';
+  String get addVocabularyDescription => 'Afegeix paraules que Omi hauria de reconèixer durant la transcripció.';
 
   @override
   String get enterWordsCommaSeparated => 'Introdueix paraules (separades per comes)';
@@ -5475,13 +5474,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get wrappedNoDataAvailable => 'No hi ha dades disponibles';
 
   @override
-  String get wrappedOmiLifeRecap => 'Resum de vida Nooto';
+  String get wrappedOmiLifeRecap => 'Resum de vida Omi';
 
   @override
   String get wrappedSwipeUpToBegin => 'Llisca amunt per començar';
 
   @override
-  String get wrappedShareText => 'El meu 2025, recordat per Nooto ✨ nooto.ai/wrapped';
+  String get wrappedShareText => 'El meu 2025, recordat per Omi ✨ omi.me/wrapped';
 
   @override
   String get wrappedFailedToShare => 'No s\'ha pogut compartir. Torna a provar.';
@@ -5502,7 +5501,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get wrappedMy2025 => 'El meu 2025';
 
   @override
-  String get wrappedRememberedByOmi => 'recordat per Nooto';
+  String get wrappedRememberedByOmi => 'recordat per Omi';
 
   @override
   String get wrappedMostFunDay => 'Més divertit';
@@ -5718,7 +5717,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get notificationFrequency => 'Freqüència de notificacions';
 
   @override
-  String get controlNotificationFrequency => 'Controla amb quina freqüència Nooto t\'envia notificacions proactives.';
+  String get controlNotificationFrequency => 'Controla amb quina freqüència Omi t\'envia notificacions proactives.';
 
   @override
   String get yourScore => 'La teva puntuació';
@@ -5744,7 +5743,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get notificationFrequencyDescription =>
-      'Controla amb quina freqüència Nooto t\'envia notificacions proactives i recordatoris.';
+      'Controla amb quina freqüència Omi t\'envia notificacions proactives i recordatoris.';
 
   @override
   String get sliderOff => 'Apagat';
@@ -5982,7 +5981,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get noRecordings => 'Sense enregistraments';
 
   @override
-  String get audioFromOmiWillAppearHere => 'L\'àudio del teu dispositiu Nooto apareixerà aquí';
+  String get audioFromOmiWillAppearHere => 'L\'àudio del teu dispositiu Omi apareixerà aquí';
 
   @override
   String get deleteProcessed => 'Eliminar processats';
@@ -6104,7 +6103,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get batteryUsageHigher => 'El consum de bateria serà més alt que la transcripció al núvol.';
 
   @override
-  String get considerOmiCloud => 'Considera utilitzar Nooto Cloud per a un millor rendiment.';
+  String get considerOmiCloud => 'Considera utilitzar Omi Cloud per a un millor rendiment.';
 
   @override
   String get highResourceUsage => 'Alt ús de recursos';
@@ -6263,7 +6262,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'La transcripció en directe integrada dNooto està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
+      'La transcripció en directe integrada dOmi està optimitzada per a converses en temps real amb detecció automàtica de parlants i diarització.';
 
   @override
   String get reset => 'Restablir';
@@ -6351,13 +6350,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get writeReviewOptional => 'Escriu una ressenya (opcional)';
 
   @override
-  String get setupQuestionsIntro => 'Ajuda\'ns a millorar Nooto responent unes quantes preguntes.  🫶 💜';
+  String get setupQuestionsIntro => 'Ajuda\'ns a millorar Omi responent unes quantes preguntes.  🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. A què et dediques?';
 
   @override
-  String get setupQuestionUsage => '2. On planifiques utilitzar el teu Nooto?';
+  String get setupQuestionUsage => '2. On planifiques utilitzar el teu Omi?';
 
   @override
   String get setupQuestionAge => '3. Quin és el teu rang d\'edat?';
@@ -6586,10 +6585,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get getOmiDeviceDescription => 'Crea un clon més precís amb les teves converses personals';
 
   @override
-  String get getOmi => 'Obtenir Nooto';
+  String get getOmi => 'Obtenir Omi';
 
   @override
-  String get iHaveOmiDevice => 'Tinc un dispositiu Nooto';
+  String get iHaveOmiDevice => 'Tinc un dispositiu Omi';
 
   @override
   String get goal => 'OBJECTIU';
@@ -6889,14 +6888,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get fastTransferDescription =>
-      'La transferència ràpida utilitza WiFi per velocitats ~5x més ràpides. El teu telèfon es connectarà temporalment a la xarxa WiFi del dispositiu Nooto durant la transferència.';
+      'La transferència ràpida utilitza WiFi per velocitats ~5x més ràpides. El teu telèfon es connectarà temporalment a la xarxa WiFi del dispositiu Omi durant la transferència.';
 
   @override
   String get internetAccessPausedDuringTransfer => 'L\'accés a internet es pausa durant la transferència';
 
   @override
   String get chooseTransferMethodDescription =>
-      'Tria com es transfereixen les gravacions del dispositiu Nooto al telèfon.';
+      'Tria com es transfereixen les gravacions del dispositiu Omi al telèfon.';
 
   @override
   String get wifiSpeed => '~150 KB/s via WiFi';
@@ -6906,7 +6905,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get fastTransferMethodDescription =>
-      'Crea una connexió WiFi directa al dispositiu Nooto. El telèfon es desconnecta temporalment del WiFi habitual durant la transferència.';
+      'Crea una connexió WiFi directa al dispositiu Omi. El telèfon es desconnecta temporalment del WiFi habitual durant la transferència.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6931,17 +6930,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String get lowBatteryAlertBody => 'La bateria del teu dispositiu és baixa. És hora de carregar! 🔋';
 
   @override
-  String get deviceDisconnectedNotificationTitle => 'El teu dispositiu Nooto s\'ha desconnectat';
+  String get deviceDisconnectedNotificationTitle => 'El teu dispositiu Omi s\'ha desconnectat';
 
   @override
-  String get deviceDisconnectedNotificationBody => 'Si us plau, reconnecta per continuar utilitzant Nooto.';
+  String get deviceDisconnectedNotificationBody => 'Si us plau, reconnecta per continuar utilitzant Omi.';
 
   @override
   String get firmwareUpdateAvailable => 'Actualització de firmware disponible';
 
   @override
   String firmwareUpdateAvailableDescription(String version) {
-    return 'Hi ha una nova actualització de firmware ($version) disponible per al teu dispositiu Nooto. Vols actualitzar ara?';
+    return 'Hi ha una nova actualització de firmware ($version) disponible per al teu dispositiu Omi. Vols actualitzar ara?';
   }
 
   @override
@@ -6979,7 +6978,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get almostDone => 'Gairebé acabat...';
 
   @override
-  String get omiSays => 'nooto diu';
+  String get omiSays => 'omi diu';
 
   @override
   String get analyzingYourData => 'Analitzant les teves dades...';
@@ -7157,7 +7156,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get personaFailedToCreate => 'Error en crear la persona';
 
   @override
-  String get personaConnectKnowledgeSource => 'Connecteu almenys una font de dades (Nooto o Twitter)';
+  String get personaConnectKnowledgeSource => 'Connecteu almenys una font de dades (Omi o Twitter)';
 
   @override
   String get personaUpdatedSuccessfully => 'Persona actualitzada correctament';
@@ -7263,7 +7262,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get xHandleTitle => 'Quin és el teu identificador X?';
 
   @override
-  String get xHandleDescription => 'Pre-entrenarem el teu clon Nooto\nbasant-nos en l\'activitat del teu compte';
+  String get xHandleDescription => 'Pre-entrenarem el teu clon Omi\nbasant-nos en l\'activitat del teu compte';
 
   @override
   String get xHandleHint => '@nikshevchenko';
@@ -7278,7 +7277,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get nextButton => 'Següent';
 
   @override
-  String get connectOmiDevice => 'Connectar dispositiu Nooto';
+  String get connectOmiDevice => 'Connectar dispositiu Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
@@ -7310,7 +7309,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcriptionJsonPlaceholder => 'Enganxa la teva configuració JSON aquí...';
 
   @override
-  String get transcriptionSourceOmi => 'Nooto';
+  String get transcriptionSourceOmi => 'Omi';
 
   @override
   String get pricePlaceholder => '0,00';
@@ -7340,7 +7339,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dailyReflectionNotificationBody => 'Explica\'m el teu dia';
 
   @override
-  String get actionItemReminderTitle => 'Recordatori d\'Nooto';
+  String get actionItemReminderTitle => 'Recordatori d\'Omi';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
@@ -7368,7 +7367,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onboardingComplete => 'Complet';
 
   @override
-  String get onboardingWelcomeToOmi => 'Benvingut a Nooto';
+  String get onboardingWelcomeToOmi => 'Benvingut a Omi';
 
   @override
   String get onboardingTellUsAboutYourself => 'Explica\'ns sobre tu';
@@ -8039,52 +8038,22 @@ class AppLocalizationsCa extends AppLocalizations {
   String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nova tasca';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Veure tot';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Afegir tasca';
 
   @override
   String get addMcpServer => 'Add MCP Server';
 
   @override
-  String get appStore => 'App Store';
-
-  @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
-
-  @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
-
-  @override
-  String get authorizingMcpServer => 'Authorizing...';
-
-  @override
   String get connectExternalAiTools => 'Connect external AI tools';
 
   @override
-  String get coworker => 'Coworker';
-
-  @override
-  String get event => 'Event';
-
-  @override
-  String get friendWordOfMouth => 'Friend';
-
-  @override
-  String get googleSearch => 'Google Search';
-
-  @override
-  String get instagram => 'Instagram';
-
-  @override
-  String get linkedIn => 'LinkedIn';
-
-  @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
@@ -8092,7 +8061,31 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get mcpServerUrl => 'MCP Server URL';
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
 
   @override
   String get otherSource => 'Other';
@@ -8101,20 +8094,179 @@ class AppLocalizationsCa extends AppLocalizations {
   String get pleaseSpecify => 'Please specify';
 
   @override
-  String get reddit => 'Reddit';
+  String get event => 'Event';
 
   @override
-  String get tiktok => 'TikTok';
+  String get coworker => 'Coworker';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get linkedIn => 'LinkedIn';
 
   @override
-  String get xTwitter => 'X (Twitter)';
+  String get appStore => 'App Store';
 
   @override
-  String get youtube => 'YouTube';
+  String get googleSearch => 'Google Search';
 
   @override
-  String get officialTeamName => 'Nooto Team';
+  String get audioPlaybackUnavailable => 'El fitxer d\'àudio no està disponible per a la reproducció';
+
+  @override
+  String get audioPlaybackFailed => 'No s\'ha pogut reproduir l\'àudio. El fitxer pot estar malmès o no existir.';
+
+  @override
+  String get connectionGuide => 'Guia de connexió';
+
+  @override
+  String get iveDoneThis => 'Ja ho he fet';
+
+  @override
+  String get pairNewDevice => 'Aparellar un dispositiu nou';
+
+  @override
+  String get dontSeeYourDevice => 'No veus el teu dispositiu?';
+
+  @override
+  String get reportAnIssue => 'Informar d\'un problema';
+
+  @override
+  String get pairingTitleOmi => 'Enceneu Omi';
+
+  @override
+  String get pairingDescOmi => 'Manteniu premut el dispositiu fins que vibri per encendre\'l.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Posa Omi DevKit en mode d\'aparellament';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Premeu el botó un cop per encendre. El LED parpellejarà en violeta en mode d\'aparellament.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Enceneu Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Manteniu premut el botó lateral durant 3 segons per encendre.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Posa Plaud Note en mode d\'aparellament';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Manteniu premut el botó lateral durant 2 segons. El LED vermell parpellejarà quan estigui llest per aparellar.';
+
+  @override
+  String get pairingTitleBee => 'Posa Bee en mode d\'aparellament';
+
+  @override
+  String get pairingDescBee => 'Premeu el botó 5 vegades seguidament. La llum començarà a parpellejar en blau i verd.';
+
+  @override
+  String get pairingTitleLimitless => 'Posa Limitless en mode d\'aparellament';
+
+  @override
+  String get pairingDescLimitless =>
+      'Quan qualsevol llum sigui visible, premeu un cop i després manteniu premut fins que el dispositiu mostri una llum rosa, després deixeu anar.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Posa Friend Pendant en mode d\'aparellament';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Premeu el botó del penjoll per encendre\'l. Entrarà en mode d\'aparellament automàticament.';
+
+  @override
+  String get pairingTitleFieldy => 'Posa Fieldy en mode d\'aparellament';
+
+  @override
+  String get pairingDescFieldy => 'Manteniu premut el dispositiu fins que aparegui la llum per encendre\'l.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Connecteu Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instal·leu i obriu l\'aplicació Omi al vostre Apple Watch, després toqueu Connectar a l\'aplicació.';
+
+  @override
+  String get pairingTitleNeoOne => 'Posa Neo One en mode d\'aparellament';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Manteniu premut el botó d\'engegada fins que el LED parpellegi. El dispositiu serà detectable.';
+
+  @override
+  String get downloadingFromDevice => 'Descarregant del dispositiu';
+
+  @override
+  String get reconnectingToInternet => 'Reconnectant a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Pujant $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Processat';
+
+  @override
+  String get corruptedStatus => 'Corrupte';
+
+  @override
+  String nPending(int count) {
+    return '$count pendents';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processats';
+  }
+
+  @override
+  String get synced => 'Sincronitzat';
+
+  @override
+  String get noPendingRecordings => 'No hi ha enregistraments pendents';
+
+  @override
+  String get noProcessedRecordings => 'Encara no hi ha enregistraments processats';
+
+  @override
+  String get pending => 'Pendent';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novetats a $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Afegir a la llista de tasques?';
+
+  @override
+  String get failedToCreateShareLink => 'No s\'ha pogut crear l\'enllaç per compartir';
+
+  @override
+  String get deleteGoal => 'Eliminar objectiu';
+
+  @override
+  String get deviceUpToDate => 'El dispositiu està actualitzat';
+
+  @override
+  String get wifiConfiguration => 'Configuració WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.';
+
+  @override
+  String get networkNameSsid => 'Nom de la xarxa (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduïu el nom de la xarxa WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

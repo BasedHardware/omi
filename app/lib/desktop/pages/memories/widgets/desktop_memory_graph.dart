@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -552,7 +554,7 @@ class DesktopMemoryGraphWidgetState extends State<DesktopMemoryGraphWidget>
                 ),
                 const Spacer(),
                 OmiIconButton(
-                  icon: Icons.share,
+                  icon: FontAwesomeIcons.share,
                   onPressed: shareGraph,
                   style: OmiIconButtonStyle.outline,
                 ),

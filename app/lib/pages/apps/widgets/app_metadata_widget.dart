@@ -131,6 +131,7 @@ class AppMetadataWidget extends StatelessWidget {
                     children: [
                       // Image picker
                       Stack(
+                        clipBehavior: Clip.none,
                         children: [
                           GestureDetector(
                             onTap: pickImage,
@@ -150,8 +151,16 @@ class AppMetadataWidget extends StatelessWidget {
                                           borderRadius: BorderRadius.circular(14.0),
                                           child: CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover),
                                         ))
-                                  : const Center(
-                                      child: FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                  : Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '${context.l10n.appIconLabel}*',
+                                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                                        ),
+                                      ],
                                     ),
                             ),
                           ),

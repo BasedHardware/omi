@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:intl/intl.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -83,7 +84,7 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
-            Text('Add to your task list?', style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
+            Text(context.l10n.addToYourTaskList, style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
             const SizedBox(height: 20),
 
             // Task list

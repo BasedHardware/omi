@@ -1,0 +1,207 @@
+import Foundation
+import simd
+
+// MARK: - 3D Graph Node for Physics
+
+class GraphNode3D {
+    let id: String
+    let label: String
+    let nodeType: KnowledgeGraphNodeType
+
+    var position: SIMD3<Float>
+    var velocity: SIMD3<Float> = .zero
+    var force: SIMD3<Float> = .zero
+    var isFixed: Bool = false
+
+    init(id: String, label: String, nodeType: KnowledgeGraphNodeType) {
+        self.id = id
+        self.label = label
+        self.nodeType = nodeType
+        // Random initial position in a sphere
+        let theta = Float.random(in: 0...(2 * .pi))
+        let phi = Float.random(in: 0...Float.pi)
+        let r = Float.random(in: 500...1500)
+        self.position = SIMD3<Float>(
+            r * sin(phi) * cos(theta),
+            r * sin(phi) * sin(theta),
+            r * cos(phi)
+        )
+    }
+}
+
+// MARK: - 3D Graph Edge
+
+struct GraphEdge3D {
+    let id: String
+    let sourceId: String
+    let targetId: String
+    let label: String
+}
+
+// MARK: - Force-Directed Layout Simulation
+
+class ForceDirectedSimulation {
+    var nodes: [GraphNode3D] = []
+    var edges: [GraphEdge3D] = []
+    var nodeMap: [String: GraphNode3D] = [:]
+
+    // Physics parameters (tuned from Flutter implementation)
+    let repulsion: Float = 120_000
+    let attraction: Float = 0.0015
+    let centerGravity: Float = 0.0002
+    let damping: Float = 0.9
+    let dt: Float = 0.016 // 60fps timestep
+    let restLength: Float = 1500
+    let maxSpeed: Float = 40
+
+    private var tickCount = 0
+    private var stableFrameCount = 0
+    private let stableThreshold: Float = 0.2
+    private let stableFramesRequired = 10
+
+    var isStable: Bool { stableFrameCount >= stableFramesRequired }
+
+    /// Populate the simulation with nodes and edges from API response
+    func populate(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
+        nodes.removeAll()
+        edges.removeAll()
+        nodeMap.removeAll()
+
+        // Create 3D nodes
+        for node in graphResponse.nodes {
+            let node3D = GraphNode3D(
+                id: node.id,
+                label: node.label,
+                nodeType: node.nodeType
+            )
+
+            // Fix the user node at center
+            if let userName = userNodeLabel,
+               node.label.lowercased() == userName.lowercased() {
+                node3D.position = .zero
+                node3D.isFixed = true
+            }
+
+            nodes.append(node3D)
+            nodeMap[node.id] = node3D
+        }
+
+        // Create edges
+        for edge in graphResponse.edges {
+            edges.append(GraphEdge3D(
+                id: edge.id,
+                sourceId: edge.sourceId,
+                targetId: edge.targetId,
+                label: edge.label
+            ))
+        }
+
+        // Reset simulation state
+        tickCount = 0
+        stableFrameCount = 0
+    }
+
+    /// Run one tick of the physics simulation
+    func tick() {
+        tickCount += 1
+
+        // Only run physics every 4 ticks for performance
+        guard tickCount % 4 == 0 else { return }
+
+        // 1. Reset forces
+        for node in nodes {
+            node.force = .zero
+        }
+
+        // 2. Calculate repulsive forces (Coulomb-like)
+        let nodeCount = nodes.count
+        for i in 0..<nodeCount {
+            guard !nodes[i].isFixed else { continue }
+
+            for j in (i + 1)..<nodeCount {
+                let delta = nodes[j].position - nodes[i].position
+                let distSq = max(simd_length_squared(delta), 100) // Avoid division by zero
+
+                // Skip very distant pairs for performance
+                guard distSq < 100_000_000 else { continue }
+
+                let dist = sqrt(distSq)
+                let direction = delta / dist
+                let forceMagnitude = repulsion / distSq
+                let force = direction * forceMagnitude
+
+                nodes[i].force -= force
+                if !nodes[j].isFixed {
+                    nodes[j].force += force
+                }
+            }
+        }
+
+        // 3. Calculate attractive forces (spring-like along edges)
+        for edge in edges {
+            guard let source = nodeMap[edge.sourceId],
+                  let target = nodeMap[edge.targetId] else { continue }
+
+            let delta = target.position - source.position
+            let dist = simd_length(delta)
+            guard dist > 0 else { continue }
+
+            let direction = delta / dist
+            let displacement = dist - restLength
+            let forceMagnitude = displacement * attraction
+            let force = direction * forceMagnitude
+
+            if !source.isFixed {
+                source.force += force
+            }
+            if !target.isFixed {
+                target.force -= force
+            }
+        }
+
+        // 4. Apply center gravity
+        for node in nodes where !node.isFixed {
+            node.force -= node.position * centerGravity
+        }
+
+        // 5. Update velocities and positions
+        var totalEnergy: Float = 0
+
+        for node in nodes where !node.isFixed {
+            // Update velocity
+            node.velocity += node.force * dt
+            node.velocity *= damping
+
+            // Cap max speed
+            let speed = simd_length(node.velocity)
+            if speed > maxSpeed {
+                node.velocity = simd_normalize(node.velocity) * maxSpeed
+            }
+
+            // Update position
+            node.position += node.velocity
+
+            // Accumulate kinetic energy
+            totalEnergy += speed * speed
+        }
+
+        // 6. Check for stability
+        if totalEnergy < stableThreshold {
+            stableFrameCount += 1
+        } else {
+            stableFrameCount = 0
+        }
+    }
+
+    /// Run multiple ticks synchronously (for initial layout)
+    func runSync(ticks: Int) {
+        for _ in 0..<ticks {
+            tick()
+        }
+    }
+
+    /// Wake up the simulation (reset stability counter)
+    func wake() {
+        stableFrameCount = 0
+    }
+}

@@ -7,7 +7,8 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class OmiSettingsTile extends AdaptiveWidget {
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final String? value;
   final IconData icon;
   final VoidCallback onTap;
   final Color? iconColor;
@@ -18,7 +19,8 @@ class OmiSettingsTile extends AdaptiveWidget {
   const OmiSettingsTile({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
+    this.value,
     required this.icon,
     required this.onTap,
     this.iconColor,
@@ -78,26 +80,45 @@ class OmiSettingsTile extends AdaptiveWidget {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textTertiary,
-                          fontSize: 13,
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle!,
+                          style: const TextStyle(
+                            color: ResponsiveHelper.textTertiary,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(width: 16),
-                trailing ??
-                    (showArrow
-                        ? const Icon(
-                            FontAwesomeIcons.chevronRight,
-                            size: 12,
-                            color: ResponsiveHelper.textTertiary,
-                          )
-                        : const SizedBox.shrink()),
+                if (value != null)
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      value!,
+                      style: const TextStyle(
+                        color: ResponsiveHelper.textTertiary,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                if (trailing != null) ...[
+                  if (value != null) const SizedBox(width: 16),
+                  trailing!,
+                ] else if (showArrow) ...[
+                  if (value != null) const SizedBox(width: 16),
+                  const Icon(
+                    FontAwesomeIcons.chevronRight,
+                    size: 12,
+                    color: ResponsiveHelper.textTertiary,
+                  ),
+                ],
               ],
             ),
           ),

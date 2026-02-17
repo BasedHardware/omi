@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:provider/provider.dart';
@@ -359,7 +360,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               if (!app.private)
                 _buildActionButton(
                   responsive,
-                  icon: Icons.share_rounded,
+                  icon: FontAwesomeIcons.share,
                   onTap: () => _handleShareTap(),
                 ),
 

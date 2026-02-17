@@ -1,0 +1,64 @@
+# Development environment values for desktop-backend
+
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/desktop-backend
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"8080":{"name": "dev-desktop-backend-neg"}}}'
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: FIREBASE_PROJECT_ID
+    value: "based-hardware"
+  - name: RUST_LOG
+    value: "debug"
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENAI_API_KEY
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: RESEND_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RESEND_API_KEY
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - backend-listen
+            - key: env
+              operator: In
+              values:
+                - dev

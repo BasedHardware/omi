@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Chrome profile (contains cookies, login sessions)
+chrome-profile/
+
+# Database files
+data/
+*.db
+
+# Environment / credentials
+.env
+*.pem
+*.key
+
+# Playwright cache
+playwright-report/
+test-results/
+
+# OS
+.DS_Store

@@ -16,11 +16,11 @@ router = APIRouter()
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
-    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto
+    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}-{cm|auto}
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)-(?:cm|auto)$'
+    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
@@ -166,11 +166,12 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
 
         tag_name = release.get("tag_name", "")
 
-        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, or -desktop-auto)
+        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, -desktop-auto, or -{platform})
         if not (
             tag_name.endswith("-desktop-cm")
             or tag_name.endswith(f"-{platform}-cm")
             or tag_name.endswith("-desktop-auto")
+            or tag_name.endswith(f"-{platform}")
         ):
             continue
 
@@ -344,56 +345,21 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
     """
     Get the download URL for the latest desktop release installer.
-    Redirects to the GitHub release asset download URL.
+    Delegates to the desktop backend service which tracks releases via Firestore.
 
     Args:
         platform: Target platform (macos, windows, or linux)
 
     Returns:
-        Redirect to the installer download URL (DMG for macOS, EXE for Windows, AppImage for Linux)
+        Redirect to the desktop backend download endpoint
     """
-    try:
-        # Get live desktop releases using shared helper
-        desktop_releases = await _get_live_desktop_releases(platform)
+    from fastapi.responses import RedirectResponse
 
-        if not desktop_releases:
-            raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
-
-        # Get the latest release (first in the sorted list)
-        latest_entry = desktop_releases[0]
-        latest_release = latest_entry["release"]
-
-        # Find the installer asset in the release
-        assets = latest_release.get("assets", [])
-
-        # Look for platform-specific installer files
-        extension_map = {"macos": ".dmg", "windows": ".exe", "linux": ".AppImage"}
-        target_extension = extension_map.get(platform, ".dmg")
-
-        installer_asset = None
-        for asset in assets:
-            asset_name = asset.get("name", "").lower()
-            if asset_name.endswith(target_extension):
-                installer_asset = asset
-                break
-
-        if not installer_asset:
-            raise HTTPException(status_code=404, detail=f"No {target_extension} installer found in the latest release")
-
-        # Get the download URL from the asset
-        download_url = installer_asset.get("browser_download_url")
-        if not download_url:
-            raise HTTPException(status_code=404, detail="Download URL not found")
-
-        # Redirect to the GitHub asset download URL
-        from fastapi.responses import RedirectResponse
-
-        return RedirectResponse(url=download_url, status_code=302)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching latest release: {str(e)}")
+    desktop_backend_url = os.getenv(
+        "DESKTOP_BACKEND_URL",
+        "https://desktop-backend-hhibjajaja-uc.a.run.app",
+    )
+    return RedirectResponse(url=f"{desktop_backend_url}/download", status_code=302)
 
 
 @router.post("/v2/desktop/clear-cache")

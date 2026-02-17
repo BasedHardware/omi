@@ -66,6 +66,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void dispose() {
+    killMcuUpdateManager();
     final provider = _deviceProvider;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi/theme/app_theme.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
@@ -158,7 +158,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final storageLabel =
         isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
-    final storageColor = isFlashPage ? Colors.teal : context.accentColor;
+    final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
 
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
@@ -242,14 +242,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: context.primaryColor.withOpacity(0.1),
+                          color: Colors.deepPurple.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
                             size: 56,
-                            color: context.accentColor,
+                            color: Colors.deepPurpleAccent,
                           ),
                         ),
                       ),
@@ -283,7 +283,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
                             backgroundColor: Colors.grey.shade800,
-                            color: context.accentColor,
+                            color: Colors.deepPurpleAccent,
                             minHeight: 6,
                           ),
                         ),
@@ -337,7 +337,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 child: ElevatedButton(
                   onPressed: isTransferring ? _handleCancelTransfer : _handleTransferToPhone,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isTransferring ? Colors.orange : context.accentColor,
+                    backgroundColor: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -699,7 +699,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ] else ...[
               ListTile(
-                leading: const Icon(Icons.share, color: Colors.white),
+                leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);

@@ -39,6 +39,8 @@ class UpdateActionItemRequest(BaseModel):
     exported: Optional[bool] = Field(default=None, description="Whether the item has been exported")
     export_date: Optional[datetime] = Field(default=None, description="When the item was exported")
     export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
+    sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
+    indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
 
 
 class ActionItemResponse(BaseModel):
@@ -54,6 +56,8 @@ class ActionItemResponse(BaseModel):
     exported: bool = False
     export_date: Optional[datetime] = None
     export_platform: Optional[str] = None
+    sort_order: int = 0
+    indent_level: int = 0
 
 
 def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
@@ -65,6 +69,28 @@ def _get_valid_action_item(uid: str, action_item_id: str) -> dict:
         raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this action item.")
 
     return action_item
+
+
+# *****************************
+# ******* BATCH OPERATIONS ****
+# *****************************
+
+
+class BatchUpdateActionItemEntry(BaseModel):
+    id: str
+    sort_order: Optional[int] = None
+    indent_level: Optional[int] = Field(default=None, ge=0, le=3)
+
+
+class BatchUpdateActionItemsRequest(BaseModel):
+    items: List[BatchUpdateActionItemEntry] = Field(..., max_length=500)
+
+
+@router.patch("/v1/action-items/batch", tags=['action-items'])
+def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Batch update sort_order and indent_level for multiple action items."""
+    action_items_db.batch_update_action_items(uid, request.items)
+    return {"status": "ok", "updated_count": len(request.items)}
 
 
 # *****************************
@@ -200,6 +226,10 @@ def update_action_item(
         update_data['export_date'] = request.export_date
     if request.export_platform is not None:
         update_data['export_platform'] = request.export_platform
+    if request.sort_order is not None:
+        update_data['sort_order'] = request.sort_order
+    if request.indent_level is not None:
+        update_data['indent_level'] = request.indent_level
 
     # Update the action item
     success = action_items_db.update_action_item(uid, action_item_id, update_data)
@@ -292,11 +322,6 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
     deleted_count = action_items_db.delete_action_items_for_conversation(uid, conversation_id)
 
     return {"status": "Ok", "deleted_count": deleted_count}
-
-
-# *****************************
-# ******* BATCH OPERATIONS ****
-# *****************************
 
 
 @router.post("/v1/action-items/batch", tags=['action-items'])

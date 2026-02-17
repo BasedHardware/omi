@@ -1,14 +1,17 @@
 import threading
+import uuid
 from datetime import datetime, timezone, timedelta
+from enum import Enum
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
+import database.goals as goals_db
 import database.users as users_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
@@ -31,6 +34,8 @@ from dependencies import (
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
+    get_uid_with_goals_read,
+    get_uid_with_goals_write,
 )
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
@@ -67,6 +72,8 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
       - memories:write
       - action_items:read
       - action_items:write
+      - goals:read
+      - goals:write
     """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
@@ -1053,3 +1060,218 @@ def update_conversation_endpoint(
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
     return conversations_db.get_conversation(uid, conversation_id)
+
+
+# ******************************************************
+# *********************** GOALS ************************
+# ******************************************************
+
+
+class GoalType(str, Enum):
+    boolean = "boolean"
+    scale = "scale"
+    numeric = "numeric"
+
+
+class GoalResponse(BaseModel):
+    id: str
+    title: str
+    goal_type: str
+    target_value: float
+    current_value: float
+    min_value: float
+    max_value: float
+    unit: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateGoalRequest(BaseModel):
+    title: str = Field(description="The goal title/description", min_length=1, max_length=500)
+    goal_type: GoalType = Field(default=GoalType.scale, description="Type of goal metric: boolean, scale, or numeric")
+    target_value: float = Field(description="Target value to achieve")
+    current_value: float = Field(default=0, description="Current progress value")
+    min_value: float = Field(default=0, description="Minimum value of the scale")
+    max_value: float = Field(default=10, description="Maximum value of the scale")
+    unit: Optional[str] = Field(default=None, description="Unit label (e.g., 'users', 'points')")
+
+
+class UpdateGoalRequest(BaseModel):
+    title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
+    target_value: Optional[float] = Field(default=None, description="New target value")
+    current_value: Optional[float] = Field(default=None, description="New progress value")
+    min_value: Optional[float] = Field(default=None, description="New minimum value")
+    max_value: Optional[float] = Field(default=None, description="New maximum value")
+    unit: Optional[str] = Field(default=None, description="New unit label")
+
+
+def _serialize_goal_datetimes(goal: dict) -> dict:
+    """Convert datetime objects to ISO strings for JSON serialization."""
+    if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
+        goal['created_at'] = goal['created_at'].isoformat()
+    if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
+        goal['updated_at'] = goal['updated_at'].isoformat()
+    return goal
+
+
+@router.get("/v1/dev/user/goals", tags=["developer"], response_model=List[GoalResponse])
+def get_goals(
+    uid: str = Depends(get_uid_with_goals_read),
+    limit: int = 10,
+    include_inactive: bool = False,
+):
+    """
+    Get user goals.
+
+    - **limit**: Maximum number of goals to return
+    - **include_inactive**: If True, includes inactive/completed goals
+    """
+    if include_inactive:
+        goals = goals_db.get_all_goals(uid, include_inactive=True)
+    else:
+        goals = goals_db.get_user_goals(uid, limit=limit)
+
+    return [_serialize_goal_datetimes(g) for g in goals]
+
+
+@router.get("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
+def get_goal(
+    goal_id: str,
+    uid: str = Depends(get_uid_with_goals_read),
+):
+    """
+    Get a single goal by ID.
+
+    - **goal_id**: The ID of the goal to retrieve
+    """
+    goals = goals_db.get_all_goals(uid, include_inactive=True)
+    goal = next((g for g in goals if g.get('id') == goal_id), None)
+
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    return _serialize_goal_datetimes(goal)
+
+
+@router.post("/v1/dev/user/goals", tags=["developer"], response_model=GoalResponse)
+def create_goal(
+    request: CreateGoalRequest,
+    uid: str = Depends(get_uid_with_goals_write),
+):
+    """
+    Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.
+
+    - **title**: The goal title/description (1-500 characters)
+    - **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)
+    - **target_value**: Target value to achieve
+    - **current_value**: Current progress (default: 0)
+    - **min_value**: Minimum scale value (default: 0)
+    - **max_value**: Maximum scale value (default: 10)
+    - **unit**: Optional unit label (e.g., 'users', 'points')
+    """
+    if not request.title or len(request.title.strip()) == 0:
+        raise HTTPException(status_code=422, detail="title cannot be empty")
+
+    goal_data = {
+        'id': f"goal_{uuid.uuid4().hex[:12]}",
+        'title': request.title.strip(),
+        'goal_type': request.goal_type.value,
+        'target_value': request.target_value,
+        'current_value': request.current_value,
+        'min_value': request.min_value,
+        'max_value': request.max_value,
+        'unit': request.unit,
+    }
+
+    created_goal = goals_db.create_goal(uid, goal_data)
+    return _serialize_goal_datetimes(created_goal)
+
+
+@router.patch("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
+def update_goal(
+    goal_id: str,
+    request: UpdateGoalRequest,
+    uid: str = Depends(get_uid_with_goals_write),
+):
+    """
+    Update a goal.
+
+    - **goal_id**: The ID of the goal to update
+    - **title**: New title (optional)
+    - **target_value**: New target value (optional)
+    - **current_value**: New progress value (optional)
+    - **min_value**: New minimum value (optional)
+    - **max_value**: New maximum value (optional)
+    - **unit**: New unit label (optional)
+    """
+    update_data = request.model_dump(exclude_unset=True)
+
+    if not update_data:
+        raise HTTPException(status_code=422, detail="At least one field must be provided")
+
+    if 'title' in update_data and update_data['title']:
+        update_data['title'] = update_data['title'].strip()
+
+    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+
+    if not updated_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    return _serialize_goal_datetimes(updated_goal)
+
+
+@router.patch("/v1/dev/user/goals/{goal_id}/progress", tags=["developer"], response_model=GoalResponse)
+def update_goal_progress(
+    goal_id: str,
+    current_value: float = Query(..., description="New progress value"),
+    uid: str = Depends(get_uid_with_goals_write),
+):
+    """
+    Update the progress value of a goal.
+
+    - **goal_id**: The ID of the goal to update
+    - **current_value**: New progress value (query parameter)
+    """
+    updated_goal = goals_db.update_goal_progress(uid, goal_id, current_value)
+
+    if not updated_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    return _serialize_goal_datetimes(updated_goal)
+
+
+@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
+def get_goal_history(
+    goal_id: str,
+    days: int = Query(default=30, le=365),
+    uid: str = Depends(get_uid_with_goals_read),
+) -> List[dict]:
+    """
+    Get progress history for a goal.
+
+    - **goal_id**: The ID of the goal
+    - **days**: Number of days of history to return (max 365, default 30)
+    """
+    history = goals_db.get_goal_history(uid, goal_id, days)
+
+    for entry in history:
+        if 'recorded_at' in entry and hasattr(entry['recorded_at'], 'isoformat'):
+            entry['recorded_at'] = entry['recorded_at'].isoformat()
+
+    return history
+
+
+@router.delete("/v1/dev/user/goals/{goal_id}", tags=["developer"])
+def delete_goal(
+    goal_id: str,
+    uid: str = Depends(get_uid_with_goals_write),
+):
+    """
+    Delete a goal by ID.
+
+    - **goal_id**: The ID of the goal to delete
+    """
+    if not goals_db.delete_goal(uid, goal_id):
+        raise HTTPException(status_code=404, detail="Goal not found")
+    return {"success": True}

@@ -397,7 +397,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             children: [
               _buildVersionItem(
                 icon: FontAwesomeIcons.microchip,
-                label: 'Current Version',
+                label: context.l10n.currentVersion,
                 version: _currentVersion,
                 chipColor: _hasUpdate ? const Color(0xFF3D2A2A) : null,
               ),
@@ -405,7 +405,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildVersionItem(
                   icon: FontAwesomeIcons.cloudArrowDown,
-                  label: 'Latest Version',
+                  label: context.l10n.latestVersion,
                   version: _latestVersion,
                   chipColor: const Color(0xFF1A3D2E),
                 ),
@@ -422,7 +422,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             child: Row(
               children: [
                 Text(
-                  'Your device is up to date',
+                  context.l10n.deviceUpToDate,
                   style: TextStyle(
                     color: Colors.grey.shade400,
                     fontSize: 14,
@@ -442,10 +442,10 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         // Changelog
         if (_hasUpdate && _changelog.isNotEmpty) ...[
           const SizedBox(height: 24),
-          const Padding(
-            padding: EdgeInsets.only(left: 4, right: 4, bottom: 12),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
             child: Text(
-              'What\'s New',
+              context.l10n.whatsNew,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 20,
@@ -504,21 +504,21 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           const SizedBox(height: 24),
           // WiFi credentials section
           _buildSectionHeader(
-            'WiFi Configuration',
-            subtitle: 'Enter your WiFi credentials to allow the device to download the firmware.',
+            context.l10n.wifiConfiguration,
+            subtitle: context.l10n.wifiConfigurationSubtitle,
           ),
           const SizedBox(height: 16),
           _buildTextField(
             controller: _ssidController,
-            label: 'Network Name (SSID)',
-            hint: 'Enter WiFi network name',
+            label: context.l10n.networkNameSsid,
+            hint: context.l10n.enterWifiNetworkName,
             icon: FontAwesomeIcons.wifi,
           ),
           const SizedBox(height: 12),
           _buildTextField(
             controller: _passwordController,
-            label: 'Password',
-            hint: 'Enter WiFi password',
+            label: context.l10n.password,
+            hint: context.l10n.enterWifiPassword,
             icon: FontAwesomeIcons.lock,
             obscureText: _obscurePassword,
             suffixIcon: IconButton(

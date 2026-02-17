@@ -9,7 +9,7 @@ class AppLocalizationsSk extends AppLocalizations {
   AppLocalizationsSk([String locale = 'sk']) : super(locale);
 
   @override
-  String get appTitle => 'Nooto';
+  String get appTitle => 'Omi';
 
   @override
   String get conversationTab => 'Konverzácia';
@@ -123,7 +123,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editPerson => 'Upraviť osobu';
 
   @override
-  String get createPersonHint => 'Vytvorte novú osobu a naučte Nooto rozpoznávať aj jej hlas!';
+  String get createPersonHint => 'Vytvorte novú osobu a naučte Omi rozpoznávať aj jej hlas!';
 
   @override
   String get speechProfile => 'Rečový Profil';
@@ -162,7 +162,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get couldNotAccessFile => 'Nepodarilo sa pristúpiť k vybranému súboru';
 
   @override
-  String get askOmi => 'Opýtať sa Nooto';
+  String get askOmi => 'Opýtať sa Omi';
 
   @override
   String get done => 'Hotovo';
@@ -263,7 +263,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noMessagesYet => 'Zatiaľ žiadne správy!\nPrečo nespustíte konverzáciu?';
 
   @override
-  String get deletingMessages => 'Odstraňovanie vašich správ z pamäte Nooto...';
+  String get deletingMessages => 'Odstraňovanie vašich správ z pamäte Omi...';
 
   @override
   String get messageCopied => '✨ Správa skopírovaná do schránky';
@@ -293,7 +293,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get maxFilesLimit => 'Môžete nahrať maximálne 4 súbory naraz';
 
   @override
-  String get chatWithOmi => 'Chat s Nooto';
+  String get chatWithOmi => 'Chat s Omi';
 
   @override
   String get apps => 'Aplikácie';
@@ -324,7 +324,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Nepodarilo sa načítať aplikácie :(\n\nSkontrolujte prosím svoje internetové pripojenie a skúste to znova.';
 
   @override
-  String get aboutOmi => 'O Nooto';
+  String get aboutOmi => 'O Omi';
 
   @override
   String get privacyPolicy => 'Zásady ochrany osobných údajov';
@@ -439,7 +439,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get developerSettings => 'Nastavenia vývojára';
 
   @override
-  String get getOmiForMac => 'Získať Nooto pre Mac';
+  String get getOmiForMac => 'Získať Omi pre Mac';
 
   @override
   String get referralProgram => 'Odporúčací program';
@@ -458,7 +458,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get privacyIntro =>
-      'V Nooto sa zaväzujeme chrániť vaše súkromie. Táto stránka vám umožňuje kontrolovať, ako sú vaše údaje ukladané a používané.';
+      'V Omi sa zaväzujeme chrániť vaše súkromie. Táto stránka vám umožňuje kontrolovať, ako sú vaše údaje ukladané a používané.';
 
   @override
   String get learnMore => 'Dozvedieť sa viac...';
@@ -529,7 +529,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get unpairAndForget => 'Zrušiť párovanie a zabudnúť zariadenie';
 
   @override
-  String get deviceDisconnectedMessage => 'Vaše Nooto bolo odpojené 😔';
+  String get deviceDisconnectedMessage => 'Vaše Omi bolo odpojené 😔';
 
   @override
   String get deviceUnpairedMessage =>
@@ -547,7 +547,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get connectDeviceMessage =>
-      'Pripojte svoje zariadenie Nooto pre prístup\nk nastaveniam a prispôsobeniu zariadenia';
+      'Pripojte svoje zariadenie Omi pre prístup\nk nastaveniam a prispôsobeniu zariadenia';
 
   @override
   String get deviceInfoSection => 'Informácie o zariadení';
@@ -680,7 +680,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get docs => 'Dokumentácia';
 
   @override
-  String get yourOmiInsights => 'Vaše štatistiky Nooto';
+  String get yourOmiInsights => 'Vaše štatistiky Omi';
 
   @override
   String get today => 'Dnes';
@@ -699,13 +699,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get startConversationToSeeInsights =>
-      'Začnite konverzáciu s Nooto,\naby ste tu videli svoje štatistiky využitia.';
+      'Začnite konverzáciu s Omi,\naby ste tu videli svoje štatistiky využitia.';
 
   @override
   String get listening => 'Počúvanie';
 
   @override
-  String get listeningSubtitle => 'Celkový čas, počas ktorého Nooto aktívne počúvalo.';
+  String get listeningSubtitle => 'Celkový čas, počas ktorého Omi aktívne počúvalo.';
 
   @override
   String get understanding => 'Porozumenie';
@@ -761,19 +761,19 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get shareStatsMessage => 'Zdieľam svoje štatistiky Nooto! (nooto.ai - váš AI asistent vždy po ruke)';
+  String get shareStatsMessage => 'Zdieľam svoje štatistiky Omi! (omi.me - váš AI asistent vždy po ruke)';
 
   @override
-  String get sharePeriodToday => 'Dnes Nooto:';
+  String get sharePeriodToday => 'Dnes Omi:';
 
   @override
-  String get sharePeriodMonth => 'Tento mesiac Nooto:';
+  String get sharePeriodMonth => 'Tento mesiac Omi:';
 
   @override
-  String get sharePeriodYear => 'Tento rok Nooto:';
+  String get sharePeriodYear => 'Tento rok Omi:';
 
   @override
-  String get sharePeriodAllTime => 'Doteraz Nooto:';
+  String get sharePeriodAllTime => 'Doteraz Omi:';
 
   @override
   String shareStatsListened(String minutes) {
@@ -808,7 +808,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noLogFilesFound => 'Nenašli sa žiadne súbory denníka.';
 
   @override
-  String get omiDebugLog => 'Nooto debug log';
+  String get omiDebugLog => 'Omi debug log';
 
   @override
   String get logShared => 'Log bol zdieľaný';
@@ -832,7 +832,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get exportDataDesc => 'Exportovať konverzácie do JSON súboru';
 
   @override
-  String get exportedConversations => 'Exportované konverzácie z Nooto';
+  String get exportedConversations => 'Exportované konverzácie z Omi';
 
   @override
   String get exportShared => 'Export bol zdieľaný';
@@ -1014,10 +1014,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get addWordsDesc => 'Mená, výrazy alebo neobvyklé slová';
 
   @override
-  String get vocabularyHint => 'Nooto, Callie, OpenAI';
+  String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Pripojiť';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Čoskoro';
@@ -1059,7 +1059,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String authAccessMessage(String appName) {
-    return 'Budete musieť autorizovať Nooto na prístup k vašim údajom $appName. Toto otvorí váš prehliadač pre autentifikáciu.';
+    return 'Budete musieť autorizovať Omi na prístup k vašim údajom $appName. Toto otvorí váš prehliadač pre autentifikáciu.';
   }
 
   @override
@@ -1155,7 +1155,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editName => 'Upraviť meno';
 
   @override
-  String get howShouldOmiCallYou => 'Ako by vás malo Nooto oslovovať?';
+  String get howShouldOmiCallYou => 'Ako by vás malo Omi oslovovať?';
 
   @override
   String get enterYourName => 'Zadajte svoje meno';
@@ -1426,7 +1426,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Budete musieť autorizovať Nooto na vytváranie úloh vo vašom účte $appName. Toto otvorí váš prehliadač pre autentifikáciu.';
+    return 'Budete musieť autorizovať Omi na vytváranie úloh vo vašom účte $appName. Toto otvorí váš prehliadač pre autentifikáciu.';
   }
 
   @override
@@ -1461,13 +1461,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get bringYourOwn => 'Prineste si vlastný';
 
   @override
-  String get payYourSttProvider => 'Voľne používajte nooto. Platíte len svojmu poskytovateľovi STT priamo.';
+  String get payYourSttProvider => 'Voľne používajte omi. Platíte len svojmu poskytovateľovi STT priamo.';
 
   @override
   String get freeMinutesMonth => '1 200 bezplatných minút/mesiac je zahrnutých. Neobmedzené s ';
 
   @override
-  String get omiUnlimited => 'Nooto Unlimited';
+  String get omiUnlimited => 'Omi Unlimited';
 
   @override
   String get hostRequired => 'Hostiteľ je povinný';
@@ -1585,11 +1585,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device používa $reason. Bude použité Nooto.';
+    return '$device používa $reason. Bude použité Omi.';
   }
 
   @override
-  String get omiTranscription => 'Nooto Prepis';
+  String get omiTranscription => 'Omi Prepis';
 
   @override
   String get bestInClassTranscription => 'Najlepší prepis v triede s nulovou konfiguráciou';
@@ -1658,7 +1658,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get whatShouldWeMake => 'Čo by sme mali vytvoriť?';
 
   @override
-  String get appName => 'Názov aplikácie';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Popis';
@@ -1741,7 +1741,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get bluetoothNeeded =>
-      'Nooto potrebuje Bluetooth na pripojenie k vášmu nositeľnému zariadeniu. Povoľte prosím Bluetooth a skúste to znova.';
+      'Omi potrebuje Bluetooth na pripojenie k vášmu nositeľnému zariadeniu. Povoľte prosím Bluetooth a skúste to znova.';
 
   @override
   String get contactSupport => 'Kontaktovať podporu?';
@@ -1756,7 +1756,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get backgroundActivity => 'Aktivita na pozadí';
 
   @override
-  String get backgroundActivityDesc => 'Nechajte Nooto bežať na pozadí pre lepšiu stabilitu';
+  String get backgroundActivityDesc => 'Nechajte Omi bežať na pozadí pre lepšiu stabilitu';
 
   @override
   String get locationAccess => 'Prístup k polohe';
@@ -1785,7 +1785,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Prejdite do nastavení zariadenia a nastavte povolenie polohy na \"Vždy povoliť\"';
 
   @override
-  String get lovingOmi => 'Páči sa vám Nooto?';
+  String get lovingOmi => 'Páči sa vám Omi?';
 
   @override
   String get leaveReviewIos =>
@@ -1805,7 +1805,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get maybeLater => 'Možno neskôr';
 
   @override
-  String get speechProfileIntro => 'Nooto potrebuje spoznať vaše ciele a váš hlas. Neskôr to budete môcť zmeniť.';
+  String get speechProfileIntro => 'Omi potrebuje spoznať vaše ciele a váš hlas. Neskôr to budete môcť zmeniť.';
 
   @override
   String get getStarted => 'Začať';
@@ -1860,7 +1860,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tryAgain => 'Skúsiť znova';
 
   @override
-  String get connectOmiOmiGlass => 'Pripojiť Nooto / NootoGlass';
+  String get connectOmiOmiGlass => 'Pripojiť Omi / OmiGlass';
 
   @override
   String get continueWithoutDevice => 'Pokračovať bez zariadenia';
@@ -1897,7 +1897,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get termsOfUse => 'Podmienky používania';
 
   @override
-  String get omiYourAiCompanion => 'Nooto – Váš AI spoločník';
+  String get omiYourAiCompanion => 'Omi – Váš AI spoločník';
 
   @override
   String get captureEveryMoment =>
@@ -1914,7 +1914,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get permissionGrantedNow =>
-      'Povolenie bolo udelené! Teraz:\n\nOtvorte aplikáciu Nooto na hodinkách a ťuknite na \"Pokračovať\" nižšie';
+      'Povolenie bolo udelené! Teraz:\n\nOtvorte aplikáciu Omi na hodinkách a ťuknite na \"Pokračovať\" nižšie';
 
   @override
   String get needMicrophonePermission =>
@@ -1928,7 +1928,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get troubleshootingSteps =>
-      'Riešenie problémov:\n\n1. Uistite sa, že Nooto je nainštalované na vašich hodinkách\n2. Otvorte aplikáciu Nooto na hodinkách\n3. Hľadajte vyskakovacie okno s povolením\n4. Ťuknite na \"Povoliť\", keď sa zobrazí\n5. Aplikácia na hodinkách sa zatvorí - znovu ju otvorte\n6. Vráťte sa a ťuknite na \"Pokračovať\" na vašom iPhone';
+      'Riešenie problémov:\n\n1. Uistite sa, že Omi je nainštalované na vašich hodinkách\n2. Otvorte aplikáciu Omi na hodinkách\n3. Hľadajte vyskakovacie okno s povolením\n4. Ťuknite na \"Povoliť\", keď sa zobrazí\n5. Aplikácia na hodinkách sa zatvorí - znovu ju otvorte\n6. Vráťte sa a ťuknite na \"Pokračovať\" na vašom iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Nahrávanie bolo úspešne spustené!';
@@ -2080,16 +2080,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get addFirstMemory => 'Pridajte svoju prvú spomienku';
 
   @override
-  String get clearMemoryTitle => 'Vymazať pamäť Nooto';
+  String get clearMemoryTitle => 'Vymazať pamäť Omi';
 
   @override
-  String get clearMemoryMessage => 'Naozaj chcete vymazať pamäť Nooto? Túto akciu nie je možné vrátiť späť.';
+  String get clearMemoryMessage => 'Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť.';
 
   @override
   String get clearMemoryButton => 'Vymazať pamäť';
 
   @override
-  String get memoryClearedSuccess => 'Pamäť Nooto o vás bola vymazaná';
+  String get memoryClearedSuccess => 'Pamäť Omi o vás bola vymazaná';
 
   @override
   String get noMemoriesToDelete => 'Žiadne spomienky na odstránenie';
@@ -2237,7 +2237,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get translationNoticeMessage =>
-      'Nooto prekladá konverzácie do vášho hlavného jazyka. Aktualizujte to kedykoľvek v Nastavenia → Profily.';
+      'Omi prekladá konverzácie do vášho hlavného jazyka. Aktualizujte to kedykoľvek v Nastavenia → Profily.';
 
   @override
   String get pleaseCheckInternetConnection => 'Skontrolujte prosím pripojenie k internetu a skúste to znova';
@@ -2272,7 +2272,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get folderName => 'Názov priečinka';
 
   @override
-  String get descriptionOptional => 'Popis (voliteľné)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Odstránenie priečinka zlyhalo';
@@ -2417,7 +2417,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get privacyPolicyTitle => 'Zásady ochrany osobných údajov';
 
   @override
-  String get omiSttProvider => 'Nooto';
+  String get omiSttProvider => 'Omi';
 
   @override
   String labelCopied(String label) {
@@ -2574,7 +2574,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get checksForAudioFiles => 'Kontroluje zvukové súbory na SD karte';
 
   @override
-  String get omiSyncsAudioFiles => 'Nooto potom synchronizuje zvukové súbory so serverom';
+  String get omiSyncsAudioFiles => 'Omi potom synchronizuje zvukové súbory so serverom';
 
   @override
   String get serverProcessesAudio => 'Server spracováva zvukové súbory a vytvára spomienky';
@@ -2584,10 +2584,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get welcomeToOmiDescription =>
-      'Vitajte v Nooto! Váš AI spoločník je pripravený pomôcť vám s rozhovormi, úlohami a oveľa viac.';
+      'Vitajte v Omi! Váš AI spoločník je pripravený pomôcť vám s rozhovormi, úlohami a oveľa viac.';
 
   @override
-  String get startUsingOmi => 'Začať používať Nooto';
+  String get startUsingOmi => 'Začať používať Omi';
 
   @override
   String get back => 'Späť';
@@ -2663,7 +2663,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reviewAndManageConversations => 'Prezrite si a spravujte svoje zaznamenané konverzácie';
 
   @override
-  String get startCapturingConversations => 'Začnite zachytávať konverzácie pomocou zariadenia Nooto a uvidíte ich tu.';
+  String get startCapturingConversations => 'Začnite zachytávať konverzácie pomocou zariadenia Omi a uvidíte ich tu.';
 
   @override
   String get useMobileAppToCapture => 'Použite mobilnú aplikáciu na zachytenie zvuku';
@@ -2678,8 +2678,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get showAll => 'Zobraziť všetko →';
 
   @override
-  String get noTasksForToday =>
-      'Žiadne úlohy na dnes.\\nSpýtajte sa Nooto na ďalšie úlohy alebo ich vytvorte manuálne.';
+  String get noTasksForToday => 'Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
 
   @override
   String get dailyScore => 'DENNÉ SKÓRE';
@@ -2828,7 +2827,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get createNewApp => 'Vytvoriť novú aplikáciu';
 
   @override
-  String get buildSubmitCustomOmiApp => 'Vytvorte a odošlite svoju vlastnú Nooto aplikáciu';
+  String get buildSubmitCustomOmiApp => 'Vytvorte a odošlite svoju vlastnú Omi aplikáciu';
 
   @override
   String get submittingYourApp => 'Odosielanie vašej aplikácie...';
@@ -2875,7 +2874,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get submitAppTermsAgreement =>
-      'Odoslaním tejto aplikácie súhlasím so Zmluvnými podmienkami a Zásadami ochrany osobných údajov Nooto AI';
+      'Odoslaním tejto aplikácie súhlasím so Zmluvnými podmienkami a Zásadami ochrany osobných údajov Omi AI';
 
   @override
   String get submitApp => 'Odoslať aplikáciu';
@@ -2920,7 +2919,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dataAccessWarning =>
-      'Táto aplikácia bude mať prístup k vašim údajom. Nooto AI nie je zodpovedný za to, ako táto aplikácia používa, upravuje alebo maže vaše údaje';
+      'Táto aplikácia bude mať prístup k vašim údajom. Omi AI nie je zodpovedný za to, ako táto aplikácia používa, upravuje alebo maže vaše údaje';
 
   @override
   String get installApp => 'Inštalovať aplikáciu';
@@ -3269,7 +3268,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get upgradeToPro => 'Upgrade na Pro';
 
   @override
-  String get getOmiDevice => 'Získať zariadenie Nooto';
+  String get getOmiDevice => 'Získať zariadenie Omi';
 
   @override
   String get wearableAiCompanion => 'Nositeľný AI spoločník';
@@ -3335,7 +3334,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get setAllMemoriesToPublic => 'Nastaviť všetky spomienky na verejnú viditeľnosť';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Trvalo odstrániť všetky spomienky z Nooto';
+  String get permanentlyRemoveAllMemories => 'Trvalo odstrániť všetky spomienky z Omi';
 
   @override
   String get allMemoriesAreNowPrivate => 'Všetky spomienky sú teraz súkromné';
@@ -3344,18 +3343,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get allMemoriesAreNowPublic => 'Všetky spomienky sú teraz verejné';
 
   @override
-  String get clearOmisMemory => 'Vymazať pamäť Nooto';
+  String get clearOmisMemory => 'Vymazať pamäť Omi';
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Naozaj chcete vymazať pamäť Nooto? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých $count spomienok.';
+    return 'Naozaj chcete vymazať pamäť Omi? Túto akciu nie je možné vrátiť späť a trvalo odstráni všetkých $count spomienok.';
   }
 
   @override
-  String get omisMemoryCleared => 'Pamäť Nooto o vás bola vymazaná';
+  String get omisMemoryCleared => 'Pamäť Omi o vás bola vymazaná';
 
   @override
-  String get welcomeToOmi => 'Vitajte v Nooto';
+  String get welcomeToOmi => 'Vitajte v Omi';
 
   @override
   String get continueWithApple => 'Pokračovať s Apple';
@@ -3401,7 +3400,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get chooseYourLanguage => 'Vyberte si svoj jazyk';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'Vyberte si preferovaný jazyk pre najlepší Nooto zážitok';
+  String get selectPreferredLanguageForBestExperience => 'Vyberte si preferovaný jazyk pre najlepší Omi zážitok';
 
   @override
   String get searchLanguages => 'Hľadať jazyky...';
@@ -3420,7 +3419,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tellUsHowYouWouldLikeToBeAddressed =>
-      'Povedzte nám, ako by ste chceli byť oslovovaní. To pomáha prispôsobiť váš Nooto zážitok.';
+      'Povedzte nám, ako by ste chceli byť oslovovaní. To pomáha prispôsobiť váš Omi zážitok.';
 
   @override
   String charactersCount(int count) {
@@ -3428,7 +3427,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get enableFeaturesForBestExperience => 'Povoľte funkcie pre najlepší Nooto zážitok na vašom zariadení.';
+  String get enableFeaturesForBestExperience => 'Povoľte funkcie pre najlepší Omi zážitok na vašom zariadení.';
 
   @override
   String get microphoneAccess => 'Prístup k mikrofónu';
@@ -3438,7 +3437,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get microphoneAccessDescription =>
-      'Nooto potrebuje prístup k mikrofónu na nahrávanie vašich konverzácií a poskytovanie prepisov.';
+      'Omi potrebuje prístup k mikrofónu na nahrávanie vašich konverzácií a poskytovanie prepisov.';
 
   @override
   String get screenRecording => 'Záznam obrazovky';
@@ -3448,7 +3447,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get screenRecordingDescription =>
-      'Nooto potrebuje povolenie na záznam obrazovky na zachytenie systémového zvuku z vašich schôdzok v prehliadači.';
+      'Omi potrebuje povolenie na záznam obrazovky na zachytenie systémového zvuku z vašich schôdzok v prehliadači.';
 
   @override
   String get accessibility => 'Prístupnosť';
@@ -3458,7 +3457,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get accessibilityDescription =>
-      'Nooto potrebuje povolenie prístupnosti na detekciu, kedy sa pripájate k schôdzkam Zoom, Meet alebo Teams vo vašom prehliadači.';
+      'Omi potrebuje povolenie prístupnosti na detekciu, kedy sa pripájate k schôdzkam Zoom, Meet alebo Teams vo vašom prehliadači.';
 
   @override
   String get pleaseWait => 'Prosím čakajte...';
@@ -3488,16 +3487,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get changeYourName => 'Zmeniť svoje meno';
 
   @override
-  String get manageYourOmiPersona => 'Spravovať svoju Nooto personu';
+  String get manageYourOmiPersona => 'Spravovať svoju Omi personu';
 
   @override
   String get voiceAndPeople => 'Hlas a Ľudia';
 
   @override
-  String get teachOmiYourVoice => 'Naučiť Nooto svoj hlas';
+  String get teachOmiYourVoice => 'Naučiť Omi svoj hlas';
 
   @override
-  String get tellOmiWhoSaidIt => 'Povedzte Nooto, kto to povedal 🗣️';
+  String get tellOmiWhoSaidIt => 'Povedzte Omi, kto to povedal 🗣️';
 
   @override
   String get payment => 'Platba';
@@ -3509,7 +3508,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get preferences => 'Predvoľby';
 
   @override
-  String get helpImproveOmiBySharing => 'Pomôžte vylepšiť Nooto zdieľaním anonymizovaných analytických dát';
+  String get helpImproveOmiBySharing => 'Pomôžte vylepšiť Omi zdieľaním anonymizovaných analytických dát';
 
   @override
   String get deleteAccount => 'Zmazať Účet';
@@ -3534,7 +3533,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get mcpDescription =>
-      'Na pripojenie Nooto k iným aplikáciám na čítanie, vyhľadávanie a správu vašich spomienok a konverzácií. Vytvorte kľúč na začatie.';
+      'Na pripojenie Omi k iným aplikáciám na čítanie, vyhľadávanie a správu vašich spomienok a konverzácií. Vytvorte kľúč na začatie.';
 
   @override
   String get apiKeys => 'API kľúče';
@@ -3569,7 +3568,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get triggersWhenDaySummaryGenerated => 'Spustí sa pri vytvorení denného súhrnu.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'Vyskúšajte najnovšie experimentálne funkcie od tímu Nooto.';
+  String get tryLatestExperimentalFeatures => 'Vyskúšajte najnovšie experimentálne funkcie od tímu Omi.';
 
   @override
   String get transcriptionServiceDiagnosticStatus => 'Diagnostický stav služby prepisu';
@@ -3640,7 +3639,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'Nechajte Nooto automaticky vybrať najlepšiu aplikáciu';
+  String get letOmiChooseAutomatically => 'Nechajte Omi automaticky vybrať najlepšiu aplikáciu';
 
   @override
   String get deleteConversationConfirmation =>
@@ -3778,7 +3777,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'preložené pomocou nooto';
+  String get translatedByOmi => 'preložené pomocou omi';
 
   @override
   String get backToConversations => 'Späť na konverzácie';
@@ -3839,7 +3838,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get customVocabularyHeader => 'VLASTNÝ SLOVNÍK';
 
   @override
-  String get addWordsDescription => 'Pridajte slová, ktoré má Nooto rozpoznávať počas prepisu.';
+  String get addWordsDescription => 'Pridajte slová, ktoré má Omi rozpoznávať počas prepisu.';
 
   @override
   String get enterWordsHint => 'Zadajte slová (oddelené čiarkami)';
@@ -3927,7 +3926,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Tým sa vymažú všetky odvodené údaje grafu znalostí. Vaše pôvodné spomienky zostanú v bezpečí.';
 
   @override
-  String get connectOmiWithAI => 'Pripojte Nooto k AI asistentom';
+  String get connectOmiWithAI => 'Pripojte Omi k AI asistentom';
 
   @override
   String get noAPIKeys => 'Žiadne kľúče API. Vytvorte jeden na začatie.';
@@ -3964,7 +3963,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get holdOnPreparingForm => 'Počkajte, pripravujeme pre vás formulár';
 
   @override
-  String get bySubmittingYouAgreeToOmi => 'Odoslaním súhlasíte s Nooto ';
+  String get bySubmittingYouAgreeToOmi => 'Odoslaním súhlasíte s Omi ';
 
   @override
   String get termsAndPrivacyPolicy => 'Podmienky a Zásady ochrany osobných údajov';
@@ -4124,7 +4123,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get issueActivatingApp => 'Pri aktivácii tejto aplikácie došlo k problému. Skúste to prosím znova.';
 
   @override
-  String get dataAccessNoticeDescription => 'Nooto pristupuje k vašim údajom len na zlepšenie vášho zážitku';
+  String get dataAccessNoticeDescription => 'Omi pristupuje k vašim údajom len na zlepšenie vášho zážitku';
 
   @override
   String get copyUrl => 'Kopírovať URL';
@@ -4209,14 +4208,14 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get omiApiKeys => 'Nooto API kľúče';
+  String get omiApiKeys => 'Omi API kľúče';
 
   @override
   String get apiKeysDescription =>
-      'API kľúče sa používajú na overenie, keď vaša aplikácia komunikuje so serverom nooto. Umožňujú vašej aplikácii vytvárať spomienky a bezpečne pristupovať k ďalším službám nooto.';
+      'API kľúče sa používajú na overenie, keď vaša aplikácia komunikuje so serverom OMI. Umožňujú vašej aplikácii vytvárať spomienky a bezpečne pristupovať k ďalším službám OMI.';
 
   @override
-  String get aboutOmiApiKeys => 'O Nooto API kľúčoch';
+  String get aboutOmiApiKeys => 'O Omi API kľúčoch';
 
   @override
   String get yourNewKey => 'Váš nový kľúč:';
@@ -4359,7 +4358,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get e2eeDescription =>
-      'End-to-end šifrovanie je zlatý štandard ochrany súkromia. Keď je povolené, vaše údaje sú šifrované na vašom zariadení pred odoslaním na naše servery. To znamená, že nikto, ani Nooto, nemôže pristupovať k vášmu obsahu.';
+      'End-to-end šifrovanie je zlatý štandard ochrany súkromia. Keď je povolené, vaše údaje sú šifrované na vašom zariadení pred odoslaním na naše servery. To znamená, že nikto, ani Omi, nemôže pristupovať k vášmu obsahu.';
 
   @override
   String get importantTradeoffs => 'Dôležité kompromisy:';
@@ -4394,7 +4393,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get secureEncryptionDescription =>
-      'Vaše údaje sú šifrované kľúčom jedinečným pre vás na našich serveroch hostovaných v Google Cloud. To znamená, že váš surový obsah je neprístupný nikomu, vrátane zamestnancov Nooto alebo Google, priamo z databázy.';
+      'Vaše údaje sú šifrované kľúčom jedinečným pre vás na našich serveroch hostovaných v Google Cloud. To znamená, že váš surový obsah je neprístupný nikomu, vrátane zamestnancov Omi alebo Google, priamo z databázy.';
 
   @override
   String get endToEndEncryption => 'End-to-end šifrovanie';
@@ -4463,20 +4462,20 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Školenie Nooto';
+  String get omiTraining => 'Školenie Omi';
 
   @override
   String get trainingDataProgram => 'Program tréningových dát';
 
   @override
-  String get getOmiUnlimitedFree => 'Získajte Nooto Unlimited zadarmo prispením vašich dát na trénovanie AI modelov.';
+  String get getOmiUnlimitedFree => 'Získajte Omi Unlimited zadarmo prispením vašich dát na trénovanie AI modelov.';
 
   @override
   String get trainingDataBullets =>
       '• Vaše dáta pomáhajú zlepšovať AI modely\n• Zdieľajú sa len necitlivé dáta\n• Úplne transparentný proces';
 
   @override
-  String get learnMoreAtOmiTraining => 'Zistite viac na nooto.ai/training';
+  String get learnMoreAtOmiTraining => 'Zistite viac na omi.me/training';
 
   @override
   String get agreeToContributeData => 'Rozumiem a súhlasím s prispením mojich dát na trénovanie AI';
@@ -4554,7 +4553,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Ste na pláne Unlimited.';
 
   @override
-  String get yourOmiUnleashed => 'Váš Nooto, uvoľnený. Prejdite na neobmedzený pre nekonečné možnosti.';
+  String get yourOmiUnleashed => 'Váš Omi, uvoľnený. Prejdite na neobmedzený pre nekonečné možnosti.';
 
   @override
   String planEndedOn(String date) {
@@ -4578,10 +4577,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get unlimitedConversations => 'Neobmedzené konverzácie';
 
   @override
-  String get askOmiAnything => 'Opýtajte sa Nooto čokoľvek o svojom živote';
+  String get askOmiAnything => 'Opýtajte sa Omi čokoľvek o svojom živote';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Odomknite nekonečnú pamäť Nooto';
+  String get unlockOmiInfiniteMemory => 'Odomknite nekonečnú pamäť Omi';
 
   @override
   String get youreOnAnnualPlan => 'Ste na ročnom pláne';
@@ -4635,7 +4634,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get privacyIntroText =>
-      'V Nooto berieme vaše súkromie veľmi vážne. Chceme byť transparentní ohľadom údajov, ktoré zhromažďujeme a ako ich používame. Tu je to, čo potrebujete vedieť:';
+      'V Omi berieme vaše súkromie veľmi vážne. Chceme byť transparentní ohľadom údajov, ktoré zhromažďujeme a ako ich používame. Tu je to, čo potrebujete vedieť:';
 
   @override
   String get whatWeTrack => 'Čo sledujeme';
@@ -4651,11 +4650,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get commitmentText =>
-      'Zaväzujeme sa používať zhromaždené údaje len na to, aby sme z Nooto urobili lepší produkt pre vás. Vaše súkromie a dôvera sú pre nás prvoradé.';
+      'Zaväzujeme sa používať zhromaždené údaje len na to, aby sme z Omi urobili lepší produkt pre vás. Vaše súkromie a dôvera sú pre nás prvoradé.';
 
   @override
   String get thankYouText =>
-      'Ďakujeme, že ste cenený používateľ Nooto. Ak máte akékoľvek otázky alebo obavy, neváhajte nás kontaktovať na team@basedhardware.com.';
+      'Ďakujeme, že ste cenený používateľ Omi. Ak máte akékoľvek otázky alebo obavy, neváhajte nás kontaktovať na team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'Nastavenia synchronizácie WiFi';
@@ -4767,7 +4766,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get minutes => 'minút';
 
   @override
-  String get omiHas => 'Nooto má:';
+  String get omiHas => 'Omi má:';
 
   @override
   String get premiumMinutesUsed => 'Prémiové minúty vyčerpané.';
@@ -4860,7 +4859,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get howPeopleWorks =>
-      'Po vytvorení osoby môžete prejsť na prepis konverzácie a priradiť im zodpovedajúce segmenty, takto bude Nooto schopné rozpoznať aj ich reč!';
+      'Po vytvorení osoby môžete prejsť na prepis konverzácie a priradiť im zodpovedajúce segmenty, takto bude Omi schopné rozpoznať aj ich reč!';
 
   @override
   String get tapToDelete => 'Klepnite pre odstránenie';
@@ -5140,7 +5139,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get enableApps => 'Povoliť aplikácie';
 
   @override
-  String get omiAppName => 'Nooto';
+  String get omiAppName => 'Omi';
 
   @override
   String get showMore => 'zobraziť viac ↓';
@@ -5164,18 +5163,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get checkingAppleWatch => 'Kontrola Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Nainštalujte Nooto na\nApple Watch';
+  String get installOmiOnAppleWatch => 'Nainštalujte Omi na\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
-      'Ak chcete používať Apple Watch s Nooto, musíte najprv nainštalovať aplikáciu Nooto na hodinky.';
+      'Ak chcete používať Apple Watch s Omi, musíte najprv nainštalovať aplikáciu Omi na hodinky.';
 
   @override
-  String get openOmiOnAppleWatch => 'Otvorte Nooto na\nApple Watch';
+  String get openOmiOnAppleWatch => 'Otvorte Omi na\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
-      'Aplikácia Nooto je nainštalovaná na Apple Watch. Otvorte ju a klepnite na Štart.';
+      'Aplikácia Omi je nainštalovaná na Apple Watch. Otvorte ju a klepnite na Štart.';
 
   @override
   String get openWatchApp => 'Otvoriť aplikáciu Watch';
@@ -5185,14 +5184,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get unableToOpenWatchApp =>
-      'Aplikáciu Apple Watch sa nepodarilo otvoriť. Manuálne otvorte aplikáciu Watch na Apple Watch a nainštalujte Nooto zo sekcie \"Dostupné aplikácie\".';
+      'Aplikáciu Apple Watch sa nepodarilo otvoriť. Manuálne otvorte aplikáciu Watch na Apple Watch a nainštalujte Omi zo sekcie \"Dostupné aplikácie\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch úspešne pripojené!';
 
   @override
   String get appleWatchNotReachable =>
-      'Apple Watch stále nie je dostupné. Uistite sa, že aplikácia Nooto je na hodinkách otvorená.';
+      'Apple Watch stále nie je dostupné. Uistite sa, že aplikácia Omi je na hodinkách otvorená.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5270,7 +5269,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noSummary => 'Žiadny súhrn';
 
   @override
-  String get updateOmiFirmware => 'Aktualizovať firmvér nooto';
+  String get updateOmiFirmware => 'Aktualizovať firmvér omi';
 
   @override
   String get anErrorOccurredTryAgain => 'Vyskytla sa chyba. Skúste to znova.';
@@ -5279,7 +5278,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get welcomeBackSimple => 'Vitajte späť';
 
   @override
-  String get addVocabularyDescription => 'Pridajte slová, ktoré má Nooto rozpoznať počas prepisu.';
+  String get addVocabularyDescription => 'Pridajte slová, ktoré má Omi rozpoznať počas prepisu.';
 
   @override
   String get enterWordsCommaSeparated => 'Zadajte slová (oddelené čiarkou)';
@@ -5440,13 +5439,13 @@ class AppLocalizationsSk extends AppLocalizations {
   String get wrappedNoDataAvailable => 'Žiadne údaje nie sú k dispozícii';
 
   @override
-  String get wrappedOmiLifeRecap => 'Nooto zhrnutie života';
+  String get wrappedOmiLifeRecap => 'Omi zhrnutie života';
 
   @override
   String get wrappedSwipeUpToBegin => 'Potiahni nahor pre začiatok';
 
   @override
-  String get wrappedShareText => 'Môj 2025, zaznamenaný Nooto ✨ nooto.ai/wrapped';
+  String get wrappedShareText => 'Môj 2025, zaznamenaný Omi ✨ omi.me/wrapped';
 
   @override
   String get wrappedFailedToShare => 'Zdieľanie zlyhalo. Skúste to znova.';
@@ -5467,7 +5466,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get wrappedMy2025 => 'Môj 2025';
 
   @override
-  String get wrappedRememberedByOmi => 'zaznamenaný Nooto';
+  String get wrappedRememberedByOmi => 'zaznamenaný Omi';
 
   @override
   String get wrappedMostFunDay => 'Najzábavnejší';
@@ -5683,7 +5682,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get notificationFrequency => 'Frekvencia upozornení';
 
   @override
-  String get controlNotificationFrequency => 'Ovládajte, ako často vám Nooto posiela proaktívne oznámenia.';
+  String get controlNotificationFrequency => 'Ovládajte, ako často vám Omi posiela proaktívne oznámenia.';
 
   @override
   String get yourScore => 'Vaše skóre';
@@ -5709,7 +5708,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get notificationFrequencyDescription =>
-      'Ovládajte, ako často vám Nooto posiela proaktívne upozornenia a pripomienky.';
+      'Ovládajte, ako často vám Omi posiela proaktívne upozornenia a pripomienky.';
 
   @override
   String get sliderOff => 'Vyp.';
@@ -5947,7 +5946,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get noRecordings => 'Žiadne nahrávky';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio z vášho zariadenia Nooto sa zobrazí tu';
+  String get audioFromOmiWillAppearHere => 'Audio z vášho zariadenia Omi sa zobrazí tu';
 
   @override
   String get deleteProcessed => 'Odstrániť spracované';
@@ -6067,7 +6066,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get batteryUsageHigher => 'Spotreba batérie bude vyššia ako pri cloudovom prepise.';
 
   @override
-  String get considerOmiCloud => 'Zvážte použitie Nooto Cloud pre lepší výkon.';
+  String get considerOmiCloud => 'Zvážte použitie Omi Cloud pre lepší výkon.';
 
   @override
   String get highResourceUsage => 'Vysoká spotreba zdrojov';
@@ -6226,7 +6225,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Vstavaný živý prepis Nooto je optimalizovaný pre konverzácie v reálnom čase s automatickou detekciou rečníkov a diarizáciou.';
+      'Vstavaný živý prepis Omi je optimalizovaný pre konverzácie v reálnom čase s automatickou detekciou rečníkov a diarizáciou.';
 
   @override
   String get reset => 'Resetovať';
@@ -6320,7 +6319,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get setupQuestionProfession => 'Aká je vaša profesia?';
 
   @override
-  String get setupQuestionUsage => 'Kde budete Nooto najviac používať?';
+  String get setupQuestionUsage => 'Kde budete Omi najviac používať?';
 
   @override
   String get setupQuestionAge => 'Aký je váš vek?';
@@ -6548,10 +6547,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get getOmiDeviceDescription => 'Vytvorte presnejší klon s vašimi osobnými konverzáciami';
 
   @override
-  String get getOmi => 'Získať Nooto';
+  String get getOmi => 'Získať Omi';
 
   @override
-  String get iHaveOmiDevice => 'Mám zariadenie Nooto';
+  String get iHaveOmiDevice => 'Mám zariadenie Omi';
 
   @override
   String get goal => 'CIEĽ';
@@ -6849,13 +6848,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get fastTransferDescription =>
-      'Rýchly prenos používa WiFi pre ~5x rýchlejšie prenosy. Váš telefón sa dočasne pripojí k WiFi sieti zariadenia Nooto počas prenosu.';
+      'Rýchly prenos používa WiFi pre ~5x rýchlejšie prenosy. Váš telefón sa dočasne pripojí k WiFi sieti zariadenia Omi počas prenosu.';
 
   @override
   String get internetAccessPausedDuringTransfer => 'Prístup na internet je počas prenosu pozastavený';
 
   @override
-  String get chooseTransferMethodDescription => 'Zvoľte, ako sa nahrávky prenášajú zo zariadenia Nooto do telefónu.';
+  String get chooseTransferMethodDescription => 'Zvoľte, ako sa nahrávky prenášajú zo zariadenia Omi do telefónu.';
 
   @override
   String get wifiSpeed => '~150 KB/s cez WiFi';
@@ -6865,7 +6864,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get fastTransferMethodDescription =>
-      'Vytvorí priame WiFi pripojenie k zariadeniu Nooto. Telefón sa dočasne odpojí od bežnej WiFi počas prenosu.';
+      'Vytvorí priame WiFi pripojenie k zariadeniu Omi. Telefón sa dočasne odpojí od bežnej WiFi počas prenosu.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6890,18 +6889,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get lowBatteryAlertBody => 'Batéria vášho zariadenia je vybitá. Je čas ju nabiť! 🔋';
 
   @override
-  String get deviceDisconnectedNotificationTitle => 'Vaše zariadenie Nooto bolo odpojené';
+  String get deviceDisconnectedNotificationTitle => 'Vaše zariadenie Omi bolo odpojené';
 
   @override
   String get deviceDisconnectedNotificationBody =>
-      'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní Nooto.';
+      'Prosím, znova sa pripojte, aby ste mohli pokračovať v používaní Omi.';
 
   @override
   String get firmwareUpdateAvailable => 'K dispozícii je aktualizácia firmvéru';
 
   @override
   String firmwareUpdateAvailableDescription(String version) {
-    return 'Pre vaše zariadenie Nooto je k dispozícii nová aktualizácia firmvéru ($version). Chcete aktualizovať teraz?';
+    return 'Pre vaše zariadenie Omi je k dispozícii nová aktualizácia firmvéru ($version). Chcete aktualizovať teraz?';
   }
 
   @override
@@ -6939,7 +6938,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get almostDone => 'Almost done...';
 
   @override
-  String get omiSays => 'nooto says';
+  String get omiSays => 'omi says';
 
   @override
   String get analyzingYourData => 'Analyzujú sa vaše údaje';
@@ -7116,7 +7115,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get personaFailedToCreate => 'Nepodarilo sa vytvoriť personu';
 
   @override
-  String get personaConnectKnowledgeSource => 'Pripojte aspoň jeden zdroj dát (Nooto alebo Twitter)';
+  String get personaConnectKnowledgeSource => 'Pripojte aspoň jeden zdroj dát (Omi alebo Twitter)';
 
   @override
   String get personaUpdatedSuccessfully => 'Persona úspešne aktualizovaná';
@@ -7236,7 +7235,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get nextButton => 'Ďalej';
 
   @override
-  String get connectOmiDevice => 'Pripojiť zariadenie Nooto';
+  String get connectOmiDevice => 'Pripojiť zariadenie Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
@@ -7266,7 +7265,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcriptionJsonPlaceholder => 'Tu sa zobrazí JSON prepisu';
 
   @override
-  String get transcriptionSourceOmi => 'Nooto';
+  String get transcriptionSourceOmi => 'Omi';
 
   @override
   String get pricePlaceholder => '0.00';
@@ -7296,7 +7295,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dailyReflectionNotificationBody => 'Povedz mi o svojom dni';
 
   @override
-  String get actionItemReminderTitle => 'Pripomienka Nooto';
+  String get actionItemReminderTitle => 'Pripomienka Omi';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
@@ -7324,7 +7323,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingComplete => 'Hotovo';
 
   @override
-  String get onboardingWelcomeToOmi => 'Vitajte v Nooto';
+  String get onboardingWelcomeToOmi => 'Vitajte v Omi';
 
   @override
   String get onboardingTellUsAboutYourself => 'Povedzte nám niečo o sebe';
@@ -7981,52 +7980,22 @@ class AppLocalizationsSk extends AppLocalizations {
   String get couldNotOpenUrl => 'Nepodarilo sa otvoriť URL. Skúste to znova.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nová úloha';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Zobraziť všetko';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Pridať úlohu';
 
   @override
   String get addMcpServer => 'Add MCP Server';
 
   @override
-  String get appStore => 'App Store';
-
-  @override
-  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
-
-  @override
-  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
-
-  @override
-  String get authorizingMcpServer => 'Authorizing...';
-
-  @override
   String get connectExternalAiTools => 'Connect external AI tools';
 
   @override
-  String get coworker => 'Coworker';
-
-  @override
-  String get event => 'Event';
-
-  @override
-  String get friendWordOfMouth => 'Friend';
-
-  @override
-  String get googleSearch => 'Google Search';
-
-  @override
-  String get instagram => 'Instagram';
-
-  @override
-  String get linkedIn => 'LinkedIn';
-
-  @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
@@ -8034,7 +8003,31 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get mcpServerUrl => 'MCP Server URL';
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
 
   @override
   String get otherSource => 'Other';
@@ -8043,20 +8036,177 @@ class AppLocalizationsSk extends AppLocalizations {
   String get pleaseSpecify => 'Please specify';
 
   @override
-  String get reddit => 'Reddit';
+  String get event => 'Event';
 
   @override
-  String get tiktok => 'TikTok';
+  String get coworker => 'Coworker';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get linkedIn => 'LinkedIn';
 
   @override
-  String get xTwitter => 'X (Twitter)';
+  String get appStore => 'App Store';
 
   @override
-  String get youtube => 'YouTube';
+  String get googleSearch => 'Google Search';
 
   @override
-  String get officialTeamName => 'Nooto Team';
+  String get audioPlaybackUnavailable => 'Zvukový súbor nie je k dispozícii na prehrávanie';
+
+  @override
+  String get audioPlaybackFailed => 'Nie je možné prehrať zvuk. Súbor môže byť poškodený alebo chýba.';
+
+  @override
+  String get connectionGuide => 'Sprievodca pripojením';
+
+  @override
+  String get iveDoneThis => 'Urobil som to';
+
+  @override
+  String get pairNewDevice => 'Spárovať nové zariadenie';
+
+  @override
+  String get dontSeeYourDevice => 'Nevidíte svoje zariadenie?';
+
+  @override
+  String get reportAnIssue => 'Nahlásiť problém';
+
+  @override
+  String get pairingTitleOmi => 'Zapnite Omi';
+
+  @override
+  String get pairingDescOmi => 'Stlačte a podržte zariadenie, kým nezavibruje, pre zapnutie.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Prepnite Omi DevKit do režimu párovania';
+
+  @override
+  String get pairingDescOmiDevkit => 'Stlačte tlačidlo raz pre zapnutie. LED bude blikať fialovo v režime párovania.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Zapnite Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Stlačte a podržte bočné tlačidlo na 3 sekundy pre zapnutie.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Prepnite Plaud Note do režimu párovania';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Stlačte a podržte bočné tlačidlo na 2 sekundy. Červená LED začne blikať, keď bude pripravené na párovanie.';
+
+  @override
+  String get pairingTitleBee => 'Prepnite Bee do režimu párovania';
+
+  @override
+  String get pairingDescBee => 'Stlačte tlačidlo 5-krát za sebou. Svetlo začne blikať modro a zeleno.';
+
+  @override
+  String get pairingTitleLimitless => 'Prepnite Limitless do režimu párovania';
+
+  @override
+  String get pairingDescLimitless =>
+      'Keď svieti akékoľvek svetlo, stlačte raz a potom stlačte a podržte, kým zariadenie neukáže ružové svetlo, potom uvoľnite.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Prepnite Friend Pendant do režimu párovania';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Stlačte tlačidlo na prívesek pre zapnutie. Automaticky prejde do režimu párovania.';
+
+  @override
+  String get pairingTitleFieldy => 'Prepnite Fieldy do režimu párovania';
+
+  @override
+  String get pairingDescFieldy => 'Stlačte a podržte zariadenie, kým sa neobjaví svetlo, pre zapnutie.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Pripojte Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Nainštalujte a otvorte aplikáciu Omi na Apple Watch, potom klepnite na Pripojiť v aplikácii.';
+
+  @override
+  String get pairingTitleNeoOne => 'Prepnite Neo One do režimu párovania';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Stlačte a podržte tlačidlo napájania, kým LED nezačne blikať. Zariadenie bude viditeľné.';
+
+  @override
+  String get downloadingFromDevice => 'Sťahovanie zo zariadenia';
+
+  @override
+  String get reconnectingToInternet => 'Opätovné pripájanie k internetu...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Nahrávanie $current z $total';
+  }
+
+  @override
+  String get processedStatus => 'Spracované';
+
+  @override
+  String get corruptedStatus => 'Poškodené';
+
+  @override
+  String nPending(int count) {
+    return '$count čakajúcich';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count spracovaných';
+  }
+
+  @override
+  String get synced => 'Synchronizované';
+
+  @override
+  String get noPendingRecordings => 'Žiadne čakajúce nahrávky';
+
+  @override
+  String get noProcessedRecordings => 'Zatiaľ žiadne spracované nahrávky';
+
+  @override
+  String get pending => 'Čakajúce';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Čo je nové vo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridať do zoznamu úloh?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodarilo sa vytvoriť odkaz na zdieľanie';
+
+  @override
+  String get deleteGoal => 'Vymazať cieľ';
+
+  @override
+  String get deviceUpToDate => 'Vaše zariadenie je aktuálne';
+
+  @override
+  String get wifiConfiguration => 'Konfigurácia WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadajte prihlasovacie údaje WiFi, aby zariadenie mohlo stiahnuť firmvér.';
+
+  @override
+  String get networkNameSsid => 'Názov siete (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadajte názov WiFi siete';
+
+  @override
+  String get enterWifiPassword => 'Zadajte heslo WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

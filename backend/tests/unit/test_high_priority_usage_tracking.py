@@ -60,6 +60,7 @@ for submodule in [
 # Set needed attributes on db stubs
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.goals"].get_user_goal = MagicMock(return_value=None)
+sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
 sys.modules["database.goals"].update_goal_progress = MagicMock()
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
@@ -182,15 +183,15 @@ class TestGoalsTracking:
             return MagicMock(content="Focus on one thing at a time.")
 
         mock_llm_medium.invoke = capturing_invoke
-        sys.modules["database.goals"].get_user_goal = MagicMock(
-            return_value={
-                'id': 'goal-1',
-                'title': 'Read 20 books',
-                'current_value': 5,
-                'target_value': 20,
-                'goal_type': 'numeric',
-            }
-        )
+        _goal = {
+            'id': 'goal-1',
+            'title': 'Read 20 books',
+            'current_value': 5,
+            'target_value': 20,
+            'goal_type': 'numeric',
+        }
+        sys.modules["database.goals"].get_user_goal = MagicMock(return_value=_goal)
+        sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[_goal])
         try:
             from utils.llm.goals import get_goal_advice
 
@@ -213,15 +214,15 @@ class TestGoalsTracking:
             return MagicMock(content='{"found": false, "value": null, "reasoning": "no progress"}')
 
         mock_llm_mini.invoke = capturing_invoke
-        sys.modules["database.goals"].get_user_goal = MagicMock(
-            return_value={
-                'id': 'goal-1',
-                'title': 'Save $10000',
-                'current_value': 2000,
-                'target_value': 10000,
-                'goal_type': 'numeric',
-            }
-        )
+        _goal = {
+            'id': 'goal-1',
+            'title': 'Save $10000',
+            'current_value': 2000,
+            'target_value': 10000,
+            'goal_type': 'numeric',
+        }
+        sys.modules["database.goals"].get_user_goal = MagicMock(return_value=_goal)
+        sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[_goal])
         try:
             from utils.llm.goals import extract_and_update_goal_progress
 

@@ -1,0 +1,19 @@
+{
+  "name": "omi-agent-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node agent.mjs --serve",
+    "cli": "node agent.mjs",
+    "deploy": "bash scripts/deploy.sh",
+    "upload-db": "bash scripts/upload-db.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
+    "@playwright/mcp": "^0.0.64",
+    "better-sqlite3": "^11.0.0",
+    "ws": "^8.19.0",
+    "zod": "^4.0.0"
+  }
+}

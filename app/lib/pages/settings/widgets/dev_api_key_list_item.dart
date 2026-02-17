@@ -23,7 +23,7 @@ class DevApiKeyListItem extends StatelessWidget {
     final hasRead = scopes.any((s) => s.endsWith(':read'));
     final hasWrite = scopes.any((s) => s.endsWith(':write'));
 
-    if (hasRead && hasWrite && scopes.length == 6) {
+    if (hasRead && hasWrite && scopes.length == 8) {
       return [_buildChip(context.l10n.fullAccessScope, const Color(0xFF10B981))];
     }
 

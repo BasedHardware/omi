@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir fastapi uvicorn[standard] websockets starlette
+
+COPY mock_deps/ /app/mock_deps/
+COPY harness_main.py /app/
+# PUSHER_MODULE env var selects which pusher.py to use (set at docker run time)
+COPY pusher_vuln.py /app/
+COPY pusher_fixed.py /app/
+
+EXPOSE 8080
+
+CMD ["uvicorn", "harness_main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "warning"]
