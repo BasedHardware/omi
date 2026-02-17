@@ -8,6 +8,9 @@ extension UserDefaults {
     @objc dynamic var multiChatEnabled: Bool {
         return bool(forKey: "multiChatEnabled")
     }
+    @objc dynamic var playwrightUseExtension: Bool {
+        return bool(forKey: "playwrightUseExtension")
+    }
 }
 
 // MARK: - Chat Session Model
@@ -303,6 +306,7 @@ class ChatProvider: ObservableObject {
     private var bridgeStarted = false
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
+    private var playwrightExtensionObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -377,6 +381,30 @@ class ChatProvider: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor in
                     await self?.reinitialize()
+                }
+            }
+
+        // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
+        playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    guard !self.isSending else {
+                        log("ChatProvider: Skipping bridge restart — query in progress")
+                        return
+                    }
+                    guard self.bridgeStarted else { return }
+                    log("ChatProvider: Playwright extension setting changed, restarting bridge")
+                    self.bridgeStarted = false
+                    do {
+                        try await self.claudeBridge.restart()
+                        self.bridgeStarted = true
+                        log("ChatProvider: Bridge restarted with new Playwright settings")
+                    } catch {
+                        logError("Failed to restart bridge after Playwright setting change", error: error)
+                    }
                 }
             }
     }
