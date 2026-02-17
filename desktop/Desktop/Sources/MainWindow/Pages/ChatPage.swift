@@ -1167,6 +1167,7 @@ struct ChatHistoryPopover: View {
                                 HistorySessionRow(
                                     session: session,
                                     isSelected: chatProvider.currentSession?.id == session.id,
+                                    isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                                     onSelect: {
                                         Task {
                                             await chatProvider.selectSession(session)
@@ -1237,6 +1238,7 @@ struct ChatHistoryPopover: View {
 struct HistorySessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -1295,8 +1297,14 @@ struct HistorySessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Action buttons on hover
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 6) {
                         // Rename button
                         Button(action: startEditing) {
