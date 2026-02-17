@@ -1640,9 +1640,16 @@ struct SettingsContentView: View {
                             .toggleStyle(.switch)
                             .controlSize(.small)
                             .labelsHidden()
+                            .onChange(of: playwrightUseExtension) { _, enabled in
+                                if enabled {
+                                    ClaudeAgentBridge.ensureChromeExtensionInstalled()
+                                } else {
+                                    ClaudeAgentBridge.removeChromeExtensionPolicy()
+                                }
+                            }
                     }
 
-                    Text("Connect to your Chrome browser with all your logged-in sessions. When disabled, the AI opens a standalone browser instead.")
+                    Text("Connect to your Chrome browser with all your logged-in sessions. The extension is auto-installed via Chrome policy. When disabled, the AI opens a standalone browser instead.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
 
@@ -1655,7 +1662,7 @@ struct SettingsContentView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.up.right.square")
                                     .scaledFont(size: 12)
-                                Text("Install Chrome Extension")
+                                Text("View Chrome Extension")
                                     .scaledFont(size: 13)
                             }
                         }

@@ -101,11 +101,14 @@ actor ClaudeAgentBridge {
 
         // Playwright MCP extension mode
         let defaults = UserDefaults.standard
-        if defaults.object(forKey: "playwrightUseExtension") == nil || defaults.bool(forKey: "playwrightUseExtension") {
+        let useExtension = defaults.object(forKey: "playwrightUseExtension") == nil || defaults.bool(forKey: "playwrightUseExtension")
+        if useExtension {
             env["PLAYWRIGHT_USE_EXTENSION"] = "true"
             if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
                 env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
             }
+            // Auto-install the Chrome extension via policy
+            Self.ensureChromeExtensionInstalled()
         }
 
         proc.environment = env
@@ -498,6 +501,46 @@ actor ClaudeAgentBridge {
         }
 
         return nil
+    }
+
+    // MARK: - Chrome Extension Auto-Install
+
+    private static let playwrightExtensionId = "mmlmfjhmonkocbjadbfplnigmagldckm"
+    private static let chromeUpdateURL = "https://clients2.google.com/service/update2/crx"
+    private static let chromeDomain = "com.google.Chrome"
+
+    /// Auto-install the Playwright MCP Bridge Chrome extension via Chrome's ExtensionInstallForcelist policy.
+    /// Uses user-level preferences (recommended policy) — no admin privileges needed.
+    /// The extension is silently installed and enabled on next Chrome launch/policy refresh.
+    static func ensureChromeExtensionInstalled() {
+        let entry = "\(playwrightExtensionId);\(chromeUpdateURL)"
+        var prefs = UserDefaults.standard.persistentDomain(forName: chromeDomain) ?? [:]
+        var forcelist = prefs["ExtensionInstallForcelist"] as? [String] ?? []
+
+        guard !forcelist.contains(entry) else { return }
+
+        forcelist.append(entry)
+        prefs["ExtensionInstallForcelist"] = forcelist
+        UserDefaults.standard.setPersistentDomain(prefs, forName: chromeDomain)
+        log("ClaudeAgentBridge: Auto-installed Playwright MCP Bridge Chrome extension via policy")
+    }
+
+    /// Remove the Playwright MCP Bridge extension from Chrome's forcelist policy.
+    static func removeChromeExtensionPolicy() {
+        var prefs = UserDefaults.standard.persistentDomain(forName: chromeDomain) ?? [:]
+        guard var forcelist = prefs["ExtensionInstallForcelist"] as? [String] else { return }
+
+        let before = forcelist.count
+        forcelist.removeAll { $0.hasPrefix(playwrightExtensionId) }
+        guard forcelist.count != before else { return }
+
+        if forcelist.isEmpty {
+            prefs.removeValue(forKey: "ExtensionInstallForcelist")
+        } else {
+            prefs["ExtensionInstallForcelist"] = forcelist
+        }
+        UserDefaults.standard.setPersistentDomain(prefs, forName: chromeDomain)
+        log("ClaudeAgentBridge: Removed Playwright MCP Bridge Chrome extension policy")
     }
 }
 
