@@ -52,10 +52,9 @@ class GoalGenerationService {
     private func checkDailyGeneration() async {
         let lastDate = UserDefaults.standard.object(forKey: Self.kLastGenerationDate) as? Date
 
-        // First time: seed the date without generating
         if lastDate == nil {
-            UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
-            log("GoalGenerationService: Seeded last generation date")
+            log("GoalGenerationService: First run, generating immediately")
+            await generateGoalIfNeeded()
             return
         }
 

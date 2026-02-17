@@ -106,9 +106,9 @@ struct FloatingControlBarView: View {
     /// Minimal circle shown when not hovering
     private var compactCircleView: some View {
         Image(systemName: "waveform")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
-            .frame(width: 36, height: 36)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white.opacity(0.6))
+            .frame(width: 28, height: 28)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
