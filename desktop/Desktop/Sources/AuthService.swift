@@ -261,7 +261,7 @@ class AuthService {
 
             // Also try Firebase SDK sign-in (best effort for other Firebase features)
             do {
-                let credential = OAuthProvider.credential(withProviderID: "apple.com", idToken: identityToken, rawNonce: nonce)
+                let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
                 let authResult = try await Auth.auth().signIn(with: credential)
                 NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
             } catch let firebaseError as NSError {

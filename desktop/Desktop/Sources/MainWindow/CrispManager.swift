@@ -144,7 +144,7 @@ class CrispManager: ObservableObject {
             request.setValue(value, forHTTPHeaderField: key)
         }
 
-        let session = await api.session
+        let session = api.session
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
