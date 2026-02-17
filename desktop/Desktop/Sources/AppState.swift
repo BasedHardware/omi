@@ -457,8 +457,29 @@ class AppState: ObservableObject {
 
     /// Trigger screen recording permission prompt
     func triggerScreenRecordingPermission() {
-        // Request both traditional TCC and ScreenCaptureKit permissions
-        ScreenCaptureService.requestAllScreenCapturePermissions()
+        // First ensure Launch Services registration completes, then request access,
+        // then open System Settings after the app has been added to the TCC list.
+        ScreenCaptureService.ensureLaunchServicesRegistration()
+
+        // Small delay to let Launch Services registration complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list in System Settings
+            CGRequestScreenCaptureAccess()
+
+            // Request ScreenCaptureKit permission too (macOS 14+)
+            if #available(macOS 14.0, *) {
+                Task {
+                    _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
+                }
+            }
+
+            // Open System Settings after a brief delay so the app appears in the list
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if !CGPreflightScreenCaptureAccess() {
+                    ScreenCaptureService.openScreenRecordingPreferences()
+                }
+            }
+        }
     }
 
     /// Trigger automation permission by attempting to use Apple Events
