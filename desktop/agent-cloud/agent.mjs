@@ -19,6 +19,11 @@ const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
+// --- Idle auto-stop ---
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
+const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
+let lastActivityAt = Date.now();
+
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
   "screenshots", "action_items", "transcription_sessions",
@@ -416,6 +421,48 @@ function verifyAuth(req) {
 
 // --- Mode: WebSocket Server ---
 
+// --- Idle auto-stop: shut down VM after 30 min of no activity ---
+
+async function checkIdleAndStop() {
+  const idleMs = Date.now() - lastActivityAt;
+  if (idleMs < IDLE_TIMEOUT_MS) return;
+
+  log(`Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
+
+  try {
+    const metaHeaders = { "Metadata-Flavor": "Google" };
+    const name = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/name",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const zonePath = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/zone",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const token = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      { headers: metaHeaders },
+    )
+      .then((r) => r.json())
+      .then((d) => d.access_token);
+
+    const stopUrl = `https://compute.googleapis.com/compute/v1/${zonePath}/instances/${name}/stop`;
+    const resp = await fetch(stopUrl, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    log(`Stop request sent for ${name}: HTTP ${resp.status}`);
+  } catch (err) {
+    log(`GCE API stop failed: ${err.message} — trying shutdown command`);
+    const { execSync } = await import("child_process");
+    try {
+      execSync("sudo shutdown -h now");
+    } catch (e) {
+      log(`Shutdown command also failed: ${e.message}`);
+    }
+  }
+}
+
 function startServer() {
   const log = (msg) => console.log(`[server] ${msg}`);
 
@@ -632,6 +679,7 @@ function startServer() {
           // FTS is kept in sync by triggers on the content tables.
           // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
+          lastActivityAt = Date.now();
           log(`Sync: ${rows.length} rows → ${table}`);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: rows.length, table }));
@@ -753,7 +801,11 @@ function startServer() {
     log(`Health check: http://0.0.0.0:${PORT}/health`);
     log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
     log(`Sync:   POST http://0.0.0.0:${PORT}/sync`);
+    log(`Idle auto-stop: ${IDLE_TIMEOUT_MS / 60000} min timeout, checking every ${IDLE_CHECK_INTERVAL_MS / 60000} min`);
   });
+
+  // Start idle auto-stop checker
+  setInterval(checkIdleAndStop, IDLE_CHECK_INTERVAL_MS);
 }
 
 // --- Main ---
