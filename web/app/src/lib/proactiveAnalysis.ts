@@ -160,16 +160,20 @@ export async function analyzeFrame(options: AnalyzeFrameOptions): Promise<Advice
         }
 
         // Optional fields validation
-        if (result.advice !== undefined && typeof result.advice !== 'string') {
-            throw new Error('Invalid response: advice must be string if present');
-        }
-
-        if (result.confidence !== undefined && typeof result.confidence !== 'number') {
-            throw new Error('Invalid response: confidence must be number if present');
-        }
-
-        if (result.category !== undefined && typeof result.category !== 'string') {
-            throw new Error('Invalid response: category must be string if present');
+        if (result.has_advice) {
+            if (!result.advice || typeof result.advice !== 'object') {
+                throw new Error('Invalid response: advice object is missing or not an object');
+            }
+            const advice = result.advice as Record<string, any>;
+            if (typeof advice.advice !== 'string') {
+                throw new Error('Invalid response: advice.advice is not a string');
+            }
+            if (typeof advice.confidence !== 'number') {
+                throw new Error('Invalid response: advice.confidence is not a number');
+            }
+            if (typeof advice.category !== 'string') {
+                throw new Error('Invalid response: advice.category is not a string');
+            }
         }
 
         return result as AdviceExtractionResult;
