@@ -265,7 +265,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
 
         // Anchor from top so the control bar stays visually in place, input grows downward.
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedBarSize.width, height: 120)
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -274,7 +274,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isAILoading = false
             state.aiInputText = ""
             state.aiResponseText = ""
-            state.inputViewHeight = 100
+            // Match the explicit resize height so the observer doesn't immediately override it
+            state.inputViewHeight = 120
         }
         setupInputHeightObserver()
 
@@ -408,8 +409,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
-        // Use expanded bar width for AI input panels — only response view uses the wider expandedWidth
-        let width = FloatingControlBarWindow.expandedBarSize.width
+        let width = FloatingControlBarWindow.expandedWidth
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated, anchorTop: true)
