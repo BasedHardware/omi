@@ -380,6 +380,31 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
+    /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
+    func resizeForHover(expanded: Bool) {
+        guard !state.showingAIConversation, !state.isVoiceListening else { return }
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+
+        let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
+        let newOrigin = NSPoint(
+            x: frame.midX - targetSize.width / 2,
+            y: frame.midY - targetSize.height / 2
+        )
+
+        styleMask.remove(.resizable)
+        isResizingProgrammatically = true
+
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0.2
+        NSAnimationContext.current.allowsImplicitAnimation = false
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
+        NSAnimationContext.endGrouping()
+
+        self.isResizingProgrammatically = false
+    }
+
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
         let size = expanded

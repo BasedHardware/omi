@@ -54,13 +54,11 @@ struct FloatingControlBarView: View {
             }
         }
         .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.2)) {
                 isHovering = hovering
             }
-            // Drive window resize via state (only when bar is in compact mode)
-            if !state.showingAIConversation && !state.isVoiceListening {
-                state.isHoveringBar = hovering
-            }
+            // Resize window directly — no Combine delay so content and frame change together
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: hovering)
         }
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 14)
@@ -100,7 +98,6 @@ struct FloatingControlBarView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isHovering)
     }
 
     /// Minimal circle shown when not hovering

@@ -36,9 +36,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceFollowUp: Bool = false
     @Published var voiceFollowUpTranscript: String = ""
 
-    // Hover state for compact bar expansion
-    @Published var isHoveringBar: Bool = false
-
     // Model selection
     @Published var selectedModel: String = "claude-sonnet-4-5-20250929"
 
