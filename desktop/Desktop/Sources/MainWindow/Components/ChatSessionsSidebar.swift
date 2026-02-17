@@ -28,6 +28,39 @@ struct ChatSessionsSidebar: View {
             // Sessions list
             if chatProvider.isLoadingSessions {
                 loadingView
+            } else if let error = chatProvider.sessionsLoadError {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .scaledFont(size: 24)
+                        .foregroundColor(OmiColors.warning)
+
+                    Text("Failed to load chats")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text(error)
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+
+                    Button(action: {
+                        Task { await chatProvider.retryLoad() }
+                    }) {
+                        Text("Try Again")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.purplePrimary)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(16)
             } else if chatProvider.filteredSessions.isEmpty {
                 emptyStateView
             } else {

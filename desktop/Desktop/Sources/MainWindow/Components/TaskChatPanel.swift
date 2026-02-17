@@ -44,6 +44,8 @@ struct TaskChatPanel: View {
                     onRate: { messageId, rating in
                         Task { await chatProvider.rateMessage(messageId, rating: rating) }
                     },
+                    sessionsLoadError: chatProvider.sessionsLoadError,
+                    onRetry: { Task { await chatProvider.retryLoad() } },
                     welcomeContent: { taskWelcome }
                 )
 

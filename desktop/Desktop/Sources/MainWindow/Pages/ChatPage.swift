@@ -378,6 +378,8 @@ struct ChatPage: View {
             onCitationTap: { citation in
                 handleCitationTap(citation)
             },
+            sessionsLoadError: chatProvider.sessionsLoadError,
+            onRetry: { Task { await chatProvider.retryLoad() } },
             welcomeContent: { welcomeMessage }
         )
     }

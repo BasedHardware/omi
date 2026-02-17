@@ -13,6 +13,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     let onLoadMore: () async -> Void
     let onRate: (String, Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var sessionsLoadError: String? = nil
+    var onRetry: (() -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -75,7 +77,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                             .padding(.vertical, 8)
                         }
 
-                        if isLoadingInitial && messages.isEmpty {
+                        if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
                             VStack(spacing: 12) {
                                 Spacer()
                                 ProgressView()
@@ -86,6 +88,40 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                 Spacer()
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else if let error = sessionsLoadError, messages.isEmpty {
+                            VStack(spacing: 16) {
+                                Spacer()
+                                Image(systemName: "exclamationmark.triangle")
+                                    .scaledFont(size: 40)
+                                    .foregroundColor(OmiColors.warning)
+
+                                Text("Failed to load chats")
+                                    .scaledFont(size: 16, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+
+                                Text(error)
+                                    .scaledFont(size: 14)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .multilineTextAlignment(.center)
+
+                                if let onRetry {
+                                    Button(action: onRetry) {
+                                        Text("Try Again")
+                                            .scaledFont(size: 14, weight: .medium)
+                                            .foregroundColor(OmiColors.textPrimary)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(OmiColors.purplePrimary)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(32)
                         } else if messages.isEmpty {
                             welcomeContent()
                         } else {

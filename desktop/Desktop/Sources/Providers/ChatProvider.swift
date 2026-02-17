@@ -411,26 +411,40 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Session Management
 
-    /// Fetch all chat sessions for the current app
+    /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
     func fetchSessions() async {
         isLoadingSessions = true
         defer { isLoadingSessions = false }
 
-        do {
-            sessions = try await APIClient.shared.getChatSessions(
-                appId: selectedAppId,
-                starred: showStarredOnly ? true : nil
-            )
-            log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
 
-            // If we have sessions and no current session, select the most recent
-            if currentSession == nil, let mostRecent = sessions.first {
-                await selectSession(mostRecent)
+        for attempt in 1...maxAttempts {
+            do {
+                sessions = try await APIClient.shared.getChatSessions(
+                    appId: selectedAppId,
+                    starred: showStarredOnly ? true : nil
+                )
+                log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+                sessionsLoadError = nil
+
+                // If we have sessions and no current session, select the most recent
+                if currentSession == nil, let mostRecent = sessions.first {
+                    await selectSession(mostRecent)
+                }
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load chat sessions (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
             }
-        } catch {
-            logError("Failed to load chat sessions", error: error)
-            sessions = []
         }
+
+        sessions = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
     }
 
     /// Toggle the starred filter and reload sessions
@@ -1074,6 +1088,12 @@ class ChatProvider: ObservableObject {
         await initialize()
     }
 
+    /// Retry loading after a failure — clears error state and re-runs initialize
+    func retryLoad() async {
+        sessionsLoadError = nil
+        await initialize()
+    }
+
     // MARK: - CLAUDE.md & Skills Discovery
 
     /// Discover ~/.claude/CLAUDE.md and skills from ~/.claude/skills/
@@ -1159,25 +1179,40 @@ class ChatProvider: ObservableObject {
     }
 
     /// Load messages for the default chat (no session filter - compatible with Flutter)
+    /// Retries up to 3 times on failure.
     private func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
 
-        do {
-            let persistedMessages = try await APIClient.shared.getMessages(
-                appId: selectedAppId,
-                limit: messagesPageSize
-            )
-            messages = persistedMessages.map(ChatMessage.init(from:))
-                .sorted(by: { $0.createdAt < $1.createdAt })
-            hasMoreMessages = persistedMessages.count == messagesPageSize
-            log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
-        } catch {
-            logError("Failed to load default chat messages", error: error)
-            messages = []
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                let persistedMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize
+                )
+                messages = persistedMessages.map(ChatMessage.init(from:))
+                    .sorted(by: { $0.createdAt < $1.createdAt })
+                hasMoreMessages = persistedMessages.count == messagesPageSize
+                sessionsLoadError = nil
+                log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
+                isLoading = false
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load default chat messages (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
+            }
         }
 
+        messages = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
         isLoading = false
     }
 
