@@ -9,7 +9,7 @@ class AppLocalizationsLv extends AppLocalizations {
   AppLocalizationsLv([String locale = 'lv']) : super(locale);
 
   @override
-  String get appTitle => 'Omi';
+  String get appTitle => 'Nooto';
 
   @override
   String get conversationTab => 'Saruna';
@@ -122,7 +122,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get editPerson => 'Rediģēt personu';
 
   @override
-  String get createPersonHint => 'Izveidojiet jaunu personu un apmāciet Omi atpazīt arī viņu runu!';
+  String get createPersonHint => 'Izveidojiet jaunu personu un apmāciet Nooto atpazīt arī viņu runu!';
 
   @override
   String get speechProfile => 'Runas Profils';
@@ -161,7 +161,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get couldNotAccessFile => 'Nevarēja piekļūt atlasītajam failam';
 
   @override
-  String get askOmi => 'Jautāt Omi';
+  String get askOmi => 'Jautāt Nooto';
 
   @override
   String get done => 'Pabeigts';
@@ -262,7 +262,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noMessagesYet => 'Vēl nav ziņojumu!\nKāpēc nesākt sarunu?';
 
   @override
-  String get deletingMessages => 'Dzēš jūsu ziņojumus no Omi atmiņas...';
+  String get deletingMessages => 'Dzēš jūsu ziņojumus no Nooto atmiņas...';
 
   @override
   String get messageCopied => '✨ Ziņojums nokopēts starpliktuvē';
@@ -292,7 +292,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get maxFilesLimit => 'Vienlaikus var augšupielādēt tikai 4 failus';
 
   @override
-  String get chatWithOmi => 'Tērzēt ar Omi';
+  String get chatWithOmi => 'Tērzēt ar Nooto';
 
   @override
   String get apps => 'Lietotnes';
@@ -323,7 +323,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Nevar ielādēt lietotnes :(\n\nLūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.';
 
   @override
-  String get aboutOmi => 'Par Omi';
+  String get aboutOmi => 'Par Nooto';
 
   @override
   String get privacyPolicy => 'Privātuma politika';
@@ -438,7 +438,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get developerSettings => 'Izstrādātāja iestatījumi';
 
   @override
-  String get getOmiForMac => 'Iegūt Omi priekš Mac';
+  String get getOmiForMac => 'Iegūt Nooto priekš Mac';
 
   @override
   String get referralProgram => 'Ieteikšanas programma';
@@ -457,7 +457,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get privacyIntro =>
-      'Omi mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.';
+      'Nooto mēs esam apņēmušies aizsargāt jūsu privātumu. Šī lapa ļauj jums kontrolēt, kā jūsu dati tiek uzglabāti un izmantoti.';
 
   @override
   String get learnMore => 'Uzzināt vairāk...';
@@ -528,7 +528,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get unpairAndForget => 'Atpārošana un aizmirst ierīci';
 
   @override
-  String get deviceDisconnectedMessage => 'Jūsu Omi ir atvienots 😔';
+  String get deviceDisconnectedMessage => 'Jūsu Nooto ir atvienots 😔';
 
   @override
   String get deviceUnpairedMessage =>
@@ -545,7 +545,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceNotConnected => 'Ierīce nav savienota';
 
   @override
-  String get connectDeviceMessage => 'Savienojiet savu Omi ierīci, lai piekļūtu\nierīces iestatījumiem un pielāgošanai';
+  String get connectDeviceMessage =>
+      'Savienojiet savu Nooto ierīci, lai piekļūtu\nierīces iestatījumiem un pielāgošanai';
 
   @override
   String get deviceInfoSection => 'Ierīces informācija';
@@ -678,7 +679,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get docs => 'Dokumentācija';
 
   @override
-  String get yourOmiInsights => 'Jūsu Omi ieskati';
+  String get yourOmiInsights => 'Jūsu Nooto ieskati';
 
   @override
   String get today => 'Šodien';
@@ -696,13 +697,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noActivityYet => 'Vēl nav aktivitātes';
 
   @override
-  String get startConversationToSeeInsights => 'Sāciet sarunu ar Omi,\nlai šeit redzētu lietošanas statistiku.';
+  String get startConversationToSeeInsights => 'Sāciet sarunu ar Nooto,\nlai šeit redzētu lietošanas statistiku.';
 
   @override
   String get listening => 'Klausās';
 
   @override
-  String get listeningSubtitle => 'Kopējais laiks, ko Omi aktīvi klausījies.';
+  String get listeningSubtitle => 'Kopējais laiks, ko Nooto aktīvi klausījies.';
 
   @override
   String get understanding => 'Saprot';
@@ -758,7 +759,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get shareStatsMessage => 'Dalījums ar manu Omi statistiku! (omi.me - jūsu vienmēr ieslēgtais AI asistents)';
+  String get shareStatsMessage => 'Dalījums ar manu Nooto statistiku! (omi.me - jūsu vienmēr ieslēgtais AI asistents)';
 
   @override
   String get sharePeriodToday => 'Šodien omi ir:';
@@ -805,7 +806,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noLogFilesFound => 'Nav atrasts neviens žurnāla fails.';
 
   @override
-  String get omiDebugLog => 'Omi atkļūdošanas žurnāls';
+  String get omiDebugLog => 'Nooto atkļūdošanas žurnāls';
 
   @override
   String get logShared => 'Žurnāls kopīgots';
@@ -829,7 +830,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get exportDataDesc => 'Eksportēt sarunas uz JSON failu';
 
   @override
-  String get exportedConversations => 'Eksportētās sarunas no Omi';
+  String get exportedConversations => 'Eksportētās sarunas no Nooto';
 
   @override
   String get exportShared => 'Eksports kopīgots';
@@ -1011,7 +1012,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get addWordsDesc => 'Vārdi, termini vai netipiski vārdi';
 
   @override
-  String get vocabularyHint => 'Omi, Callie, OpenAI';
+  String get vocabularyHint => 'Nooto, Callie, OpenAI';
 
   @override
   String get connect => 'Connect';
@@ -1056,7 +1057,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String authAccessMessage(String appName) {
-    return 'Jums būs jāautorizē Omi piekļuvei jūsu $appName datiem. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.';
+    return 'Jums būs jāautorizē Nooto piekļuvei jūsu $appName datiem. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.';
   }
 
   @override
@@ -1152,7 +1153,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get editName => 'Rediģēt vārdu';
 
   @override
-  String get howShouldOmiCallYou => 'Kā Omi jums vajadzētu uzrunāt?';
+  String get howShouldOmiCallYou => 'Kā Nooto jums vajadzētu uzrunāt?';
 
   @override
   String get enterYourName => 'Ievadiet savu vārdu';
@@ -1424,7 +1425,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Jums būs jāautorizē Omi, lai izveidotu uzdevumus jūsu $appName kontā. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.';
+    return 'Jums būs jāautorizē Nooto, lai izveidotu uzdevumus jūsu $appName kontā. Tas atvērs jūsu pārlūkprogrammu autentifikācijai.';
   }
 
   @override
@@ -1465,7 +1466,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get freeMinutesMonth => '1200 bezmaksas minūtes/mēnesī iekļautas. Neierobežots ar ';
 
   @override
-  String get omiUnlimited => 'Omi Neierobežots';
+  String get omiUnlimited => 'Nooto Neierobežots';
 
   @override
   String get hostRequired => 'Resursdators ir nepieciešams';
@@ -1583,11 +1584,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device izmanto $reason. Tiks izmantots Omi.';
+    return '$device izmanto $reason. Tiks izmantots Nooto.';
   }
 
   @override
-  String get omiTranscription => 'Omi transkripcija';
+  String get omiTranscription => 'Nooto transkripcija';
 
   @override
   String get bestInClassTranscription => 'Labākā klases transkripcija ar nulli iestatījumiem';
@@ -1739,7 +1740,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get bluetoothNeeded =>
-      'Omi nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.';
+      'Nooto nepieciešams Bluetooth, lai savienotos ar jūsu valkājamo ierīci. Lūdzu, iespējojiet Bluetooth un mēģiniet vēlreiz.';
 
   @override
   String get contactSupport => 'Sazināties ar atbalstu?';
@@ -1754,7 +1755,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get backgroundActivity => 'Fona aktivitāte';
 
   @override
-  String get backgroundActivityDesc => 'Ļaujiet Omi darboties fonā labākai stabilitātei';
+  String get backgroundActivityDesc => 'Ļaujiet Nooto darboties fonā labākai stabilitātei';
 
   @override
   String get locationAccess => 'Atrašanās vietas piekļuve';
@@ -1783,7 +1784,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Lūdzu, dodieties uz ierīces iestatījumiem un iestatiet atrašanās vietas atļauju uz \"Vienmēr atļaut\"';
 
   @override
-  String get lovingOmi => 'Patīk Omi?';
+  String get lovingOmi => 'Patīk Nooto?';
 
   @override
   String get leaveReviewIos =>
@@ -1803,7 +1804,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get maybeLater => 'Varbūt vēlāk';
 
   @override
-  String get speechProfileIntro => 'Omi ir jāapgūst jūsu mērķi un balss. Vēlāk varēsiet to mainīt.';
+  String get speechProfileIntro => 'Nooto ir jāapgūst jūsu mērķi un balss. Vēlāk varēsiet to mainīt.';
 
   @override
   String get getStarted => 'Sākt';
@@ -1858,7 +1859,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get tryAgain => 'Mēģināt vēlreiz';
 
   @override
-  String get connectOmiOmiGlass => 'Savienot Omi / OmiGlass';
+  String get connectOmiOmiGlass => 'Savienot Nooto / NootoGlass';
 
   @override
   String get continueWithoutDevice => 'Turpināt bez ierīces';
@@ -1895,7 +1896,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get termsOfUse => 'Lietošanas noteikumi';
 
   @override
-  String get omiYourAiCompanion => 'Omi – jūsu AI pavadonis';
+  String get omiYourAiCompanion => 'Nooto – jūsu AI pavadonis';
 
   @override
   String get captureEveryMoment =>
@@ -1912,7 +1913,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get permissionGrantedNow =>
-      'Atļauja piešķirta! Tagad:\n\nAtveriet Omi lietotni savā pulkstenī un piespiediet \"Turpināt\" zemāk';
+      'Atļauja piešķirta! Tagad:\n\nAtveriet Nooto lietotni savā pulkstenī un piespiediet \"Turpināt\" zemāk';
 
   @override
   String get needMicrophonePermission =>
@@ -1926,7 +1927,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get troubleshootingSteps =>
-      'Problēmu novēršana:\n\n1. Pārliecinieties, ka Omi ir instalēts jūsu pulkstenī\n2. Atveriet Omi lietotni savā pulkstenī\n3. Meklējiet atļaujas uznirstošo logu\n4. Piespiediet \"Atļaut\", kad tiek piedāvāts\n5. Lietotne jūsu pulkstenī aizvērsies - atkārtoti atveriet to\n6. Atgriezieties un piespiediet \"Turpināt\" savā iPhone';
+      'Problēmu novēršana:\n\n1. Pārliecinieties, ka Nooto ir instalēts jūsu pulkstenī\n2. Atveriet Nooto lietotni savā pulkstenī\n3. Meklējiet atļaujas uznirstošo logu\n4. Piespiediet \"Atļaut\", kad tiek piedāvāts\n5. Lietotne jūsu pulkstenī aizvērsies - atkārtoti atveriet to\n6. Atgriezieties un piespiediet \"Turpināt\" savā iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Ierakstīšana veiksmīgi sākta!';
@@ -2079,16 +2080,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get addFirstMemory => 'Pievienot savu pirmo atmiņu';
 
   @override
-  String get clearMemoryTitle => 'Notīrīt Omi atmiņu';
+  String get clearMemoryTitle => 'Notīrīt Nooto atmiņu';
 
   @override
-  String get clearMemoryMessage => 'Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt.';
+  String get clearMemoryMessage => 'Vai tiešām vēlaties notīrīt Nooto atmiņu? Šo darbību nevar atsaukt.';
 
   @override
   String get clearMemoryButton => 'Notīrīt atmiņu';
 
   @override
-  String get memoryClearedSuccess => 'Omi atmiņa par jums ir notīrīta';
+  String get memoryClearedSuccess => 'Nooto atmiņa par jums ir notīrīta';
 
   @override
   String get noMemoriesToDelete => 'Nav atmiņu dzēšanai';
@@ -2236,7 +2237,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get translationNoticeMessage =>
-      'Omi tulko sarunas jūsu galvenajā valodā. Atjauniniet to jebkurā laikā sadaļā Iestatījumi → Profili.';
+      'Nooto tulko sarunas jūsu galvenajā valodā. Atjauniniet to jebkurā laikā sadaļā Iestatījumi → Profili.';
 
   @override
   String get pleaseCheckInternetConnection => 'Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz';
@@ -2416,7 +2417,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get privacyPolicyTitle => 'Privātuma politika';
 
   @override
-  String get omiSttProvider => 'Omi';
+  String get omiSttProvider => 'Nooto';
 
   @override
   String labelCopied(String label) {
@@ -2573,7 +2574,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get checksForAudioFiles => 'Pārbauda audio failus SD kartē';
 
   @override
-  String get omiSyncsAudioFiles => 'Omi pēc tam sinhronizē audio failus ar serveri';
+  String get omiSyncsAudioFiles => 'Nooto pēc tam sinhronizē audio failus ar serveri';
 
   @override
   String get serverProcessesAudio => 'Serveris apstrādā audio failus un izveido atmiņas';
@@ -2583,10 +2584,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get welcomeToOmiDescription =>
-      'Laipni lūdzam Omi! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.';
+      'Laipni lūdzam Nooto! Jūsu AI kompanjons ir gatavs palīdzēt jums sarunās, uzdevumos un vēl daudz ko.';
 
   @override
-  String get startUsingOmi => 'Sākt izmantot Omi';
+  String get startUsingOmi => 'Sākt izmantot Nooto';
 
   @override
   String get back => 'Atpakaļ';
@@ -2662,7 +2663,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewAndManageConversations => 'Pārskatiet un pārvaldiet ierakstītās sarunas';
 
   @override
-  String get startCapturingConversations => 'Sāciet iegūt sarunas ar savu Omi ierīci, lai tās redzētu šeit.';
+  String get startCapturingConversations => 'Sāciet iegūt sarunas ar savu Nooto ierīci, lai tās redzētu šeit.';
 
   @override
   String get useMobileAppToCapture => 'Izmantojiet mobilo lietotni, lai ierakstītu audio';
@@ -2678,7 +2679,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
+      'Šodien nav uzdevumu.\\nJautājiet Nooto par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
   String get dailyScore => 'DIENAS REZULTĀTS';
@@ -2826,7 +2827,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get createNewApp => 'Izveidot jaunu lietotni';
 
   @override
-  String get buildSubmitCustomOmiApp => 'Izveidojiet un iesniedziet savu pielāgoto Omi lietotni';
+  String get buildSubmitCustomOmiApp => 'Izveidojiet un iesniedziet savu pielāgoto Nooto lietotni';
 
   @override
   String get submittingYourApp => 'Jūsu lietotne tiek iesniegta...';
@@ -2874,7 +2875,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get submitAppTermsAgreement =>
-      'Iesniedzot šo lietotni, es piekrītu Omi AI pakalpojumu sniegšanas noteikumiem un privātuma politikai';
+      'Iesniedzot šo lietotni, es piekrītu Nooto AI pakalpojumu sniegšanas noteikumiem un privātuma politikai';
 
   @override
   String get submitApp => 'Iesniegt lietotni';
@@ -2919,7 +2920,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dataAccessWarning =>
-      'Šī lietotne piekļūs jūsu datiem. Omi AI nav atbildīgs par to, kā šī lietotne izmanto, modificē vai dzēš jūsu datus';
+      'Šī lietotne piekļūs jūsu datiem. Nooto AI nav atbildīgs par to, kā šī lietotne izmanto, modificē vai dzēš jūsu datus';
 
   @override
   String get installApp => 'Instalēt lietotni';
@@ -3270,7 +3271,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get upgradeToPro => 'Jaunināt uz Pro';
 
   @override
-  String get getOmiDevice => 'Iegūt Omi ierīci';
+  String get getOmiDevice => 'Iegūt Nooto ierīci';
 
   @override
   String get wearableAiCompanion => 'Valkājams AI palīgs';
@@ -3336,7 +3337,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get setAllMemoriesToPublic => 'Iestatīt visas atmiņas kā publiskas';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Neatgriezeniski noņemt visas atmiņas no Omi';
+  String get permanentlyRemoveAllMemories => 'Neatgriezeniski noņemt visas atmiņas no Nooto';
 
   @override
   String get allMemoriesAreNowPrivate => 'Visas atmiņas tagad ir privātas';
@@ -3345,18 +3346,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get allMemoriesAreNowPublic => 'Visas atmiņas tagad ir publiskas';
 
   @override
-  String get clearOmisMemory => 'Notīrīt Omi atmiņu';
+  String get clearOmisMemory => 'Notīrīt Nooto atmiņu';
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Vai tiešām vēlaties notīrīt Omi atmiņu? Šo darbību nevar atsaukt un tā neatgriezeniski dzēsīs visas $count atmiņas.';
+    return 'Vai tiešām vēlaties notīrīt Nooto atmiņu? Šo darbību nevar atsaukt un tā neatgriezeniski dzēsīs visas $count atmiņas.';
   }
 
   @override
-  String get omisMemoryCleared => 'Omi atmiņa par jums ir notīrīta';
+  String get omisMemoryCleared => 'Nooto atmiņa par jums ir notīrīta';
 
   @override
-  String get welcomeToOmi => 'Laipni lūdzam Omi';
+  String get welcomeToOmi => 'Laipni lūdzam Nooto';
 
   @override
   String get continueWithApple => 'Turpināt ar Apple';
@@ -3402,7 +3403,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chooseYourLanguage => 'Izvēlieties savu valodu';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'Izvēlieties vēlamo valodu labākajai Omi pieredzei';
+  String get selectPreferredLanguageForBestExperience => 'Izvēlieties vēlamo valodu labākajai Nooto pieredzei';
 
   @override
   String get searchLanguages => 'Meklēt valodas...';
@@ -3421,7 +3422,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tellUsHowYouWouldLikeToBeAddressed =>
-      'Pastāstiet mums, kā jūs vēlētos, lai jūs uzrunātu. Tas palīdz personalizēt jūsu Omi pieredzi.';
+      'Pastāstiet mums, kā jūs vēlētos, lai jūs uzrunātu. Tas palīdz personalizēt jūsu Nooto pieredzi.';
 
   @override
   String charactersCount(int count) {
@@ -3429,7 +3430,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get enableFeaturesForBestExperience => 'Iespējojiet funkcijas labākajai Omi pieredzei jūsu ierīcē.';
+  String get enableFeaturesForBestExperience => 'Iespējojiet funkcijas labākajai Nooto pieredzei jūsu ierīcē.';
 
   @override
   String get microphoneAccess => 'Mikrofona piekļuve';
@@ -3439,7 +3440,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get microphoneAccessDescription =>
-      'Omi nepieciešama mikrofona piekļuve, lai ierakstītu jūsu sarunas un nodrošinātu transkripcijas.';
+      'Nooto nepieciešama mikrofona piekļuve, lai ierakstītu jūsu sarunas un nodrošinātu transkripcijas.';
 
   @override
   String get screenRecording => 'Ekrāna ierakstīšana';
@@ -3449,7 +3450,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get screenRecordingDescription =>
-      'Omi nepieciešama ekrāna ierakstīšanas atļauja, lai uzņemtu sistēmas audio no jūsu pārlūkprogrammā balstītajām sapulcēm.';
+      'Nooto nepieciešama ekrāna ierakstīšanas atļauja, lai uzņemtu sistēmas audio no jūsu pārlūkprogrammā balstītajām sapulcēm.';
 
   @override
   String get accessibility => 'Pieejamība';
@@ -3459,7 +3460,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get accessibilityDescription =>
-      'Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.';
+      'Nooto nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.';
 
   @override
   String get pleaseWait => 'Lūdzu, uzgaidiet...';
@@ -3489,16 +3490,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get changeYourName => 'Mainīt savu vārdu';
 
   @override
-  String get manageYourOmiPersona => 'Pārvaldīt savu Omi personu';
+  String get manageYourOmiPersona => 'Pārvaldīt savu Nooto personu';
 
   @override
   String get voiceAndPeople => 'Balss un Cilvēki';
 
   @override
-  String get teachOmiYourVoice => 'Iemāciet Omi savu balsi';
+  String get teachOmiYourVoice => 'Iemāciet Nooto savu balsi';
 
   @override
-  String get tellOmiWhoSaidIt => 'Pastāstiet Omi, kas to teica 🗣️';
+  String get tellOmiWhoSaidIt => 'Pastāstiet Nooto, kas to teica 🗣️';
 
   @override
   String get payment => 'Maksājums';
@@ -3510,7 +3511,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get preferences => 'Iestatījumi';
 
   @override
-  String get helpImproveOmiBySharing => 'Palīdziet uzlabot Omi, daloties ar anonimizētiem analīzes datiem';
+  String get helpImproveOmiBySharing => 'Palīdziet uzlabot Nooto, daloties ar anonimizētiem analīzes datiem';
 
   @override
   String get deleteAccount => 'Dzēst Kontu';
@@ -3536,7 +3537,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get mcpDescription =>
-      'Lai savienotu Omi ar citām lietojumprogrammām, lai lasītu, meklētu un pārvaldītu savas atmiņas un sarunas. Izveidojiet atslēgu, lai sāktu.';
+      'Lai savienotu Nooto ar citām lietojumprogrammām, lai lasītu, meklētu un pārvaldītu savas atmiņas un sarunas. Izveidojiet atslēgu, lai sāktu.';
 
   @override
   String get apiKeys => 'API atslēgas';
@@ -3571,7 +3572,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get triggersWhenDaySummaryGenerated => 'Tiek aktivizēts, kad tiek ģenerēts dienas kopsavilkums.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'Izmēģiniet jaunākās Omi komandas eksperimentālās funkcijas.';
+  String get tryLatestExperimentalFeatures => 'Izmēģiniet jaunākās Nooto komandas eksperimentālās funkcijas.';
 
   @override
   String get transcriptionServiceDiagnosticStatus => 'Transkribēšanas pakalpojuma diagnostikas statuss';
@@ -3643,7 +3644,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'Ļaujiet Omi automātiski izvēlēties labāko lietotni';
+  String get letOmiChooseAutomatically => 'Ļaujiet Nooto automātiski izvēlēties labāko lietotni';
 
   @override
   String get deleteConversationConfirmation => 'Vai tiešām vēlaties dzēst šo sarunu? Šo darbību nevar atsaukt.';
@@ -3841,7 +3842,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get customVocabularyHeader => 'PIELĀGOTS VĀRDNĪCA';
 
   @override
-  String get addWordsDescription => 'Pievienojiet vārdus, kurus Omi vajadzētu atpazīt transkripcijas laikā.';
+  String get addWordsDescription => 'Pievienojiet vārdus, kurus Nooto vajadzētu atpazīt transkripcijas laikā.';
 
   @override
   String get enterWordsHint => 'Ievadiet vārdus (atdalīti ar komatu)';
@@ -3929,7 +3930,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Tas izdzēsīs visus atvasinātos zināšanu grafa datus. Jūsu sākotnējās atmiņas paliks drošībā.';
 
   @override
-  String get connectOmiWithAI => 'Savienojiet Omi ar AI asistentiem';
+  String get connectOmiWithAI => 'Savienojiet Nooto ar AI asistentiem';
 
   @override
   String get noAPIKeys => 'Nav API atslēgu. Izveidojiet vienu, lai sāktu.';
@@ -3966,7 +3967,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get holdOnPreparingForm => 'Uzgaidiet, mēs sagatavojam veidlapu jums';
 
   @override
-  String get bySubmittingYouAgreeToOmi => 'Iesniedzot, jūs piekrītat Omi ';
+  String get bySubmittingYouAgreeToOmi => 'Iesniedzot, jūs piekrītat Nooto ';
 
   @override
   String get termsAndPrivacyPolicy => 'Noteikumi un Privātuma Politika';
@@ -4129,7 +4130,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'Šī lietotne piekļūs jūsu datiem. Omi AI nav atbildīgs par to, kā jūsu datus izmanto, modificē vai dzēš šī lietotne';
+      'Šī lietotne piekļūs jūsu datiem. Nooto AI nav atbildīgs par to, kā jūsu datus izmanto, modificē vai dzēš šī lietotne';
 
   @override
   String get copyUrl => 'Kopēt URL';
@@ -4214,14 +4215,14 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get omiApiKeys => 'Omi API atslēgas';
+  String get omiApiKeys => 'Nooto API atslēgas';
 
   @override
   String get apiKeysDescription =>
       'API atslēgas izmanto autentifikācijai, kad jūsu lietotne sazinās ar OMI serveri. Tās ļauj jūsu lietojumprogrammai droši izveidot atmiņas un piekļūt citiem OMI pakalpojumiem.';
 
   @override
-  String get aboutOmiApiKeys => 'Par Omi API atslēgām';
+  String get aboutOmiApiKeys => 'Par Nooto API atslēgām';
 
   @override
   String get yourNewKey => 'Jūsu jaunā atslēga:';
@@ -4365,7 +4366,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get e2eeDescription =>
-      'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Omi, nevar piekļūt jūsu saturam.';
+      'Pilnīga šifrēšana ir privātuma zelta standarts. Kad tā ir iespējota, jūsu dati tiek šifrēti jūsu ierīcē pirms nosūtīšanas uz mūsu serveriem. Tas nozīmē, ka neviens, pat ne Nooto, nevar piekļūt jūsu saturam.';
 
   @override
   String get importantTradeoffs => 'Svarīgi kompromisi:';
@@ -4401,7 +4402,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get secureEncryptionDescription =>
-      'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Omi darbiniekus vai Google, tieši no datu bāzes.';
+      'Jūsu dati tiek šifrēti ar jums unikālu atslēgu mūsu serveros, kas mitināti Google Cloud. Tas nozīmē, ka jūsu neapstrādātais saturs nav pieejams nevienam, ieskaitot Nooto darbiniekus vai Google, tieši no datu bāzes.';
 
   @override
   String get endToEndEncryption => 'Pilnīga šifrēšana';
@@ -4471,13 +4472,13 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Omi Apmācība';
+  String get omiTraining => 'Nooto Apmācība';
 
   @override
   String get trainingDataProgram => 'Apmācības datu programma';
 
   @override
-  String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
+  String get getOmiUnlimitedFree => 'Iegūstiet Nooto Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
 
   @override
   String get trainingDataBullets =>
@@ -4563,7 +4564,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Jūs esat Neierobežotajā plānā.';
 
   @override
-  String get yourOmiUnleashed => 'Jūsu Omi, atbrīvots. Kļūstiet neierobežots bezgalīgām iespējām.';
+  String get yourOmiUnleashed => 'Jūsu Nooto, atbrīvots. Kļūstiet neierobežots bezgalīgām iespējām.';
 
   @override
   String planEndedOn(String date) {
@@ -4587,10 +4588,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get unlimitedConversations => 'Neierobežotas sarunas';
 
   @override
-  String get askOmiAnything => 'Jautājiet Omi jebko par savu dzīvi';
+  String get askOmiAnything => 'Jautājiet Nooto jebko par savu dzīvi';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Atbloķējiet Omi bezgalīgo atmiņu';
+  String get unlockOmiInfiniteMemory => 'Atbloķējiet Nooto bezgalīgo atmiņu';
 
   @override
   String get youreOnAnnualPlan => 'Jūs esat gada plānā';
@@ -4644,7 +4645,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get privacyIntroText =>
-      'Omi mēs ļoti nopietni uztveram jūsu privātumu. Mēs vēlamies būt caurspīdīgi par datiem, ko apkopojam un kā tos izmantojam. Lūk, kas jums jāzina:';
+      'Nooto mēs ļoti nopietni uztveram jūsu privātumu. Mēs vēlamies būt caurspīdīgi par datiem, ko apkopojam un kā tos izmantojam. Lūk, kas jums jāzina:';
 
   @override
   String get whatWeTrack => 'Ko mēs izsekojam';
@@ -4660,11 +4661,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get commitmentText =>
-      'Mēs esam apņēmušies izmantot apkopotos datus tikai, lai padarītu Omi par labāku produktu jums. Jūsu privātums un uzticība mums ir vissvarīgākā.';
+      'Mēs esam apņēmušies izmantot apkopotos datus tikai, lai padarītu Nooto par labāku produktu jums. Jūsu privātums un uzticība mums ir vissvarīgākā.';
 
   @override
   String get thankYouText =>
-      'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
+      'Paldies, ka esat vērtīgs Nooto lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'WiFi sinhronizācijas iestatījumi';
@@ -4776,7 +4777,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get minutes => 'minūtes';
 
   @override
-  String get omiHas => 'Omi ir:';
+  String get omiHas => 'Nooto ir:';
 
   @override
   String get premiumMinutesUsed => 'Premium minūtes izmantotas.';
@@ -4869,7 +4870,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get howPeopleWorks =>
-      'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Omi varēs atpazīt arī viņu runu!';
+      'Kad persona ir izveidota, varat doties uz sarunas transkripciju un piešķirt viņiem atbilstošos segmentus, tādā veidā Nooto varēs atpazīt arī viņu runu!';
 
   @override
   String get tapToDelete => 'Pieskarieties, lai dzēstu';
@@ -5149,7 +5150,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get enableApps => 'Iespējot lietotnes';
 
   @override
-  String get omiAppName => 'Omi';
+  String get omiAppName => 'Nooto';
 
   @override
   String get showMore => 'rādīt vairāk ↓';
@@ -5173,18 +5174,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get checkingAppleWatch => 'Pārbauda Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Instalējiet Omi savā\nApple Watch';
+  String get installOmiOnAppleWatch => 'Instalējiet Nooto savā\nApple Watch';
 
   @override
   String get installOmiOnAppleWatchDescription =>
-      'Lai izmantotu Apple Watch ar Omi, vispirms jāinstalē Omi lietotne pulkstenī.';
+      'Lai izmantotu Apple Watch ar Nooto, vispirms jāinstalē Nooto lietotne pulkstenī.';
 
   @override
-  String get openOmiOnAppleWatch => 'Atveriet Omi savā\nApple Watch';
+  String get openOmiOnAppleWatch => 'Atveriet Nooto savā\nApple Watch';
 
   @override
   String get openOmiOnAppleWatchDescription =>
-      'Omi lietotne ir instalēta jūsu Apple Watch. Atveriet to un pieskarieties Sākt.';
+      'Nooto lietotne ir instalēta jūsu Apple Watch. Atveriet to un pieskarieties Sākt.';
 
   @override
   String get openWatchApp => 'Atvērt Watch lietotni';
@@ -5194,14 +5195,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get unableToOpenWatchApp =>
-      'Nevar atvērt Apple Watch lietotni. Lūdzu, manuāli atveriet Watch lietotni savā Apple Watch un instalējiet Omi no sadaļas \"Pieejamās lietotnes\".';
+      'Nevar atvērt Apple Watch lietotni. Lūdzu, manuāli atveriet Watch lietotni savā Apple Watch un instalējiet Nooto no sadaļas \"Pieejamās lietotnes\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch veiksmīgi savienots!';
 
   @override
   String get appleWatchNotReachable =>
-      'Apple Watch joprojām nav sasniedzams. Lūdzu, pārliecinieties, ka Omi lietotne ir atvērta jūsu pulkstenī.';
+      'Apple Watch joprojām nav sasniedzams. Lūdzu, pārliecinieties, ka Nooto lietotne ir atvērta jūsu pulkstenī.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5288,7 +5289,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get welcomeBackSimple => 'Laipni lūdzam atpakaļ';
 
   @override
-  String get addVocabularyDescription => 'Pievienojiet vārdus, ko Omi vajadzētu atpazīt transkripcijas laikā.';
+  String get addVocabularyDescription => 'Pievienojiet vārdus, ko Nooto vajadzētu atpazīt transkripcijas laikā.';
 
   @override
   String get enterWordsCommaSeparated => 'Ievadiet vārdus (atdalītus ar komatiem)';
@@ -5449,13 +5450,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get wrappedNoDataAvailable => 'Nav pieejamu datu';
 
   @override
-  String get wrappedOmiLifeRecap => 'Omi dzīves kopsavilkums';
+  String get wrappedOmiLifeRecap => 'Nooto dzīves kopsavilkums';
 
   @override
   String get wrappedSwipeUpToBegin => 'Velciet uz augšu, lai sāktu';
 
   @override
-  String get wrappedShareText => 'Mans 2025, atcerējies Omi ✨ omi.me/wrapped';
+  String get wrappedShareText => 'Mans 2025, atcerējies Nooto ✨ omi.me/wrapped';
 
   @override
   String get wrappedFailedToShare => 'Kopīgošana neizdevās. Lūdzu, mēģiniet vēlreiz.';
@@ -5476,7 +5477,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get wrappedMy2025 => 'Mans 2025';
 
   @override
-  String get wrappedRememberedByOmi => 'atcerējies Omi';
+  String get wrappedRememberedByOmi => 'atcerējies Nooto';
 
   @override
   String get wrappedMostFunDay => 'Jautrākā';
@@ -5693,7 +5694,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get notificationFrequency => 'Paziņojumu biežums';
 
   @override
-  String get controlNotificationFrequency => 'Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus.';
+  String get controlNotificationFrequency => 'Kontrolējiet, cik bieži Nooto sūta jums proaktīvus paziņojumus.';
 
   @override
   String get yourScore => 'Jūsu rezultāts';
@@ -5719,7 +5720,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get notificationFrequencyDescription =>
-      'Kontrolējiet, cik bieži Omi sūta jums proaktīvus paziņojumus un atgādinājumus.';
+      'Kontrolējiet, cik bieži Nooto sūta jums proaktīvus paziņojumus un atgādinājumus.';
 
   @override
   String get sliderOff => 'Izslēgts';
@@ -5957,7 +5958,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get noRecordings => 'Nav ierakstu';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio no jūsu Omi ierīces parādīsies šeit';
+  String get audioFromOmiWillAppearHere => 'Audio no jūsu Nooto ierīces parādīsies šeit';
 
   @override
   String get deleteProcessed => 'Dzēst apstrādātos';
@@ -6079,7 +6080,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get batteryUsageHigher => 'Akumulatora patēriņš būs lielāks nekā mākoņa transkripcijā.';
 
   @override
-  String get considerOmiCloud => 'Apsveriet Omi Cloud izmantošanu labākai veiktspējai.';
+  String get considerOmiCloud => 'Apsveriet Nooto Cloud izmantošanu labākai veiktspējai.';
 
   @override
   String get highResourceUsage => 'Augsts resursu patēriņš';
@@ -6238,7 +6239,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Omi iebūvētā tiešraides transkripcija ir optimizēta reāllaika sarunām ar automātisku runātāju noteikšanu un diarizāciju.';
+      'Nooto iebūvētā tiešraides transkripcija ir optimizēta reāllaika sarunām ar automātisku runātāju noteikšanu un diarizāciju.';
 
   @override
   String get reset => 'Atiestatīt';
@@ -6326,13 +6327,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get writeReviewOptional => 'Rakstīt atsauksmi (neobligāti)';
 
   @override
-  String get setupQuestionsIntro => 'Palīdziet mums uzlabot Omi, atbildot uz dažiem jautājumiem. 🫶 💜';
+  String get setupQuestionsIntro => 'Palīdziet mums uzlabot Nooto, atbildot uz dažiem jautājumiem. 🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. Ko jūs darāt?';
 
   @override
-  String get setupQuestionUsage => '2. Kur plānojat izmantot savu Omi?';
+  String get setupQuestionUsage => '2. Kur plānojat izmantot savu Nooto?';
 
   @override
   String get setupQuestionAge => '3. Kāds ir jūsu vecuma diapazons?';
@@ -6561,10 +6562,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get getOmiDeviceDescription => 'Izveidojiet precīzāku klonu ar savām personīgajām sarunām';
 
   @override
-  String get getOmi => 'Iegūt Omi';
+  String get getOmi => 'Iegūt Nooto';
 
   @override
-  String get iHaveOmiDevice => 'Man ir Omi ierīce';
+  String get iHaveOmiDevice => 'Man ir Nooto ierīce';
 
   @override
   String get goal => 'MĒRĶIS';
@@ -6863,13 +6864,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get fastTransferDescription =>
-      'Ātrā pārsūtīšana izmanto WiFi ~5x ātrākam ātrumam. Pārsūtīšanas laikā tālrunis īslaicīgi pieslēgsies Omi ierīces WiFi tīklam.';
+      'Ātrā pārsūtīšana izmanto WiFi ~5x ātrākam ātrumam. Pārsūtīšanas laikā tālrunis īslaicīgi pieslēgsies Nooto ierīces WiFi tīklam.';
 
   @override
   String get internetAccessPausedDuringTransfer => 'Interneta piekļuve ir apturēta pārsūtīšanas laikā';
 
   @override
-  String get chooseTransferMethodDescription => 'Izvēlieties, kā ieraksti tiek pārsūtīti no Omi ierīces uz tālruni.';
+  String get chooseTransferMethodDescription => 'Izvēlieties, kā ieraksti tiek pārsūtīti no Nooto ierīces uz tālruni.';
 
   @override
   String get wifiSpeed => '~150 KB/s caur WiFi';
@@ -6879,7 +6880,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get fastTransferMethodDescription =>
-      'Izveido tiešu WiFi savienojumu ar Omi ierīci. Pārsūtīšanas laikā tālrunis īslaicīgi atvienojas no parastā WiFi.';
+      'Izveido tiešu WiFi savienojumu ar Nooto ierīci. Pārsūtīšanas laikā tālrunis īslaicīgi atvienojas no parastā WiFi.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6904,17 +6905,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String get lowBatteryAlertBody => 'Jūsu ierīces akumulators ir zems. Laiks uzlādēt! 🔋';
 
   @override
-  String get deviceDisconnectedNotificationTitle => 'Jūsu Omi ierīce ir atvienota';
+  String get deviceDisconnectedNotificationTitle => 'Jūsu Nooto ierīce ir atvienota';
 
   @override
-  String get deviceDisconnectedNotificationBody => 'Lūdzu, pieslēdzieties atkārtoti, lai turpinātu lietot Omi.';
+  String get deviceDisconnectedNotificationBody => 'Lūdzu, pieslēdzieties atkārtoti, lai turpinātu lietot Nooto.';
 
   @override
   String get firmwareUpdateAvailable => 'Pieejams programmaparatūras atjauninājums';
 
   @override
   String firmwareUpdateAvailableDescription(String version) {
-    return 'Jūsu Omi ierīcei ir pieejams jauns programmaparatūras atjauninājums ($version). Vai vēlaties atjaunināt tagad?';
+    return 'Jūsu Nooto ierīcei ir pieejams jauns programmaparatūras atjauninājums ($version). Vai vēlaties atjaunināt tagad?';
   }
 
   @override
@@ -7130,7 +7131,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get personaFailedToCreate => 'Neizdevās izveidot personu';
 
   @override
-  String get personaConnectKnowledgeSource => 'Lūdzu, pievienojiet vismaz vienu datu avotu (Omi vai Twitter)';
+  String get personaConnectKnowledgeSource => 'Lūdzu, pievienojiet vismaz vienu datu avotu (Nooto vai Twitter)';
 
   @override
   String get personaUpdatedSuccessfully => 'Persona veiksmīgi atjaunināta';
@@ -7235,7 +7236,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get xHandleTitle => 'Kāds ir jūsu X lietotājvārds?';
 
   @override
-  String get xHandleDescription => 'Mēs iepriekš apmācīsim jūsu Omi klonu\nbalstoties uz jūsu konta aktivitāti';
+  String get xHandleDescription => 'Mēs iepriekš apmācīsim jūsu Nooto klonu\nbalstoties uz jūsu konta aktivitāti';
 
   @override
   String get xHandleHint => '@nikshevchenko';
@@ -7250,7 +7251,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get nextButton => 'Tālāk';
 
   @override
-  String get connectOmiDevice => 'Savienot Omi ierīci';
+  String get connectOmiDevice => 'Savienot Nooto ierīci';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
@@ -7282,7 +7283,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcriptionJsonPlaceholder => 'Ielīmējiet savu JSON konfigurāciju šeit...';
 
   @override
-  String get transcriptionSourceOmi => 'Omi';
+  String get transcriptionSourceOmi => 'Nooto';
 
   @override
   String get pricePlaceholder => '0.00';
@@ -7312,7 +7313,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dailyReflectionNotificationBody => 'Pastāsti man par savu dienu';
 
   @override
-  String get actionItemReminderTitle => 'Omi atgādinājums';
+  String get actionItemReminderTitle => 'Nooto atgādinājums';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
@@ -7340,7 +7341,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingComplete => 'Pabeigts';
 
   @override
-  String get onboardingWelcomeToOmi => 'Laipni lūdzam Omi';
+  String get onboardingWelcomeToOmi => 'Laipni lūdzam Nooto';
 
   @override
   String get onboardingTellUsAboutYourself => 'Pastāstiet par sevi';
@@ -8099,20 +8100,20 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reportAnIssue => 'Ziņot par problēmu';
 
   @override
-  String get pairingTitleOmi => 'Ieslēdziet Omi';
+  String get pairingTitleOmi => 'Ieslēdziet Nooto';
 
   @override
   String get pairingDescOmi => 'Nospiediet un turiet ierīci, līdz tā vibrē, lai to ieslēgtu.';
 
   @override
-  String get pairingTitleOmiDevkit => 'Ieslēdziet Omi DevKit savienošanas režīmā';
+  String get pairingTitleOmiDevkit => 'Ieslēdziet Nooto DevKit savienošanas režīmā';
 
   @override
   String get pairingDescOmiDevkit =>
       'Nospiediet pogu vienu reizi, lai ieslēgtu. LED mirgos violeti savienošanas režīmā.';
 
   @override
-  String get pairingTitleOmiGlass => 'Ieslēdziet Omi Glass';
+  String get pairingTitleOmiGlass => 'Ieslēdziet Nooto Glass';
 
   @override
   String get pairingDescOmiGlass => 'Nospiediet un turiet sānu pogu 3 sekundes, lai ieslēgtu.';
@@ -8155,7 +8156,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get pairingDescAppleWatch =>
-      'Instalējiet un atveriet Omi lietotni savā Apple Watch, tad pieskarieties Savienot lietotnē.';
+      'Instalējiet un atveriet Nooto lietotni savā Apple Watch, tad pieskarieties Savienot lietotnē.';
 
   @override
   String get pairingTitleNeoOne => 'Ieslēdziet Neo One savienošanas režīmā';
