@@ -76,8 +76,8 @@ export function createFrameCapture(
 ): FrameCapture {
     const { intervalMs, onFrame, onError } = options;
 
-    let captureInterval: NodeJS.Timeout | null = null;
-    let startTimeout: NodeJS.Timeout | null = null;
+    let captureInterval: number | null = null;
+    let startTimeout: number | null = null;
     let isPaused = false;
     let videoElement: HTMLVideoElement | null = null;
     let canvas: HTMLCanvasElement | null = null;
