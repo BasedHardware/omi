@@ -33,12 +33,15 @@ actor AgentVMService {
                     await startIncrementalSync(vmIP: ip, authToken: status.authToken)
                     return
                 }
-                if let status = status, status.status == "provisioning" {
-                    log("AgentVMService: VM is provisioning, polling...")
+                if let status = status,
+                   status.status == "provisioning" || status.status == "stopped" {
+                    log("AgentVMService: VM is \(status.status), polling until ready...")
                     if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
                        let ip = result.ip {
                         log("AgentVMService: VM became ready — ip=\(ip)")
-                        await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
+                            await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        }
                         await startIncrementalSync(vmIP: ip, authToken: result.authToken)
                     }
                     return
