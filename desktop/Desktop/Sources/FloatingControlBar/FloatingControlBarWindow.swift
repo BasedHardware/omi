@@ -239,7 +239,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func showAIConversation() {
-        // Show input and focus immediately — don't block on screenshot
+        // Resize window BEFORE changing state so SwiftUI content doesn't render
+        // in the old 28x28 frame (which causes a visible jump).
+        let inputSize = NSSize(width: FloatingControlBarWindow.expandedBarSize.width, height: 120)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true)
+
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             state.showingAIConversation = true
             state.showingAIResponse = false
@@ -248,7 +252,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.aiResponseText = ""
             state.inputViewHeight = 100
         }
-        resizeToFixedHeight(120, animated: true)
         setupInputHeightObserver()
 
         // Make the window key so the ResizableTextEditor's focusOnAppear can take effect.
