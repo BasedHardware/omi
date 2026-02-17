@@ -32,9 +32,11 @@ actor AgentSyncService {
     private var authToken: String?
     private var isRunning = false
     private var syncTask: Task<Void, Never>?
+    private var consecutiveFailures = 0
 
     private let batchSize = 100
-    private let syncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
+    private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
+    private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
 
     // MARK: - Table definitions
 
@@ -97,17 +99,40 @@ actor AgentSyncService {
         syncTask = Task {
             while !Task.isCancelled && isRunning {
                 await syncTick()
-                try? await Task.sleep(nanoseconds: syncInterval)
+                let interval = currentSyncInterval()
+                try? await Task.sleep(nanoseconds: interval)
             }
         }
     }
 
+    private func currentSyncInterval() -> UInt64 {
+        guard consecutiveFailures > 0 else { return baseSyncInterval }
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, capped at 60s
+        let backoff = baseSyncInterval * UInt64(1 << min(consecutiveFailures, 5))
+        return min(backoff, maxSyncInterval)
+    }
+
     private func syncTick() async {
         var totalSynced = 0
+        var anyFailed = false
         for spec in tables {
-            totalSynced += await syncTable(spec)
+            let count = await syncTable(spec)
+            if count < 0 {
+                anyFailed = true
+            } else {
+                totalSynced += count
+            }
         }
-        if totalSynced > 0 {
+        if anyFailed && totalSynced == 0 {
+            consecutiveFailures += 1
+            if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
+                log("AgentSync: backend unreachable (failures=\(consecutiveFailures), next retry in \(currentSyncInterval() / 1_000_000_000)s)")
+            }
+        } else if totalSynced > 0 {
+            if consecutiveFailures > 0 {
+                log("AgentSync: backend reconnected after \(consecutiveFailures) failures")
+            }
+            consecutiveFailures = 0
             log("AgentSync: pushed \(totalSynced) rows")
             saveCursors()
         }
@@ -169,8 +194,8 @@ actor AgentSyncService {
             guard !rows.isEmpty else { return 0 }
 
             // Push to VM
-            let success = await pushRows(spec.name, rows)
-            if success {
+            let result = await pushRows(spec.name, rows)
+            if result == .success {
                 // Update cursor
                 if spec.appendOnly {
                     if let lastId = rows.last?["id"] as? Int64 {
@@ -188,6 +213,8 @@ actor AgentSyncService {
                     }
                 }
                 return rows.count
+            } else if result == .networkError {
+                return -1  // Signal network failure for backoff
             }
         } catch {
             log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
@@ -197,10 +224,20 @@ actor AgentSyncService {
 
     // MARK: - HTTP push
 
-    private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> Bool {
-        guard let vmIP = vmIP, let authToken = authToken else { return false }
+    private enum PushResult {
+        case success
+        case httpError
+        case networkError
+    }
 
-        let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)")!
+    private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
+        guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
+
+        guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
+            log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
+            return .httpError
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -211,23 +248,23 @@ actor AgentSyncService {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         } catch {
             log("AgentSync: JSON serialization error for \(table) — \(error.localizedDescription)")
-            return false
+            return .httpError
         }
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else { return false }
+            guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
             if httpResponse.statusCode == 200 {
-                return true
+                return .success
             } else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
-                return false
+                return .httpError
             }
         } catch {
             log("AgentSync: push \(table) network error — \(error.localizedDescription)")
-            return false
+            return .networkError
         }
     }
 
