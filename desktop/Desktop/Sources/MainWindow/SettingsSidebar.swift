@@ -138,10 +138,15 @@ struct SettingsSidebar: View {
 
     private var filteredSearchItems: [SettingsSearchItem] {
         guard !searchQuery.isEmpty else { return [] }
-        let query = searchQuery.lowercased()
+        let words = searchQuery.lowercased().split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return [] }
         return SettingsSearchItem.allSearchableItems.filter { item in
-            item.name.lowercased().contains(query) ||
-            item.keywords.contains(where: { $0.lowercased().contains(query) })
+            let nameLower = item.name.lowercased()
+            let keywordsLower = item.keywords.map { $0.lowercased() }
+            return words.allSatisfy { word in
+                nameLower.contains(word) ||
+                keywordsLower.contains(where: { $0.contains(word) })
+            }
         }
     }
 
