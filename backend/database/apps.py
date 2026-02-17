@@ -247,9 +247,12 @@ def update_app_visibility_in_db(app_id: str, private: bool):
         app_ref.update({'private': private})
 
 
-def change_app_approval_status(app_id: str, approved: bool):
+def change_app_approval_status(app_id: str, approved: bool, rejection_reason: str = None):
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.update({'approved': approved, 'status': 'approved' if approved else 'rejected'})
+    update_data = {'approved': approved, 'status': 'approved' if approved else 'rejected'}
+    if not approved and rejection_reason:
+        update_data['rejection_reason'] = rejection_reason
+    app_ref.update(update_data)
 
 
 def get_app_usage_history_db(app_id: str):
