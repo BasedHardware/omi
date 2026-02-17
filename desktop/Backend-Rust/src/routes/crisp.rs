@@ -81,18 +81,17 @@ async fn get_unread_messages(
 ) -> Result<Json<UnreadResponse>, StatusCode> {
     let config = &state.config;
 
-    let identifier = config.crisp_plugin_identifier.as_ref().ok_or_else(|| {
-        tracing::warn!("Crisp plugin identifier not configured");
-        StatusCode::SERVICE_UNAVAILABLE
-    })?;
-    let key = config.crisp_plugin_key.as_ref().ok_or_else(|| {
-        tracing::warn!("Crisp plugin key not configured");
-        StatusCode::SERVICE_UNAVAILABLE
-    })?;
-    let website_id = config.crisp_website_id.as_ref().ok_or_else(|| {
-        tracing::warn!("Crisp website ID not configured");
-        StatusCode::SERVICE_UNAVAILABLE
-    })?;
+    let (identifier, key, website_id) = match (
+        config.crisp_plugin_identifier.as_ref(),
+        config.crisp_plugin_key.as_ref(),
+        config.crisp_website_id.as_ref(),
+    ) {
+        (Some(id), Some(k), Some(wid)) => (id, k, wid),
+        _ => {
+            // Crisp not configured — return empty (feature disabled, not an error)
+            return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
+        }
+    };
 
     let email = match &user.email {
         Some(e) => {
