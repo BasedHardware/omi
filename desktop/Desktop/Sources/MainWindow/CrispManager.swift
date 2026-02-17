@@ -20,11 +20,19 @@ class CrispManager: ObservableObject {
         }
     }
 
-    /// Timestamp of the most recent operator message we've already notified about
-    private var lastSeenTimestamp: UInt64 = 0
+    /// Timestamp of the most recent operator message we've already notified about.
+    /// Persisted to UserDefaults so unread messages survive app restarts.
+    private var lastSeenTimestamp: UInt64 {
+        get { UserDefaults.standard.value(forKey: "crisp_lastSeenTimestamp") as? UInt64 ?? 0 }
+        set { UserDefaults.standard.set(newValue, forKey: "crisp_lastSeenTimestamp") }
+    }
 
-    /// Track the latest operator message timestamp from any poll
-    private var latestOperatorTimestamp: UInt64 = 0
+    /// Track the latest operator message timestamp from any poll.
+    /// Persisted to UserDefaults so we don't re-notify after restart.
+    private var latestOperatorTimestamp: UInt64 {
+        get { UserDefaults.standard.value(forKey: "crisp_latestOperatorTimestamp") as? UInt64 ?? 0 }
+        set { UserDefaults.standard.set(newValue, forKey: "crisp_latestOperatorTimestamp") }
+    }
 
     /// Track message texts we've already sent notifications for (to avoid duplicates)
     private var notifiedMessages = Set<String>()
@@ -42,8 +50,12 @@ class CrispManager: ObservableObject {
         guard !isStarted else { return }
         isStarted = true
 
-        // Set lastSeenTimestamp to now so we don't notify about old messages
-        lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
+        // Only set lastSeenTimestamp to "now" on first-ever launch.
+        // On subsequent launches, keep the persisted value so the first
+        // poll picks up messages that arrived while the app was closed.
+        if lastSeenTimestamp == 0 {
+            lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
+        }
 
         // Poll immediately, then every 30 seconds
         pollForMessages()
@@ -68,8 +80,9 @@ class CrispManager: ObservableObject {
         pollTimer = nil
         isStarted = false
         unreadCount = 0
-        lastSeenTimestamp = 0
-        latestOperatorTimestamp = 0
+        // Clear persisted timestamps so next sign-in starts fresh
+        UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
+        UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
         notifiedMessages.removeAll()
     }
 
