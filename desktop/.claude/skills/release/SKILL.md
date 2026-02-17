@@ -87,13 +87,21 @@ If no version specified, it auto-increments the patch version.
 
 ### Step 6: Verify the release
 
-After release completes successfully:
-1. Download the DMG from GitHub
-2. Install and launch to verify it works
-3. Check the appcast shows correct changelog:
-   ```bash
-   curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml | head -30
-   ```
+**MANDATORY** — Run verification immediately after release completes:
+
+```bash
+./verify-release.sh [version]
+```
+
+This script automatically:
+1. Checks the appcast serves the correct version
+2. Downloads the Sparkle ZIP (what auto-update users get)
+3. Verifies Gatekeeper acceptance and code signature
+4. Checks entitlements don't require a provisioning profile
+5. Launches the app and confirms it starts
+6. Checks the DMG download endpoint
+
+If verification fails, **immediately roll back** using the rollback skill (`.claude/skills/rollback/SKILL.md`).
 
 ## What release.sh Does (12 Steps)
 
