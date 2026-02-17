@@ -108,6 +108,7 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Memory Excluded Apps", keywords: ["exclude", "ignore", "memory apps"], section: .advanced, advancedSubsection: .memoryAssistant, icon: "brain.head.profile"),
         SettingsSearchItem(name: "Analysis Throttle", keywords: ["delay", "throttle", "app switch"], section: .advanced, advancedSubsection: .analysisThrottle, icon: "clock.arrow.2.circlepath"),
         SettingsSearchItem(name: "Ask Omi Floating Bar", keywords: ["floating bar", "shortcuts", "push to talk"], section: .advanced, advancedSubsection: .askOmiFloatingBar, icon: "sparkles"),
+        SettingsSearchItem(name: "AI Model", keywords: ["model", "ai", "sonnet", "opus", "claude"], section: .advanced, advancedSubsection: .askOmiFloatingBar, icon: "sparkles"),
         SettingsSearchItem(name: "Background Style", keywords: ["background", "solid", "transparent", "blur"], section: .advanced, advancedSubsection: .askOmiFloatingBar, icon: "sparkles"),
         SettingsSearchItem(name: "Ask Omi Shortcut", keywords: ["shortcut", "hotkey", "keyboard", "global shortcut"], section: .advanced, advancedSubsection: .askOmiFloatingBar, icon: "sparkles"),
         SettingsSearchItem(name: "Push to Talk", keywords: ["push to talk", "ptt", "hold to talk", "microphone key"], section: .advanced, advancedSubsection: .askOmiFloatingBar, icon: "sparkles"),

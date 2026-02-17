@@ -6,6 +6,7 @@ struct ShortcutsSettingsSection: View {
 
     var body: some View {
         VStack(spacing: 20) {
+            aiModelCard
             backgroundStyleCard
             askOmiKeyCard
             pttKeyCard
@@ -14,6 +15,55 @@ struct ShortcutsSettingsSection: View {
             pttSoundsCard
             referenceCard
         }
+    }
+
+    private var aiModelCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("AI Model")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text("Choose the AI model for Ask Omi conversations.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+
+            HStack(spacing: 12) {
+                ForEach(ShortcutSettings.availableModels, id: \.id) { model in
+                    aiModelButton(model)
+                }
+                Spacer()
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        )
+    }
+
+    private func aiModelButton(_ model: (id: String, label: String)) -> some View {
+        let isSelected = settings.selectedModel == model.id
+        return Button {
+            settings.selectedModel = model.id
+        } label: {
+            Text(model.label)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected
+                              ? OmiColors.purplePrimary.opacity(0.3)
+                              : OmiColors.backgroundTertiary.opacity(0.5))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var backgroundStyleCard: some View {
