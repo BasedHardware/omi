@@ -354,6 +354,15 @@ struct RewindPage: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription
+        if let appState = appState {
+            if enabled && !appState.isTranscribing {
+                appState.startTranscription()
+            } else if !enabled && appState.isTranscribing {
+                appState.stopTranscription()
+            }
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
@@ -390,9 +399,9 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Screen title
+                // Rewind title
                 HStack(spacing: 8) {
-                    Text("Screen")
+                    Text("Rewind")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.white)
 
@@ -457,14 +466,6 @@ struct RewindPage: View {
                 .padding(2)
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(6)
-            } else {
-                // Timeline mode controls
-                // Stats
-                if let stats = viewModel.stats {
-                    Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.white.opacity(0.5))
-                }
             }
 
             Spacer()
@@ -481,9 +482,9 @@ struct RewindPage: View {
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .help("Screen Settings")
+            .help("Rewind Settings")
 
-            // Screen recording toggle
+            // Rewind on/off toggle (controls both screen + audio)
             rewindToggle
         }
         .padding(.horizontal, 16)
@@ -1346,7 +1347,7 @@ struct RewindPage: View {
 
             Spacer()
 
-            // Right: Finish Conversation button (when recording) + audio toggle
+            // Right: Finish Conversation button (when recording)
             if appState.isTranscribing {
                 Button(action: {
                     handleFinish(appState: appState)
@@ -1380,10 +1381,6 @@ struct RewindPage: View {
                 .help("Saves current conversation and starts a new one")
             }
 
-            // Audio on/off toggle
-            if !appState.isSavingConversation {
-                audioToggle(appState: appState)
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
