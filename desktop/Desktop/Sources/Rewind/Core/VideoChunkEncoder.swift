@@ -216,10 +216,12 @@ actor VideoChunkEncoder {
             "-r", String(frameRate),
             "-i", "-",
             "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", // Ensure even dimensions
-            "-vcodec", "libx265",
+            "-vcodec", "hevc_videotoolbox",
             "-tag:v", "hvc1",
-            "-preset", "ultrafast",
-            "-crf", "15",  // Visually lossless quality
+            "-q:v", "65",  // Quality scale 1-100 (65 ≈ CRF 15 equivalent)
+            "-allow_sw", "true",  // Fall back to software if HW encoder busy
+            "-realtime", "true",  // Hint: real-time capture, don't block
+            "-prio_speed", "true",  // Prioritize speed over compression
             // Fragmented MP4 - allows reading while writing
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "-pix_fmt", "yuv420p",
@@ -249,7 +251,8 @@ actor VideoChunkEncoder {
             "input_height": Int(imageSize.height),
             "output_width": Int(outputSize.width),
             "output_height": Int(outputSize.height),
-            "crf": 15,
+            "quality": 65,
+            "encoder": "hevc_videotoolbox",
             "max_resolution": Int(maxResolution)
         ]
         SentrySDK.addBreadcrumb(breadcrumb)
