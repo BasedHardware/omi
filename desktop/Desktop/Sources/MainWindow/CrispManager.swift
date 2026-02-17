@@ -22,16 +22,17 @@ class CrispManager: ObservableObject {
 
     /// Timestamp of the most recent operator message we've already notified about.
     /// Persisted to UserDefaults so unread messages survive app restarts.
+    /// Stored as Double because UserDefaults can't round-trip UInt64.
     private var lastSeenTimestamp: UInt64 {
-        get { UserDefaults.standard.value(forKey: "crisp_lastSeenTimestamp") as? UInt64 ?? 0 }
-        set { UserDefaults.standard.set(newValue, forKey: "crisp_lastSeenTimestamp") }
+        get { UInt64(UserDefaults.standard.double(forKey: "crisp_lastSeenTimestamp")) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "crisp_lastSeenTimestamp") }
     }
 
     /// Track the latest operator message timestamp from any poll.
     /// Persisted to UserDefaults so we don't re-notify after restart.
     private var latestOperatorTimestamp: UInt64 {
-        get { UserDefaults.standard.value(forKey: "crisp_latestOperatorTimestamp") as? UInt64 ?? 0 }
-        set { UserDefaults.standard.set(newValue, forKey: "crisp_latestOperatorTimestamp") }
+        get { UInt64(UserDefaults.standard.double(forKey: "crisp_latestOperatorTimestamp")) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "crisp_latestOperatorTimestamp") }
     }
 
     /// Track message texts we've already sent notifications for (to avoid duplicates)
