@@ -41,7 +41,7 @@ actor AgentSyncService {
     private let tables: [TableSpec] = [
         // Append-only (cursor by id)
         TableSpec(name: "screenshots", appendOnly: true, excludedColumns: [
-            "ocrDataJson", "imagePath", "videoChunkPath", "frameOffset",
+            "ocrDataJson",
         ]),
         TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
         TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
