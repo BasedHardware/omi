@@ -1759,13 +1759,30 @@ struct ReviewCard: View {
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+    struct CacheData {
+        var result: FlowResult?
+        var width: CGFloat = 0
+    }
+
+    func makeCache(subviews: Subviews) -> CacheData {
+        CacheData()
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) -> CGSize {
+        let width = proposal.width ?? 0
+        let result = FlowResult(in: width, subviews: subviews, spacing: spacing)
+        cache.result = result
+        cache.width = width
         return result.size
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout CacheData) {
+        let result: FlowResult
+        if let cached = cache.result, cache.width == bounds.width {
+            result = cached
+        } else {
+            result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        }
         for (index, subview) in subviews.enumerated() {
             let idealSize = subview.sizeThatFits(.unspecified)
             let subProposal: ProposedViewSize = idealSize.width > bounds.width
