@@ -429,6 +429,8 @@ async function checkIdleAndStop() {
 
   console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
 
+  // Try GCE API first, fall back to sudo shutdown
+  let stopped = false;
   try {
     const metaHeaders = { "Metadata-Flavor": "Google" };
     const name = await fetch(
@@ -439,26 +441,33 @@ async function checkIdleAndStop() {
       "http://metadata.google.internal/computeMetadata/v1/instance/zone",
       { headers: metaHeaders },
     ).then((r) => r.text());
-    const token = await fetch(
+    const tokenResp = await fetch(
       "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
       { headers: metaHeaders },
-    )
-      .then((r) => r.json())
-      .then((d) => d.access_token);
-
-    const stopUrl = `https://compute.googleapis.com/compute/v1/${zonePath}/instances/${name}/stop`;
-    const resp = await fetch(stopUrl, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    console.log(`[server] Stop request sent for ${name}: HTTP ${resp.status}`);
+    );
+    if (tokenResp.ok) {
+      const token = (await tokenResp.json()).access_token;
+      const stopUrl = `https://compute.googleapis.com/compute/v1/${zonePath}/instances/${name}/stop`;
+      const resp = await fetch(stopUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`[server] Stop request for ${name}: HTTP ${resp.status}`);
+      if (resp.ok) stopped = true;
+    } else {
+      console.log(`[server] No service account token (HTTP ${tokenResp.status}), using shutdown`);
+    }
   } catch (err) {
-    console.log(`[server] GCE API stop failed: ${err.message} — trying shutdown command`);
+    console.log(`[server] GCE API failed: ${err.message}`);
+  }
+
+  if (!stopped) {
+    console.log(`[server] Falling back to sudo shutdown...`);
     const { execSync } = await import("child_process");
     try {
       execSync("sudo shutdown -h now");
     } catch (e) {
-      console.log(`[server] Shutdown command also failed: ${e.message}`);
+      console.log(`[server] Shutdown command failed: ${e.message}`);
     }
   }
 }
