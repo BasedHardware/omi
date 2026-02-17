@@ -457,25 +457,30 @@ class AppState: ObservableObject {
 
     /// Trigger screen recording permission prompt
     func triggerScreenRecordingPermission() {
-        // Register in Launch Services first so macOS knows which app bundle to grant permission to
-        ScreenCaptureService.ensureLaunchServicesRegistration()
+        // Run Launch Services registration on a background thread, then request permissions
+        // after registration completes. CGRequestScreenCaptureAccess() requires the app to be
+        // registered in Launch Services first, otherwise the app won't appear in System Settings.
+        Task.detached {
+            // Register synchronously on background thread (lsregister must finish first)
+            ScreenCaptureService.ensureLaunchServicesRegistrationSync()
 
-        // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list in System Settings.
-        // On macOS Sequoia+ it may not show a visible dialog, so we also open System Settings explicitly.
-        CGRequestScreenCaptureAccess()
+            await MainActor.run {
+                // CGRequestScreenCaptureAccess() adds the app to the Screen Recording list
+                CGRequestScreenCaptureAccess()
 
-        // Request ScreenCaptureKit permission too (macOS 14+)
-        if #available(macOS 14.0, *) {
-            Task {
-                _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
-            }
-        }
+                // Request ScreenCaptureKit permission too (macOS 14+)
+                if #available(macOS 14.0, *) {
+                    Task {
+                        _ = await ScreenCaptureService.requestScreenCaptureKitPermission()
+                    }
+                }
 
-        // Open System Settings after a delay to give CGRequestScreenCaptureAccess() time
-        // to register the app in the TCC database so it appears in the list
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if !CGPreflightScreenCaptureAccess() {
-                ScreenCaptureService.openScreenRecordingPreferences()
+                // Open System Settings after a brief delay so the app appears in the list
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if !CGPreflightScreenCaptureAccess() {
+                        ScreenCaptureService.openScreenRecordingPreferences()
+                    }
+                }
             }
         }
     }
