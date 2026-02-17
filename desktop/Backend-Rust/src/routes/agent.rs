@@ -157,9 +157,12 @@ async fn get_agent_status(
 
     match state.firestore.get_agent_vm(&user.uid).await {
         Ok(Some(vm)) => {
-            // If Firestore says "ready", verify the VM is actually running.
-            // The VM may have self-stopped due to idle timeout.
-            if vm.status == AgentVmStatus::Ready {
+            // If Firestore says "ready", "error", or "stopped", verify the VM is actually running.
+            // The VM may have self-stopped due to idle timeout and be restartable.
+            if vm.status == AgentVmStatus::Ready
+                || vm.status == AgentVmStatus::Error
+                || vm.status == AgentVmStatus::Stopped
+            {
                 match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone).await {
                     Ok(gce_status) if gce_status == "TERMINATED" || gce_status == "STOPPED" => {
                         tracing::info!(
