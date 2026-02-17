@@ -310,6 +310,7 @@ async fn start_stopped_vm(
     let response = firestore
         .build_compute_request(reqwest::Method::POST, &start_url)
         .await?
+        .header("Content-Length", "0")
         .send()
         .await?;
 
