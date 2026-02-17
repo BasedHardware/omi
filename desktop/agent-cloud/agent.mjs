@@ -276,7 +276,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     ],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: 15,
+    maxTurns: undefined,
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,

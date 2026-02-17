@@ -105,7 +105,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       allowedTools,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
-      maxTurns: 15,
+      maxTurns: undefined,
       cwd: msg.cwd || process.env.HOME || "/",
       mcpServers,
       includePartialMessages: true,
