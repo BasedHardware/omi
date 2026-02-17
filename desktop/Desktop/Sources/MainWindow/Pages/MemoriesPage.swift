@@ -1876,7 +1876,7 @@ private struct MemoryCardView: View {
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(memory.isTip && !memory.isRead ? OmiColors.textPrimary.opacity(0.3) : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : Color.clear), lineWidth: 1)
+                .stroke(memory.isTip && !memory.isRead ? OmiColors.textPrimary.opacity(0.3) : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border), lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
