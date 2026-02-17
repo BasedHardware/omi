@@ -1,5 +1,3 @@
-
-import asyncio
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,6 +39,10 @@ class TestSpeakerIdentification:
     @pytest.mark.parametrize("transcript, mock_response, expected_speakers", [
         ("Hey Alice", '{"speakers": ["Alice"], "cleaned_transcript": "Hey Alice"}', ["Alice"]),
         ("I told Alice", '{"speakers": null, "cleaned_transcript": "I told Alice"}', None),
+        ("I was talking to Mike about the project", '{"speakers": null, "cleaned_transcript": "I was talking to Mike about the project."}', None),
+        ("Bob and Sarah, please join the meeting", '{"speakers": ["Bob", "Sarah"], "cleaned_transcript": "Bob and Sarah, please join the meeting."}', ["Bob", "Sarah"]),
+        ("Can we ask John?", '{"speakers": null, "cleaned_transcript": "Can we ask John?"}', None),
+        ("John, can you hear me?", '{"speakers": ["John"], "cleaned_transcript": "John, can you hear me?"}', ["John"]),
     ])
     async def test_llm_addressee_detection(self, transcript, mock_response, expected_speakers):
         """Verify that identify_speaker_from_transcript handles OpenAI response correctly."""
@@ -116,15 +118,14 @@ class TestSpeakerIdentification:
             assert result["speakers"] is None
             assert result["cleaned_transcript"] == transcript
 
-    def test_empty_input(self):
+    @pytest.mark.asyncio
+    async def test_empty_input(self):
         """Verify empty input returns None immediately without API call."""
         print("\n[Test] Checking Empty Input...")
-        
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(identify_speaker_and_clean_transcript(""))
-        loop.close()
+
+        result = await identify_speaker_and_clean_transcript("")
         print(f"[Test] Early Return Result: {result}")
-        
+
         assert result["speakers"] is None
         assert result["cleaned_transcript"] == ""
 

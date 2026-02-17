@@ -7,13 +7,17 @@ Integration with external self-hosted vLLM (OpenAI-compatible) for speaker ident
 
 ## Overview
 
-This module connects to an external LLM service (e.g., Llama-3.1-8B-Instruct hosted via vLLM) to:
-1.  **Identify Addressees**: "Hey Alice" → `["Alice"]`
-2.  **Clean Transcripts**: Removes fillers ("um", "uh") and fixes grammar.
+This module (`utils/text_speaker_detection.py`) adds LLM-based addressee detection alongside the existing regex-based self-identification.
+
+**Pipeline:**
+1. **Regex first** (0 ms, 0 tokens): Catches self-introductions like "I am Alice" instantly.
+2. **LLM fallback** (~200-300 ms): Uses Llama 3.1 8B via vLLM to detect who is being *spoken to* and clean the transcript.
+
+**Key distinction — Address vs. Mention:**
+- "Hey Alice, can you help?" → `["Alice"]` (addressed)
+- "I was talking to Alice about the project" → `null` (mentioned, not addressed)
 
 ## Configuration
-
-The module uses environment variables to connect to the LLM service.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -21,37 +25,34 @@ The module uses environment variables to connect to the LLM service.
 | `VLLM_API_KEY` | `EMPTY` | API Key (if required by the endpoint) |
 | `VLLM_MODEL_NAME` | `meta-llama/Meta-Llama-3.1-8B-Instruct` | Model name to request |
 
-## Dependencies
-
-- `openai`: Standard client for connecting to vLLM.
-
-```bash
-pip install openai
-```
-
 ## Usage
 
 ```python
-from backend.utils.text_speaker_detection import identify_speaker_and_clean_transcript
+from utils.text_speaker_detection import identify_speaker_from_transcript
 
-transcript = "Um, hey Alice... can you help?"
-result = identify_speaker_and_clean_transcript(transcript)
-
-print(result["speakers"])
+# Regex path (instant):
+speakers = await identify_speaker_from_transcript("I am Alice")
 # ['Alice']
 
-print(result["cleaned_transcript"])
-# "Hey Alice, can you help?"
+# LLM path (addressee detection):
+speakers = await identify_speaker_from_transcript("Hey Bob, can you help?")
+# ['Bob']
+
+# LLM path (mention → null):
+speakers = await identify_speaker_from_transcript("I told Bob about it")
+# None
 ```
 
 ## Testing
 
-Run unit tests (mocked):
+Run unit tests (mocked, no API key needed):
 ```bash
-python3 -m pytest backend/tests/test_text_speaker_detection.py
+cd backend
+python3 -m pytest tests/test_text_speaker_detection.py -v
 ```
 
-Run verification script against live vLLM (or Groq):
+Run live integration demo against Groq (or any OpenAI-compatible endpoint):
 ```bash
-python3 backend/tests/verify_llama_8b.py
+export GROQ_API_KEY='your_key'
+python3 tests/demo_real_integration.py
 ```
