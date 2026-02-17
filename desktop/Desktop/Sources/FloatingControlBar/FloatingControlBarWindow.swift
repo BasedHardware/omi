@@ -17,6 +17,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var isResizingProgrammatically = false
     private var inputHeightCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
+    /// Saved center point from before chat opened, used to restore position on close.
+    private var preChatCenter: NSPoint?
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -221,7 +223,25 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
-        resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
+        // Restore to saved center so hover expand/collapse stays consistent (no drift).
+        if let center = preChatCenter {
+            let size = FloatingControlBarWindow.minBarSize
+            let restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
+            resizeWorkItem?.cancel()
+            resizeWorkItem = nil
+            styleMask.remove(.resizable)
+            isResizingProgrammatically = true
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0.3
+            NSAnimationContext.current.allowsImplicitAnimation = false
+            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
+            NSAnimationContext.endGrouping()
+            self.isResizingProgrammatically = false
+            preChatCenter = nil
+        } else {
+            resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
+        }
     }
 
     private func hideBar() {
@@ -241,8 +261,12 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     func showAIConversation() {
         // Resize window BEFORE changing state so SwiftUI content doesn't render
         // in the old 28x28 frame (which causes a visible jump).
+        // Save center so we can restore exact position when chat closes (avoids drift).
+        preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
+
+        // Anchor from top so the control bar stays visually in place, input grows downward.
         let inputSize = NSSize(width: FloatingControlBarWindow.expandedBarSize.width, height: 120)
-        resizeAnchored(to: inputSize, makeResizable: false, animated: true)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
 
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             state.showingAIConversation = true
@@ -328,6 +352,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     // MARK: - Window Geometry
 
+    /// Center-center: preserves midpoint (used by hover expand/collapse).
     private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
         NSPoint(
             x: frame.midX - newSize.width / 2,
@@ -335,7 +360,16 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         )
     }
 
-    private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false) {
+    /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
+    private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
+        let top = frame.origin.y + frame.height
+        return NSPoint(
+            x: frame.midX - newSize.width / 2,
+            y: top - newSize.height
+        )
+    }
+
+    private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false, anchorTop: Bool = false) {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -344,7 +378,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             width: max(size.width, FloatingControlBarWindow.minBarSize.width),
             height: max(size.height, FloatingControlBarWindow.minBarSize.height)
         )
-        let newOrigin = originForCenterAnchor(newSize: constrainedSize)
+        let newOrigin = anchorTop
+            ? originForTopCenterAnchor(newSize: constrainedSize)
+            : originForCenterAnchor(newSize: constrainedSize)
 
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
@@ -376,7 +412,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let width = FloatingControlBarWindow.expandedBarSize.width
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
-            self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
+            self?.resizeAnchored(to: size, makeResizable: false, animated: animated, anchorTop: true)
         }
         if let workItem = resizeWorkItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
@@ -427,7 +463,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             )
         } ?? NSSize(width: 430, height: 430)
 
-        resizeAnchored(to: targetSize, makeResizable: true, animated: animated)
+        resizeAnchored(to: targetSize, makeResizable: true, animated: animated, anchorTop: true)
     }
 
     /// Center the bar near the top of the main screen.
