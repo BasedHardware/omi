@@ -15,6 +15,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
+    private var isUserDragging = false
     private var inputHeightCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -497,9 +498,27 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         centerOnMainScreen()
     }
 
+    /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
+    /// fully visible on any screen.
+    private func validatePositionOnScreenChange() {
+        let barFrame = self.frame
+        // Check if the bar's center point is on any visible screen
+        let center = NSPoint(x: barFrame.midX, y: barFrame.midY)
+        let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(center) }
+        if !onScreen {
+            log("FloatingControlBarWindow: bar center \(center) is off-screen after monitor change, re-centering")
+            UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
+            centerOnMainScreen()
+        }
+    }
+
     // MARK: - NSWindowDelegate
 
     @objc func windowDidMove(_ notification: Notification) {
+        // Only persist position when the user is physically dragging the bar.
+        // Programmatic moves (resize animations, chat open/close) should not
+        // overwrite the saved position — that causes silent drift.
+        guard isUserDragging else { return }
         UserDefaults.standard.set(
             NSStringFromPoint(self.frame.origin), forKey: FloatingControlBarWindow.positionKey
         )
