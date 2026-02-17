@@ -1005,7 +1005,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             );
                           } else {
                             return Text(
-                              isUnlimited ? 'Change Plan' : 'Keep Omi Unlimited',
+                              isUnlimited ? 'Change Plan' : 'Keep Nooto Unlimited',
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             );
                           }
@@ -1024,7 +1024,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           return Text(
                             isUnlimited
                                 ? 'You are on the Unlimited Plan.'
-                                : 'Choose your plan to unlock unlimited Omi.',
+                                : 'Choose your plan to unlock unlimited Nooto.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                           );
@@ -1089,12 +1089,12 @@ class _PlansSheetState extends State<PlansSheet> {
                             const SizedBox(height: 16),
                             _buildFeatureItem(
                               faIcon: FontAwesomeIcons.solidComments,
-                              text: 'Ask Omi anything about your life',
+                              text: 'Ask Nooto anything about your life',
                             ),
                             const SizedBox(height: 16),
                             _buildFeatureItem(
                               faIcon: FontAwesomeIcons.brain,
-                              text: 'Unlock Omi\'s infinite memory',
+                              text: 'Unlock Nooto\'s infinite memory',
                             ),
                           ],
                         ),
@@ -1527,7 +1527,7 @@ class _PlansSheetState extends State<PlansSheet> {
                       if (!isUnlimited) ...[
                         const SizedBox(height: 32),
                         Text(
-                          'Omi is free, but freemium has limits that affect your experience:',
+                          'Nooto is free, but freemium has limits that affect your experience:',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.grey.shade400,
