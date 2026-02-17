@@ -570,8 +570,8 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
     }
 
-    // Skip resize when in follow-up mode (the panel is already at response size)
-    guard !skipResize && !barState.isVoiceFollowUp else { return }
+    // Skip resize when in follow-up mode or expanded AI conversation (already at full size)
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {
