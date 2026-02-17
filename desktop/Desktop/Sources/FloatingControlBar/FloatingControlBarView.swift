@@ -89,7 +89,6 @@ struct FloatingControlBarView: View {
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Escape to Close", keys: ["esc"])
                         compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
                     }
                 }
@@ -106,11 +105,20 @@ struct FloatingControlBarView: View {
 
     /// Minimal icon shown when not hovering
     private var compactCircleView: some View {
-        Text("Omi")
-            .scaledFont(size: 13, weight: .bold)
-            .foregroundColor(.white)
-            .frame(height: 28)
-            .padding(.horizontal, 4)
+        Group {
+            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "omi_app_icon", withExtension: "png")!) {
+                Image(nsImage: logoImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 24, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+        }
+        .frame(width: 28, height: 28)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
