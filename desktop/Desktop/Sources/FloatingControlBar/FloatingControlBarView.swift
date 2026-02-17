@@ -57,6 +57,10 @@ struct FloatingControlBarView: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovering = hovering
             }
+            // Drive window resize via state (only when bar is in compact mode)
+            if !state.showingAIConversation && !state.isVoiceListening {
+                state.isHoveringBar = hovering
+            }
         }
         .background(DraggableAreaView(targetWindow: window))
         .floatingBackground()
@@ -69,29 +73,47 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        VStack(spacing: 1) {
+        Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
+                // Expanded view for voice listening
                 voiceListeningView
-            } else {
-                compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
-                    onAskAI()
-                }
-            }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .frame(height: 50)
+            } else if isHovering || state.showingAIConversation {
+                // Expanded view on hover — show labels
+                VStack(spacing: 1) {
+                    compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
+                        onAskAI()
+                    }
 
-            HStack(spacing: 6) {
-                compactLabel("Hide", keys: ["\u{2318}", "\\"])
-                compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
-                // Solid color toggle moved to Settings > Ask Omi Floating Bar
-                // if state.showingAIConversation {
-                //     Spacer().frame(width: 2)
-                //     compactToggle("Solid color", isOn: $shortcutSettings.solidBackground)
-                //         .help("Toggle between solid dark background and semi-transparent blur")
-                // }
+                    HStack(spacing: 6) {
+                        compactLabel("Hide", keys: ["\u{2318}", "\\"])
+                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .frame(height: 50)
+            } else {
+                // Compact pill — minimal bar like Wispr Flow
+                compactPillView
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
-        .frame(height: 50)
+    }
+
+    /// Minimal horizontal pill shown when not hovering
+    private var compactPillView: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Color.white.opacity(0.5))
+                .frame(width: 6, height: 6)
+            Text("omi")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(height: 28)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

@@ -6,8 +6,9 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 210, height: 50)
-    private static let minBarSize = NSSize(width: 210, height: 50)
+    private static let defaultSize = NSSize(width: 100, height: 28)
+    private static let minBarSize = NSSize(width: 100, height: 28)
+    static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
 
@@ -15,6 +16,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var inputHeightCancellable: AnyCancellable?
+    private var hoverCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
 
     var onPlayPause: (() -> Void)?
@@ -136,6 +138,29 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.state.isDragging = false
             }
         }
+
+        // Observe hover state to resize between compact pill and expanded bar
+        hoverCancellable = state.$isHoveringBar
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isHovering in
+                guard let self = self,
+                      !self.state.showingAIConversation,
+                      !self.state.isVoiceListening else { return }
+                if isHovering {
+                    self.resizeAnchored(
+                        to: FloatingControlBarWindow.expandedBarSize,
+                        makeResizable: false,
+                        animated: true
+                    )
+                } else {
+                    self.resizeAnchored(
+                        to: FloatingControlBarWindow.minBarSize,
+                        makeResizable: false,
+                        animated: true
+                    )
+                }
+            }
     }
 
     // MARK: - AI Actions
@@ -220,7 +245,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
-        resizeToFixedHeight(FloatingControlBarWindow.minBarSize.height, animated: true)
+        resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
     }
 
     private func hideBar() {
@@ -368,8 +393,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
-        // Use narrow width for collapsed bar, expanded for AI panels
-        let width = height <= FloatingControlBarWindow.minBarSize.height ? FloatingControlBarWindow.defaultSize.width : FloatingControlBarWindow.expandedWidth
+        // Use expanded bar width for AI panels, compact pill for collapsed
+        let width = height <= FloatingControlBarWindow.expandedBarSize.height ? FloatingControlBarWindow.expandedBarSize.width : FloatingControlBarWindow.expandedWidth
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
@@ -379,10 +404,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    /// Resize window for PTT state (expanded when listening, narrow when idle)
+    /// Resize window for PTT state (expanded when listening, compact pill when idle)
     func resizeForPTTState(expanded: Bool) {
-        let width = expanded ? FloatingControlBarWindow.expandedWidth : FloatingControlBarWindow.defaultSize.width
-        let size = NSSize(width: width, height: FloatingControlBarWindow.minBarSize.height)
+        let size = expanded
+            ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
+            : FloatingControlBarWindow.minBarSize
         resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
