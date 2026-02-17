@@ -9,7 +9,7 @@ import { ChatBubble } from '@/components/chat/ChatBubble';
 import { BottomNavigation } from './BottomNavigation';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
-import { ProactiveProvider, ProactiveMonitoringWidget } from '@/components/proactive';
+import { ProactiveProvider } from '@/components/proactive';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
@@ -147,9 +147,6 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
             {/* Recording indicator - handles its own fixed positioning and animates with panels */}
             <HeaderRecordingIndicator />
-
-            {/* Proactive monitoring widget - floating outside recording dropdown */}
-            <ProactiveMonitoringWidget />
           </div>
         </ProactiveProvider>
       </NotificationProvider>
