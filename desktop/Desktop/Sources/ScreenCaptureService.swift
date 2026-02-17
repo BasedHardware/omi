@@ -96,21 +96,39 @@ final class ScreenCaptureService: Sendable {
         let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
         DispatchQueue.global(qos: .utility).async {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: lsregisterPath)
-            // -f = force registration even if already registered
-            // This makes this specific app bundle authoritative
-            process.arguments = ["-f", bundlePath]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
+            runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+        }
+    }
 
-            do {
-                try process.run()
-                process.waitUntilExit()
-                log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
-            } catch {
-                logError("Launch Services: Failed to register", error: error)
-            }
+    /// Synchronous version — call from a background thread when CGRequestScreenCaptureAccess()
+    /// must run after registration completes (e.g. permission trigger flow).
+    static func ensureLaunchServicesRegistrationSync() {
+        guard let bundlePath = Bundle.main.bundlePath as String? else {
+            log("Launch Services: Failed to get bundle path")
+            return
+        }
+
+        log("Launch Services: Re-registering (sync) \(bundlePath)...")
+
+        let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+    }
+
+    private static func runLsregister(path: String, bundlePath: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        // -f = force registration even if already registered
+        // This makes this specific app bundle authoritative
+        process.arguments = ["-f", bundlePath]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            log("Launch Services: Registration completed (exit code: \(process.terminationStatus))")
+        } catch {
+            logError("Launch Services: Failed to register", error: error)
         }
     }
 

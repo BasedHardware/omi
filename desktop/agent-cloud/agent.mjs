@@ -19,6 +19,32 @@ const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 
+// Tables allowed for incremental sync from desktop
+const SYNC_TABLES = new Set([
+  "screenshots", "action_items", "transcription_sessions",
+  "transcription_segments", "memories", "staged_tasks",
+  "focus_sessions", "observations", "live_notes",
+  "ai_user_profiles", "task_dedup_log",
+]);
+
+// FTS rebuild queries — run after sync inserts to keep full-text indexes current.
+// INSERT OR REPLACE fires the existing delete+insert triggers, but we do an
+// explicit rebuild per-row as a safety net.
+const FTS_REBUILD = {
+  screenshots: {
+    sql: `INSERT OR REPLACE INTO screenshots_fts(rowid, ocrText, windowTitle, appName)
+          SELECT id, ocrText, windowTitle, appName FROM screenshots WHERE id = ?`,
+  },
+  action_items: {
+    sql: `INSERT OR REPLACE INTO action_items_fts(rowid, description)
+          SELECT id, description FROM action_items WHERE id = ?`,
+  },
+  staged_tasks: {
+    sql: `INSERT OR REPLACE INTO staged_tasks_fts(rowid, description)
+          SELECT id, description FROM staged_tasks WHERE id = ?`,
+  },
+};
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
 
@@ -35,7 +61,7 @@ function openDatabase() {
   if (!existsSync(DB_PATH)) {
     return false;
   }
-  db = Database(DB_PATH, { readonly: true });
+  db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
   // Rebuild schema + system prompt + MCP server
@@ -568,6 +594,84 @@ function startServer() {
       return;
     }
 
+    // Incremental sync endpoint — desktop pushes new/changed rows
+    if (req.url?.startsWith("/sync") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      if (!db) {
+        res.writeHead(503, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Database not loaded. Upload omi.db first." }));
+        return;
+      }
+
+      let body = "";
+      req.on("data", (chunk) => { body += chunk.toString(); });
+      req.on("end", () => {
+        try {
+          const payload = JSON.parse(body);
+          const { table, rows } = payload;
+          if (!table || !Array.isArray(rows) || rows.length === 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Required: { table: string, rows: [{...}, ...] }" }));
+            return;
+          }
+          if (!SYNC_TABLES.has(table)) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: `Table '${table}' not in sync whitelist` }));
+            return;
+          }
+
+          const cols = Object.keys(rows[0]);
+          const placeholders = cols.map(() => "?").join(", ");
+          const sql = `INSERT OR REPLACE INTO "${table}" (${cols.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
+
+          const stmt = db.prepare(sql);
+          const insertMany = db.transaction((rowList) => {
+            for (const row of rowList) {
+              const values = cols.map((col) => {
+                const val = row[col];
+                // Decode base64 embedding columns back to Buffer
+                if (col === "embedding" && typeof val === "string" && val.length > 0) {
+                  return Buffer.from(val, "base64");
+                }
+                if (val === null || val === undefined) return null;
+                return val;
+              });
+              stmt.run(...values);
+            }
+          });
+
+          insertMany(rows);
+
+          // Rebuild FTS for tables that have FTS indexes
+          // The DB has triggers, but INSERT OR REPLACE fires DELETE+INSERT which
+          // the triggers handle. However, if FTS gets out of sync, we rebuild explicitly.
+          if (FTS_REBUILD[table]) {
+            const fts = FTS_REBUILD[table];
+            const ids = rows.map((r) => r.id).filter(Boolean);
+            if (ids.length > 0) {
+              const rebuildStmt = db.prepare(fts.sql);
+              for (const id of ids) {
+                rebuildStmt.run(id);
+              }
+            }
+          }
+
+          log(`Sync: ${rows.length} rows → ${table}`);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ applied: rows.length, table }));
+        } catch (err) {
+          log(`Sync error: ${err.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     res.writeHead(404);
     res.end();
   });
@@ -676,6 +780,7 @@ function startServer() {
     log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
     log(`Health check: http://0.0.0.0:${PORT}/health`);
     log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
+    log(`Sync:   POST http://0.0.0.0:${PORT}/sync`);
   });
 }
 
