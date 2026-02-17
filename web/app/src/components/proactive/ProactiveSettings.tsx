@@ -85,7 +85,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-gray-200">Confidence Threshold</label>
                     <span className="text-sm text-gray-400">
-                        {Math.round(settings.confidenceThreshold * 100)}%
+                        {Math.round((settings.advice?.confidenceThreshold ?? 0.6) * 100)}%
                     </span>
                 </div>
                 <input
@@ -93,7 +93,7 @@ export function ProactiveSettings({ onClose }: ProactiveSettingsProps) {
                     min="0.5"
                     max="1.0"
                     step="0.05"
-                    value={settings.confidenceThreshold}
+                    value={settings.advice?.confidenceThreshold ?? 0.6}
                     onChange={(e) => updateSettings({ confidenceThreshold: Number(e.target.value) })}
                     className="w-full"
                 />

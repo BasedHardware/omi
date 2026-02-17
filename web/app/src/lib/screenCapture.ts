@@ -212,7 +212,8 @@ export function createFrameCapture(
             await initializeCapture();
             // Wait for video to initialize
             // Re-check videoElement as initializeCapture is side-effectual
-            if (videoElement && (videoElement.readyState < 2)) {
+            const ve = videoElement as HTMLVideoElement | null;
+            if (ve && (ve.readyState < 2)) {
                 await new Promise((resolve) => setTimeout(resolve, 500));
             }
         }

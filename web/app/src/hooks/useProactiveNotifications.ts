@@ -41,6 +41,8 @@ export function useProactiveNotifications() {
         addAdvice,
         addFocusEntry,
         clearHistory,
+        setPreviousAdvice,
+        setFocusHistory,
         setLastNotificationTime,
         setError,
         startMonitoringRef,
@@ -348,6 +350,8 @@ export function useProactiveNotifications() {
         stopMonitoring,
         updateSettings,
         clearHistory,
+        clearAdviceHistory: () => setPreviousAdvice([]),
+        clearFocusHistory: () => setFocusHistory([]),
         clearError: () => setError(null),
     };
 }

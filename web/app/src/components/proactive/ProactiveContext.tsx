@@ -138,6 +138,8 @@ interface ProactiveContextValue {
     addAdvice: (advice: ExtractedAdvice) => void;
     addFocusEntry: (entry: FocusHistoryItem) => void;
     clearHistory: () => void;
+    setPreviousAdvice: React.Dispatch<React.SetStateAction<ExtractedAdvice[]>>;
+    setFocusHistory: React.Dispatch<React.SetStateAction<FocusHistoryItem[]>>;
     setLastNotificationTime: (time: number) => void;
     setError: (error: string | null) => void;
 
@@ -208,6 +210,8 @@ export function ProactiveProvider({ children }: { children: ReactNode }) {
                 addAdvice,
                 addFocusEntry,
                 clearHistory,
+                setPreviousAdvice,
+                setFocusHistory,
                 setLastNotificationTime,
                 setError,
                 startMonitoringRef,
