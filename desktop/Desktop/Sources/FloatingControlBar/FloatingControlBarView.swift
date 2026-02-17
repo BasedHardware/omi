@@ -63,7 +63,7 @@ struct FloatingControlBarView: View {
             }
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 18)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 14)
     }
 
     private func openFloatingBarSettings() {
