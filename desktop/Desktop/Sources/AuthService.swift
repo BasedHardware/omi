@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import FirebaseAuth
 import CryptoKit
 import AppKit
+import AuthenticationServices
 import Sentry
 
 @MainActor
@@ -31,6 +32,10 @@ class AuthService {
     // OAuth state for CSRF protection
     private var pendingOAuthState: String?
     private var oauthContinuation: CheckedContinuation<(code: String, state: String), Error>?
+
+    // Native Apple Sign In
+    private var currentNonce: String?
+    private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
     // Production: Cloud Run backend
