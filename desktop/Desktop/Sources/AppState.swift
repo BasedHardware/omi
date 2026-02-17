@@ -790,10 +790,15 @@ class AppState: ObservableObject {
     /// Trigger accessibility permission prompt
     func triggerAccessibilityPermission() {
         // This will prompt the user if not already trusted
-        // The system alert includes an "Open System Settings" button, so we don't need to open it separately
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         hasAccessibilityPermission = trusted
+
+        // On macOS Sequoia+, AXIsProcessTrustedWithOptions no longer shows a visible dialog,
+        // so explicitly open System Settings to the Accessibility pane
+        if !trusted {
+            openAccessibilityPreferences()
+        }
     }
 
     /// Open Accessibility preferences in System Settings
