@@ -54,7 +54,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         setupViews()
 
-        if let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
+        if ShortcutSettings.shared.draggableBarEnabled,
+           let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
             // Verify saved position is on a visible screen
             let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14)) }
