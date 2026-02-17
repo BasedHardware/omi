@@ -15,6 +15,7 @@ import database.conversations as conversations_db
 import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import llm_mini, llm_medium
+from utils.config import get_app_name
 from utils.llm.usage_tracker import track_usage, Features
 
 
@@ -74,7 +75,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
         if recent_messages:
             chat_lines = []
             for msg in reversed(recent_messages):  # Chronological order
-                sender = "User" if msg.get('sender') == 'human' else "Omi"
+                sender = "User" if msg.get('sender') == 'human' else get_app_name()
                 text = msg.get('text', '')[:200]
                 if text:
                     chat_lines.append(f"{sender}: {text}")
