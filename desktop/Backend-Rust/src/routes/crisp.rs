@@ -227,7 +227,7 @@ async fn get_unread_messages(
         })
         .collect();
 
-    tracing::debug!(
+    tracing::info!(
         "Crisp unread for {}: {} operator messages since {}",
         email,
         operator_messages.len(),
