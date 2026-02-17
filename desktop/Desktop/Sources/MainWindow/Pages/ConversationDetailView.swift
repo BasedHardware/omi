@@ -78,17 +78,19 @@ struct ConversationDetailView: View {
             tabPicker
 
             // Scrollable content based on selected tab
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    if selectedTab == .summary {
-                        // Summary tab content
+            // NOTE: Each tab gets its own ScrollView so that LazyVStack in the transcript tab
+            // receives bounded proposed height and can truly lazy-load its children.
+            // Previously, LazyVStack was nested inside ScrollView > VStack which defeats laziness
+            // and caused all 400+ transcript segments to be measured at once (Sentry: App Hanging 2s+).
+            if selectedTab == .summary {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
                         summaryTabContent
-                    } else {
-                        // Transcript tab content
-                        transcriptTabContent
                     }
+                    .padding(24)
                 }
-                .padding(24)
+            } else {
+                transcriptTabContent
             }
         }
         .task {
@@ -503,52 +505,65 @@ struct ConversationDetailView: View {
     private var transcriptTabContent: some View {
         if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
             // Empty state
-            VStack(spacing: 12) {
-                Image(systemName: "text.quote")
-                    .scaledFont(size: 40)
-                    .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+            ScrollView {
+                VStack(spacing: 12) {
+                    Image(systemName: "text.quote")
+                        .scaledFont(size: 40)
+                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
-                Text("No transcript available")
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
+                    Text("No transcript available")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 60)
         } else if isLoadingConversation {
             // Loading state
-            VStack(spacing: 12) {
-                ProgressView()
-                    .scaleEffect(0.8)
+            ScrollView {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .scaleEffect(0.8)
 
-                Text("Loading transcript...")
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textTertiary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 60)
-        } else {
-            // Transcript header with copy button
-            HStack {
-                Text("\(displayConversation.transcriptSegments.count) segments")
-                    .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
-
-                Spacer()
-
-                Button(action: copyTranscript) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.on.doc")
-                            .scaledFont(size: 11)
-                        Text("Copy")
-                            .scaledFont(size: 12)
-                    }
-                    .foregroundColor(OmiColors.purplePrimary)
+                    Text("Loading transcript...")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textTertiary)
                 }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
             }
+        } else {
+            // LazyVStack is a DIRECT child of ScrollView so it gets bounded proposed height
+            // and only materializes visible children. Previously nested inside ScrollView > VStack
+            // which defeated laziness and caused 400+ text layout measurements on the main thread.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    // Transcript header with copy button
+                    HStack {
+                        Text("\(displayConversation.transcriptSegments.count) segments")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
 
-            // Transcript content
-            transcriptBubblesView
+                        Spacer()
+
+                        Button(action: copyTranscript) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.doc")
+                                    .scaledFont(size: 11)
+                                Text("Copy")
+                                    .scaledFont(size: 12)
+                            }
+                            .foregroundColor(OmiColors.purplePrimary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
+
+                    // Transcript bubbles — only visible segments are materialized
+                    transcriptBubblesContent
+                }
+                .padding(24)
+            }
         }
     }
 
