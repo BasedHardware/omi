@@ -178,6 +178,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
             // App code already handles HTTP errors and reports meaningful ones explicitly.
             options.enableCaptureFailedRequests = false
+            options.maxBreadcrumbs = 100
             options.beforeSend = { event in
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
