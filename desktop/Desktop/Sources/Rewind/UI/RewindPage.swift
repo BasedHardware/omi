@@ -20,6 +20,7 @@ struct RewindPage: View {
     @State private var searchViewMode: SearchViewMode? = nil
     @State private var selectedGroupIndex: Int = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isPageFocused: Bool
 
     // Monitoring toggle state
     @State private var isMonitoring = false
@@ -144,11 +145,14 @@ struct RewindPage: View {
                 rewindIntroOverlay
             }
         }
+        .focusable()
+        .focused($isPageFocused)
         .task {
             await viewModel.loadInitialData()
         }
         .onAppear {
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
