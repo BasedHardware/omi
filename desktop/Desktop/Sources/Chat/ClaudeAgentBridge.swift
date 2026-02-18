@@ -535,17 +535,24 @@ actor ClaudeAgentBridge {
             throw BridgeError.notRunning
         }
 
+        log("ClaudeAgentBridge: Testing Playwright connection...")
         let result = try await query(
             prompt: "Call browser_snapshot to verify the extension is connected. Only call that one tool, then report success or failure.",
             systemPrompt: "You are a connection test agent. Call the browser_snapshot tool exactly once. If it succeeds, respond with exactly 'CONNECTED'. If it fails, respond with 'FAILED' followed by the error.",
             mode: "ask",
             onTextDelta: { _ in },
             onToolCall: { _, _, _ in "" },
-            onToolActivity: { _, _, _, _ in },
+            onToolActivity: { name, status, _, _ in
+                log("ClaudeAgentBridge: test tool activity: \(name) \(status)")
+            },
             onThinkingDelta: { _ in },
-            onToolResultDisplay: { _, _, _ in }
+            onToolResultDisplay: { _, name, output in
+                log("ClaudeAgentBridge: test tool result: \(name) -> \(output.prefix(200))")
+            }
         )
-        return result.text.contains("CONNECTED")
+        let connected = result.text.contains("CONNECTED")
+        log("ClaudeAgentBridge: Playwright test response: \(result.text.prefix(300)), connected=\(connected)")
+        return connected
     }
 
     /// Remove the Playwright MCP Bridge extension from Chrome's forcelist policy.
