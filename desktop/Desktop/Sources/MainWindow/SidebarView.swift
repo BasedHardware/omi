@@ -1105,6 +1105,13 @@ struct SidebarView: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription to match (Rewind bundles both)
+        if enabled && !appState.isTranscribing {
+            appState.startTranscription()
+        } else if !enabled && appState.isTranscribing {
+            appState.stopTranscription()
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {

@@ -161,6 +161,9 @@ class AppState: ObservableObject {
     private var screenCapturePermissionLostObserver: NSObjectProtocol?
     private var screenCaptureKitBrokenObserver: NSObjectProtocol?
 
+    // Track transcription state across sleep/wake cycles
+    private var wasTranscribingBeforeSleep = false
+
     // Debounce timestamps to prevent duplicate system notifications
     private var lastScreenLockTime: Date?
     private var lastScreenUnlockTime: Date?
@@ -274,8 +277,9 @@ class AppState: ObservableObject {
         ) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
+                self.wasTranscribingBeforeSleep = self.isTranscribing
                 if self.isTranscribing {
-                    log("Computer sleeping - finalizing conversation")
+                    log("Computer sleeping - finalizing conversation (will restart on wake)")
                     _ = await self.finalizeConversation()
                     self.stopAudioCapture()
                     self.clearTranscriptionState()
@@ -290,9 +294,23 @@ class AppState: ObservableObject {
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             log("System woke from sleep")
             NotificationCenter.default.post(name: .systemDidWake, object: nil)
+
+            // Restart transcription if it was active before sleep
+            Task { @MainActor in
+                guard let self = self else { return }
+                if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+                    log("System wake: Restarting transcription (was active before sleep)")
+                    // Brief delay to let audio subsystem settle after wake
+                    try? await Task.sleep(for: .seconds(2))
+                    if !self.isTranscribing {
+                        self.startTranscription()
+                    }
+                }
+                self.wasTranscribingBeforeSleep = false
+            }
         }
 
         // Screen locked (debounced - macOS sometimes fires multiple times)
