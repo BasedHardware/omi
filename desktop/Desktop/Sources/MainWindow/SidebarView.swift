@@ -36,15 +36,15 @@ enum SidebarNavItem: Int, CaseIterable {
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
+        case .dashboard: return "house.fill"
         case .conversations: return "text.bubble.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
-        case .memories: return "brain.head.profile"
-        case .tasks: return "checkmark.square.fill"
+        case .memories: return "brain"
+        case .tasks: return "checklist"
         case .focus: return "eye.fill"
         case .advice: return "lightbulb.fill"
         case .rewind: return "clock.arrow.circlepath"
-        case .apps: return "square.grid.2x2.fill"
+        case .apps: return "puzzlepiece.fill"
         case .settings: return "gearshape.fill"
         case .permissions: return "exclamationmark.triangle.fill"
         case .device: return "wave.3.right.circle.fill"
