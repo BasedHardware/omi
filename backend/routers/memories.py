@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.conversations as conversations_db
+from utils.other.storage import delete_conversation_audio_files, delete_conversation_recording
 from database.vector_db import upsert_memory_vector, delete_memory_vector, delete_vector
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
@@ -77,6 +78,8 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
         try:
             conversations_db.delete_conversation(uid, conversation_id)
             delete_vector(uid, conversation_id)
+            delete_conversation_audio_files(uid, conversation_id)   # private_cloud_sync_bucket
+            delete_conversation_recording(uid, conversation_id)     # memories_recordings_bucket
         except Exception as e:
             # Log the error, but don't block the memory deletion as it's already done
             logger.error(f"Failed to delete conversation {conversation_id} or its vector for memory {memory_id}: {e}")
