@@ -474,6 +474,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
+    final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
@@ -528,10 +529,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               child: Text(
                                 data.speakerId == omiSpeakerId
                                     ? 'omi'
-                                    : (person?.name ??
-                                        widget.sharedSpeakerNames[data.speakerId] ??
-                                        context.l10n.speakerWithId(
-                                            '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}')),
+                                    : (suggestion != null && person == null
+                                        ? '${suggestion.personName}?'
+                                        : (person?.name ??
+                                            widget.sharedSpeakerNames[data.speakerId] ??
+                                            context.l10n.speakerWithId(
+                                                '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}'))),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
@@ -551,6 +554,20 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
                                 ),
                               )
+                            ] else if (suggestion != null && person == null && !widget.isConversationDetail) ...[
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
+                                child: const Text(
+                                  'Tag',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: Colors.white,
+                                  ),
+                                ),
+                              ),
                             ],
                           ],
                         ),
