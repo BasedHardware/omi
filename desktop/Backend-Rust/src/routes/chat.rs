@@ -439,7 +439,7 @@ async fn save_and_return_greeting(
 ) -> Result<Json<InitialMessageResponse>, StatusCode> {
     match state
         .firestore
-        .save_message(uid, greeting, "ai", app_id, Some(session_id))
+        .save_message(uid, greeting, "ai", app_id, Some(session_id), None)
         .await
     {
         Ok(message) => {
