@@ -252,6 +252,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             // Report comprehensive settings state (at most once per day)
             AnalyticsManager.shared.reportAllSettingsIfNeeded()
+
+            // File indexing: scan ~/Downloads, ~/Documents, ~/Desktop → analyze → store as memories
+            // Runs once (guarded by hasCompletedFileIndexing UserDefaults key)
+            Task {
+                await FileIndexerService.shared.runOnboardingPipeline()
+            }
         }
 
         // One-time migration: Enable launch at login for existing users who haven't set it
