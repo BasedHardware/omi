@@ -74,8 +74,12 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
     # fix: delete the source conversation + its vector so chat can't retrieve it
     conversation_id = memory.get('conversation_id')
     if conversation_id:
-        conversations_db.delete_conversation(uid, conversation_id)
-        delete_vector(uid, conversation_id)
+        try:
+            conversations_db.delete_conversation(uid, conversation_id)
+            delete_vector(uid, conversation_id)
+        except Exception as e:
+            # Log the error, but don't block the memory deletion as it's already done
+            logger.error(f"Failed to delete conversation {conversation_id} or its vector for memory {memory_id}: {e}")
         
     return {'status': 'ok'}
 
