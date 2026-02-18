@@ -466,6 +466,9 @@ export DB_PATH='data/omi.db'
 
 source .env.sh
 
+# Pull latest agent.mjs from GCS
+curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS pull failed, using existing agent.mjs'
+
 # Kill any existing agent process
 pkill -x node 2>/dev/null || true
 sleep 1
