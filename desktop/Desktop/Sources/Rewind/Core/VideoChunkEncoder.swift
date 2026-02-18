@@ -150,6 +150,7 @@ actor VideoChunkEncoder {
         do {
             try await writeFrame(image: image)
             consecutiveWriteFailures = 0 // Reset on successful write
+            resetStalenessTimer()
         } catch {
             consecutiveWriteFailures += 1
             logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
@@ -292,6 +293,9 @@ actor VideoChunkEncoder {
     }
 
     private func finalizeCurrentChunk() async throws {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         // Close stdin to signal end of input to ffmpeg
         if let stdin = ffmpegStdin {
             try? stdin.close()
@@ -319,6 +323,42 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+    }
+
+    // MARK: - Staleness Detection
+
+    /// Reset the staleness timer after each successful frame write.
+    /// If no new frame arrives within chunkDuration + 10s, finalize the chunk
+    /// to release the ffmpeg process and H.265 hardware encoder context.
+    private func resetStalenessTimer() {
+        stalenessCheckTask?.cancel()
+        let timeout = chunkDuration + 10.0
+        stalenessCheckTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.finalizeStaleChunkIfNeeded()
+        }
+    }
+
+    /// Finalize a chunk that has gone stale (no new frames for longer than chunk duration).
+    private func finalizeStaleChunkIfNeeded() async {
+        guard let startTime = currentChunkStartTime else { return }
+
+        let age = Date().timeIntervalSince(startTime)
+        guard age >= chunkDuration else { return }
+
+        log("VideoChunkEncoder: Stale chunk detected (age: \(String(format: "%.0f", age))s, no new frames) — finalizing to release encoder resources")
+
+        let breadcrumb = Breadcrumb(level: .warning, category: "video_encoder")
+        breadcrumb.message = "Stale chunk finalized"
+        breadcrumb.data = [
+            "age_seconds": Int(age),
+            "frame_count": frameTimestamps.count,
+            "chunk_path": currentChunkPath ?? "none"
+        ]
+        SentrySDK.addBreadcrumb(breadcrumb)
+
+        try? await finalizeCurrentChunk()
     }
 
     // MARK: - Helpers
@@ -435,6 +475,9 @@ actor VideoChunkEncoder {
 
     /// Cancel any in-progress encoding and clean up
     func cancel() async {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         // Close stdin first
         if let stdin = ffmpegStdin {
             try? stdin.close()
@@ -459,6 +502,9 @@ actor VideoChunkEncoder {
     /// Emergency reset when ffmpeg fails repeatedly or buffer overflows
     /// Clears all state and allows fresh start on next frame
     private func emergencyReset() async throws {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         let droppedFrames = frameTimestamps.count
 
         // Report to Sentry for monitoring
