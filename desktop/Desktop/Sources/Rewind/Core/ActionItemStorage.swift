@@ -590,14 +590,13 @@ actor ActionItemStorage {
     }
 
 
-    /// Mark incomplete tasks NOT present in the API response as staged (soft-deleted).
-    /// This cleans up tasks that were moved to staged_tasks on the backend
+    /// Hard-delete incomplete tasks NOT present in the API response.
+    /// This cleans up tasks that were moved to staged_tasks or deleted on the backend
     /// but still linger in local SQLite, preventing phantom entries in the task list.
     func markAbsentTasksAsStaged(apiIds: Set<String>) async throws {
         let db = try await ensureInitialized()
 
-        let marked = try await db.write { database -> Int in
-            // Find recent incomplete, non-deleted tasks whose backendId is NOT in the API set
+        let deleted = try await db.write { database -> Int in
             let records = try ActionItemRecord
                 .filter(Column("completed") == false)
                 .filter(Column("deleted") == false)
@@ -605,21 +604,18 @@ actor ActionItemStorage {
                 .fetchAll(database)
 
             var count = 0
-            for var record in records {
+            for record in records {
                 guard let backendId = record.backendId, !backendId.isEmpty else { continue }
                 if !apiIds.contains(backendId) {
-                    record.deleted = true
-                    record.deletedBy = "staged"
-                    record.updatedAt = Date()
-                    try record.update(database)
+                    try record.delete(database)
                     count += 1
                 }
             }
             return count
         }
 
-        if marked > 0 {
-            log("ActionItemStorage: Marked \(marked) absent tasks as staged")
+        if deleted > 0 {
+            log("ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync")
         }
     }
 
@@ -768,21 +764,19 @@ actor ActionItemStorage {
         }
     }
 
-    /// Soft delete an action item
+    /// Hard-delete an action item by local SQLite ID
     func deleteActionItem(id: Int64) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            guard var record = try ActionItemRecord.fetchOne(database, key: id) else {
+            guard let record = try ActionItemRecord.fetchOne(database, key: id) else {
                 throw ActionItemStorageError.recordNotFound
             }
 
-            record.deleted = true
-            record.updatedAt = Date()
-            try record.update(database)
+            try record.delete(database)
         }
 
-        log("ActionItemStorage: Soft deleted action item \(id)")
+        log("ActionItemStorage: Hard-deleted action item \(id)")
     }
 
     /// Optimistically update completion status locally (before API call)
