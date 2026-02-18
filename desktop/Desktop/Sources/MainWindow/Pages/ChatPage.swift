@@ -153,7 +153,17 @@ struct ChatPage: View {
             }
 
             let prompt = """
-            I just indexed \(pendingFiles) files on your computer. Use the execute_sql tool to explore the indexed_files table — look at file types, project indicators, recent files, and folder structure. Open interesting findings, identify what the user works on, their tech stack, projects, and interests. Share what you learn about them.
+            I just indexed \(pendingFiles) files on your computer. I want to understand who you are — your projects, passions, and what you're building.
+
+            Use the execute_sql tool to explore the indexed_files table. Start with an overview (file types, folders, project indicators), then dig deeper:
+
+            1. Find project files (package.json, Cargo.toml, etc.) to identify active projects
+            2. Look at recently modified files to understand what you're working on right now
+            3. Search for patterns — recurring themes, technologies, interests
+            4. Open interesting files (read_file tool) to understand project purposes and context
+            5. Don't stop at surface level — keep investigating, follow threads, connect the dots
+
+            Tell me a story about this person. Who are they? What are they building? What drives them? What's their tech stack and workflow? Share discoveries as you find them, like you're exploring and getting to know a new friend.
             """
             await chatProvider.sendMessage(prompt)
         }
