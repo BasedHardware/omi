@@ -46,8 +46,6 @@ struct GoalsWidget: View {
                 }
             }
 
-            // Number emojis for goal indices
-            let numberEmojis = ["1️⃣", "2️⃣", "3️⃣"]
 
             if goals.isEmpty {
                 // Empty state with AI suggestion
@@ -101,7 +99,6 @@ struct GoalsWidget: View {
                         GoalRowView(
                             goal: goal,
                             index: index,
-                            numberEmoji: index < numberEmojis.count ? numberEmojis[index] : "\(index + 1)",
                             onTap: { editingGoal = goal },
                             onUpdateProgress: { value in onUpdateProgress(goal, value) },
                             onDelete: { onDeleteGoal(goal) },
@@ -171,7 +168,6 @@ struct GoalsWidget: View {
 struct GoalRowView: View {
     let goal: Goal
     let index: Int
-    let numberEmoji: String
     let onTap: () -> Void
     let onUpdateProgress: (Double) -> Void
     let onDelete: () -> Void
@@ -210,28 +206,22 @@ struct GoalRowView: View {
     private var dragProgressText: String {
         let currentVal: Double
         if let dv = dragValue {
-            let raw = goal.minValue + dv * (goal.maxValue - goal.minValue)
-            currentVal = max(goal.minValue, min(raw, goal.maxValue))
+            let raw = goal.minValue + dv * (goal.targetValue - goal.minValue)
+            currentVal = max(goal.minValue, min(raw, goal.targetValue))
         } else {
             currentVal = goal.currentValue
         }
-        let current = currentVal == currentVal.rounded()
-            ? String(format: "%.0f", currentVal)
-            : String(format: "%.1f", currentVal)
-        let target = goal.targetValue == goal.targetValue.rounded()
-            ? String(format: "%.0f", goal.targetValue)
-            : String(format: "%.1f", goal.targetValue)
-        return "\(current)/\(target)"
+        return "\(Int(currentVal.rounded()))/\(Int(goal.targetValue.rounded()))"
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            // Number icon - tapping opens edit sheet
+            // Emoji icon - tapping opens edit sheet
             ZStack {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(OmiColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 32, height: 32)
-                Text(numberEmoji)
+                Text(goalEmoji)
                     .scaledFont(size: 16)
             }
             .onTapGesture { onTap() }
@@ -313,9 +303,9 @@ struct GoalRowView: View {
                             }
                             .onEnded { _ in
                                 if let dv = dragValue {
-                                    let finalValue = goal.minValue + dv * (goal.maxValue - goal.minValue)
-                                    let clampedValue = max(goal.minValue, min(finalValue, goal.maxValue))
-                                    let roundedValue = (clampedValue * 10).rounded() / 10
+                                    let finalValue = goal.minValue + dv * (goal.targetValue - goal.minValue)
+                                    let clampedValue = max(goal.minValue, min(finalValue, goal.targetValue))
+                                    let roundedValue = clampedValue.rounded()
                                     onUpdateProgress(roundedValue)
                                 }
                                 isDragging = false
@@ -393,8 +383,178 @@ struct GoalRowView: View {
         }
     }
 
-    // goalEmoji computed property commented out — replaced with numbered icons
-    // private var goalEmoji: String { ... }
+    private var goalEmoji: String {
+        let title = goal.title.lowercased()
+
+        // Money/Revenue
+        if title.contains("revenue") || title.contains("money") || title.contains("income") ||
+           title.contains("profit") || title.contains("sales") || title.contains("$") ||
+           title.contains("dollar") || title.contains("earn") {
+            return "💰"
+        }
+        // Growth/Users
+        if title.contains("users") || title.contains("customers") || title.contains("clients") ||
+           title.contains("subscribers") || title.contains("followers") || title.contains("growth") ||
+           title.contains("million") || title.contains("1m") || title.contains("10k") ||
+           title.contains("100k") || title.contains("mrr") || title.contains("arr") {
+            return "🚀"
+        }
+        // Startup/Business
+        if title.contains("startup") || title.contains("launch") || title.contains("business") ||
+           title.contains("company") {
+            return "🏆"
+        }
+        // Investment
+        if title.contains("invest") || title.contains("stock") || title.contains("crypto") ||
+           title.contains("trading") {
+            return "📈"
+        }
+        // Workout/Gym
+        if title.contains("workout") || title.contains("gym") || title.contains("exercise") ||
+           title.contains("lift") || title.contains("muscle") || title.contains("strength") ||
+           title.contains("pushup") || title.contains("pullup") {
+            return "💪"
+        }
+        // Running/Cardio
+        if title.contains("run") || title.contains("marathon") || title.contains("jog") ||
+           title.contains("cardio") || title.contains("steps") || title.contains("walk") ||
+           title.contains("mile") || title.contains("km") {
+            return "🏃"
+        }
+        // Weight/Diet
+        if title.contains("weight") || title.contains("lose") || title.contains("fat") ||
+           title.contains("diet") || title.contains("calories") || title.contains("kg") ||
+           title.contains("lbs") || title.contains("pounds") {
+            return "⚖️"
+        }
+        // Meditation/Yoga
+        if title.contains("meditat") || title.contains("mindful") || title.contains("yoga") ||
+           title.contains("breath") || title.contains("calm") || title.contains("peace") ||
+           title.contains("zen") {
+            return "🧘"
+        }
+        // Sleep
+        if title.contains("sleep") || title.contains("rest") || title.contains("hours") {
+            return "😴"
+        }
+        // Water/Hydration
+        if title.contains("water") || title.contains("hydrat") || title.contains("drink") {
+            return "💧"
+        }
+        // Health
+        if title.contains("health") || title.contains("wellness") || title.contains("healthy") {
+            return "❤️"
+        }
+        // Reading
+        if title.contains("read") || title.contains("book") || title.contains("pages") ||
+           title.contains("chapter") {
+            return "📚"
+        }
+        // Learning
+        if title.contains("learn") || title.contains("study") || title.contains("course") ||
+           title.contains("class") || title.contains("skill") || title.contains("certif") {
+            return "🎓"
+        }
+        // Coding
+        if title.contains("code") || title.contains("program") || title.contains("develop") ||
+           title.contains("app") || title.contains("software") || title.contains("tech") {
+            return "💻"
+        }
+        // Language
+        if title.contains("language") || title.contains("spanish") || title.contains("french") ||
+           title.contains("chinese") || title.contains("english") || title.contains("german") {
+            return "🗣️"
+        }
+        // Writing
+        if title.contains("write") || title.contains("blog") || title.contains("article") ||
+           title.contains("post") || title.contains("content") || title.contains("words") {
+            return "✍️"
+        }
+        // Video
+        if title.contains("video") || title.contains("youtube") || title.contains("tiktok") ||
+           title.contains("film") {
+            return "🎬"
+        }
+        // Music
+        if title.contains("music") || title.contains("song") || title.contains("piano") ||
+           title.contains("guitar") || title.contains("sing") {
+            return "🎵"
+        }
+        // Art
+        if title.contains("art") || title.contains("draw") || title.contains("paint") ||
+           title.contains("design") || title.contains("create") {
+            return "🎨"
+        }
+        // Photo
+        if title.contains("photo") || title.contains("picture") || title.contains("camera") {
+            return "📸"
+        }
+        // Tasks
+        if title.contains("task") || title.contains("todo") || title.contains("complete") ||
+           title.contains("finish") || title.contains("done") {
+            return "✅"
+        }
+        // Habits
+        if title.contains("habit") || title.contains("daily") || title.contains("streak") ||
+           title.contains("consistent") || title.contains("routine") {
+            return "🔥"
+        }
+        // Time/Focus
+        if title.contains("time") || title.contains("hour") || title.contains("minute") ||
+           title.contains("focus") || title.contains("pomodoro") || title.contains("productive") {
+            return "⏰"
+        }
+        // Project/Ship
+        if title.contains("project") || title.contains("ship") || title.contains("deliver") ||
+           title.contains("deadline") || title.contains("feature") {
+            return "🎯"
+        }
+        // Travel
+        if title.contains("travel") || title.contains("trip") || title.contains("visit") ||
+           title.contains("country") || title.contains("city") || title.contains("vacation") {
+            return "✈️"
+        }
+        // Home
+        if title.contains("home") || title.contains("house") || title.contains("apartment") ||
+           title.contains("move") || title.contains("buy") {
+            return "🏠"
+        }
+        // Saving
+        if title.contains("save") || title.contains("saving") || title.contains("budget") ||
+           title.contains("emergency fund") {
+            return "🏦"
+        }
+        // Social
+        if title.contains("friend") || title.contains("social") || title.contains("network") ||
+           title.contains("connect") || title.contains("meet") || title.contains("outreach") {
+            return "👥"
+        }
+        // Family
+        if title.contains("family") || title.contains("kids") || title.contains("parent") {
+            return "👨‍👩‍👧"
+        }
+        // Relationship
+        if title.contains("date") || title.contains("relationship") || title.contains("love") {
+            return "💕"
+        }
+        // Win/Success
+        if title.contains("win") || title.contains("first") || title.contains("best") ||
+           title.contains("top") || title.contains("champion") {
+            return "🏆"
+        }
+        // Growth/Improve
+        if title.contains("grow") || title.contains("improve") || title.contains("better") ||
+           title.contains("progress") {
+            return "🌱"
+        }
+        // Star/Success
+        if title.contains("star") || title.contains("success") || title.contains("excellent") {
+            return "⭐"
+        }
+
+        // Default
+        return "🎯"
+    }
 }
 
 // MARK: - Goal Edit Sheet
@@ -447,8 +607,7 @@ struct GoalEditSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Emoji selector commented out — goals now use numbered icons
-                    // if !isNewGoal { ... }
+
 
                     // Title field
                     VStack(alignment: .leading, spacing: 8) {

@@ -771,66 +771,42 @@ class TasksViewModel: ObservableObject {
 
     // MARK: - Drag-and-Drop Methods
 
-    /// Get ordered tasks for a category, respecting sortOrder then legacy categoryOrder
+    /// Get ordered tasks for a category, matching Python backend sort: due_at ASC, created_at DESC
     func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
         guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
             return []
         }
 
-        // Check if any tasks have sortOrder set (backend-synced ordering)
-        let hasSortOrder = tasks.contains { ($0.sortOrder ?? 0) > 0 }
+        // Fall back to legacy UserDefaults categoryOrder if present (local drag-and-drop)
+        if let order = categoryOrder[category], !order.isEmpty {
+            var orderedTasks: [TaskActionItem] = []
+            var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
 
-        if hasSortOrder {
-            // Sort by sortOrder ascending; tasks without sortOrder go at the end (matches Flutter)
-            return tasks.sorted { a, b in
-                let aOrder = a.sortOrder ?? 0
-                let bOrder = b.sortOrder ?? 0
-                if aOrder > 0 && bOrder > 0 {
-                    return aOrder < bOrder
+            for id in order {
+                if let task = taskMap[id] {
+                    orderedTasks.append(task)
+                    taskMap.removeValue(forKey: id)
                 }
-                if aOrder > 0 { return true }
-                if bOrder > 0 { return false }
-                // Fallback: dueAt ascending, then createdAt ascending
+            }
+
+            // Remaining tasks not in custom order
+            let remaining = taskMap.values.sorted { a, b in
                 let aDue = a.dueAt ?? .distantFuture
                 let bDue = b.dueAt ?? .distantFuture
                 if aDue != bDue { return aDue < bDue }
-                return a.createdAt < b.createdAt
+                return a.createdAt > b.createdAt
             }
+            orderedTasks.append(contentsOf: remaining)
+            return orderedTasks
         }
 
-        // Fall back to legacy UserDefaults categoryOrder
-        guard let order = categoryOrder[category], !order.isEmpty else {
-            // No custom order — sort by dueAt ascending, then createdAt ascending (matches Flutter)
-            return tasks.sorted { a, b in
-                let aDue = a.dueAt ?? .distantFuture
-                let bDue = b.dueAt ?? .distantFuture
-                if aDue != bDue { return aDue < bDue }
-                return a.createdAt < b.createdAt
-            }
-        }
-
-        // Sort tasks by custom order, new items go at the end
-        var orderedTasks: [TaskActionItem] = []
-        var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
-
-        // Add tasks in custom order
-        for id in order {
-            if let task = taskMap[id] {
-                orderedTasks.append(task)
-                taskMap.removeValue(forKey: id)
-            }
-        }
-
-        // Add remaining tasks (new ones not in custom order), sorted by dueAt then createdAt
-        let remaining = taskMap.values.sorted { a, b in
+        // Default sort: due_at ascending (nulls last), created_at descending (newest first)
+        return tasks.sorted { a, b in
             let aDue = a.dueAt ?? .distantFuture
             let bDue = b.dueAt ?? .distantFuture
             if aDue != bDue { return aDue < bDue }
-            return a.createdAt < b.createdAt
+            return a.createdAt > b.createdAt
         }
-        orderedTasks.append(contentsOf: remaining)
-
-        return orderedTasks
     }
 
     /// Move a task within a category
@@ -1568,7 +1544,8 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
             // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
             if !task.completed {
@@ -1603,7 +1580,8 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
-        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
             // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
             if !task.completed {
@@ -1682,25 +1660,15 @@ class TasksViewModel: ObservableObject {
     }
 
     private func sortTasks(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        // Matches Python backend sort: due_at ASC (nulls last), created_at DESC (newest first)
         tasks.sorted { a, b in
-            // 1. Tasks with sortOrder > 0 come first, sorted ascending (matches Flutter)
-            let aOrder = a.sortOrder ?? 0
-            let bOrder = b.sortOrder ?? 0
-            if aOrder > 0 && bOrder > 0 {
-                return aOrder < bOrder
-            }
-            if aOrder > 0 { return true }
-            if bOrder > 0 { return false }
-
-            // 2. Sort by dueAt ascending (soonest first), nil = distantFuture
             let aDue = a.dueAt ?? .distantFuture
             let bDue = b.dueAt ?? .distantFuture
             if aDue != bDue {
                 return aDue < bDue
             }
-
-            // 3. Tie-breaker: createdAt ascending (oldest first, matches Flutter)
-            return a.createdAt < b.createdAt
+            // Tie-breaker: created_at descending (newest first)
+            return a.createdAt > b.createdAt
         }
     }
 

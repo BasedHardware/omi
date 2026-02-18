@@ -137,9 +137,14 @@ struct DesktopHomeView: View {
                             Task { await appState.refreshConversations() }
                         }
                         // Periodic file re-scan (every 3 hours in production, 2 min for testing)
-                        .onReceive(Timer.publish(every: 2 * 60, on: .main, in: .common).autoconnect()) { _ in
-                            guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { return }
-                            Task { await FileIndexerService.shared.backgroundRescan() }
+                        .task {
+                            while !Task.isCancelled {
+                                try? await Task.sleep(for: .seconds(2 * 60))
+                                guard !Task.isCancelled else { break }
+                                guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { continue }
+                                log("DesktopHomeView: Triggering background file rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
                         }
                         .dismissableSheet(isPresented: $showFileIndexingSheet) {
                             FileIndexingView(

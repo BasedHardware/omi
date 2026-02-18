@@ -85,29 +85,15 @@ class TasksStore: ObservableObject {
         }
     }
 
-    /// Standard sort: sortOrder first (if set), then due date ascending, then manual > AI-generated, then newest first
+    /// Standard sort matching Python backend: due_at ASC (nulls last), created_at DESC (newest first)
     private static func sortByDueDateThenSource(_ a: TaskActionItem, _ b: TaskActionItem) -> Bool {
-        // If both have sortOrder, use it
-        let aSort = a.sortOrder ?? 0
-        let bSort = b.sortOrder ?? 0
-        if aSort > 0 && bSort > 0 {
-            return aSort < bSort
-        }
-        // Tasks with sortOrder precede unsorted tasks
-        if aSort > 0 && bSort == 0 { return true }
-        if aSort == 0 && bSort > 0 { return false }
-
         let aDue = a.dueAt ?? .distantFuture
         let bDue = b.dueAt ?? .distantFuture
         if aDue != bDue {
             return aDue < bDue
         }
-        let aWeight = sourceWeight(for: a.source)
-        let bWeight = sourceWeight(for: b.source)
-        if aWeight != bWeight {
-            return aWeight < bWeight
-        }
-        return a.createdAt < b.createdAt
+        // Tie-breaker: created_at descending (newest first) — matches Python backend
+        return a.createdAt > b.createdAt
     }
 
     /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite

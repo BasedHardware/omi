@@ -214,6 +214,7 @@ struct OnboardingView: View {
         switch activePermissionIndex {
         case 0: return "permissions"
         case 2: return "enable_notifications"
+        case 3: return "accessibility_permission"
         default: return nil
         }
     }
