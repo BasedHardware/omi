@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
 
 import database.memories as memories_db
-from database.vector_db import upsert_memory_vector, delete_memory_vector
+import database.conversations as conversations_db
+from database.vector_db import upsert_memory_vector, delete_memory_vector, delete_vector
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.other import endpoints as auth
@@ -66,9 +67,16 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
 def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _validate_memory(uid, memory_id)
+    memory = _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     delete_memory_vector(uid, memory_id)
+
+    # fix: delete the source conversation + its vector so chat can't retrieve it
+    conversation_id = memory.get('conversation_id')
+    if conversation_id:
+        conversations_db.delete_conversation(uid, conversation_id)
+        delete_vector(uid, conversation_id)
+        
     return {'status': 'ok'}
 
 
