@@ -217,7 +217,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        toggleMonitoring(enabled: !isMonitoring)
+                                        // Use combined state so toggle matches what's displayed
+                                        let isFullyOn = isMonitoring && appState.isTranscribing
+                                        toggleMonitoring(enabled: !isFullyOn)
                                     },
                                     showRewindIcon: true
                                 )
