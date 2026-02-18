@@ -36,17 +36,17 @@ class GoalGenerationService {
 
     // MARK: - Stale Goal Removal
 
-    /// Complete (deactivate) goals that haven't had any progress update in 3+ days
-    /// Instead of deleting, marks them as completed so they appear in history
+    /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
+    /// Only applies to goals with source == "ai". User-created goals (source == "user" or no source) are never auto-removed.
     private func removeStaleGoals() async {
         do {
             let goals = try await APIClient.shared.getGoals()
             let now = Date()
 
-            for goal in goals where goal.isActive {
+            for goal in goals where goal.isActive && goal.source == "ai" {
                 let daysSinceUpdate = now.timeIntervalSince(goal.updatedAt)
                 if daysSinceUpdate >= staleGoalDays {
-                    log("GoalGenerationService: Completing stale goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
+                    log("GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
                     _ = try await APIClient.shared.completeGoal(id: goal.id)
                     try? await GoalStorage.shared.markCompleted(backendId: goal.id)
                     NotificationCenter.default.post(name: .goalAutoCreated, object: nil)
