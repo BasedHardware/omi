@@ -1641,6 +1641,17 @@ struct SettingsContentView: View {
 
                         Spacer()
 
+                        if !playwrightExtensionToken.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Connected")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
                         Toggle("", isOn: $playwrightUseExtension)
                             .toggleStyle(.switch)
                             .controlSize(.small)
@@ -1654,58 +1665,118 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    Text("Connect to your Chrome browser with all your logged-in sessions. The extension is auto-installed via Chrome policy. When disabled, the AI opens a standalone browser instead.")
+                    Text("Lets the AI use your Chrome browser with all your logged-in sessions. The extension is auto-installed when Chrome restarts.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if playwrightUseExtension {
-                        Button(action: {
-                            if let url = URL(string: "https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 12)
-                                Text("View Chrome Extension")
-                                    .scaledFont(size: 13)
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                        if playwrightExtensionToken.isEmpty {
+                            // Setup steps
+                            VStack(alignment: .leading, spacing: 10) {
+                                // Step 1
+                                HStack(alignment: .top, spacing: 10) {
+                                    Text("1")
+                                        .scaledFont(size: 11, weight: .bold)
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
 
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Auto-approve token (optional)")
-                                .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Open the extension in Chrome")
+                                            .scaledFont(size: 13, weight: .medium)
+                                            .foregroundColor(OmiColors.textPrimary)
 
-                            HStack(spacing: 8) {
-                                TextField("Paste token from extension", text: $playwrightExtensionToken)
-                                    .textFieldStyle(.plain)
-                                    .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textPrimary)
-                                    .padding(8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(OmiColors.backgroundPrimary.opacity(0.5))
-                                    )
-                                    .onChange(of: playwrightExtensionToken) { _, newValue in
-                                        UserDefaults.standard.set(newValue, forKey: "playwrightExtensionToken")
+                                        Button(action: {
+                                            if let url = URL(string: "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html") {
+                                                NSWorkspace.shared.open(url)
+                                            }
+                                        }) {
+                                            HStack(spacing: 5) {
+                                                Image(systemName: "arrow.up.right.square")
+                                                    .scaledFont(size: 11)
+                                                Text("Open Extension Settings")
+                                                    .scaledFont(size: 12)
+                                            }
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.small)
                                     }
+                                }
 
-                                if !playwrightExtensionToken.isEmpty {
-                                    Button(action: { playwrightExtensionToken = "" }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .scaledFont(size: 14)
-                                            .foregroundColor(OmiColors.textTertiary)
+                                // Step 2
+                                HStack(alignment: .top, spacing: 10) {
+                                    Text("2")
+                                        .scaledFont(size: 11, weight: .bold)
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
+
+                                    Text("Copy the auth token from the extension page")
+                                        .scaledFont(size: 13, weight: .medium)
+                                        .foregroundColor(OmiColors.textPrimary)
+                                }
+
+                                // Step 3
+                                HStack(alignment: .top, spacing: 10) {
+                                    Text("3")
+                                        .scaledFont(size: 11, weight: .bold)
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
+
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Paste it here")
+                                            .scaledFont(size: 13, weight: .medium)
+                                            .foregroundColor(OmiColors.textPrimary)
+
+                                        TextField("Paste token here...", text: $playwrightExtensionToken)
+                                            .textFieldStyle(.plain)
+                                            .scaledFont(size: 13)
+                                            .foregroundColor(OmiColors.textPrimary)
+                                            .padding(8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 8)
+                                                            .stroke(OmiColors.textTertiary.opacity(0.3), lineWidth: 1)
+                                                    )
+                                            )
+                                            .onChange(of: playwrightExtensionToken) { _, newValue in
+                                                UserDefaults.standard.set(newValue, forKey: "playwrightExtensionToken")
+                                            }
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
+                            .padding(.top, 4)
+                        } else {
+                            // Token is set — show compact view
+                            HStack(spacing: 8) {
+                                Text("Token")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
 
-                            Text("Set a token in the extension settings and paste it here to skip the approval popup for each action.")
-                                .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                                Text(String(playwrightExtensionToken.prefix(8)) + "...")
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Spacer()
+
+                                Button(action: {
+                                    playwrightExtensionToken = ""
+                                    UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reset")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
                         }
                     }
                 }
