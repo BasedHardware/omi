@@ -586,10 +586,11 @@ struct ChatBubble: View {
                         }
                     }
                     // Show typing indicator at end if still streaming
+                    // (skip only when last block is a running tool — it already has a spinner)
                     if message.isStreaming {
                         if case .toolCall(_, _, .running, _, _, _) = message.contentBlocks.last {
-                            // Tool is running — indicator already shows spinner
-                        } else if case .text(_, let lastText) = message.contentBlocks.last, lastText.isEmpty {
+                            // Tool is running — its card already shows a spinner
+                        } else {
                             TypingIndicator()
                         }
                     }
