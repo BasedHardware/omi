@@ -264,6 +264,7 @@ class ChatProvider: ObservableObject {
     @Published var isLoading = false
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
+    @Published var isClearing = false
     @Published var errorMessage: String?
     @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
@@ -1718,6 +1719,9 @@ class ChatProvider: ObservableObject {
 
     /// Clear current session messages (delete and create new)
     func clearChat() async {
+        isClearing = true
+        defer { isClearing = false }
+
         if isInDefaultChat {
             // Default chat mode: clear UI immediately, delete in background
             messages = []

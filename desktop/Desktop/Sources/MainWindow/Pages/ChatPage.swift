@@ -316,19 +316,25 @@ struct ChatPage: View {
             }
 
             // Clear chat button
-            if !chatProvider.messages.isEmpty {
+            if !chatProvider.messages.isEmpty || chatProvider.isClearing {
                 Button(action: {
                     Task {
                         await chatProvider.clearChat()
                     }
                 }) {
-                    Image(systemName: "trash")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                    if chatProvider.isClearing {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "trash")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("Clear chat history")
-                .disabled(chatProvider.isLoading)
+                .disabled(chatProvider.isLoading || chatProvider.isClearing)
             }
 
             // History button (only in multi-chat mode)
@@ -369,7 +375,7 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             hasMoreMessages: chatProvider.hasMoreMessages,
             isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-            isLoadingInitial: chatProvider.isLoading || chatProvider.isLoadingSessions,
+            isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions) && !chatProvider.isClearing,
             app: selectedApp,
             onLoadMore: { await chatProvider.loadMoreMessages() },
             onRate: { messageId, rating in
