@@ -961,8 +961,18 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    // Always open settings - user needs to configure notification style
-                    appState.openNotificationPreferences()
+                    if isBannerDisabled {
+                        // Banners are off — user needs to change notification style in System Settings
+                        appState.openNotificationPreferences()
+                    } else {
+                        // Auth is not authorized — try lsregister repair first, then fall back to System Settings
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "sidebar_fix_button",
+                            previousStatus: "not_authorized",
+                            currentStatus: "not_authorized"
+                        )
+                        appState.repairNotificationAndFallback()
+                    }
                 }) {
                     Text("Fix")
                         .scaledFont(size: 11, weight: .semibold)
