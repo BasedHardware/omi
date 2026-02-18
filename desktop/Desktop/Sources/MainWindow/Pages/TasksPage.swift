@@ -1190,14 +1190,18 @@ class TasksViewModel: ObservableObject {
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
         if hasNonStatusFilters {
-            Task { await loadFilteredTasksFromDatabase() }
+            Task { [weak self] in
+                guard let self, self.recomputeVersion == version else { return }
+                await self.loadFilteredTasksFromDatabase()
+            }
         } else {
             recomputeDisplayCaches()
         }
 
         // Load true counts from SQLite asynchronously
-        Task {
-            await loadTagCountsFromDatabase()
+        Task { [weak self] in
+            guard let self, self.recomputeVersion == version else { return }
+            await self.loadTagCountsFromDatabase()
         }
     }
 

@@ -1149,11 +1149,11 @@ class TasksStore: ObservableObject {
             }
         }
 
-        // Soft-delete on backend in background
+        // Hard-delete on backend in background
         do {
-            _ = try await APIClient.shared.softDeleteActionItem(id: task.id, deletedBy: "user")
+            try await APIClient.shared.deleteActionItem(id: task.id)
         } catch {
-            logError("TasksStore: Failed to soft-delete task on backend (local delete preserved)", error: error)
+            logError("TasksStore: Failed to hard-delete task on backend (local delete preserved)", error: error)
         }
     }
 
