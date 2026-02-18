@@ -184,8 +184,8 @@ class AuthService {
                     AuthState.shared.userEmail = user?.email
                     AuthState.shared.isRestoringAuth = false
                     self?.saveAuthState(isSignedIn: true, email: user?.email, userId: user?.uid)
-                    // Load name from Firebase Auth displayName if we don't have it locally
-                    self?.loadNameFromFirebaseIfNeeded()
+                    // Load name from backend profile (Firestore), then Firebase Auth as fallback
+                    self?.loadNameFromBackendIfNeeded()
                     // Sync assistant settings from backend (fire-and-forget)
                     Task { await SettingsSyncManager.shared.syncFromServer() }
                 } else {
@@ -627,11 +627,12 @@ class AuthService {
 
     // MARK: - User Name Management
 
-    /// Update the user's given name (stores locally and optionally updates Firebase)
+    /// Update the user's given name (stores locally, updates Firebase Auth, and syncs to backend profile)
     @MainActor
     func updateGivenName(_ fullName: String) async {
-        let nameParts = fullName.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-        let newGivenName = nameParts.first.map(String.init) ?? fullName.trimmingCharacters(in: .whitespaces)
+        let trimmedName = fullName.trimmingCharacters(in: .whitespaces)
+        let nameParts = trimmedName.split(separator: " ", maxSplits: 1)
+        let newGivenName = nameParts.first.map(String.init) ?? trimmedName
         let newFamilyName = nameParts.count > 1 ? String(nameParts[1]) : ""
 
         // Save locally
@@ -647,11 +648,21 @@ class AuthService {
         } else if let user = Auth.auth().currentUser {
             do {
                 let changeRequest = user.createProfileChangeRequest()
-                changeRequest.displayName = fullName.trimmingCharacters(in: .whitespaces)
+                changeRequest.displayName = trimmedName
                 try await changeRequest.commitChanges()
-                NSLog("OMI AUTH: Updated Firebase displayName to: %@", fullName)
+                NSLog("OMI AUTH: Updated Firebase displayName to: %@", trimmedName)
             } catch {
                 NSLog("OMI AUTH: Failed to update Firebase displayName (non-fatal): %@", error.localizedDescription)
+            }
+        }
+
+        // Also save to backend profile (Firestore) so it persists across sign-in methods
+        if !isImpersonating {
+            do {
+                try await APIClient.shared.updateUserProfile(name: trimmedName)
+                NSLog("OMI AUTH: Updated backend profile name to: %@", trimmedName)
+            } catch {
+                NSLog("OMI AUTH: Failed to update backend profile name (non-fatal): %@", error.localizedDescription)
             }
         }
     }
