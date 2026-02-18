@@ -461,6 +461,7 @@ export DB_PATH='data/omi.db'
     if let Some(key) = gemini_key {
         startup_script.push_str(&format!("export GEMINI_API_KEY='{}'\n", key));
     }
+    startup_script.push_str("export BACKEND_URL='https://api.omi.me'\n");
     startup_script.push_str(
         r#"ENVEOF
 

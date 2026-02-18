@@ -14,6 +14,7 @@ import { homedir } from "os";
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.omi.me";
 const PORT = parseInt(process.env.PORT || "8080", 10);
 const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
@@ -35,6 +36,10 @@ const SYNC_TABLES = new Set([
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
+
+// --- Firebase token (passed from desktop app for backend API calls) ---
+let userFirebaseToken = null;
+let backendTools = [];
 
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
@@ -246,6 +251,114 @@ e.g. "reading about machine learning", "working on design mockups"`,
     return { content: [{ type: "text", text: result }] };
   }
 );
+
+// --- JSON Schema → Zod converter for backend tools ---
+
+function jsonSchemaToZod(schema) {
+  const props = schema.properties || {};
+  const required = new Set(schema.required || []);
+  const shape = {};
+
+  for (const [name, prop] of Object.entries(props)) {
+    if (name === "config") continue; // internal LangChain param
+
+    let zodType;
+    // Handle anyOf (Optional fields from Pydantic)
+    const rawType = prop.type || (prop.anyOf ? prop.anyOf.find(t => t.type && t.type !== "null")?.type : "string");
+
+    switch (rawType) {
+      case "integer":
+      case "number":
+        zodType = z.number();
+        break;
+      case "boolean":
+        zodType = z.boolean();
+        break;
+      case "array":
+        zodType = z.array(z.any());
+        break;
+      default:
+        zodType = z.string();
+    }
+
+    if (prop.description) zodType = zodType.describe(prop.description);
+
+    if (!required.has(name)) {
+      zodType = zodType.optional();
+      if (prop.default !== undefined) zodType = zodType.default(prop.default);
+    }
+
+    shape[name] = zodType;
+  }
+
+  return shape;
+}
+
+// --- Fetch and register backend tools from Python API ---
+
+async function fetchAndRegisterBackendTools() {
+  if (!userFirebaseToken) {
+    console.log("[backend-tools] No Firebase token, skipping tool fetch");
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/v1/agent/tools`, {
+      headers: { Authorization: `Bearer ${userFirebaseToken}` },
+    });
+    if (!resp.ok) {
+      console.log(`[backend-tools] Failed to fetch tools: HTTP ${resp.status}`);
+      return;
+    }
+
+    const data = await resp.json();
+    const toolDefs = data.tools || [];
+    console.log(`[backend-tools] Fetched ${toolDefs.length} tools from Python backend`);
+
+    backendTools = toolDefs.map((def) => {
+      const zodShape = jsonSchemaToZod(def.parameters || {});
+      return tool(
+        def.name,
+        def.description || `Backend tool: ${def.name}`,
+        zodShape,
+        async (params) => {
+          try {
+            const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${userFirebaseToken}`,
+              },
+              body: JSON.stringify({ tool_name: def.name, params }),
+            });
+            const result = await execResp.json();
+            if (result.error) {
+              return { content: [{ type: "text", text: `Error: ${result.error}` }] };
+            }
+            return { content: [{ type: "text", text: result.result || JSON.stringify(result) }] };
+          } catch (err) {
+            return { content: [{ type: "text", text: `Error calling ${def.name}: ${err.message}` }] };
+          }
+        }
+      );
+    });
+
+    // Rebuild MCP server with all tools
+    rebuildMcpServer();
+    console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
+  } catch (err) {
+    console.log(`[backend-tools] Error fetching tools: ${err.message}`);
+  }
+}
+
+function rebuildMcpServer() {
+  const allTools = [executeSqlTool, semanticSearchTool, ...backendTools];
+  omiServer = createSdkMcpServer({
+    name: "omi-tools",
+    tools: allTools,
+  });
+  console.log(`[mcp] Rebuilt MCP server with ${allTools.length} tools`);
+}
 
 // --- Shared Agent Query Handler ---
 
