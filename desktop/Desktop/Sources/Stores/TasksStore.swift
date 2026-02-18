@@ -1157,32 +1157,37 @@ class TasksStore: ObservableObject {
         }
     }
 
-    /// Restore a previously soft-deleted task (for undo)
-    /// Uses local-first: un-soft-deletes in SQLite (with fresh updatedAt to prevent
-    /// auto-refresh from reverting) and re-inserts into in-memory arrays.
+    /// Restore a previously deleted task (for undo)
+    /// Re-inserts the task into SQLite and re-creates on backend (since both were hard-deleted).
     func restoreTask(_ task: TaskActionItem) async {
-        // 1. Un-soft-delete in SQLite
+        // 1. Re-insert into SQLite from the in-memory task object
         do {
-            try await ActionItemStorage.shared.undeleteActionItemByBackendId(task.id)
+            try await ActionItemStorage.shared.syncTaskActionItems([task])
         } catch {
-            logError("TasksStore: Failed to undelete task locally", error: error)
+            logError("TasksStore: Failed to re-insert task locally for undo", error: error)
             return
         }
 
-        // 2. Read back from SQLite to get fresh state
-        guard let restoredTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) else {
-            logError("TasksStore: Failed to read back restored task", error: nil)
-            return
-        }
-
-        // 3. Re-insert into the appropriate in-memory array
-        if restoredTask.completed {
-            completedTasks.insert(restoredTask, at: 0)
+        // 2. Re-insert into the appropriate in-memory array
+        if task.completed {
+            completedTasks.insert(task, at: 0)
         } else {
-            incompleteTasks.insert(restoredTask, at: 0)
+            incompleteTasks.insert(task, at: 0)
         }
 
-        log("TasksStore: Restored task \(task.id) via undo")
+        // 3. Re-create on backend (hard-delete already removed it)
+        do {
+            let created = try await APIClient.shared.createActionItem(
+                description: task.description,
+                dueAt: task.dueAt,
+                priority: task.priority
+            )
+            // Update local record with new backend ID
+            try await ActionItemStorage.shared.syncTaskActionItems([created])
+            log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+        } catch {
+            logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
+        }
     }
 
     func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
