@@ -274,6 +274,13 @@ def delete_all_conversation_recordings(uid: str):
     for blob in blobs:
         blob.delete()
 
+def delete_conversation_recording(uid: str, conversation_id: str) -> None:
+    """Delete the recording for a specific conversation."""
+    bucket = storage_client.bucket(memories_recordings_bucket)
+    blob = bucket.blob(f'{uid}/{conversation_id}.wav')
+    if blob.exists():
+        blob.delete()
+
 
 # ********************************************
 # ************* SYNCING FILES **************
