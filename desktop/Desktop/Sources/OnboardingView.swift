@@ -317,8 +317,8 @@ struct OnboardingView: View {
 
                         buttonSection
                     }
-                    .frame(width: currentStep == 3 ? 720 : 420)
-                    .frame(height: currentStep == 3 ? 560 : 420)
+                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 600 : 420))
+                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 650 : 420))
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(OmiColors.backgroundSecondary)
@@ -498,7 +498,6 @@ struct OnboardingView: View {
         if fileCount > 0 {
             log("OnboardingView: File indexing completed with \(fileCount) files")
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
-            UserDefaults.standard.set(fileCount, forKey: "pendingFileIndexingChat")
         } else {
             log("OnboardingView: File indexing skipped")
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")

@@ -26,6 +26,12 @@ actor FileIndexerService {
     /// Batch insert size
     private let batchSize = 500
 
+    /// Package extensions to treat as leaf entries (don't recurse into)
+    private let packageExtensions: Set<String> = [
+        "app", "framework", "bundle", "plugin", "kext",
+        "xcodeproj", "xcworkspace", "playground"
+    ]
+
     private init() {}
 
     // MARK: - Database Access
@@ -187,6 +193,34 @@ actor FileIndexerService {
 
             if isDirectory {
                 if skipFolders.contains(name) { continue }
+
+                // Treat macOS packages (.app, .framework, etc.) as leaf entries
+                let ext = item.pathExtension.lowercased()
+                if packageExtensions.contains(ext) {
+                    var relativePath = item.path
+                    if relativePath.hasPrefix(homePath) {
+                        relativePath = "~" + relativePath.dropFirst(homePath.count)
+                    }
+                    let record = IndexedFileRecord(
+                        path: relativePath,
+                        filename: name,
+                        fileExtension: ext,
+                        fileType: ext == "app" ? "application" : "package",
+                        sizeBytes: 0,
+                        folder: folderName,
+                        depth: depth,
+                        createdAt: resourceValues?.creationDate,
+                        modifiedAt: resourceValues?.contentModificationDate
+                    )
+                    batch.append(record)
+                    totalFiles += 1
+                    if batch.count >= batchSize {
+                        insertBatch(batch, into: db)
+                        batch.removeAll(keepingCapacity: true)
+                    }
+                    continue
+                }
+
                 scanDirectory(
                     url: item,
                     folderName: folderName,
