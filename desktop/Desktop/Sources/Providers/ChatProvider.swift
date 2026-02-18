@@ -1404,17 +1404,19 @@ class ChatProvider: ObservableObject {
             let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
             if !textToSave.isEmpty {
                 do {
+                    let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
                     let response = try await APIClient.shared.saveMessage(
                         text: textToSave,
                         sender: "ai",
                         appId: capturedAppId,
-                        sessionId: capturedSessionId
+                        sessionId: capturedSessionId,
+                        metadata: toolMetadata
                     )
                     if let syncIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
                         messages[syncIndex].id = response.id
                         messages[syncIndex].isSynced = true
                     }
-                    log("Saved and synced AI response: \(response.id)")
+                    log("Saved and synced AI response: \(response.id) (tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
                 } catch {
                     logError("Failed to persist AI response", error: error)
                 }
@@ -1460,13 +1462,15 @@ class ChatProvider: ObservableObject {
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
                     // Still try to persist the partial response
                     let partialText = messages[index].text
+                    let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
                     Task { [weak self] in
                         do {
                             let response = try await APIClient.shared.saveMessage(
                                 text: partialText,
                                 sender: "ai",
                                 appId: capturedAppId,
-                                sessionId: capturedSessionId
+                                sessionId: capturedSessionId,
+                                metadata: partialToolMetadata
                             )
                             await MainActor.run {
                                 if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -1683,6 +1687,36 @@ class ChatProvider: ObservableObject {
                 )
             }
         }
+    }
+
+    /// Serialize tool calls from a message's contentBlocks into a JSON metadata string.
+    /// Returns nil if there are no tool calls.
+    private func serializeToolCallMetadata(messageId: String) -> String? {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
+
+        var toolCalls: [[String: Any]] = []
+        for block in messages[index].contentBlocks {
+            if case .toolCall(_, let name, _, let toolUseId, let input, let output) = block {
+                var call: [String: Any] = ["name": name]
+                if let toolUseId = toolUseId { call["tool_use_id"] = toolUseId }
+                if let input = input {
+                    call["input_summary"] = input.summary
+                    if let details = input.details { call["input"] = details }
+                }
+                if let output = output {
+                    // Truncate large outputs to keep metadata reasonable
+                    call["output"] = output.count > 500 ? String(output.prefix(500)) + "… (truncated)" : output
+                }
+                toolCalls.append(call)
+            }
+        }
+
+        guard !toolCalls.isEmpty else { return nil }
+
+        let metadata: [String: Any] = ["tool_calls": toolCalls]
+        guard let data = try? JSONSerialization.data(withJSONObject: metadata),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
     }
 
     // MARK: - Message Rating

@@ -3855,15 +3855,17 @@ extension APIClient {
         text: String,
         sender: String,
         appId: String? = nil,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        metadata: String? = nil
     ) async throws -> SaveMessageResponse {
         struct SaveRequest: Encodable {
             let text: String
             let sender: String
             let app_id: String?
             let session_id: String?
+            let metadata: String?
         }
-        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId)
+        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
         return try await post("v2/messages", body: body)
     }
 

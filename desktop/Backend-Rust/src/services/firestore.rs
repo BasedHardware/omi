@@ -6493,6 +6493,7 @@ impl FirestoreService {
             session_id: session_id.map(|s| s.to_string()),
             rating: None,
             reported: false,
+            metadata: metadata.map(|s| s.to_string()),
         };
 
         tracing::info!(
@@ -6805,6 +6806,12 @@ impl FirestoreService {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let metadata = fields
+            .get("metadata")
+            .and_then(|v| v.get("stringValue"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(MessageDB {
             id,
             text,
@@ -6814,6 +6821,7 @@ impl FirestoreService {
             session_id,
             rating,
             reported,
+            metadata,
         })
     }
 

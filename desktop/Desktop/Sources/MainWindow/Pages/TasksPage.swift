@@ -683,6 +683,10 @@ class TasksViewModel: ObservableObject {
     /// Throttle flag for loadMoreIfNeeded to prevent task storms during fast scroll
     private var isLoadingMoreGuard = false
 
+    /// Minimum interval between pagination triggers (seconds)
+    private var lastLoadMoreTime: Date = .distantPast
+    private let loadMoreThrottleInterval: TimeInterval = 0.5
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -777,14 +781,20 @@ class TasksViewModel: ObservableObject {
         let hasSortOrder = tasks.contains { ($0.sortOrder ?? 0) > 0 }
 
         if hasSortOrder {
-            // Sort by sortOrder ascending; tasks without sortOrder go at the end sorted by createdAt
+            // Sort by sortOrder ascending; tasks without sortOrder go at the end (matches Flutter)
             return tasks.sorted { a, b in
-                let aOrder = a.sortOrder ?? Int.max
-                let bOrder = b.sortOrder ?? Int.max
-                if aOrder != bOrder {
+                let aOrder = a.sortOrder ?? 0
+                let bOrder = b.sortOrder ?? 0
+                if aOrder > 0 && bOrder > 0 {
                     return aOrder < bOrder
                 }
-                return a.createdAt > b.createdAt
+                if aOrder > 0 { return true }
+                if bOrder > 0 { return false }
+                // Fallback: dueAt ascending, then createdAt ascending
+                let aDue = a.dueAt ?? .distantFuture
+                let bDue = b.dueAt ?? .distantFuture
+                if aDue != bDue { return aDue < bDue }
+                return a.createdAt < b.createdAt
             }
         }
 
@@ -1669,21 +1679,24 @@ class TasksViewModel: ObservableObject {
 
     private func sortTasks(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
         tasks.sorted { a, b in
-            // Tasks with due dates first, then by due date ascending
-            // Tie-breaker: created_at descending (newest first) - matches backend
-            switch (a.dueAt, b.dueAt) {
-            case (nil, nil):
-                return a.createdAt > b.createdAt
-            case (nil, _):
-                return false
-            case (_, nil):
-                return true
-            case (let aDate?, let bDate?):
-                if aDate == bDate {
-                    return a.createdAt > b.createdAt
-                }
-                return aDate < bDate
+            // 1. Tasks with sortOrder > 0 come first, sorted ascending (matches Flutter)
+            let aOrder = a.sortOrder ?? 0
+            let bOrder = b.sortOrder ?? 0
+            if aOrder > 0 && bOrder > 0 {
+                return aOrder < bOrder
             }
+            if aOrder > 0 { return true }
+            if bOrder > 0 { return false }
+
+            // 2. Sort by dueAt ascending (soonest first), nil = distantFuture
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue {
+                return aDue < bDue
+            }
+
+            // 3. Tie-breaker: createdAt ascending (oldest first, matches Flutter)
+            return a.createdAt < b.createdAt
         }
     }
 
@@ -1693,8 +1706,18 @@ class TasksViewModel: ObservableObject {
         await store.loadTasks()
     }
 
+    /// Throttled wrapper called from .onAppear — skips if called too recently
+    func throttledLoadMoreIfNeeded(currentTask: TaskActionItem) async {
+        let now = Date()
+        guard now.timeIntervalSince(lastLoadMoreTime) >= loadMoreThrottleInterval else { return }
+        lastLoadMoreTime = now
+        await loadMoreIfNeeded(currentTask: currentTask)
+    }
+
     func loadMoreIfNeeded(currentTask: TaskActionItem) async {
         guard !isLoadingMoreGuard else { return }
+        isLoadingMoreGuard = true
+        defer { isLoadingMoreGuard = false }
 
         if isInFilteredMode {
             // In filtered mode, check if we need to show more from already-queried results
@@ -1706,13 +1729,9 @@ class TasksViewModel: ObservableObject {
                   taskIndex >= thresholdIndex else {
                 return
             }
-            isLoadingMoreGuard = true
             loadMoreFiltered()
-            isLoadingMoreGuard = false
         } else {
-            isLoadingMoreGuard = true
             await store.loadMoreIfNeeded(currentTask: currentTask)
-            isLoadingMoreGuard = false
         }
     }
 
@@ -2917,7 +2936,7 @@ struct TasksPage: View {
                             }
                             .onAppear {
                                 Task {
-                                    await viewModel.loadMoreIfNeeded(currentTask: task)
+                                    await viewModel.throttledLoadMoreIfNeeded(currentTask: task)
                                 }
                             }
                         }
