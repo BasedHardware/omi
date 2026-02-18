@@ -2310,7 +2310,7 @@ struct TasksPage: View {
                 cancelMultiSelectButton
             } else {
                 addTaskButton
-                if chatProvider != nil {
+                if chatProvider != nil && TaskAgentSettings.shared.isEnabled {
                     chatToggleButton
                 }
                 taskSettingsButton

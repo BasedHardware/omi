@@ -157,6 +157,11 @@ struct RewindPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
         }
+        .onChange(of: isSearchFocused) { _, focused in
+            if !focused {
+                isPageFocused = true
+            }
+        }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
             if !oldScreenshots.isEmpty,
