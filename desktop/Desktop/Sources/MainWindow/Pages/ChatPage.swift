@@ -133,6 +133,27 @@ struct ChatPage: View {
                 .padding()
         }
         .background(OmiColors.backgroundPrimary)
+        .onReceive(NotificationCenter.default.publisher(for: .fileIndexingComplete)) { notification in
+            let totalFiles = notification.userInfo?["totalFiles"] as? Int ?? 0
+            log("ChatPage: Received fileIndexingComplete with \(totalFiles) files, navigating to chat")
+
+            // Navigate to chat tab
+            NotificationCenter.default.post(name: .navigateToChat, object: nil)
+
+            // Create new session and auto-send exploration prompt
+            Task {
+                let session = await chatProvider.createNewSession(skipGreeting: true)
+                guard session != nil else {
+                    log("ChatPage: Failed to create session for file indexing analysis")
+                    return
+                }
+
+                let prompt = """
+                I just indexed \(totalFiles) files on your computer. Use the execute_sql tool to explore the indexed_files table — look at file types, project indicators, recent files, and folder structure. Open interesting findings, identify what the user works on, their tech stack, projects, and interests. Share what you learn about them.
+                """
+                await chatProvider.sendMessage(prompt)
+            }
+        }
         .sheet(item: $citedConversation) { conversation in
             ConversationDetailView(
                 conversation: conversation,

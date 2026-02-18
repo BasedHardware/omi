@@ -322,6 +322,11 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.rewind.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.chat.rawValue
+            }
+        }
         .onChange(of: selectedIndex) { oldValue, newValue in
             // Track the previous index when navigating to settings
             if newValue == SidebarNavItem.settings.rawValue && oldValue != SidebarNavItem.settings.rawValue {

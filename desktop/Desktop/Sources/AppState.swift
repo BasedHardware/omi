@@ -2453,4 +2453,8 @@ extension Notification.Name {
     static let goalAutoCreated = Notification.Name("goalAutoCreated")
     /// Posted when a goal is completed (current_value >= target_value)
     static let goalCompleted = Notification.Name("goalCompleted")
+    /// Posted to navigate to AI Chat page
+    static let navigateToChat = Notification.Name("navigateToChat")
+    /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
+    static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
 }
