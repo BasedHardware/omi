@@ -4,6 +4,7 @@ import AVKit
 
 struct OnboardingView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var chatProvider: ChatProvider
     var onComplete: (() -> Void)? = nil
     @AppStorage("onboardingStep") private var currentStep = 0
     @Environment(\.dismiss) private var dismiss
@@ -24,7 +25,6 @@ struct OnboardingView: View {
 
     // State for file indexing step (step 4)
     @State private var fileIndexingDone = false
-    @StateObject private var onboardingChatProvider = ChatProvider()
 
     // Track whether we've initialized bluetooth on the permissions step
     @State private var hasInitializedBluetoothForPermissions = false

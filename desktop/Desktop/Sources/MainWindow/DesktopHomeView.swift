@@ -60,7 +60,7 @@ struct DesktopHomeView: View {
                         appState.hasCompletedOnboarding = true
                     }
                 } else {
-                    OnboardingView(appState: appState, onComplete: nil)
+                    OnboardingView(appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil)
                         .onAppear {
                             log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
                         }
