@@ -136,18 +136,14 @@ struct DesktopHomeView: View {
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
                         }
-                        .sheet(isPresented: $showFileIndexingSheet) {
-                            FileIndexingView { fileCount in
-                                showFileIndexingSheet = false
-                                if fileCount > 0 {
-                                    UserDefaults.standard.set(fileCount, forKey: "pendingFileIndexingChat")
-                                    // Navigate to chat after sheet dismisses
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        NotificationCenter.default.post(name: .navigateToChat, object: nil)
-                                    }
+                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
+                            FileIndexingView(
+                                chatProvider: viewModelContainer.chatProvider,
+                                onComplete: { fileCount in
+                                    showFileIndexingSheet = false
                                 }
-                            }
-                            .frame(width: 420, height: 420)
+                            )
+                            .frame(width: 600, height: 650)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
