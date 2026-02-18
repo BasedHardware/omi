@@ -471,6 +471,30 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Repair notification registration via lsregister, then fall back to System Settings if still broken.
+    /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
+    func repairNotificationAndFallback() {
+        log("Fix button tapped — running lsregister repair for notifications")
+        ProactiveAssistantsPlugin.repairNotificationRegistration()
+
+        // Wait for repair + re-authorization, then check if it worked
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                DispatchQueue.main.async {
+                    let isNowGranted = settings.authorizationStatus == .authorized
+                    self?.hasNotificationPermission = isNowGranted
+                    self?.notificationAlertStyle = settings.alertStyle
+                    if isNowGranted {
+                        log("Notification repair succeeded — auth is now authorized")
+                    } else {
+                        log("Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings")
+                        self?.openNotificationPreferences()
+                    }
+                }
+            }
+        }
+    }
+
     /// Trigger screen recording permission prompt
     func triggerScreenRecordingPermission() {
         // Request both traditional TCC and ScreenCaptureKit permissions
