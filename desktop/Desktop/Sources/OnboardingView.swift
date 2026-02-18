@@ -489,113 +489,20 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - File Index Step View
+    // MARK: - File Indexing Completion
 
-    private var fileIndexStepView: some View {
-        VStack(spacing: 16) {
-            switch fileIndexPhase {
-            case .consent:
-                Image(systemName: "folder.badge.gearshape")
-                    .scaledFont(size: 48)
-                    .foregroundColor(OmiColors.purplePrimary)
+    private func handleFileIndexingComplete(fileCount: Int) {
+        fileIndexingDone = true
 
-                Text("Get to Know You")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Let Omi look at your files to understand what you work on, your projects, and interests.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.shield")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                    Text("Only scans ~/Downloads, ~/Documents, ~/Desktop")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.top, 4)
-
-            case .scanning:
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .padding(.bottom, 8)
-
-                Text("Scanning your files...")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                if !scanningFolder.isEmpty {
-                    Text("~/\(scanningFolder)")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.purplePrimary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(OmiColors.purplePrimary.opacity(0.1))
-                        .cornerRadius(6)
-                }
-
-                Text("\(totalFilesScanned.formatted()) files found")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
-
-            case .complete:
-                Image(systemName: "checkmark.circle.fill")
-                    .scaledFont(size: 48)
-                    .foregroundColor(.green)
-
-                Text("\(totalFilesScanned.formatted()) files indexed!")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Let's see what we found!")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
+        if fileCount > 0 {
+            log("OnboardingView: File indexing completed with \(fileCount) files")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
+            UserDefaults.standard.set(fileCount, forKey: "pendingFileIndexingChat")
+        } else {
+            log("OnboardingView: File indexing skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")
         }
-    }
 
-    private func startFileScanning() {
-        fileIndexPhase = .scanning
-        totalFilesScanned = 0
-
-        Task {
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let folders = [
-                ("Downloads", home.appendingPathComponent("Downloads")),
-                ("Documents", home.appendingPathComponent("Documents")),
-                ("Desktop", home.appendingPathComponent("Desktop")),
-            ]
-
-            for (name, url) in folders {
-                await MainActor.run {
-                    scanningFolder = name
-                }
-                let count = await FileIndexerService.shared.scanFolders([url])
-                await MainActor.run {
-                    totalFilesScanned += count
-                }
-            }
-
-            await MainActor.run {
-                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-                scanningFolder = ""
-                fileIndexPhase = .complete
-            }
-        }
-    }
-
-    private func skipFileIndexing() {
-        log("OnboardingView: Skipping file indexing")
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")
         AnalyticsManager.shared.onboardingCompleted()
         appState.hasCompletedOnboarding = true
         // Start cloud agent VM pipeline
@@ -824,32 +731,31 @@ struct OnboardingView: View {
     @ViewBuilder
     private var buttonSection: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 16) {
-                // Back button (not shown on first step or name step)
-                if currentStep > 0 && currentStep != 1 && !(currentStep == 4 && fileIndexPhase == .scanning) {
-                    Button(action: {
-                        if currentStep == 4 {
-                            fileIndexPhase = .consent
+            // Step 4 has its own buttons inside FileIndexingView
+            if currentStep != 4 {
+                HStack(spacing: 16) {
+                    // Back button (not shown on first step or name step)
+                    if currentStep > 0 && currentStep != 1 {
+                        Button(action: {
+                            currentStep -= 1
+                        }) {
+                            Text("Back")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
                         }
-                        currentStep -= 1
-                    }) {
-                        Text("Back")
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+
+                    // Main action / Continue button
+                    Button(action: handleMainAction) {
+                        Text(mainButtonTitle)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 }
-
-                // Main action / Continue button
-                Button(action: handleMainAction) {
-                    Text(mainButtonTitle)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(currentStep == 4 && fileIndexPhase == .scanning)
             }
 
             if currentStep == 3 && !requiredPermissionsGranted {
@@ -857,34 +763,13 @@ struct OnboardingView: View {
                     .scaledFont(size: 12)
                     .foregroundColor(.secondary)
             }
-
-            if currentStep == 4 && fileIndexPhase == .consent {
-                Button(action: skipFileIndexing) {
-                    Text("Skip")
-                        .scaledFont(size: 13)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
         }
         .padding(.horizontal, 40)
         .padding(.bottom, 20)
     }
 
     private var mainButtonTitle: String {
-        switch currentStep {
-        case 0: return "Continue"
-        case 1: return "Continue"
-        case 2: return "Continue"
-        case 3: return "Continue"
-        case 4:
-            switch fileIndexPhase {
-            case .consent: return "Get Started"
-            case .scanning: return "Scanning..."
-            case .complete: return "Start Using Omi"
-            }
-        default: return "Continue"
-        }
+        return "Continue"
     }
 
     private func handleMainAction() {
@@ -965,37 +850,7 @@ struct OnboardingView: View {
             }
             currentStep += 1
         case 4:
-            switch fileIndexPhase {
-            case .consent:
-                startFileScanning()
-            case .scanning:
-                break // Button disabled during scanning
-            case .complete:
-                log("OnboardingView: Step 4 - Completing onboarding")
-                AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
-                AnalyticsManager.shared.onboardingCompleted()
-                // Store pending flag so ChatPage picks it up
-                UserDefaults.standard.set(totalFilesScanned, forKey: "pendingFileIndexingChat")
-                appState.hasCompletedOnboarding = true
-                // Start cloud agent VM pipeline (provision → poll → upload DB)
-                Task {
-                    await AgentVMService.shared.startPipeline()
-                }
-                // Enable launch at login by default for new users
-                if LaunchAtLoginManager.shared.setEnabled(true) {
-                    AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-                }
-                ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-                appState.startTranscription()
-                // Only call completion handler if provided (for sheet presentations)
-                // Don't dismiss - DesktopHomeView will automatically transition to mainContent
-                if let onComplete = onComplete {
-                    log("OnboardingView: Calling onComplete handler")
-                    onComplete()
-                } else {
-                    log("OnboardingView: Onboarding complete, DesktopHomeView will show mainContent")
-                }
-            }
+            break // FileIndexingView handles step 4 actions via handleFileIndexingComplete
         default:
             break
         }

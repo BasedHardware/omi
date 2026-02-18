@@ -18,6 +18,9 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
+    // File indexing sheet for existing users
+    @State private var showFileIndexingSheet = false
+
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
         selectedIndex == SidebarNavItem.settings.rawValue
@@ -71,6 +74,11 @@ struct DesktopHomeView: View {
                             log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
                             // Check all permissions on launch
                             appState.checkAllPermissions()
+
+                            // Show file indexing sheet for existing users who haven't done it
+                            if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+                                showFileIndexingSheet = true
+                            }
 
                             let settings = AssistantSettings.shared
 
@@ -127,6 +135,19 @@ struct DesktopHomeView: View {
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
+                        }
+                        .sheet(isPresented: $showFileIndexingSheet) {
+                            FileIndexingView { fileCount in
+                                showFileIndexingSheet = false
+                                if fileCount > 0 {
+                                    UserDefaults.standard.set(fileCount, forKey: "pendingFileIndexingChat")
+                                    // Navigate to chat after sheet dismisses
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        NotificationCenter.default.post(name: .navigateToChat, object: nil)
+                                    }
+                                }
+                            }
+                            .frame(width: 420, height: 420)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
