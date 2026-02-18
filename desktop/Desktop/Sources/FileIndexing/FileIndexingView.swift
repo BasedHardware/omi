@@ -252,7 +252,7 @@ struct FileIndexingView: View {
     }
 
     /// Scan /Applications and ~/Applications for app names
-    private func scanApplicationNames() -> Int {
+    private func scanApplicationNames() async -> Int {
         await MainActor.run {
             scanningFolder = "Applications"
         }
