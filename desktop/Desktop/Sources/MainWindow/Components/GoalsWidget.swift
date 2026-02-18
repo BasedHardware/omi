@@ -12,6 +12,7 @@ struct GoalsWidget: View {
     @State private var showingCreateSheet = false
     @State private var showingHistory = false
     @State private var isGeneratingGoal = false
+    @State private var autoGenerateEnabled: Bool = GoalGenerationService.shared.isAutoGenerationEnabled
 
     // AI Features
     @State private var selectedGoalForAdvice: Goal? = nil
@@ -25,6 +26,18 @@ struct GoalsWidget: View {
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
+
+                // Auto-generate toggle
+                Button(action: {
+                    autoGenerateEnabled.toggle()
+                    GoalGenerationService.shared.isAutoGenerationEnabled = autoGenerateEnabled
+                }) {
+                    Image(systemName: autoGenerateEnabled ? "wand.and.stars" : "wand.and.stars")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(autoGenerateEnabled ? OmiColors.purplePrimary : OmiColors.textTertiary.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+                .help(autoGenerateEnabled ? "Auto-generate goals: ON" : "Auto-generate goals: OFF")
 
                 // History button
                 Button(action: { showingHistory = true }) {
