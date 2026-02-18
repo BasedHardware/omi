@@ -412,14 +412,19 @@ struct BrowserExtensionSetup: View {
                         verifySuccess = true
                         log("BrowserExtensionSetup: Connection test succeeded")
                     } else {
-                        verifyError = "The extension responded but the connection test failed. The token may be incorrect."
+                        verifyError = "Could not connect to the Chrome extension. Make sure Chrome is open and try again."
                         log("BrowserExtensionSetup: Connection test returned false")
                     }
                 }
             } catch {
                 await MainActor.run {
                     isVerifying = false
-                    verifyError = error.localizedDescription
+                    let msg = error.localizedDescription
+                    if msg.contains("timeout") || msg.contains("Extension connection timeout") {
+                        verifyError = "Connection timed out. Make sure Chrome is running and the extension is installed, then try again."
+                    } else {
+                        verifyError = msg
+                    }
                     log("BrowserExtensionSetup: Connection test error: \(error)")
                 }
             }
