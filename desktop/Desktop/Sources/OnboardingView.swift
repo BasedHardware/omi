@@ -11,7 +11,7 @@ struct OnboardingView: View {
     // Timer to periodically check permission status when on permissions step
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
-    let steps = ["Video", "Name", "Language", "Permissions", "Done"]
+    let steps = ["Video", "Name", "Language", "Permissions", "Get to Know You"]
 
     // State for name input
     @State private var nameInput: String = ""
@@ -21,6 +21,12 @@ struct OnboardingView: View {
     // State for language selection
     @State private var selectedLanguage: String = "en"
     @State private var autoDetectEnabled: Bool = false
+
+    // State for file indexing step (step 4)
+    enum FileIndexPhase { case consent, scanning, complete }
+    @State private var fileIndexPhase: FileIndexPhase = .consent
+    @State private var scanningFolder: String = ""
+    @State private var totalFilesScanned: Int = 0
 
     // Track whether we've initialized bluetooth on the permissions step
     @State private var hasInitializedBluetoothForPermissions = false
@@ -173,7 +179,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
         case 3: return requiredPermissionsGranted
-        case 4: return true // Done step
+        case 4: return fileIndexPhase == .complete // File indexing step
         default: return true
         }
     }
@@ -359,7 +365,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
         case 3: return allPermissionsGranted // Permissions step
-        case 4: return true // Done - always "granted"
+        case 4: return fileIndexPhase == .complete // File indexing step
         default: return false
         }
     }
