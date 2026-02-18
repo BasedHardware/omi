@@ -349,6 +349,11 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.chat.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.tasks.rawValue
+            }
+        }
         .onChange(of: selectedIndex) { oldValue, newValue in
             // Track the previous index when navigating to settings
             if newValue == SidebarNavItem.settings.rawValue && oldValue != SidebarNavItem.settings.rawValue {

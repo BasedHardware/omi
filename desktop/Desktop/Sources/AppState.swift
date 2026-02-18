@@ -2479,6 +2479,7 @@ extension Notification.Name {
     static let goalCompleted = Notification.Name("goalCompleted")
     /// Posted to navigate to AI Chat page
     static let navigateToChat = Notification.Name("navigateToChat")
+    static let navigateToTasks = Notification.Name("navigateToTasks")
     /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
     static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
 }

@@ -90,7 +90,7 @@ struct TasksWidget: View {
                 Button(action: {
                     // Navigate to Tasks tab
                     NotificationCenter.default.post(
-                        name: NSNotification.Name("NavigateToTasks"),
+                        name: .navigateToTasks,
                         object: nil
                     )
                 }) {
