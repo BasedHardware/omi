@@ -618,7 +618,7 @@ class TasksStore: ObservableObject {
     /// Ensures filter/search queries have the full dataset. Keyed per user so it runs once per account.
     private func performFullSyncIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let syncKey = "tasksFullSyncCompleted_v8_\(userId)"
+        let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: syncKey) else {
             log("TasksStore: Full sync already completed for user \(userId)")
@@ -764,7 +764,7 @@ class TasksStore: ObservableObject {
             log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
 
             // Reset full sync flag so it re-runs and marks migrated items as staged locally
-            let syncKey = "tasksFullSyncCompleted_v8_\(userId)"
+            let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
             UserDefaults.standard.set(false, forKey: syncKey)
 
             // Run full sync now to clean up local SQLite
