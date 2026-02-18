@@ -136,6 +136,11 @@ struct DesktopHomeView: View {
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
                         }
+                        // Periodic file re-scan every 3 hours (only if user already consented)
+                        .onReceive(Timer.publish(every: 3 * 60 * 60, on: .main, in: .common).autoconnect()) { _ in
+                            guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { return }
+                            Task { await FileIndexerService.shared.backgroundRescan() }
+                        }
                         .dismissableSheet(isPresented: $showFileIndexingSheet) {
                             FileIndexingView(
                                 chatProvider: viewModelContainer.chatProvider,

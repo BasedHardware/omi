@@ -108,6 +108,40 @@ actor FileIndexerService {
         log("FileIndexer: Pipeline complete, posted fileIndexingComplete notification")
     }
 
+    // MARK: - Background Re-scan
+
+    /// Incremental background re-scan of all standard folders.
+    /// Updates metadata for existing files and adds new ones.
+    func backgroundRescan() async {
+        guard !isScanning else {
+            log("FileIndexer: Scan already in progress, skipping background rescan")
+            return
+        }
+
+        isScanning = true
+        defer { isScanning = false }
+
+        log("FileIndexer: Starting background rescan")
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let folders = [
+            home.appendingPathComponent("Downloads"),
+            home.appendingPathComponent("Documents"),
+            home.appendingPathComponent("Desktop"),
+            home.appendingPathComponent("Developer"),
+            home.appendingPathComponent("Projects"),
+            home.appendingPathComponent("Code"),
+            home.appendingPathComponent("src"),
+            home.appendingPathComponent("repos"),
+            home.appendingPathComponent("Sites"),
+            URL(fileURLWithPath: "/Applications"),
+            home.appendingPathComponent("Applications"),
+        ]
+
+        let count = await scanFolders(folders)
+        log("FileIndexer: Background rescan complete, \(count) files indexed")
+    }
+
     // MARK: - File Scanning
 
     /// Scan folders and store file metadata in indexed_files table
