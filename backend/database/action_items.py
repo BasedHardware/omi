@@ -231,17 +231,12 @@ def get_action_items(
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort matching Flutter/Desktop client-side algorithm:
-    # 1. Items with sort_order > 0 come first (ascending by sort_order)
-    # 2. Then items without sort_order, sorted by due_at ascending (nulls last)
-    # 3. Tie-breaker: created_at ascending
+    # Sort results by due_at first (items without due_at come last), then by created_at
     action_items.sort(
         key=lambda x: (
-            0 if (x.get('sort_order') or 0) > 0 else 1,
-            x.get('sort_order', 0) if (x.get('sort_order') or 0) > 0 else 0,
             x.get('due_at') is None,
             x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-            x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)),
+            -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
         )
     )
 
