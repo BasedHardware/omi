@@ -291,6 +291,14 @@ extension PostHogManager {
         ])
     }
 
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        track("Notification Repair Triggered", properties: [
+            "reason": reason,
+            "previous_status": previousStatus,
+            "current_status": currentStatus
+        ])
+    }
+
     func notificationSettingsChecked(
         authStatus: String,
         alertStyle: String,

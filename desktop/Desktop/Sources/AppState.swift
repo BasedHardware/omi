@@ -146,6 +146,9 @@ class AppState: ObservableObject {
     private var maxRecordingTimer: Timer?
     private let maxRecordingDuration: TimeInterval = 4 * 60 * 60  // 4 hours
 
+    // Periodic notification health check timer
+    private var notificationHealthTimer: Timer?
+
     // Crash-safe transcription storage
     private var currentSessionId: Int64?
 
@@ -209,6 +212,12 @@ class AppState: ObservableObject {
 
         // Note: Bluetooth subscription is initialized lazily via initializeBluetoothIfNeeded()
         // to avoid triggering the permission dialog before the user reaches the Bluetooth step
+
+        // Start periodic notification health check (every 30 min)
+        // Detects when macOS silently revokes notification authorization and auto-repairs
+        notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
+            self?.checkNotificationPermission()
+        }
     }
 
     /// Initialize Bluetooth manager and subscribe to state changes
@@ -645,6 +654,18 @@ class AppState: ObservableObject {
                         badgeEnabled: badgeEnabled,
                         bannersDisabled: settings.alertStyle == .none
                     )
+
+                    // Detect regression: was authorized, now reverted to notDetermined
+                    // This happens on macOS 26+ where the OS silently revokes notification permission
+                    if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+                        log("Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair")
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "auth_regression",
+                            previousStatus: "authorized",
+                            currentStatus: "notDetermined"
+                        )
+                        self.repairNotificationRegistrationAndRetry()
+                    }
 
                     // Update last known state
                     self.lastNotificationAuthStatus = authStatus
