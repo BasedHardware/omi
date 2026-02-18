@@ -454,20 +454,26 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
-        resizeWorkItem = nil
 
         let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
-        let newOrigin = NSPoint(
-            x: frame.midX - targetSize.width / 2,
-            y: frame.midY - targetSize.height / 2
-        )
 
-        styleMask.remove(.resizable)
-        isResizingProgrammatically = true
-        // Non-animated setFrame avoids race between window-server animation and
-        // NSTrackingArea updates that causes hover flicker. SwiftUI handles the visual transition.
-        self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
-        self.isResizingProgrammatically = false
+        // Dispatch async to avoid blocking SwiftUI body evaluation with a synchronous
+        // window server round-trip (setFrame). Cancellable via resizeWorkItem so rapid
+        // hover in/out doesn't queue stale resizes. (OMI-COMPUTER-1PT)
+        resizeWorkItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let newOrigin = NSPoint(
+                x: self.frame.midX - targetSize.width / 2,
+                y: self.frame.midY - targetSize.height / 2
+            )
+            self.styleMask.remove(.resizable)
+            self.isResizingProgrammatically = true
+            // Non-animated setFrame avoids race between window-server animation and
+            // NSTrackingArea updates that causes hover flicker. SwiftUI handles the visual transition.
+            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            self.isResizingProgrammatically = false
+        }
+        DispatchQueue.main.async(execute: resizeWorkItem!)
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
