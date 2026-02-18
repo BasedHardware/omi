@@ -51,6 +51,9 @@ actor VideoChunkEncoder {
     private var currentOutputSize: CGSize?
     private var currentChunkInputSize: CGSize?  // Track input size for aspect ratio comparison
 
+    /// Timer to finalize stale chunks when frames stop arriving
+    private var stalenessCheckTask: Task<Void, Never>?
+
     private var videosDirectory: URL?
     private var isInitialized = false
 
