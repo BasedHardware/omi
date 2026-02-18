@@ -378,7 +378,8 @@ private struct PageContentView: View {
                 SettingsPage(
                     appState: appState,
                     selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    chatProvider: viewModelContainer.chatProvider
                 )
             case 10:
                 PermissionsPage(appState: appState)

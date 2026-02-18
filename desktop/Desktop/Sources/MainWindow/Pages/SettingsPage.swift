@@ -251,11 +251,13 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>
+        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
+        chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
         self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
         _isTranscribing = State(initialValue: appState.isTranscribing)
