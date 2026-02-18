@@ -737,20 +737,10 @@ class TasksStore: ObservableObject {
                 if response.items.count < batchSize { break }
             }
 
-            // Sync all deleted tasks
-            offset = 0
-            while true {
-                let response = try await APIClient.shared.getActionItems(
-                    limit: batchSize,
-                    offset: offset,
-                    deleted: true
-                )
-                if response.items.isEmpty { break }
-                try await ActionItemStorage.shared.syncTaskActionItems(response.items)
-                totalSynced += response.items.count
-                offset += response.items.count
-                log("TasksStore: Full sync progress - \(totalSynced) tasks synced (deleted)")
-                if response.items.count < batchSize { break }
+            // Purge any soft-deleted rows from local SQLite (one-time cleanup)
+            let purged = try await ActionItemStorage.shared.purgeAllSoftDeletedItems()
+            if purged > 0 {
+                log("TasksStore: Purged \(purged) soft-deleted items from local SQLite")
             }
 
             UserDefaults.standard.set(true, forKey: syncKey)

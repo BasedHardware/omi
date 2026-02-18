@@ -864,6 +864,24 @@ actor ActionItemStorage {
         log("ActionItemStorage: Undeleted action item with backendId \(backendId)")
     }
 
+    /// Purge all soft-deleted items from local SQLite (one-time cleanup during full sync)
+    func purgeAllSoftDeletedItems() async throws -> Int {
+        let db = try await ensureInitialized()
+
+        let count = try await db.write { database -> Int in
+            let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
+            if count > 0 {
+                try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+            }
+            return count
+        }
+
+        if count > 0 {
+            log("ActionItemStorage: Purged \(count) soft-deleted items from SQLite")
+        }
+        return count
+    }
+
     /// Hard-delete an action item by backend ID
     func deleteActionItemByBackendId(_ backendId: String, deletedBy: String? = nil) async throws {
         let db = try await ensureInitialized()
