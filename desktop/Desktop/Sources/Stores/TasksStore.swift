@@ -50,13 +50,19 @@ class TasksStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isRetryingUnsynced = false
 
+    /// Timestamp of last full reconciliation (paginated API check for absent tasks)
+    private var lastReconciliationDate: Date?
+
     /// Whether the tasks page (or dashboard) is currently visible.
     /// Auto-refresh only runs when active to avoid unnecessary API calls.
     var isActive = false {
         didSet {
             if isActive && !oldValue && hasLoadedIncomplete {
                 // Refresh immediately when becoming active
-                Task { await refreshTasksIfNeeded() }
+                Task {
+                    await refreshTasksIfNeeded()
+                    await reconcileWithAPIIfNeeded()
+                }
             }
         }
     }
@@ -203,6 +209,16 @@ class TasksStore: ObservableObject {
             // Sync API results to local cache
             try await ActionItemStorage.shared.syncTaskActionItems(response.items)
 
+            // Reconcile: if we got the full set, hard-delete local tasks absent from API
+            // (completed/deleted on mobile). Safe: only deletes synced records.
+            if response.items.count < reloadLimit {
+                let apiIds = Set(response.items.map { $0.id })
+                let reconciled = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: apiIds)
+                if reconciled > 0 {
+                    log("TasksStore: Reconciled: hard-deleted \(reconciled) absent tasks during auto-refresh")
+                }
+            }
+
             // Reload from local cache (respects local changes like completions/deletions)
             let mergedTasks = try await ActionItemStorage.shared.getLocalActionItems(
                 limit: reloadLimit,
@@ -299,6 +315,56 @@ class TasksStore: ObservableObject {
             } catch {
                 logError("TasksStore: Auto-refresh deleted tasks failed", error: error)
             }
+        }
+    }
+
+    /// Full reconciliation: paginate ALL incomplete task IDs from API, then hard-delete
+    /// local tasks not present. Throttled to run at most every 5 minutes.
+    /// Catches cases where the user has more tasks than one page of auto-refresh can cover.
+    private func reconcileWithAPIIfNeeded() async {
+        guard AuthService.shared.isSignedIn else { return }
+
+        // Throttle: skip if last reconciliation was < 5 minutes ago
+        if let last = lastReconciliationDate, Date().timeIntervalSince(last) < 300 {
+            return
+        }
+
+        let batchSize = 500
+        var allApiIds = Set<String>()
+        var offset = 0
+
+        do {
+            while true {
+                let response = try await APIClient.shared.getActionItems(
+                    limit: batchSize,
+                    offset: offset,
+                    completed: false
+                )
+                allApiIds.formUnion(response.items.map { $0.id })
+                offset += response.items.count
+                if response.items.count < batchSize { break }
+            }
+
+            let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
+            lastReconciliationDate = Date()
+
+            if deleted > 0 {
+                log("TasksStore: Full reconciliation: hard-deleted \(deleted) absent tasks")
+                // Reload from cache to reflect deletions in UI
+                let reloadLimit = max(pageSize, incompleteTasks.count)
+                let refreshed = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: reloadLimit,
+                    offset: 0,
+                    completed: false
+                )
+                if refreshed != incompleteTasks {
+                    incompleteTasks = refreshed
+                    incompleteOffset = refreshed.count
+                }
+                await loadDashboardTasks()
+            }
+        } catch {
+            logError("TasksStore: Full reconciliation failed", error: error)
         }
     }
 
