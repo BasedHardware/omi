@@ -254,14 +254,15 @@ async fn get_chat_context(
         Some(key) => key.clone(),
         None => {
             tracing::warn!("No Gemini API key configured, returning basic context");
-            return get_basic_context(&state.firestore, &user.uid, &request).await;
+            return get_basic_context(&state.firestore, &user.uid, user.name.as_deref().unwrap_or("User"), &request).await;
         }
     };
 
     let llm = LlmClient::new(api_key);
 
     // Format conversation history for context-aware decisions
-    let conversation_history = format_conversation_history(&request.messages);
+    let user_name = user.name.as_deref().unwrap_or("User");
+    let conversation_history = format_conversation_history(&request.messages, user_name);
 
     // Step 1: Determine if context is needed (considering conversation history)
     let requires_context = check_requires_context(&llm, question, &conversation_history)
@@ -536,7 +537,7 @@ fn truncate_str(s: &str, max_bytes: usize) -> &str {
 }
 
 /// Format conversation history for inclusion in prompts
-fn format_conversation_history(messages: &[ChatMessageInput]) -> String {
+fn format_conversation_history(messages: &[ChatMessageInput], user_name: &str) -> String {
     if messages.is_empty() {
         return "No previous messages in this conversation.".to_string();
     }
@@ -544,7 +545,7 @@ fn format_conversation_history(messages: &[ChatMessageInput]) -> String {
     let mut lines = vec!["Previous messages in this conversation:".to_string()];
     // Take last 10 messages to avoid prompt bloat
     for msg in messages.iter().rev().take(10).rev() {
-        let role = if msg.sender == "human" { "User" } else { "Assistant" };
+        let role = if msg.sender == "human" { user_name } else { "Assistant" };
         // Truncate very long messages
         let text = if msg.text.len() > 500 {
             format!("{}...", truncate_str(&msg.text, 500))
@@ -759,6 +760,7 @@ fn format_memories_context(memories: &[MemorySummary]) -> String {
 async fn get_basic_context(
     firestore: &Arc<FirestoreService>,
     uid: &str,
+    user_name: &str,
     request: &ChatContextRequest,
 ) -> Result<Json<ChatContextResponse>, StatusCode> {
     let now = Utc::now();
@@ -781,7 +783,7 @@ async fn get_basic_context(
     let memories = get_user_memories(firestore, uid).await;
 
     // Include conversation history in context string
-    let conversation_history = format_conversation_history(&request.messages);
+    let conversation_history = format_conversation_history(&request.messages, user_name);
     let (base_context, citation_sources) = build_context_string(&conversations, &memories, &request.timezone);
 
     // Add app-specific context if available
