@@ -1931,7 +1931,8 @@ extension APIClient {
         currentValue: Double = 0.0,
         minValue: Double = 0.0,
         maxValue: Double = 100.0,
-        unit: String? = nil
+        unit: String? = nil,
+        source: String? = nil
     ) async throws -> Goal {
         struct CreateGoalRequest: Encodable {
             let title: String
@@ -1942,9 +1943,10 @@ extension APIClient {
             let minValue: Double
             let maxValue: Double
             let unit: String?
+            let source: String?
 
             enum CodingKeys: String, CodingKey {
-                case title, description, unit
+                case title, description, unit, source
                 case goalType = "goal_type"
                 case targetValue = "target_value"
                 case currentValue = "current_value"
@@ -1961,7 +1963,8 @@ extension APIClient {
             currentValue: currentValue,
             minValue: minValue,
             maxValue: maxValue,
-            unit: unit
+            unit: unit,
+            source: source
         )
 
         let goal: Goal = try await post("v1/goals", body: request)
@@ -2507,9 +2510,10 @@ struct Goal: Codable, Identifiable {
     let createdAt: Date
     let updatedAt: Date
     let completedAt: Date?
+    let source: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, unit
+        case id, title, description, unit, source
         case goalType = "goal_type"
         case targetValue = "target_value"
         case currentValue = "current_value"
@@ -2536,6 +2540,7 @@ struct Goal: Codable, Identifiable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -2553,6 +2558,7 @@ struct Goal: Codable, Identifiable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(source, forKey: .source)
     }
 
     /// Progress as a percentage (0-100)
