@@ -790,7 +790,13 @@ class TasksViewModel: ObservableObject {
 
         // Fall back to legacy UserDefaults categoryOrder
         guard let order = categoryOrder[category], !order.isEmpty else {
-            return tasks // No custom order, return as-is
+            // No custom order — sort by dueAt ascending, then createdAt ascending (matches Flutter)
+            return tasks.sorted { a, b in
+                let aDue = a.dueAt ?? .distantFuture
+                let bDue = b.dueAt ?? .distantFuture
+                if aDue != bDue { return aDue < bDue }
+                return a.createdAt < b.createdAt
+            }
         }
 
         // Sort tasks by custom order, new items go at the end
@@ -805,8 +811,14 @@ class TasksViewModel: ObservableObject {
             }
         }
 
-        // Add remaining tasks (new ones not in custom order)
-        orderedTasks.append(contentsOf: taskMap.values)
+        // Add remaining tasks (new ones not in custom order), sorted by dueAt then createdAt
+        let remaining = taskMap.values.sorted { a, b in
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue { return aDue < bDue }
+            return a.createdAt < b.createdAt
+        }
+        orderedTasks.append(contentsOf: remaining)
 
         return orderedTasks
     }
@@ -1542,7 +1554,16 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
@@ -1568,7 +1589,16 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: startOfToday) ?? startOfToday
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }

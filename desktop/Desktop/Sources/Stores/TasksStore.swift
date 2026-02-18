@@ -101,7 +101,7 @@ class TasksStore: ObservableObject {
         if aWeight != bWeight {
             return aWeight < bWeight
         }
-        return a.createdAt > b.createdAt
+        return a.createdAt < b.createdAt
     }
 
     /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
@@ -706,8 +706,6 @@ class TasksStore: ObservableObject {
                 logError("TasksStore: Failed to refresh UI after full sync", error: error)
             }
 
-            // Backfill due dates on backend for tasks that have none
-            await backfillDueDatesOnBackendIfNeeded(userId: userId)
         } catch {
             logError("TasksStore: Full sync failed (will retry next launch)", error: error)
         }
@@ -835,45 +833,6 @@ class TasksStore: ObservableObject {
         log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
 
-    /// One-time backfill: patch backend tasks that have no dueAt.
-    /// Sets dueAt to end of the day the task was created.
-    private func backfillDueDatesOnBackendIfNeeded(userId: String) async {
-        let backfillKey = "tasksDueDateBackfill_v1_\(userId)"
-        guard !UserDefaults.standard.bool(forKey: backfillKey) else { return }
-
-        log("TasksStore: Starting due date backfill for backend tasks")
-        var patchedCount = 0
-
-        do {
-            // Fetch all incomplete tasks from local cache that have no dueAt
-            let tasksWithoutDueDate = try await ActionItemStorage.shared.getLocalActionItems(
-                limit: 500,
-                completed: false
-            ).filter { $0.dueAt == nil }
-
-            for task in tasksWithoutDueDate {
-                // Set dueAt to end of the day the task was created (11:59 PM local)
-                let calendar = Calendar.current
-                let endOfCreatedDay = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: task.createdAt)
-                    ?? task.createdAt
-
-                do {
-                    _ = try await APIClient.shared.updateActionItem(
-                        id: task.id,
-                        dueAt: endOfCreatedDay
-                    )
-                    patchedCount += 1
-                } catch {
-                    logError("TasksStore: Failed to backfill dueAt for task \(task.id)", error: error)
-                }
-            }
-
-            UserDefaults.standard.set(true, forKey: backfillKey)
-            log("TasksStore: Due date backfill complete - patched \(patchedCount) tasks")
-        } catch {
-            logError("TasksStore: Due date backfill failed", error: error)
-        }
-    }
 
     /// One-time backfill: assign relevance scores to all unscored active tasks.
     /// Each unscored task gets max+1 sequentially so they appear at the bottom
