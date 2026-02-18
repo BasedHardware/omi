@@ -454,13 +454,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
+        resizeWorkItem = nil
 
         let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
 
-        // Dispatch async to avoid blocking SwiftUI body evaluation with a synchronous
-        // window server round-trip (setFrame). Cancellable via resizeWorkItem so rapid
-        // hover in/out doesn't queue stale resizes. (OMI-COMPUTER-1PT)
-        resizeWorkItem = DispatchWorkItem { [weak self] in
+        let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             let newOrigin = NSPoint(
                 x: self.frame.midX - targetSize.width / 2,
@@ -468,12 +466,24 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             )
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
-            // Non-animated setFrame avoids race between window-server animation and
-            // NSTrackingArea updates that causes hover flicker. SwiftUI handles the visual transition.
             self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
             self.isResizingProgrammatically = false
         }
-        DispatchQueue.main.async(execute: resizeWorkItem!)
+
+        if expanded {
+            // Expand synchronously so the window is already large enough when
+            // SwiftUI re-evaluates body with isHovering=true. If this were async,
+            // the 50px expanded content renders in the still-22px window, causing
+            // the tracking area to invalidate and trigger immediate unhover — producing
+            // a flicker loop when hovering from the top or bottom edge.
+            doResize()
+        } else {
+            // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
+            // Cancellable via resizeWorkItem so rapid hover in/out doesn't queue stale
+            // resizes. (OMI-COMPUTER-1PT)
+            resizeWorkItem = DispatchWorkItem(block: doResize)
+            DispatchQueue.main.async(execute: resizeWorkItem!)
+        }
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
