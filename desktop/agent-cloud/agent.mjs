@@ -59,7 +59,7 @@ function openDatabase() {
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
-  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database.
+  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
 This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
 
 DATABASE SCHEMA:
@@ -69,6 +69,7 @@ TOOLS:
 - **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
+- **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
 GUIDELINES:
 - Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
@@ -78,12 +79,10 @@ GUIDELINES:
 - For "what did I do today/yesterday" queries, use screenshots table grouped by appName
 - For task queries, use action_items table
 - For conversation queries, use transcription_sessions + transcription_segments
+- For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
 - Be concise and helpful. Format results clearly.`;
 
-  omiServer = createSdkMcpServer({
-    name: "omi-tools",
-    tools: [executeSqlTool, semanticSearchTool],
-  });
+  rebuildMcpServer();
 
   console.log(`[db] Database opened: ${DB_PATH}`);
   return true;
@@ -747,6 +746,47 @@ function startServer() {
       return;
     }
 
+    // Auth endpoint — receives Firebase token from desktop app
+    if (req.url?.startsWith("/auth") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      let body = "";
+      req.on("data", (chunk) => { body += chunk.toString(); });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body);
+          const { firebaseToken } = payload;
+          if (!firebaseToken) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Missing firebaseToken" }));
+            return;
+          }
+
+          const isFirst = userFirebaseToken === null;
+          userFirebaseToken = firebaseToken;
+          lastActivityAt = Date.now();
+          log(`Firebase token ${isFirst ? "received" : "refreshed"}`);
+
+          // On first token, fetch backend tools
+          if (isFirst) {
+            await fetchAndRegisterBackendTools();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "ok", toolsRegistered: backendTools.length }));
+        } catch (err) {
+          log(`Auth error: ${err.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
     // Incremental sync endpoint — desktop pushes new/changed rows
     if (req.url?.startsWith("/sync") && req.method === "POST") {
       if (!verifyAuth(req)) {
@@ -924,7 +964,9 @@ function startServer() {
     log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
     log(`Health check: http://0.0.0.0:${PORT}/health`);
     log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
+    log(`Auth:   POST http://0.0.0.0:${PORT}/auth`);
     log(`Sync:   POST http://0.0.0.0:${PORT}/sync`);
+    log(`Backend URL: ${BACKEND_URL}`);
     log(`Idle auto-stop: ${IDLE_TIMEOUT_MS / 60000} min timeout, checking every ${IDLE_CHECK_INTERVAL_MS / 60000} min`);
   });
 

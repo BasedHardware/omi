@@ -33,10 +33,12 @@ actor AgentSyncService {
     private var isRunning = false
     private var syncTask: Task<Void, Never>?
     private var consecutiveFailures = 0
+    private var lastTokenRefresh: Date = .distantPast
 
     private let batchSize = 100
     private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
     private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
+    private let tokenRefreshInterval: TimeInterval = 30 * 60  // 30 minutes
 
     // MARK: - Table definitions
 
