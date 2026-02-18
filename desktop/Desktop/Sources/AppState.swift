@@ -219,7 +219,9 @@ class AppState: ObservableObject {
         // Start periodic notification health check (every 30 min)
         // Detects when macOS silently revokes notification authorization and auto-repairs
         notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
-            self?.checkNotificationPermission()
+            DispatchQueue.main.async {
+                self?.checkNotificationPermission()
+            }
         }
     }
 
@@ -443,12 +445,12 @@ class AppState: ObservableObject {
                             // which prevents the notification center from registering the app.
                             // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
                             if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
-                                AnalyticsManager.shared.notificationRepairTriggered(
-                                    reason: "launch_disabled_error",
-                                    previousStatus: "notDetermined",
-                                    currentStatus: "error_code_1"
-                                )
                                 DispatchQueue.main.async {
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "launch_disabled_error",
+                                        previousStatus: "notDetermined",
+                                        currentStatus: "error_code_1"
+                                    )
                                     self?.repairNotificationRegistrationAndRetry()
                                 }
                                 return
