@@ -6420,6 +6420,7 @@ impl FirestoreService {
         sender: &str,
         app_id: Option<&str>,
         session_id: Option<&str>,
+        metadata: Option<&str>,
     ) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
         let message_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -6463,6 +6464,10 @@ impl FirestoreService {
             fields["session_id"] = json!({"stringValue": session});
             // Also set chat_session_id for Python compatibility
             fields["chat_session_id"] = json!({"stringValue": session});
+        }
+
+        if let Some(meta) = metadata {
+            fields["metadata"] = json!({"stringValue": meta});
         }
 
         let doc = json!({"fields": fields});

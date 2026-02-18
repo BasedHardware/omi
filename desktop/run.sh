@@ -35,7 +35,7 @@ BUNDLE_ID="com.omi.desktop-dev"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+SIGN_IDENTITY="Developer ID Application: Matthew Diakonov (S6DP5HF77G)"
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
@@ -235,27 +235,22 @@ step "Removing extended attributes (xattr -cr)..."
 xattr -cr "$APP_BUNDLE"
 
 step "Signing app with hardened runtime..."
-# Auto-detect a stable signing identity so TCC permissions persist across rebuilds.
-# Ad-hoc signing (--sign -) generates a new CDHash each build, causing macOS to
-# reset Screen Recording, Accessibility, and Notification permissions every time.
-if [ -z "$SIGN_IDENTITY" ]; then
-    # Try Developer ID first, then Apple Development, then self-signed
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    fi
-fi
-
-if [ -n "$SIGN_IDENTITY" ]; then
-    substep "Using identity: $SIGN_IDENTITY"
+if security find-identity -v -p codesigning | grep -q "$SIGN_IDENTITY"; then
     if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
         substep "Signing Sparkle framework"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
     fi
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+elif security find-identity -v -p codesigning | grep -q "Omi Dev"; then
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]; then
+        substep "Signing Sparkle framework"
+        codesign --force --options runtime --sign "Omi Dev" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+    fi
+    substep "Signing app bundle"
+    codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "Omi Dev" "$APP_BUNDLE"
 else
-    substep "Warning: No signing identity found. Using ad-hoc (permissions will reset each build)."
+    substep "Warning: No persistent signing identity found. Using ad-hoc."
     codesign --force --deep --sign - "$APP_BUNDLE"
 fi
 

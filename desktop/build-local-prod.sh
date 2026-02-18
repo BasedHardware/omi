@@ -14,7 +14,7 @@ BUNDLE_ID_DEV="com.omi.desktop-dev"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed 's/.*"\(.*\)"/\1/')}"
+SIGN_IDENTITY="Developer ID Application: Matthew Diakonov (S6DP5HF77G)"
 VERSION="0.0.0-local"
 
 echo "=============================================="

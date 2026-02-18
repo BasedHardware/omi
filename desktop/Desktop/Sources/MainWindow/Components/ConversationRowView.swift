@@ -293,44 +293,27 @@ struct ConversationRowView: View {
             // Emoji
             Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
                 .scaledFont(size: 16)
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
                         .fill(OmiColors.backgroundTertiary)
                 )
 
-            // Title + metadata below
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(conversation.title)
-                        .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .lineLimit(1)
+            // Title
+            Text(conversation.title)
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+                .lineLimit(1)
 
-                    if isNewlyCreated {
-                        NewBadge()
-                    }
+            // New badge
+            if isNewlyCreated {
+                NewBadge()
+            }
 
-                    // Inline action buttons (show on hover)
-                    if isHovering && !isMultiSelectMode {
-                        inlineActionButtons
-                            .transition(.opacity)
-                    }
-                }
-
-                HStack(spacing: 6) {
-                    Text(formattedTimestamp)
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
-
-                    Text("·")
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textQuaternary)
-
-                    Text(conversation.formattedDuration)
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
+            // Inline action buttons (show on hover)
+            if isHovering && !isMultiSelectMode {
+                inlineActionButtons
+                    .transition(.opacity)
             }
 
             Spacer()
@@ -345,9 +328,36 @@ struct ConversationRowView: View {
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
+
+            // Source label (hide on hover to make room)
+            if !isHovering {
+                Text(sourceLabel)
+                    .scaledFont(size: 10, weight: .medium)
+                    .foregroundColor(OmiColors.textQuaternary)
+            }
+
+            // Folder label
+            if !isHovering, let folderName = folderName {
+                Text(folderName)
+                    .scaledFont(size: 10, weight: .medium)
+                    .foregroundColor(OmiColors.textQuaternary)
+                    .lineLimit(1)
+            }
+
+            // Time
+            Text(formattedTimestamp)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+
+            // Duration (hide on hover to make room)
+            if !isHovering {
+                Text(conversation.formattedDuration)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textQuaternary)
+            }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? OmiColors.purplePrimary.opacity(0.2) : (isHovering ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)))
@@ -359,7 +369,7 @@ struct ConversationRowView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Expanded Row (title + time/duration)
+    // MARK: - Expanded Row (title + overview)
 
     private var expandedRowContent: some View {
         HStack(spacing: 12) {
@@ -370,23 +380,15 @@ struct ConversationRowView: View {
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
 
-            // Emoji
-            Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-                .scaledFont(size: 18)
-                .frame(width: 36, height: 36)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(OmiColors.backgroundTertiary)
-                )
-
-            // Title + time/duration below
-            VStack(alignment: .leading, spacing: 3) {
+            // Emoji, Title, and overview
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(conversation.title)
                         .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
+                    // New badge
                     if isNewlyCreated {
                         NewBadge()
                     }
@@ -396,20 +398,19 @@ struct ConversationRowView: View {
                         inlineActionButtons
                             .transition(.opacity)
                     }
+
+                    if conversation.structured.title.isEmpty && !isHovering {
+                        Text("(\(conversation.id.prefix(8))...)")
+                            .scaledFont(size: 11, design: .monospaced)
+                            .foregroundColor(OmiColors.textQuaternary)
+                    }
                 }
 
-                HStack(spacing: 6) {
-                    Text(formattedTimestamp)
-                        .scaledFont(size: 12)
+                if !conversation.overview.isEmpty {
+                    Text(conversation.overview)
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
-
-                    Text("·")
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textQuaternary)
-
-                    Text(conversation.formattedDuration)
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .lineLimit(2)
                 }
             }
 
@@ -425,6 +426,36 @@ struct ConversationRowView: View {
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
+
+            // Time, duration, and source
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 6) {
+                    if !isHovering {
+                        Text(sourceLabel)
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Text(formattedTimestamp)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                if !isHovering {
+                    HStack(spacing: 6) {
+                        if let folderName = folderName {
+                            Text(folderName)
+                                .scaledFont(size: 11, weight: .medium)
+                                .foregroundColor(OmiColors.textQuaternary)
+                                .lineLimit(1)
+                        }
+
+                        Text(conversation.formattedDuration)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textQuaternary)
+                    }
+                }
+            }
         }
         .padding(12)
         .background(

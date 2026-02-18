@@ -76,34 +76,19 @@ actor GoalStorage {
 
     // MARK: - Sync Operations
 
-    /// Batch upsert from API response — server is source of truth.
-    /// Goals not present in the server response are hard-deleted locally.
+    /// Batch upsert from API response
     func syncServerGoals(_ goals: [Goal]) async throws {
         let db = try await ensureInitialized()
 
-        let serverIds = Set(goals.map { $0.id })
-
         try await db.write { database in
-            // Upsert goals from server
             for goal in goals {
                 if var existingRecord = try GoalRecord
                     .filter(Column("backendId") == goal.id)
                     .fetchOne(database) {
                     existingRecord.updateFrom(goal)
-                    existingRecord.deleted = false
                     try existingRecord.update(database)
                 } else {
                     _ = try GoalRecord.from(goal).inserted(database)
-                }
-            }
-
-            // Remove local records that no longer exist on server
-            let localRecords = try GoalRecord
-                .filter(Column("backendId") != nil)
-                .fetchAll(database)
-            for record in localRecords {
-                if let backendId = record.backendId, !serverIds.contains(backendId) {
-                    try record.delete(database)
                 }
             }
         }

@@ -2561,10 +2561,10 @@ struct Goal: Codable, Identifiable {
         try container.encodeIfPresent(source, forKey: .source)
     }
 
-    /// Progress as a percentage (0-100), based on targetValue
+    /// Progress as a percentage (0-100)
     var progress: Double {
-        guard targetValue != minValue else { return 0 }
-        return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+        guard maxValue != minValue else { return 0 }
+        return ((currentValue - minValue) / (maxValue - minValue)) * 100.0
     }
 
     /// Whether the goal is completed

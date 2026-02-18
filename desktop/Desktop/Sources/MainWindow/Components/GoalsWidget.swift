@@ -229,12 +229,18 @@ struct GoalRowView: View {
     private var dragProgressText: String {
         let currentVal: Double
         if let dv = dragValue {
-            let raw = goal.minValue + dv * (goal.targetValue - goal.minValue)
-            currentVal = max(goal.minValue, min(raw, goal.targetValue))
+            let raw = goal.minValue + dv * (goal.maxValue - goal.minValue)
+            currentVal = max(goal.minValue, min(raw, goal.maxValue))
         } else {
             currentVal = goal.currentValue
         }
-        return "\(Int(currentVal.rounded()))/\(Int(goal.targetValue.rounded()))"
+        let current = currentVal == currentVal.rounded()
+            ? String(format: "%.0f", currentVal)
+            : String(format: "%.1f", currentVal)
+        let target = goal.targetValue == goal.targetValue.rounded()
+            ? String(format: "%.0f", goal.targetValue)
+            : String(format: "%.1f", goal.targetValue)
+        return "\(current)/\(target)"
     }
 
     var body: some View {
@@ -326,9 +332,9 @@ struct GoalRowView: View {
                             }
                             .onEnded { _ in
                                 if let dv = dragValue {
-                                    let finalValue = goal.minValue + dv * (goal.targetValue - goal.minValue)
-                                    let clampedValue = max(goal.minValue, min(finalValue, goal.targetValue))
-                                    let roundedValue = clampedValue.rounded()
+                                    let finalValue = goal.minValue + dv * (goal.maxValue - goal.minValue)
+                                    let clampedValue = max(goal.minValue, min(finalValue, goal.maxValue))
+                                    let roundedValue = (clampedValue * 10).rounded() / 10
                                     onUpdateProgress(roundedValue)
                                 }
                                 isDragging = false
