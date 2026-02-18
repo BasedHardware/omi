@@ -443,9 +443,13 @@ async fn create_gce_vm(
     let zone = "us-central1-a";
 
     // Build startup script that starts the agent server
+    // Uses stdbuf for line-buffered output, writes env to file so restarts work
     let mut startup_script = format!(
         r#"#!/bin/bash
 cd /home/matthewdi/omi-agent
+
+# Write env vars to file (persists across restarts)
+cat > .env.sh << 'ENVEOF'
 export AUTH_TOKEN='{}'
 export DB_PATH='data/omi.db'
 "#,
@@ -457,7 +461,19 @@ export DB_PATH='data/omi.db'
     if let Some(key) = gemini_key {
         startup_script.push_str(&format!("export GEMINI_API_KEY='{}'\n", key));
     }
-    startup_script.push_str("nohup node agent.mjs --serve > /tmp/agent-server.log 2>&1 &\n");
+    startup_script.push_str(
+        r#"ENVEOF
+
+source .env.sh
+
+# Kill any existing agent process
+pkill -x node 2>/dev/null || true
+sleep 1
+
+# Start agent with line-buffered output
+nohup stdbuf -oL node agent.mjs --serve > /home/matthewdi/omi-agent/agent-server.log 2>&1 &
+"#,
+    );
 
     // GCE instances.insert REST API
     let url = format!(
