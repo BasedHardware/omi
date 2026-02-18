@@ -590,6 +590,7 @@ struct ChatPrompts {
         "live_notes": "AI-generated notes during recording",
         "memories": "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
         "ai_user_profiles": "daily AI-generated user profile summaries",
+        "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
     ]
 
     /// Tables to exclude from the schema prompt (internal/GRDB tables)

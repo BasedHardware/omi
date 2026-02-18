@@ -840,6 +840,10 @@ struct OnboardingView: View {
             Task {
                 await AgentVMService.shared.startPipeline()
             }
+            // Start file indexing pipeline (scan files → analyze → store insights as memories)
+            Task {
+                await FileIndexerService.shared.runOnboardingPipeline()
+            }
             // Enable launch at login by default for new users
             if LaunchAtLoginManager.shared.setEnabled(true) {
                 AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
