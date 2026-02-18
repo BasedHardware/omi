@@ -7,6 +7,7 @@ struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    var chatProvider: ChatProvider? = nil
 
     var body: some View {
         ScrollView {
@@ -32,7 +33,8 @@ struct SettingsPage: View {
                 SettingsContentView(
                     appState: appState,
                     selectedSection: $selectedSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    chatProvider: chatProvider
                 )
                 .padding(.horizontal, 32)
 
@@ -55,6 +57,9 @@ struct SettingsPage: View {
 struct SettingsContentView: View {
     // AppState for transcription control
     @ObservedObject var appState: AppState
+
+    // ChatProvider for browser extension setup
+    var chatProvider: ChatProvider? = nil
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
@@ -192,6 +197,7 @@ struct SettingsContentView: View {
     // Browser Extension settings
     @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
     @State private var playwrightExtensionToken: String = ""
+    @State private var showBrowserSetup = false
 
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
@@ -1682,84 +1688,19 @@ struct SettingsContentView: View {
 
                     if playwrightUseExtension {
                         if playwrightExtensionToken.isEmpty {
-                            // Setup steps
-                            VStack(alignment: .leading, spacing: 10) {
-                                // Step 1
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("1")
-                                        .scaledFont(size: 11, weight: .bold)
-                                        .foregroundColor(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Open the extension in Chrome")
-                                            .scaledFont(size: 13, weight: .medium)
-                                            .foregroundColor(OmiColors.textPrimary)
-
-                                        Button(action: {
-                                            if let url = URL(string: "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html") {
-                                                NSWorkspace.shared.open(url)
-                                            }
-                                        }) {
-                                            HStack(spacing: 5) {
-                                                Image(systemName: "arrow.up.right.square")
-                                                    .scaledFont(size: 11)
-                                                Text("Open Extension Settings")
-                                                    .scaledFont(size: 12)
-                                            }
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.small)
-                                    }
-                                }
-
-                                // Step 2
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("2")
-                                        .scaledFont(size: 11, weight: .bold)
-                                        .foregroundColor(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
-
-                                    Text("Copy the auth token from the extension page")
+                            // No token — show "Set Up" button
+                            Button(action: {
+                                showBrowserSetup = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .scaledFont(size: 12)
+                                    Text("Set Up")
                                         .scaledFont(size: 13, weight: .medium)
-                                        .foregroundColor(OmiColors.textPrimary)
-                                }
-
-                                // Step 3
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("3")
-                                        .scaledFont(size: 11, weight: .bold)
-                                        .foregroundColor(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("Paste it here")
-                                            .scaledFont(size: 13, weight: .medium)
-                                            .foregroundColor(OmiColors.textPrimary)
-
-                                        TextField("Paste token here...", text: $playwrightExtensionToken)
-                                            .textFieldStyle(.plain)
-                                            .scaledFont(size: 13)
-                                            .foregroundColor(OmiColors.textPrimary)
-                                            .padding(8)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .fill(OmiColors.backgroundPrimary.opacity(0.5))
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 8)
-                                                            .stroke(OmiColors.textTertiary.opacity(0.3), lineWidth: 1)
-                                                    )
-                                            )
-                                            .onChange(of: playwrightExtensionToken) { _, newValue in
-                                                UserDefaults.standard.set(newValue, forKey: "playwrightExtensionToken")
-                                            }
-                                    }
                                 }
                             }
-                            .padding(.top, 4)
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
                         } else {
                             // Token is set — show compact view
                             HStack(spacing: 8) {
@@ -1775,11 +1716,24 @@ struct SettingsContentView: View {
                                 Spacer()
 
                                 Button(action: {
+                                    showBrowserSetup = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reconfigure")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button(action: {
                                     playwrightExtensionToken = ""
                                     UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                                 }) {
                                     HStack(spacing: 4) {
-                                        Image(systemName: "arrow.clockwise")
+                                        Image(systemName: "xmark")
                                             .scaledFont(size: 11)
                                         Text("Reset")
                                             .scaledFont(size: 12)
@@ -1799,6 +1753,17 @@ struct SettingsContentView: View {
         }
         .sheet(isPresented: $showFileViewer) {
             fileViewerSheet
+        }
+        .sheet(isPresented: $showBrowserSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    showBrowserSetup = false
+                    // Refresh local token state from UserDefaults
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                chatProvider: chatProvider
+            )
+            .frame(width: 480, height: 460)
         }
     }
 

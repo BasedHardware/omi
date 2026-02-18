@@ -82,12 +82,16 @@ actor FileIndexerService {
         }
         log("FileIndexer: Scanned \(totalFiles) files")
 
-        // 2. Mark complete
+        // 2. Mark complete and set pending chat flag for ChatPage to pick up
         await MainActor.run {
             UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+            // Set pending flag so ChatPage picks it up when it mounts (or on next navigation)
+            if UserDefaults.standard.integer(forKey: "pendingFileIndexingChat") == 0 {
+                UserDefaults.standard.set(totalFiles, forKey: "pendingFileIndexingChat")
+            }
         }
 
-        // 3. Post notification so ChatPage can trigger AI analysis
+        // 3. Post notification so ChatPage can trigger AI analysis (if already mounted)
         await MainActor.run {
             NotificationCenter.default.post(
                 name: .fileIndexingComplete,
