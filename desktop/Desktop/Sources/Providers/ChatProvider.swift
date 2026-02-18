@@ -404,6 +404,23 @@ class ChatProvider: ObservableObject {
         _ = await ensureBridgeStarted()
     }
 
+    /// Test that the Playwright Chrome extension is connected and working.
+    /// Ensures the bridge is started (restarting if needed to pick up new token),
+    /// then sends a lightweight test query that triggers a browser_snapshot tool call.
+    func testPlaywrightConnection() async throws -> Bool {
+        // Restart bridge to pick up any newly-saved token from UserDefaults
+        bridgeStarted = false
+        do {
+            try await claudeBridge.restart()
+            bridgeStarted = true
+        } catch {
+            // If restart fails, try a fresh start
+            try await claudeBridge.start()
+            bridgeStarted = true
+        }
+        return try await claudeBridge.testPlaywrightConnection()
+    }
+
     /// Ensure the Claude Agent bridge is started (restarts if the process died)
     private func ensureBridgeStarted() async -> Bool {
         // If we thought the bridge was started but the process died, reset so we restart

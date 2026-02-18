@@ -525,6 +525,29 @@ actor ClaudeAgentBridge {
         log("ClaudeAgentBridge: Auto-installed Playwright MCP Bridge Chrome extension via policy")
     }
 
+    // MARK: - Playwright Connection Test
+
+    /// Test that the Playwright Chrome extension is connected and working.
+    /// Sends a minimal query that triggers a browser_snapshot tool call.
+    /// Returns true if the extension responds successfully.
+    func testPlaywrightConnection() async throws -> Bool {
+        guard isRunning else {
+            throw BridgeError.notRunning
+        }
+
+        let result = try await query(
+            prompt: "Call browser_snapshot to verify the extension is connected. Only call that one tool, then report success or failure.",
+            systemPrompt: "You are a connection test agent. Call the browser_snapshot tool exactly once. If it succeeds, respond with exactly 'CONNECTED'. If it fails, respond with 'FAILED' followed by the error.",
+            mode: "ask",
+            onTextDelta: { _ in },
+            onToolCall: { _, _, _ in "" },
+            onToolActivity: { _, _, _, _ in },
+            onThinkingDelta: { _ in },
+            onToolResultDisplay: { _, _, _ in }
+        )
+        return result.text.contains("CONNECTED")
+    }
+
     /// Remove the Playwright MCP Bridge extension from Chrome's forcelist policy.
     static func removeChromeExtensionPolicy() {
         var prefs = UserDefaults.standard.persistentDomain(forName: chromeDomain) ?? [:]
