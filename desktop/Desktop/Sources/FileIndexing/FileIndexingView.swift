@@ -297,8 +297,36 @@ struct FileIndexingView: View {
         """
         await chatProvider.sendMessage(prompt)
 
+        // Append the AI's exploration response to the user's AI profile
+        await appendExplorationToProfile()
+
         // Follow up: ask the model to find something actionable
         await chatProvider.sendMessage("Now based on everything you discovered, find something that you can actually help me with to get done. Something that is clearly not done yet and something that you as an AI agent can execute upon.")
+    }
+
+    /// Append the AI's file exploration response to the latest AI user profile
+    private func appendExplorationToProfile() async {
+        // Get the last AI message (the exploration response)
+        guard let lastAIMessage = chatProvider.messages.last(where: { $0.sender == .ai }),
+              !lastAIMessage.text.isEmpty else {
+            log("FileIndexingView: No AI response to append to profile")
+            return
+        }
+
+        let service = AIUserProfileService.shared
+        let existingProfile = await service.getLatestProfile()
+
+        if let existing = existingProfile, let profileId = existing.id {
+            // Append to existing profile
+            let updated = existing.profileText + "\n\n--- File Exploration Insights ---\n" + lastAIMessage.text
+            let success = await service.updateProfileText(id: profileId, newText: updated)
+            log("FileIndexingView: Appended exploration to AI profile (success=\(success))")
+        } else {
+            // No profile exists yet — create one via generation, or save directly
+            // For now, trigger a full generation which will pick up the new data
+            log("FileIndexingView: No existing AI profile, triggering generation")
+            _ = try? await service.generateProfile()
+        }
     }
 
     private func skip() {
