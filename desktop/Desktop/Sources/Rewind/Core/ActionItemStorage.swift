@@ -623,6 +623,42 @@ actor ActionItemStorage {
         }
     }
 
+    /// Hard-delete local tasks whose backendId is NOT in the given API set.
+    /// Only targets synced records (backendSynced=true, backendId present) to avoid
+    /// deleting locally-created tasks that haven't been pushed yet.
+    /// Returns the number of records deleted.
+    func hardDeleteAbsentTasks(apiIds: Set<String>) async throws -> Int {
+        let db = try await ensureInitialized()
+
+        let deleted = try await db.write { database -> Int in
+            let records = try ActionItemRecord
+                .filter(Column("completed") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("backendId") != nil)
+                .filter(Column("backendSynced") == true)
+                .fetchAll(database)
+
+            var count = 0
+            for record in records {
+                guard let backendId = record.backendId, !backendId.isEmpty else { continue }
+                if !apiIds.contains(backendId) {
+                    try database.execute(
+                        sql: "DELETE FROM action_items WHERE id = ?",
+                        arguments: [record.id]
+                    )
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        if deleted > 0 {
+            log("ActionItemStorage: hard-deleted \(deleted) absent tasks")
+        }
+
+        return deleted
+    }
+
     /// Returns all active scored tasks for batch-syncing scores to backend
     func getAllScoredTasks() async throws -> [TaskActionItem] {
         let db = try await ensureInitialized()
