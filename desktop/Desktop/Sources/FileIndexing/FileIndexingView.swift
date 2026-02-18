@@ -296,6 +296,9 @@ struct FileIndexingView: View {
         Tell me a story about this person. Who are they? What are they building? What drives them? What's their tech stack and workflow? Share discoveries as you find them, like you're exploring and getting to know a new friend.
         """
         await chatProvider.sendMessage(prompt)
+
+        // Follow up: ask the model to find something actionable
+        await chatProvider.sendMessage("Now based on everything you discovered, find something that you can actually help me with to get done. Something that is clearly not done yet and something that you as an AI agent can execute upon.")
     }
 
     private func skip() {
