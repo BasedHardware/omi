@@ -1973,6 +1973,28 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN fromStaged BOOLEAN NOT NULL DEFAULT 0")
         }
 
+        migrator.registerMigration("createIndexedFiles") { db in
+            try db.create(table: "indexed_files") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("path", .text).notNull()
+                t.column("filename", .text).notNull()
+                t.column("fileExtension", .text)
+                t.column("fileType", .text).notNull()
+                t.column("sizeBytes", .integer).notNull()
+                t.column("folder", .text).notNull()
+                t.column("depth", .integer).notNull()
+                t.column("createdAt", .datetime)
+                t.column("modifiedAt", .datetime)
+                t.column("indexedAt", .datetime).notNull()
+            }
+
+            try db.create(index: "idx_indexed_files_path", on: "indexed_files", columns: ["path"], unique: true)
+            try db.create(index: "idx_indexed_files_type", on: "indexed_files", columns: ["fileType"])
+            try db.create(index: "idx_indexed_files_folder", on: "indexed_files", columns: ["folder"])
+            try db.create(index: "idx_indexed_files_ext", on: "indexed_files", columns: ["fileExtension"])
+            try db.create(index: "idx_indexed_files_modified", on: "indexed_files", columns: ["modifiedAt"])
+        }
+
         try migrator.migrate(queue)
     }
 
