@@ -276,8 +276,22 @@ actor FileIndexerService {
         do {
             try db.write { database in
                 for record in records {
-                    // Use INSERT OR IGNORE to skip duplicates (unique path constraint)
-                    try record.insert(database, onConflict: .ignore)
+                    // Upsert: insert new files, update metadata for existing ones
+                    try database.execute(
+                        sql: """
+                            INSERT INTO indexed_files (path, filename, fileExtension, fileType, sizeBytes, folder, depth, createdAt, modifiedAt, indexedAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(path) DO UPDATE SET
+                                sizeBytes = excluded.sizeBytes,
+                                modifiedAt = excluded.modifiedAt,
+                                indexedAt = excluded.indexedAt
+                            """,
+                        arguments: [
+                            record.path, record.filename, record.fileExtension,
+                            record.fileType, record.sizeBytes, record.folder,
+                            record.depth, record.createdAt, record.modifiedAt, record.indexedAt
+                        ]
+                    )
                 }
             }
         } catch {
