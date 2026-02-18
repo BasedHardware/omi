@@ -419,7 +419,6 @@ class LocalWalSyncImpl implements LocalWalSync {
             wals[j].syncEtaSeconds = null;
           }
         }
-        continue;
       }
 
       await _saveWalsToFile();
