@@ -83,7 +83,8 @@ async fn provision_agent_vm(
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
-    let anthropic_key = state.config.agent_anthropic_api_key.clone();
+    let anthropic_key = state.config.agent_anthropic_api_key.clone()
+        .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok());
     let gemini_key = state.config.gemini_api_key.clone();
 
     tokio::spawn(async move {
