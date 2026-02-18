@@ -202,7 +202,7 @@ async fn get_unread_messages(
         match find_session_by_email(&client, &auth, website_id, &email).await? {
             Some(id) => {
                 tracing::info!("Crisp: found session {} for {} (caching)", id, email);
-                set_cached_session(state.crisp_session_cache.clone(), email_lower, id.clone()).await;
+                set_cached_session(&state.crisp_session_cache, email_lower, id.clone()).await;
                 id
             }
             None => {
