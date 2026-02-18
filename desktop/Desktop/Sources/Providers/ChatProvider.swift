@@ -1719,20 +1719,40 @@ class ChatProvider: ObservableObject {
     /// Clear current session messages (delete and create new)
     func clearChat() async {
         if isInDefaultChat {
-            // Default chat mode: delete messages without session (compatible with Flutter)
-            do {
-                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
-                messages = []
-                log("Cleared default chat messages")
-            } catch {
-                logError("Failed to clear default chat messages", error: error)
+            // Default chat mode: clear UI immediately, delete in background
+            messages = []
+            log("Cleared default chat messages")
+            Task {
+                do {
+                    _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
+                } catch {
+                    logError("Failed to clear default chat messages", error: error)
+                }
             }
         } else {
-            // Session mode: delete session and create new
-            if let session = currentSession {
-                await deleteSession(session)
+            // Session mode: clear UI immediately, delete old session in background, create new
+            let sessionToDelete = currentSession
+
+            // Immediately clear UI state
+            if let session = sessionToDelete {
+                sessions.removeAll { $0.id == session.id }
             }
-            // Create a fresh session
+            currentSession = nil
+            messages = []
+
+            // Delete old session in background (don't await — backend is slow)
+            if let session = sessionToDelete {
+                Task {
+                    do {
+                        try await APIClient.shared.deleteChatSession(sessionId: session.id)
+                        log("Background deleted chat session: \(session.id)")
+                    } catch {
+                        logError("Failed to background delete chat session", error: error)
+                    }
+                }
+            }
+
+            // Create a fresh session immediately
             _ = await createNewSession()
         }
 
