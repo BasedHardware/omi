@@ -241,7 +241,7 @@ actor FileIndexerService {
     private func insertBatch(_ records: [IndexedFileRecord], into db: DatabasePool) {
         do {
             try db.write { database in
-                for var record in records {
+                for record in records {
                     // Use INSERT OR IGNORE to skip duplicates (unique path constraint)
                     try record.insert(database, onConflict: .ignore)
                 }
