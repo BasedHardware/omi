@@ -27,41 +27,22 @@ struct GoalsWidget: View {
                 Spacer()
 
                 // History button
-                Button(action: { showingHistory = true }) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                GoalHeaderButton(icon: "clock.arrow.circlepath", tooltip: "Goal history", color: OmiColors.textTertiary) {
+                    showingHistory = true
                 }
-                .buttonStyle(.plain)
-                .help("Goal history")
 
                 // AI goal generation button (when there are goals but room for more)
                 if goals.count > 0 && goals.count < 3 {
-                    Button(action: { triggerGoalGeneration() }) {
-                        if isGeneratingGoal {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .frame(width: 14, height: 14)
-                        } else {
-                            Image(systemName: "sparkles")
-                                .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
-                        }
+                    GoalHeaderButton(icon: "sparkles", tooltip: "Generate AI goal", color: OmiColors.purplePrimary.opacity(0.8), isLoading: isGeneratingGoal) {
+                        triggerGoalGeneration()
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isGeneratingGoal)
-                    .help("Generate AI goal")
                 }
 
                 // Add goal button (only if less than 3 goals)
                 if goals.count < 3 {
-                    Button(action: { showingCreateSheet = true }) {
-                        Image(systemName: "plus")
-                            .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textTertiary)
+                    GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
+                        showingCreateSheet = true
                     }
-                    .buttonStyle(.plain)
-                    .help("Add goal manually")
                 }
             }
 
@@ -764,6 +745,56 @@ struct GoalAdviceSheet: View {
                     errorMessage = error.localizedDescription
                     isLoading = false
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Goal Header Button with Tooltip
+
+private struct GoalHeaderButton: View {
+    let icon: String
+    let tooltip: String
+    let color: Color
+    var isLoading: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 14, height: 14)
+            } else {
+                Image(systemName: icon)
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(color)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .overlay(alignment: .bottom) {
+            if isHovered {
+                Text(tooltip)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(OmiColors.backgroundTertiary)
+                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    )
+                    .fixedSize()
+                    .offset(y: 24)
+                    .transition(.opacity)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
             }
         }
     }
