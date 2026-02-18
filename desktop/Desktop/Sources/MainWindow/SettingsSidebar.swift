@@ -19,8 +19,7 @@ struct SettingsSearchItem: Identifiable {
 
     static let allSearchableItems: [SettingsSearchItem] = [
         // General
-        SettingsSearchItem(name: "Screen Analysis", keywords: ["monitor", "screenshot", "capture"], section: .general, advancedSubsection: nil, icon: "gearshape"),
-        SettingsSearchItem(name: "Transcription", keywords: ["audio", "recording", "microphone", "speech"], section: .general, advancedSubsection: nil, icon: "gearshape"),
+        SettingsSearchItem(name: "Rewind", keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Notifications", keywords: ["alerts", "notify"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Ask Omi", keywords: ["floating bar", "chat bar"], section: .general, advancedSubsection: nil, icon: "gearshape"),
         SettingsSearchItem(name: "Font Size", keywords: ["text size", "zoom", "scale"], section: .general, advancedSubsection: nil, icon: "gearshape"),
@@ -36,6 +35,7 @@ struct SettingsSearchItem: Identifiable {
 
         // Rewind
         SettingsSearchItem(name: "Rewind", keywords: ["screen history", "screenshots", "recording"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
+        SettingsSearchItem(name: "Storage", keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Excluded Apps", keywords: ["exclude", "ignore", "block apps", "blocklist"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Battery Optimization", keywords: ["battery", "power", "energy", "low power"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
         SettingsSearchItem(name: "Data Retention", keywords: ["retention", "storage", "delete old", "keep data"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath"),
@@ -138,10 +138,15 @@ struct SettingsSidebar: View {
 
     private var filteredSearchItems: [SettingsSearchItem] {
         guard !searchQuery.isEmpty else { return [] }
-        let query = searchQuery.lowercased()
+        let words = searchQuery.lowercased().split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return [] }
         return SettingsSearchItem.allSearchableItems.filter { item in
-            item.name.lowercased().contains(query) ||
-            item.keywords.contains(where: { $0.lowercased().contains(query) })
+            let nameLower = item.name.lowercased()
+            let keywordsLower = item.keywords.map { $0.lowercased() }
+            return words.allSatisfy { word in
+                nameLower.contains(word) ||
+                keywordsLower.contains(where: { $0.contains(word) })
+            }
         }
     }
 

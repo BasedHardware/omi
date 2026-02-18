@@ -90,11 +90,16 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
 
     // Always include both MCP servers
+    const playwrightArgs = [playwrightCli];
+    if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+      playwrightArgs.push("--extension");
+    }
+
     const mcpServers: Record<string, unknown> = {
       "omi-tools": omiServer,
       "playwright": {
         command: process.execPath,
-        args: [playwrightCli],
+        args: playwrightArgs,
       },
     };
 
@@ -105,7 +110,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       allowedTools,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
-      maxTurns: 15,
+      maxTurns: undefined,
       cwd: msg.cwd || process.env.HOME || "/",
       mcpServers,
       includePartialMessages: true,

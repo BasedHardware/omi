@@ -350,6 +350,8 @@ class TranscriptionService {
         watchdogTask?.cancel()
         watchdogTask = nil
         webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         onDisconnected?()
 
         // Attempt reconnection if enabled

@@ -146,6 +146,9 @@ class AppState: ObservableObject {
     private var maxRecordingTimer: Timer?
     private let maxRecordingDuration: TimeInterval = 4 * 60 * 60  // 4 hours
 
+    // Periodic notification health check timer
+    private var notificationHealthTimer: Timer?
+
     // Crash-safe transcription storage
     private var currentSessionId: Int64?
 
@@ -209,6 +212,12 @@ class AppState: ObservableObject {
 
         // Note: Bluetooth subscription is initialized lazily via initializeBluetoothIfNeeded()
         // to avoid triggering the permission dialog before the user reaches the Bluetooth step
+
+        // Start periodic notification health check (every 30 min)
+        // Detects when macOS silently revokes notification authorization and auto-repairs
+        notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
+            self?.checkNotificationPermission()
+        }
     }
 
     /// Initialize Bluetooth manager and subscribe to state changes
@@ -416,6 +425,11 @@ class AppState: ObservableObject {
                             // which prevents the notification center from registering the app.
                             // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
                             if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                                AnalyticsManager.shared.notificationRepairTriggered(
+                                    reason: "launch_disabled_error",
+                                    previousStatus: "notDetermined",
+                                    currentStatus: "error_code_1"
+                                )
                                 DispatchQueue.main.async {
                                     self?.repairNotificationRegistrationAndRetry()
                                 }
@@ -450,6 +464,30 @@ class AppState: ObservableObject {
                     self?.hasNotificationPermission = isNowGranted
                     if !isNowGranted {
                         log("Notification permission still not granted after repair. Opening System Settings.")
+                        self?.openNotificationPreferences()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Repair notification registration via lsregister, then fall back to System Settings if still broken.
+    /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
+    func repairNotificationAndFallback() {
+        log("Fix button tapped — running lsregister repair for notifications")
+        ProactiveAssistantsPlugin.repairNotificationRegistration()
+
+        // Wait for repair + re-authorization, then check if it worked
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                DispatchQueue.main.async {
+                    let isNowGranted = settings.authorizationStatus == .authorized
+                    self?.hasNotificationPermission = isNowGranted
+                    self?.notificationAlertStyle = settings.alertStyle
+                    if isNowGranted {
+                        log("Notification repair succeeded — auth is now authorized")
+                    } else {
+                        log("Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings")
                         self?.openNotificationPreferences()
                     }
                 }
@@ -645,6 +683,18 @@ class AppState: ObservableObject {
                         badgeEnabled: badgeEnabled,
                         bannersDisabled: settings.alertStyle == .none
                     )
+
+                    // Detect regression: was authorized, now reverted to notDetermined
+                    // This happens on macOS 26+ where the OS silently revokes notification permission
+                    if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+                        log("Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair")
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "auth_regression",
+                            previousStatus: "authorized",
+                            currentStatus: "notDetermined"
+                        )
+                        self.repairNotificationRegistrationAndRetry()
+                    }
 
                     // Update last known state
                     self.lastNotificationAuthStatus = authStatus
@@ -1947,6 +1997,7 @@ class AppState: ObservableObject {
                         )
                     } catch {
                         logError("Transcription: Failed to persist segment to DB", error: error)
+                        await RewindDatabase.shared.reportQueryError(error)
                         // Non-fatal - continue recording
                     }
                 }
@@ -2426,4 +2477,8 @@ extension Notification.Name {
     static let goalAutoCreated = Notification.Name("goalAutoCreated")
     /// Posted when a goal is completed (current_value >= target_value)
     static let goalCompleted = Notification.Name("goalCompleted")
+    /// Posted to navigate to AI Chat page
+    static let navigateToChat = Notification.Name("navigateToChat")
+    /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
+    static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
 }

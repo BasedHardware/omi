@@ -29,7 +29,7 @@ struct FloatingControlBarView: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                        .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
@@ -53,20 +53,31 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             }
         }
+        .clipped()
         .onHover { hovering in
+            // Resize window BEFORE updating SwiftUI state on expand so the expanded
+            // content never renders in a too-small window (which causes overflow).
+            if hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            }
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovering = hovering
             }
-            // Resize window directly — no Combine delay so content and frame change together
-            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: hovering)
+            if !hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+            }
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 14)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 11)
     }
 
     private func openFloatingBarSettings() {
         // Bring main window to front and navigate to floating bar settings
         NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.title.hasPrefix("Omi") {
+            window.makeKeyAndOrderFront(nil)
+            break
+        }
         NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
     }
 
@@ -85,7 +96,6 @@ struct FloatingControlBarView: View {
                     }
 
                     HStack(spacing: 6) {
-                        compactLabel("Hide", keys: ["\u{2318}", "\\"])
                         compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
                     }
                 }
@@ -100,12 +110,24 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal circle shown when not hovering
+    /// Minimal icon shown when not hovering
     private var compactCircleView: some View {
-        Image(systemName: "waveform")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white.opacity(0.6))
-            .frame(width: 28, height: 28)
+        Group {
+            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png")!) {
+                Image(nsImage: logoImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(height: 12)
+                    .colorInvert()
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+        }
+        .frame(height: 22)
+        .padding(.horizontal, 8)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

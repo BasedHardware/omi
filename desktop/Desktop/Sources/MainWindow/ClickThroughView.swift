@@ -97,12 +97,22 @@ class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             let screenLocation = window.convertPoint(toScreen: location)
 
             // Flip Y coordinate for CGEvent (CGEvent uses top-left origin, AppKit uses bottom-left)
-            guard let screen = window.screen ?? NSScreen.main else { return }
+            guard let screen = window.screen ?? NSScreen.main else {
+                log("CLICKTHROUGH: No screen available, skipping synthetic click")
+                return
+            }
             let flippedY = screen.frame.maxY - screenLocation.y
             let cgPoint = CGPoint(x: screenLocation.x, y: flippedY)
 
             // Set guard before posting synthetic events
             self.isProcessingSyntheticClick = true
+
+            // Safety timeout: reset the guard after 200ms no matter what
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                if self?.isProcessingSyntheticClick == true {
+                    self?.isProcessingSyntheticClick = false
+                }
+            }
 
             // Create and post a synthetic mouse event at the SAVED click location
             log("CLICKTHROUGH: Posting synthetic click at screen position \(cgPoint)")

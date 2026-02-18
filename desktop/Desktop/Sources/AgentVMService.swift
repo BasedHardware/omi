@@ -33,12 +33,15 @@ actor AgentVMService {
                     await startIncrementalSync(vmIP: ip, authToken: status.authToken)
                     return
                 }
-                if let status = status, status.status == "provisioning" {
-                    log("AgentVMService: VM is provisioning, polling...")
+                if let status = status,
+                   status.status == "provisioning" || status.status == "stopped" {
+                    log("AgentVMService: VM is \(status.status), polling until ready...")
                     if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
                        let ip = result.ip {
                         log("AgentVMService: VM became ready — ip=\(ip)")
-                        await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
+                            await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        }
                         await startIncrementalSync(vmIP: ip, authToken: result.authToken)
                     }
                     return
@@ -225,6 +228,40 @@ actor AgentVMService {
     /// Start incremental sync after VM is confirmed ready.
     private func startIncrementalSync(vmIP: String, authToken: String) async {
         await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+        // Send Firebase token so the VM can call backend tools
+        await sendFirebaseToken(vmIP: vmIP, authToken: authToken)
+    }
+
+    /// Send the user's Firebase ID token to the VM so it can call Python backend tools.
+    private func sendFirebaseToken(vmIP: String, authToken: String) async {
+        do {
+            let idToken = try await AuthService.shared.getIdToken()
+            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 15
+
+            let body: [String: String] = ["firebaseToken": idToken]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+
+            if httpResponse.statusCode == 200 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let toolCount = json["toolsRegistered"] as? Int {
+                    log("AgentVMService: Firebase token sent to VM (\(toolCount) backend tools registered)")
+                } else {
+                    log("AgentVMService: Firebase token sent to VM")
+                }
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                log("AgentVMService: Failed to send Firebase token — HTTP \(httpResponse.statusCode): \(body)")
+            }
+        } catch {
+            log("AgentVMService: Failed to send Firebase token — \(error.localizedDescription)")
+        }
     }
 
     /// Gzip compress data using Apple's Compression framework.

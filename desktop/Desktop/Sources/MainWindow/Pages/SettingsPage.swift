@@ -7,6 +7,7 @@ struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    var chatProvider: ChatProvider? = nil
 
     var body: some View {
         ScrollView {
@@ -32,7 +33,8 @@ struct SettingsPage: View {
                 SettingsContentView(
                     appState: appState,
                     selectedSection: $selectedSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    chatProvider: chatProvider
                 )
                 .padding(.horizontal, 32)
 
@@ -55,6 +57,9 @@ struct SettingsPage: View {
 struct SettingsContentView: View {
     // AppState for transcription control
     @ObservedObject var appState: AppState
+
+    // ChatProvider for browser extension setup
+    var chatProvider: ChatProvider? = nil
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
@@ -189,6 +194,11 @@ struct SettingsContentView: View {
     @State private var fileViewerTitle = ""
     @State private var skillSearchQuery = ""
 
+    // Browser Extension settings
+    @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
+    @State private var playwrightExtensionToken: String = ""
+    @State private var showBrowserSetup = false
+
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
@@ -241,11 +251,13 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>
+        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
+        chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
         self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
         _isTranscribing = State(initialValue: appState.isTranscribing)
@@ -352,70 +364,41 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Screen Analysis toggle
+            // Rewind toggle (controls both screen + audio)
             settingsCard {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Analysis")
+                        Text("Rewind")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? (isMonitoring ? "Analyzing your screen" : "Screen analysis is paused"))
+                        Text(permissionError ?? transcriptionError ?? ((isMonitoring || isTranscribing) ? "Screen capture and audio are active" : "Screen capture and audio are paused"))
                             .scaledFont(size: 13)
-                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isToggling {
+                    if isToggling || isTogglingTranscription {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Toggle("", isOn: $isMonitoring)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isMonitoring) { _, newValue in
+                        Toggle("", isOn: Binding(
+                            get: { isMonitoring || isTranscribing },
+                            set: { newValue in
+                                isMonitoring = newValue
+                                isTranscribing = newValue
                                 toggleMonitoring(enabled: newValue)
-                            }
-                    }
-                }
-            }
-
-            // Transcription toggle
-            settingsCard {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Transcription")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Transcription is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isTogglingTranscription {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: $isTranscribing)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isTranscribing) { _, newValue in
                                 toggleTranscription(enabled: newValue)
                             }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                     }
                 }
             }
@@ -458,7 +441,18 @@ struct SettingsContentView: View {
                         } else {
                             // Show button to enable or fix
                             Button(action: {
-                                appState.openNotificationPreferences()
+                                if appState.isNotificationBannerDisabled {
+                                    // Banners off — user needs to change style in System Settings
+                                    appState.openNotificationPreferences()
+                                } else {
+                                    // Auth not granted — try lsregister repair first
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "settings_fix_button",
+                                        previousStatus: "not_authorized",
+                                        currentStatus: "not_authorized"
+                                    )
+                                    appState.repairNotificationAndFallback()
+                                }
                             }) {
                                 Text(appState.isNotificationBannerDisabled ? "Fix" : "Enable")
                                     .scaledFont(size: 12, weight: .semibold)
@@ -619,8 +613,42 @@ struct SettingsContentView: View {
     @ObservedObject private var fontScaleSettings = FontScaleSettings.shared
     @ObservedObject private var rewindSettings = RewindSettings.shared
 
+    @State private var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
+
     private var rewindSection: some View {
         VStack(spacing: 20) {
+            // Storage Stats
+            settingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "internaldrive.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Storage")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if let stats = rewindStats {
+                                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            } else {
+                                Text("Loading...")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+            .task {
+                rewindStats = await RewindIndexer.shared.getStats()
+            }
+
             // Excluded Apps
             settingsCard {
                 VStack(alignment: .leading, spacing: 16) {
@@ -1617,12 +1645,130 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Browser Extension card
+            settingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "globe")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Browser Extension")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        if !playwrightExtensionToken.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Connected")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Toggle("", isOn: $playwrightUseExtension)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: playwrightUseExtension) { _, enabled in
+                                if enabled {
+                                    ClaudeAgentBridge.ensureChromeExtensionInstalled()
+                                } else {
+                                    ClaudeAgentBridge.removeChromeExtensionPolicy()
+                                }
+                            }
+                    }
+
+                    Text("Lets the AI use your Chrome browser with all your logged-in sessions. The extension is auto-installed when Chrome restarts.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if playwrightUseExtension {
+                        if playwrightExtensionToken.isEmpty {
+                            // No token — show "Set Up" button
+                            Button(action: {
+                                showBrowserSetup = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .scaledFont(size: 12)
+                                    Text("Set Up")
+                                        .scaledFont(size: 13, weight: .medium)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        } else {
+                            // Token is set — show compact view
+                            HStack(spacing: 8) {
+                                Text("Token")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+
+                                Text(String(playwrightExtensionToken.prefix(8)) + "...")
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Spacer()
+
+                                Button(action: {
+                                    showBrowserSetup = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reconfigure")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button(action: {
+                                    playwrightExtensionToken = ""
+                                    UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "xmark")
+                                            .scaledFont(size: 11)
+                                        Text("Reset")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
             refreshAIChatConfig()
+            playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
         }
         .sheet(isPresented: $showFileViewer) {
             fileViewerSheet
+        }
+        .sheet(isPresented: $showBrowserSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                onDismiss: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                chatProvider: chatProvider
+            )
+            .frame(width: 480, height: 460)
         }
     }
 

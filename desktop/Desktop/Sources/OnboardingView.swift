@@ -4,6 +4,7 @@ import AVKit
 
 struct OnboardingView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var chatProvider: ChatProvider
     var onComplete: (() -> Void)? = nil
     @AppStorage("onboardingStep") private var currentStep = 0
     @Environment(\.dismiss) private var dismiss
@@ -11,7 +12,7 @@ struct OnboardingView: View {
     // Timer to periodically check permission status when on permissions step
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
-    let steps = ["Video", "Name", "Language", "Permissions", "Done"]
+    let steps = ["Video", "Name", "Language", "Permissions", "Get to Know You"]
 
     // State for name input
     @State private var nameInput: String = ""
@@ -21,6 +22,9 @@ struct OnboardingView: View {
     // State for language selection
     @State private var selectedLanguage: String = "en"
     @State private var autoDetectEnabled: Bool = false
+
+    // State for file indexing step (step 4)
+    @State private var fileIndexingDone = false
 
     // Track whether we've initialized bluetooth on the permissions step
     @State private var hasInitializedBluetoothForPermissions = false
@@ -173,7 +177,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
         case 3: return requiredPermissionsGranted
-        case 4: return true // Done step
+        case 4: return fileIndexingDone // File indexing step
         default: return true
         }
     }
@@ -313,8 +317,8 @@ struct OnboardingView: View {
 
                         buttonSection
                     }
-                    .frame(width: currentStep == 3 ? 720 : 420)
-                    .frame(height: currentStep == 3 ? 560 : 420)
+                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 600 : 420))
+                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 650 : 420))
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(OmiColors.backgroundSecondary)
@@ -359,7 +363,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
         case 3: return allPermissionsGranted // Permissions step
-        case 4: return true // Done - always "granted"
+        case 4: return fileIndexingDone // File indexing step
         default: return false
         }
     }
@@ -376,21 +380,8 @@ struct OnboardingView: View {
         case 3:
             permissionsStepView
         case 4:
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle")
-                    .scaledFont(size: 48)
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("You're All Set!")
-                    .font(.title)
-                    .fontWeight(.semibold)
-
-                Text("Just use Omi in the background for 2 days and you'll start getting useful feedback after!")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
+            FileIndexingView(chatProvider: chatProvider) { fileCount in
+                handleFileIndexingComplete(fileCount: fileCount)
             }
         default:
             EmptyView()
@@ -496,6 +487,35 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = AssistantSettings.shared.transcriptionLanguage
             autoDetectEnabled = false
+        }
+    }
+
+    // MARK: - File Indexing Completion
+
+    private func handleFileIndexingComplete(fileCount: Int) {
+        fileIndexingDone = true
+
+        if fileCount > 0 {
+            log("OnboardingView: File indexing completed with \(fileCount) files")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
+        } else {
+            log("OnboardingView: File indexing skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")
+        }
+
+        AnalyticsManager.shared.onboardingCompleted()
+        appState.hasCompletedOnboarding = true
+        // Start cloud agent VM pipeline
+        Task {
+            await AgentVMService.shared.startPipeline()
+        }
+        if LaunchAtLoginManager.shared.setEnabled(true) {
+            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
+        }
+        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+        appState.startTranscription()
+        if let onComplete = onComplete {
+            onComplete()
         }
     }
 
@@ -711,26 +731,31 @@ struct OnboardingView: View {
     @ViewBuilder
     private var buttonSection: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 16) {
-                // Back button (not shown on first step or name step)
-                if currentStep > 0 && currentStep != 1 {
-                    Button(action: { currentStep -= 1 }) {
-                        Text("Back")
+            // Step 4 has its own buttons inside FileIndexingView
+            if currentStep != 4 {
+                HStack(spacing: 16) {
+                    // Back button (not shown on first step or name step)
+                    if currentStep > 0 && currentStep != 1 {
+                        Button(action: {
+                            currentStep -= 1
+                        }) {
+                            Text("Back")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+
+                    // Main action / Continue button
+                    Button(action: handleMainAction) {
+                        Text(mainButtonTitle)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 }
-
-                // Main action / Continue button
-                Button(action: handleMainAction) {
-                    Text(mainButtonTitle)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             }
 
             if currentStep == 3 && !requiredPermissionsGranted {
@@ -744,14 +769,7 @@ struct OnboardingView: View {
     }
 
     private var mainButtonTitle: String {
-        switch currentStep {
-        case 0: return "Continue"
-        case 1: return "Continue"
-        case 2: return "Continue"
-        case 3: return "Continue"
-        case 4: return "Start Using Omi"
-        default: return "Continue"
-        }
+        return "Continue"
     }
 
     private func handleMainAction() {
@@ -832,28 +850,7 @@ struct OnboardingView: View {
             }
             currentStep += 1
         case 4:
-            log("OnboardingView: Step 4 - Completing onboarding")
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Done")
-            AnalyticsManager.shared.onboardingCompleted()
-            appState.hasCompletedOnboarding = true
-            // Start cloud agent VM pipeline (provision → poll → upload DB)
-            Task {
-                await AgentVMService.shared.startPipeline()
-            }
-            // Enable launch at login by default for new users
-            if LaunchAtLoginManager.shared.setEnabled(true) {
-                AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-            }
-            ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-            appState.startTranscription()
-            // Only call completion handler if provided (for sheet presentations)
-            // Don't dismiss - DesktopHomeView will automatically transition to mainContent
-            if let onComplete = onComplete {
-                log("OnboardingView: Calling onComplete handler")
-                onComplete()
-            } else {
-                log("OnboardingView: Onboarding complete, DesktopHomeView will show mainContent")
-            }
+            break // FileIndexingView handles step 4 actions via handleFileIndexingComplete
         default:
             break
         }

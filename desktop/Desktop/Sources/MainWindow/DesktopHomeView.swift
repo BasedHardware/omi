@@ -18,6 +18,9 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
+    // File indexing sheet for existing users
+    @State private var showFileIndexingSheet = false
+
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
         selectedIndex == SidebarNavItem.settings.rawValue
@@ -57,7 +60,7 @@ struct DesktopHomeView: View {
                         appState.hasCompletedOnboarding = true
                     }
                 } else {
-                    OnboardingView(appState: appState, onComplete: nil)
+                    OnboardingView(appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil)
                         .onAppear {
                             log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
                         }
@@ -71,6 +74,11 @@ struct DesktopHomeView: View {
                             log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
                             // Check all permissions on launch
                             appState.checkAllPermissions()
+
+                            // Show file indexing sheet for existing users who haven't done it
+                            if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+                                showFileIndexingSheet = true
+                            }
 
                             let settings = AssistantSettings.shared
 
@@ -127,6 +135,15 @@ struct DesktopHomeView: View {
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
+                        }
+                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
+                            FileIndexingView(
+                                chatProvider: viewModelContainer.chatProvider,
+                                onComplete: { fileCount in
+                                    showFileIndexingSheet = false
+                                }
+                            )
+                            .frame(width: 600, height: 650)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -322,6 +339,11 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.rewind.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.chat.rawValue
+            }
+        }
         .onChange(of: selectedIndex) { oldValue, newValue in
             // Track the previous index when navigating to settings
             if newValue == SidebarNavItem.settings.rawValue && oldValue != SidebarNavItem.settings.rawValue {
@@ -373,7 +395,8 @@ private struct PageContentView: View {
                 SettingsPage(
                     appState: appState,
                     selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    chatProvider: viewModelContainer.chatProvider
                 )
             case 10:
                 PermissionsPage(appState: appState)

@@ -319,7 +319,6 @@ struct ThinkingDotsView: View {
 
     private let dotCount = 3
     private let dotSize: CGFloat = 6
-    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 5) {
@@ -331,8 +330,11 @@ struct ThinkingDotsView: View {
                     .animation(.easeInOut(duration: 0.3), value: activeDot)
             }
         }
-        .onReceive(timer) { _ in
-            activeDot = (activeDot + 1) % dotCount
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(400))
+                activeDot = (activeDot + 1) % dotCount
+            }
         }
     }
 }

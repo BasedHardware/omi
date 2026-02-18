@@ -3208,9 +3208,6 @@ struct TaskRow: View {
     @State private var showDatePicker = false
     @State private var editDueDate: Date = Date()
 
-    // Inline priority popover
-    @State private var showPriorityPicker = false
-
     // Swipe gesture state
     @State private var swipeOffset: CGFloat = 0
     @State private var isDragging = false
@@ -3561,13 +3558,6 @@ struct TaskRow: View {
                         NewBadge()
                     }
 
-
-
-                    // Tag badges (show up to 3)
-                    ForEach(task.tags.prefix(3), id: \.self) { tag in
-                        TaskClassificationBadge(category: tag)
-                    }
-
                     // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
                     if TaskAgentSettings.shared.isEnabled {
                         AgentStatusIndicator(task: task)
@@ -3580,34 +3570,6 @@ struct TaskRow: View {
 
                     // Task detail button (hover for preview, click for full detail)
                     TaskDetailButton(task: task, showDetail: $showTaskDetail)
-
-                    // Due date badge - clickable
-                    if let dueAt = task.dueAt {
-                        DueDateBadgeInteractive(
-                            dueAt: dueAt,
-                            isCompleted: task.completed,
-                            showDatePicker: $showDatePicker,
-                            editDueDate: $editDueDate
-                        )
-                    }
-
-                    // Source badge (read-only)
-                    if let source = task.source {
-                        SourceBadgeCompact(source: source, sourceLabel: task.sourceAppLabel, sourceIcon: task.sourceIcon, windowTitle: task.windowTitle)
-                    }
-
-                    // Priority badge - clickable
-                    PriorityBadgeInteractive(
-                        priority: task.priority,
-                        isCompleted: task.completed,
-                        isHovering: isHovering,
-                        showPriorityPicker: $showPriorityPicker,
-                        onPriorityChange: { newPriority in
-                            Task {
-                                await onUpdateDetails?(task, nil, nil, newPriority)
-                            }
-                        }
-                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -3717,7 +3679,7 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundPrimary)))
+                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)

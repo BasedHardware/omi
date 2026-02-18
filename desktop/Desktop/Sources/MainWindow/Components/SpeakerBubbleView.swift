@@ -74,10 +74,13 @@ struct SpeakerBubbleView: View {
                 }
 
                 // Message bubble
+                // NOTE: .textSelection(.enabled) was removed here because it wraps each Text
+                // in an NSTextView-backed StyledTextLayoutEngine, which is extremely expensive.
+                // With 400 segments in a conversation, this caused 2+ second main thread hangs.
+                // Users can still copy the full transcript via the "Copy" button in the header.
                 Text(segment.text)
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textPrimary)
-                    .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(

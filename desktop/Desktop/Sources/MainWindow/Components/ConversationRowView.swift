@@ -38,23 +38,40 @@ struct ConversationRowView: View {
         Date().timeIntervalSince(conversation.createdAt) < 60
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+    private static let yesterdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "'Yesterday,' h:mm a"
+        return f
+    }()
+    private static let sameYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, h:mm a"
+        return f
+    }()
+    private static let otherYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy, h:mm a"
+        return f
+    }()
+
     /// Format timestamp (e.g., "10:43 AM" for today, "Jan 29, 10:43 AM" for other days)
     private var formattedTimestamp: String {
-        let formatter = DateFormatter()
         let calendar = Calendar.current
+        let formatter: DateFormatter
 
         if calendar.isDateInToday(displayDate) {
-            // Today: just show time
-            formatter.dateFormat = "h:mm a"
+            formatter = Self.timeFormatter
         } else if calendar.isDateInYesterday(displayDate) {
-            // Yesterday: show "Yesterday, time"
-            formatter.dateFormat = "'Yesterday,' h:mm a"
+            formatter = Self.yesterdayFormatter
         } else if calendar.isDate(displayDate, equalTo: Date(), toGranularity: .year) {
-            // This year: show "Mon, Jan 29, 10:43 AM"
-            formatter.dateFormat = "MMM d, h:mm a"
+            formatter = Self.sameYearFormatter
         } else {
-            // Different year: include year
-            formatter.dateFormat = "MMM d, yyyy, h:mm a"
+            formatter = Self.otherYearFormatter
         }
 
         return formatter.string(from: displayDate)

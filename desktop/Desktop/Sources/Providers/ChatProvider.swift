@@ -8,6 +8,9 @@ extension UserDefaults {
     @objc dynamic var multiChatEnabled: Bool {
         return bool(forKey: "multiChatEnabled")
     }
+    @objc dynamic var playwrightUseExtension: Bool {
+        return bool(forKey: "playwrightUseExtension")
+    }
 }
 
 // MARK: - Chat Session Model
@@ -239,15 +242,6 @@ struct Citation: Identifiable {
         case conversation
         case memory
     }
-
-    init(from source: CitationSource) {
-        self.id = source.id
-        self.sourceType = source.sourceType == "conversation" ? .conversation : .memory
-        self.title = source.title
-        self.preview = source.preview
-        self.emoji = source.emoji
-        self.createdAt = source.createdAt
-    }
 }
 
 // MARK: - Chat Mode
@@ -303,6 +297,7 @@ class ChatProvider: ObservableObject {
     private var bridgeStarted = false
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
+    private var playwrightExtensionObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -335,7 +330,6 @@ class ChatProvider: ObservableObject {
     }
 
     // MARK: - Cached Context for Prompts
-    private var cachedContext: ChatContextResponse?
     private var cachedMemories: [ServerMemory] = []
     private var memoriesLoaded = false
     private var cachedGoals: [Goal] = []
@@ -379,11 +373,52 @@ class ChatProvider: ObservableObject {
                     await self?.reinitialize()
                 }
             }
+
+        // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
+        playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    guard !self.isSending else {
+                        log("ChatProvider: Skipping bridge restart — query in progress")
+                        return
+                    }
+                    guard self.bridgeStarted else { return }
+                    log("ChatProvider: Playwright extension setting changed, restarting bridge")
+                    self.bridgeStarted = false
+                    do {
+                        try await self.claudeBridge.restart()
+                        self.bridgeStarted = true
+                        log("ChatProvider: Bridge restarted with new Playwright settings")
+                    } catch {
+                        logError("Failed to restart bridge after Playwright setting change", error: error)
+                    }
+                }
+            }
     }
 
     /// Pre-start the Claude bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
         _ = await ensureBridgeStarted()
+    }
+
+    /// Test that the Playwright Chrome extension is connected and working.
+    /// Ensures the bridge is started (restarting if needed to pick up new token),
+    /// then sends a lightweight test query that triggers a browser_snapshot tool call.
+    func testPlaywrightConnection() async throws -> Bool {
+        // Restart bridge to pick up any newly-saved token from UserDefaults
+        bridgeStarted = false
+        do {
+            try await claudeBridge.restart()
+            bridgeStarted = true
+        } catch {
+            // If restart fails, try a fresh start
+            try await claudeBridge.start()
+            bridgeStarted = true
+        }
+        return try await claudeBridge.testPlaywrightConnection()
     }
 
     /// Ensure the Claude Agent bridge is started (restarts if the process died)
@@ -587,10 +622,15 @@ class ChatProvider: ObservableObject {
         isLoadingMoreMessages = false
     }
 
+    /// Track which sessions are currently being deleted
+    @Published var deletingSessionIds: Set<String> = []
+
     /// Delete a chat session
     func deleteSession(_ session: ChatSession) async {
+        deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
+            deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
             // If deleted the current session, select another or clear
@@ -606,6 +646,7 @@ class ChatProvider: ObservableObject {
             log("Deleted chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionDeleted()
         } catch {
+            deletingSessionIds.remove(session.id)
             logError("Failed to delete chat session", error: error)
             errorMessage = "Failed to delete chat"
         }
@@ -897,40 +938,6 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    // MARK: - Fetch Context from Backend
-
-    /// Fetches rich context (conversations + memories) from backend using LLM-based retrieval
-    private func fetchContext(for question: String) async -> String {
-        // Build previous messages for context
-        let previousMessages: [(text: String, sender: String)] = messages.suffix(10).map { msg in
-            (text: msg.text, sender: msg.sender == .user ? "human" : "ai")
-        }
-
-        do {
-            let context = try await APIClient.shared.getChatContext(
-                question: question,
-                timezone: TimeZone.current.identifier,
-                appId: selectedAppId,
-                previousMessages: previousMessages
-            )
-
-            cachedContext = context
-
-            if context.requiresContext {
-                log("ChatProvider fetched context: \(context.conversations.count) conversations, \(context.memories.count) memories")
-                return context.contextString
-            } else {
-                log("ChatProvider: question doesn't require context")
-                // Return just memories for personalization
-                return context.contextString
-            }
-        } catch {
-            logError("Failed to fetch chat context", error: error)
-            // Fall back to cached memories
-            return formatMemoriesSection()
-        }
-    }
-
     // MARK: - Build System Prompt with Variables
 
     /// Builds the system prompt with dynamic template variables
@@ -1018,45 +1025,6 @@ class ChatProvider: ObservableObject {
             let role = msg.sender == .user ? "human" : "assistant"
             return "\(role): \(msg.text)"
         }.joined(separator: "\n")
-    }
-
-    // MARK: - Citation Extraction
-
-    /// Extracts citations from an AI response based on [N] patterns
-    /// - Parameters:
-    ///   - response: The AI response text containing citation markers
-    ///   - sources: Available citation sources from the context
-    /// - Returns: Array of citations that were actually referenced in the response
-    private func extractCitations(from response: String, sources: [CitationSource]) -> [Citation] {
-        guard !sources.isEmpty else { return [] }
-
-        // Find all [N] patterns in response
-        let pattern = "\\[(\\d+)\\]"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        let range = NSRange(response.startIndex..., in: response)
-        let matches = regex.matches(in: response, range: range)
-
-        // Extract unique indices
-        var citedIndices = Set<Int>()
-        for match in matches {
-            if let indexRange = Range(match.range(at: 1), in: response),
-               let index = Int(response[indexRange]) {
-                citedIndices.insert(index)
-            }
-        }
-
-        // Map to Citation objects (only cited sources)
-        return sources
-            .filter { citedIndices.contains($0.index) }
-            .map { Citation(from: $0) }
-    }
-
-    /// Strips citation markers [N] from display text
-    /// - Parameter text: Text containing citation markers
-    /// - Returns: Cleaned text without citation markers
-    private func stripCitationMarkers(from text: String) -> String {
-        text.replacingOccurrences(of: "\\[\\d+\\]", with: "", options: .regularExpression)
     }
 
     /// Initialize chat: fetch sessions and load messages
@@ -1416,28 +1384,18 @@ class ChatProvider: ObservableObject {
             streamingFlushWorkItem = nil
             flushStreamingBuffer()
 
-            // Extract citations from the response and strip markers for display
-            let citationSources = cachedContext?.citationSources ?? []
-            let citations = extractCitations(from: queryResult.text, sources: citationSources)
-            let displayText = stripCitationMarkers(from: queryResult.text)
-
             // Determine the final text to display and save
             let messageText: String
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
-                messageText = messages[index].text.isEmpty ? displayText : stripCitationMarkers(from: messages[index].text)
+                messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                 messages[index].text = messageText
-                messages[index].citations = citations
                 messages[index].isStreaming = false
                 completeRemainingToolCalls(messageId: aiMessageId)
-
-                if !citations.isEmpty {
-                    log("Extracted \(citations.count) citation(s) from response")
-                }
             } else {
                 // Message no longer in memory (user switched away from this session).
                 // Still need to persist the response to the backend.
-                messageText = displayText
+                messageText = queryResult.text
                 log("Chat response arrived after session switch, persisting to backend only")
             }
 
@@ -1761,20 +1719,40 @@ class ChatProvider: ObservableObject {
     /// Clear current session messages (delete and create new)
     func clearChat() async {
         if isInDefaultChat {
-            // Default chat mode: delete messages without session (compatible with Flutter)
-            do {
-                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
-                messages = []
-                log("Cleared default chat messages")
-            } catch {
-                logError("Failed to clear default chat messages", error: error)
+            // Default chat mode: clear UI immediately, delete in background
+            messages = []
+            log("Cleared default chat messages")
+            Task {
+                do {
+                    _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
+                } catch {
+                    logError("Failed to clear default chat messages", error: error)
+                }
             }
         } else {
-            // Session mode: delete session and create new
-            if let session = currentSession {
-                await deleteSession(session)
+            // Session mode: clear UI immediately, delete old session in background, create new
+            let sessionToDelete = currentSession
+
+            // Immediately clear UI state
+            if let session = sessionToDelete {
+                sessions.removeAll { $0.id == session.id }
             }
-            // Create a fresh session
+            currentSession = nil
+            messages = []
+
+            // Delete old session in background (don't await — backend is slow)
+            if let session = sessionToDelete {
+                Task {
+                    do {
+                        try await APIClient.shared.deleteChatSession(sessionId: session.id)
+                        log("Background deleted chat session: \(session.id)")
+                    } catch {
+                        logError("Failed to background delete chat session", error: error)
+                    }
+                }
+            }
+
+            // Create a fresh session immediately
             _ = await createNewSession()
         }
 

@@ -27,18 +27,24 @@ struct DraggableAreaView: NSViewRepresentable {
         private var initialLocation: NSPoint?
 
         override func mouseDown(with event: NSEvent) {
+            guard ShortcutSettings.shared.draggableBarEnabled else { return }
             initialLocation = event.locationInWindow
             NotificationCenter.default.post(name: .floatingBarDragDidStart, object: nil)
         }
 
         override func mouseUp(with event: NSEvent) {
+            guard initialLocation != nil else {
+                super.mouseUp(with: event)
+                return
+            }
             super.mouseUp(with: event)
             NotificationCenter.default.post(name: .floatingBarDragDidEnd, object: nil)
             initialLocation = nil
         }
 
         override func mouseDragged(with event: NSEvent) {
-            guard let targetWindow = targetWindow, let initialLocation = initialLocation else {
+            guard ShortcutSettings.shared.draggableBarEnabled,
+                  let targetWindow = targetWindow, let initialLocation = initialLocation else {
                 return
             }
 

@@ -50,10 +50,45 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Daily settings state tracking
     private var settingsStateTimer: Timer?
 
+    // Video call throttling: reduce capture frequency when a call app is frontmost
+    // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
+    private var videoCallFrameCounter = 0
+    private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
+
+    /// Apps whose primary purpose is video/audio calls.
+    private static let videoCallApps: Set<String> = [
+        "Microsoft Teams",
+        "zoom.us",
+        "FaceTime",
+        "Webex",
+        "Cisco Webex Meetings",
+        "GoTo Meeting",
+        "GoToMeeting",
+    ]
+
+    /// Keywords in browser window titles that indicate a video call.
+    private static let videoCallBrowserKeywords: [String] = [
+        "Google Meet",
+        "meet.google.com",
+        "Teams - Microsoft",  // Teams web app
+    ]
+
+    /// Browser app names (for window-title-based call detection).
+    private static let browserApps: Set<String> = [
+        "Google Chrome",
+        "Arc",
+        "Safari",
+        "Firefox",
+        "Microsoft Edge",
+        "Brave Browser",
+        "Opera",
+    ]
+
     // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
     private var isInRecoveryMode = false
     private var recoveryRetryCount = 0
-    private let maxRecoveryRetries = 30  // Try for 30 seconds before giving up
+    private let maxRecoveryRetries = 30  // Try up to 30 attempts before giving up
+    private let recoveryInterval: TimeInterval = 5.0  // Seconds between recovery attempts
 
     // Background polling state for extended recovery after initial retry fails
     private var isInBackgroundPolling = false
@@ -160,6 +195,11 @@ public class ProactiveAssistantsPlugin: NSObject {
                     // This happens when LaunchServices has the app marked as launch-disabled,
                     // preventing notification center registration. Repair and retry once.
                     if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "launch_disabled_error_startup",
+                            previousStatus: "notDetermined",
+                            currentStatus: "error_code_1"
+                        )
                         Self.repairNotificationRegistration()
                     }
                 }
@@ -500,6 +540,23 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         // Check if the current app is excluded from Rewind capture
         let isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+
+        // Throttle capture when a video call app is frontmost to reduce CPU contention.
+        // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
+        if isVideoCallApp(appName: realAppName, windowTitle: windowTitle) {
+            videoCallFrameCounter += 1
+            if videoCallFrameCounter < videoCallThrottleFactor {
+                if videoCallFrameCounter == 1 {
+                    log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
+                }
+                return  // Skip this frame
+            }
+            // This frame will be captured — reset counter for next cycle
+            videoCallFrameCounter = 0
+        } else if videoCallFrameCounter > 0 {
+            log("VideoCallThrottle: Left call app, resuming normal capture")
+            videoCallFrameCounter = 0
+        }
 
         // Unified context switch detection (covers app changes, window ID changes, and title changes)
         // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
@@ -900,6 +957,30 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
     }
 
+    // MARK: - Video Call Detection
+
+    /// Check if the frontmost app (and optionally window title) indicates an active video call.
+    private func isVideoCallApp(appName: String?, windowTitle: String?) -> Bool {
+        guard let appName = appName else { return false }
+
+        // Direct match: dedicated video call apps
+        if Self.videoCallApps.contains(appName) {
+            return true
+        }
+
+        // Browser-based calls: check window title for call keywords
+        if Self.browserApps.contains(appName), let title = windowTitle {
+            let lowercaseTitle = title.lowercased()
+            for keyword in Self.videoCallBrowserKeywords {
+                if lowercaseTitle.contains(keyword.lowercased()) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
     // MARK: - Special System Mode Detection
 
     /// Check if the system is in a special mode that blocks screen capture.
@@ -981,8 +1062,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         captureTimer?.invalidate()
         captureTimer = nil
 
-        // Start recovery timer - check every 1 second if we can capture again
-        captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
+        // Start recovery timer - check every 5 seconds if we can capture again
+        // Using a slower interval than normal capture to reduce CPU overhead from repeated failed ScreenCaptureKit calls
+        captureTimer = Timer.scheduledTimer(withTimeInterval: recoveryInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.attemptRecovery()
             }
@@ -997,7 +1079,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         if isInSpecialSystemMode() {
             // Still in Exposé/Mission Control, keep waiting
             if recoveryRetryCount % 5 == 0 {
-                log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (\(recoveryRetryCount)s)")
+                log("ProactiveAssistantsPlugin: Still in special system mode, waiting... (attempt \(recoveryRetryCount))")
             }
 
             // Give up after max retries (likely a real issue)
@@ -1017,7 +1099,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         if let _ = await screenCaptureService.captureActiveWindowAsync() {
             // Success! Exit recovery mode
-            log("ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount)s, resuming normal capture (frontmost: \(getFrontmostAppInfo()))")
+            log("ProactiveAssistantsPlugin: Recovery successful after \(recoveryRetryCount) attempts (~\(recoveryRetryCount * Int(recoveryInterval))s), resuming normal capture (frontmost: \(getFrontmostAppInfo()))")
             exitRecoveryMode(success: true)
         } else {
             // Still failing

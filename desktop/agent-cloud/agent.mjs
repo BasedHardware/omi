@@ -14,10 +14,16 @@ import { homedir } from "os";
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.omi.me";
 const PORT = parseInt(process.env.PORT || "8080", 10);
 const EMBEDDING_DIM = 3072;
 // Max upload size: 10GB
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
+
+// --- Idle auto-stop ---
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
+const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
+let lastActivityAt = Date.now();
 
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
@@ -30,6 +36,10 @@ const SYNC_TABLES = new Set([
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli.js");
+
+// --- Firebase token (passed from desktop app for backend API calls) ---
+let userFirebaseToken = null;
+let backendTools = [];
 
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
@@ -49,7 +59,7 @@ function openDatabase() {
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
-  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database.
+  defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
 This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
 
 DATABASE SCHEMA:
@@ -59,6 +69,7 @@ TOOLS:
 - **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
+- **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
 GUIDELINES:
 - Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
@@ -68,12 +79,10 @@ GUIDELINES:
 - For "what did I do today/yesterday" queries, use screenshots table grouped by appName
 - For task queries, use action_items table
 - For conversation queries, use transcription_sessions + transcription_segments
+- For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
 - Be concise and helpful. Format results clearly.`;
 
-  omiServer = createSdkMcpServer({
-    name: "omi-tools",
-    tools: [executeSqlTool, semanticSearchTool],
-  });
+  rebuildMcpServer();
 
   console.log(`[db] Database opened: ${DB_PATH}`);
   return true;
@@ -242,6 +251,114 @@ e.g. "reading about machine learning", "working on design mockups"`,
   }
 );
 
+// --- JSON Schema → Zod converter for backend tools ---
+
+function jsonSchemaToZod(schema) {
+  const props = schema.properties || {};
+  const required = new Set(schema.required || []);
+  const shape = {};
+
+  for (const [name, prop] of Object.entries(props)) {
+    if (name === "config") continue; // internal LangChain param
+
+    let zodType;
+    // Handle anyOf (Optional fields from Pydantic)
+    const rawType = prop.type || (prop.anyOf ? prop.anyOf.find(t => t.type && t.type !== "null")?.type : "string");
+
+    switch (rawType) {
+      case "integer":
+      case "number":
+        zodType = z.number();
+        break;
+      case "boolean":
+        zodType = z.boolean();
+        break;
+      case "array":
+        zodType = z.array(z.any());
+        break;
+      default:
+        zodType = z.string();
+    }
+
+    if (prop.description) zodType = zodType.describe(prop.description);
+
+    if (!required.has(name)) {
+      zodType = zodType.optional();
+      if (prop.default !== undefined) zodType = zodType.default(prop.default);
+    }
+
+    shape[name] = zodType;
+  }
+
+  return shape;
+}
+
+// --- Fetch and register backend tools from Python API ---
+
+async function fetchAndRegisterBackendTools() {
+  if (!userFirebaseToken) {
+    console.log("[backend-tools] No Firebase token, skipping tool fetch");
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${BACKEND_URL}/v1/agent/tools`, {
+      headers: { Authorization: `Bearer ${userFirebaseToken}` },
+    });
+    if (!resp.ok) {
+      console.log(`[backend-tools] Failed to fetch tools: HTTP ${resp.status}`);
+      return;
+    }
+
+    const data = await resp.json();
+    const toolDefs = data.tools || [];
+    console.log(`[backend-tools] Fetched ${toolDefs.length} tools from Python backend`);
+
+    backendTools = toolDefs.map((def) => {
+      const zodShape = jsonSchemaToZod(def.parameters || {});
+      return tool(
+        def.name,
+        def.description || `Backend tool: ${def.name}`,
+        zodShape,
+        async (params) => {
+          try {
+            const execResp = await fetch(`${BACKEND_URL}/v1/agent/execute-tool`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${userFirebaseToken}`,
+              },
+              body: JSON.stringify({ tool_name: def.name, params }),
+            });
+            const result = await execResp.json();
+            if (result.error) {
+              return { content: [{ type: "text", text: `Error: ${result.error}` }] };
+            }
+            return { content: [{ type: "text", text: result.result || JSON.stringify(result) }] };
+          } catch (err) {
+            return { content: [{ type: "text", text: `Error calling ${def.name}: ${err.message}` }] };
+          }
+        }
+      );
+    });
+
+    // Rebuild MCP server with all tools
+    rebuildMcpServer();
+    console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
+  } catch (err) {
+    console.log(`[backend-tools] Error fetching tools: ${err.message}`);
+  }
+}
+
+function rebuildMcpServer() {
+  const allTools = [executeSqlTool, semanticSearchTool, ...backendTools];
+  omiServer = createSdkMcpServer({
+    name: "omi-tools",
+    tools: allTools,
+  });
+  console.log(`[mcp] Rebuilt MCP server with ${allTools.length} tools`);
+}
+
 // --- Shared Agent Query Handler ---
 
 async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
@@ -271,7 +388,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     ],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: 15,
+    maxTurns: undefined,
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -416,6 +533,57 @@ function verifyAuth(req) {
 
 // --- Mode: WebSocket Server ---
 
+// --- Idle auto-stop: shut down VM after 30 min of no activity ---
+
+async function checkIdleAndStop() {
+  const idleMs = Date.now() - lastActivityAt;
+  if (idleMs < IDLE_TIMEOUT_MS) return;
+
+  console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
+
+  // Try GCE API first, fall back to sudo shutdown
+  let stopped = false;
+  try {
+    const metaHeaders = { "Metadata-Flavor": "Google" };
+    const name = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/name",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const zonePath = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/zone",
+      { headers: metaHeaders },
+    ).then((r) => r.text());
+    const tokenResp = await fetch(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+      { headers: metaHeaders },
+    );
+    if (tokenResp.ok) {
+      const token = (await tokenResp.json()).access_token;
+      const stopUrl = `https://compute.googleapis.com/compute/v1/${zonePath}/instances/${name}/stop`;
+      const resp = await fetch(stopUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`[server] Stop request for ${name}: HTTP ${resp.status}`);
+      if (resp.ok) stopped = true;
+    } else {
+      console.log(`[server] No service account token (HTTP ${tokenResp.status}), using shutdown`);
+    }
+  } catch (err) {
+    console.log(`[server] GCE API failed: ${err.message}`);
+  }
+
+  if (!stopped) {
+    console.log(`[server] Falling back to sudo shutdown...`);
+    const { execSync } = await import("child_process");
+    try {
+      execSync("sudo shutdown -h now");
+    } catch (e) {
+      console.log(`[server] Shutdown command failed: ${e.message}`);
+    }
+  }
+}
+
 function startServer() {
   const log = (msg) => console.log(`[server] ${msg}`);
 
@@ -525,6 +693,7 @@ function startServer() {
         renameSync(tmpPath, DB_PATH);
 
         const finalSize = statSync(DB_PATH).size;
+        lastActivityAt = Date.now();
         log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
 
         // Re-open the database
@@ -574,6 +743,47 @@ function startServer() {
         try { unlinkSync(tmpPath); } catch {}
       });
 
+      return;
+    }
+
+    // Auth endpoint — receives Firebase token from desktop app
+    if (req.url?.startsWith("/auth") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+
+      let body = "";
+      req.on("data", (chunk) => { body += chunk.toString(); });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body);
+          const { firebaseToken } = payload;
+          if (!firebaseToken) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Missing firebaseToken" }));
+            return;
+          }
+
+          const isFirst = userFirebaseToken === null;
+          userFirebaseToken = firebaseToken;
+          lastActivityAt = Date.now();
+          log(`Firebase token ${isFirst ? "received" : "refreshed"}`);
+
+          // On first token, fetch backend tools
+          if (isFirst) {
+            await fetchAndRegisterBackendTools();
+          }
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "ok", toolsRegistered: backendTools.length }));
+        } catch (err) {
+          log(`Auth error: ${err.message}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
       return;
     }
 
@@ -632,6 +842,7 @@ function startServer() {
           // FTS is kept in sync by triggers on the content tables.
           // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
+          lastActivityAt = Date.now();
           log(`Sync: ${rows.length} rows → ${table}`);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: rows.length, table }));
@@ -682,6 +893,7 @@ function startServer() {
 
       switch (msg.type) {
         case "query": {
+          lastActivityAt = Date.now();
           // Cancel any prior query
           if (activeAbort) {
             activeAbort.abort();
@@ -752,8 +964,14 @@ function startServer() {
     log(`WebSocket: ws://0.0.0.0:${PORT}/ws`);
     log(`Health check: http://0.0.0.0:${PORT}/health`);
     log(`Upload: POST http://0.0.0.0:${PORT}/upload`);
+    log(`Auth:   POST http://0.0.0.0:${PORT}/auth`);
     log(`Sync:   POST http://0.0.0.0:${PORT}/sync`);
+    log(`Backend URL: ${BACKEND_URL}`);
+    log(`Idle auto-stop: ${IDLE_TIMEOUT_MS / 60000} min timeout, checking every ${IDLE_CHECK_INTERVAL_MS / 60000} min`);
   });
+
+  // Start idle auto-stop checker
+  setInterval(checkIdleAndStop, IDLE_CHECK_INTERVAL_MS);
 }
 
 // --- Main ---
