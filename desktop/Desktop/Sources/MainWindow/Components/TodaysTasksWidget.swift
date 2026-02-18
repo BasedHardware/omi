@@ -23,19 +23,9 @@ struct TasksWidget: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            HStack {
-                Text("Tasks")
-                    .scaledFont(size: 16, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                Spacer()
-
-                if totalTaskCount > 0 {
-                    Text("\(totalTaskCount) incomplete")
-                        .scaledMonospacedDigitFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-            }
+            Text("Tasks")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
 
             if totalTaskCount == 0 {
                 // Empty state
