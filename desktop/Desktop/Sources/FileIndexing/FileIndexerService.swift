@@ -47,7 +47,7 @@ actor FileIndexerService {
 
     // MARK: - Onboarding Pipeline
 
-    /// Main entry point: scan files → build summary → analyze with Gemini → store as memories
+    /// Main entry point: scan files → post notification → chat AI does the analysis
     func runOnboardingPipeline() async {
         guard !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else {
             log("FileIndexer: Already completed, skipping")
@@ -74,7 +74,7 @@ actor FileIndexerService {
         // 1. Scan files
         let totalFiles = await scanFolders(foldersToScan)
         guard totalFiles > 0 else {
-            log("FileIndexer: No files found, skipping analysis")
+            log("FileIndexer: No files found, skipping")
             await MainActor.run {
                 UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
             }
@@ -82,24 +82,20 @@ actor FileIndexerService {
         }
         log("FileIndexer: Scanned \(totalFiles) files")
 
-        // 2. Generate summary
-        let summary = await generateFileSummary()
-        guard !summary.isEmpty else {
-            log("FileIndexer: Empty summary, skipping analysis")
-            await MainActor.run {
-                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-            }
-            return
-        }
-
-        // 3. Analyze with Gemini and store as memories
-        await analyzeWithGemini(summary: summary)
-
-        // 4. Mark complete
+        // 2. Mark complete
         await MainActor.run {
             UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
         }
-        log("FileIndexer: Pipeline complete")
+
+        // 3. Post notification so ChatPage can trigger AI analysis
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .fileIndexingComplete,
+                object: nil,
+                userInfo: ["totalFiles": totalFiles]
+            )
+        }
+        log("FileIndexer: Pipeline complete, posted fileIndexingComplete notification")
     }
 
     // MARK: - File Scanning
