@@ -195,6 +195,11 @@ public class ProactiveAssistantsPlugin: NSObject {
                     // This happens when LaunchServices has the app marked as launch-disabled,
                     // preventing notification center registration. Repair and retry once.
                     if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "launch_disabled_error_startup",
+                            previousStatus: "notDetermined",
+                            currentStatus: "error_code_1"
+                        )
                         Self.repairNotificationRegistration()
                     }
                 }

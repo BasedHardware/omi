@@ -425,6 +425,11 @@ class AppState: ObservableObject {
                             // which prevents the notification center from registering the app.
                             // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
                             if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
+                                AnalyticsManager.shared.notificationRepairTriggered(
+                                    reason: "launch_disabled_error",
+                                    previousStatus: "notDetermined",
+                                    currentStatus: "error_code_1"
+                                )
                                 DispatchQueue.main.async {
                                     self?.repairNotificationRegistrationAndRetry()
                                 }
