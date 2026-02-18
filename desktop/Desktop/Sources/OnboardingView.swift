@@ -23,10 +23,7 @@ struct OnboardingView: View {
     @State private var autoDetectEnabled: Bool = false
 
     // State for file indexing step (step 4)
-    enum FileIndexPhase { case consent, scanning, complete }
-    @State private var fileIndexPhase: FileIndexPhase = .consent
-    @State private var scanningFolder: String = ""
-    @State private var totalFilesScanned: Int = 0
+    @State private var fileIndexingDone = false
 
     // Track whether we've initialized bluetooth on the permissions step
     @State private var hasInitializedBluetoothForPermissions = false
@@ -179,7 +176,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
         case 3: return requiredPermissionsGranted
-        case 4: return fileIndexPhase == .complete // File indexing step
+        case 4: return fileIndexingDone // File indexing step
         default: return true
         }
     }
@@ -365,7 +362,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
         case 3: return allPermissionsGranted // Permissions step
-        case 4: return fileIndexPhase == .complete // File indexing step
+        case 4: return fileIndexingDone // File indexing step
         default: return false
         }
     }
@@ -382,7 +379,9 @@ struct OnboardingView: View {
         case 3:
             permissionsStepView
         case 4:
-            fileIndexStepView
+            FileIndexingView { fileCount in
+                handleFileIndexingComplete(fileCount: fileCount)
+            }
         default:
             EmptyView()
         }
