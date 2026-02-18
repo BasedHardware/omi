@@ -117,7 +117,7 @@ struct GoalsWidget: View {
                         GoalRowView(
                             goal: goal,
                             index: index,
-                            numberEmoji: numberEmojis[safe: index] ?? "\(index + 1)",
+                            numberEmoji: index < numberEmojis.count ? numberEmojis[index] : "\(index + 1)",
                             onTap: { editingGoal = goal },
                             onUpdateProgress: { value in onUpdateProgress(goal, value) },
                             onDelete: { onDeleteGoal(goal) },
