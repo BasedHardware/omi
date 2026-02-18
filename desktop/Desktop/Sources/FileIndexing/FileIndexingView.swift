@@ -271,12 +271,15 @@ struct FileIndexingView: View {
         return count
     }
 
-    /// Create a new chat session and send the exploration prompt
+    /// Send the exploration prompt to the chat
     private func startExplorationChat() async {
-        let session = await chatProvider.createNewSession(skipGreeting: true)
-        guard session != nil else {
-            log("FileIndexingView: Failed to create session for file exploration")
-            return
+        // Multi-chat users get a dedicated session; single-chat users stay in default chat
+        if chatProvider.multiChatEnabled {
+            let session = await chatProvider.createNewSession(skipGreeting: true)
+            guard session != nil else {
+                log("FileIndexingView: Failed to create session for file exploration")
+                return
+            }
         }
 
         let prompt = """
