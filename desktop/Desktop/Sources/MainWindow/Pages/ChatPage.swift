@@ -133,6 +133,30 @@ struct ChatPage: View {
                 .padding()
         }
         .background(OmiColors.backgroundPrimary)
+        .task {
+            // Check for pending file indexing chat from onboarding
+            let pendingFiles = UserDefaults.standard.integer(forKey: "pendingFileIndexingChat")
+            guard pendingFiles > 0 else { return }
+            UserDefaults.standard.removeObject(forKey: "pendingFileIndexingChat")
+            log("ChatPage: Found pendingFileIndexingChat with \(pendingFiles) files, auto-creating chat")
+
+            // Navigate to chat tab
+            NotificationCenter.default.post(name: .navigateToChat, object: nil)
+
+            // Small delay to let navigation complete
+            try? await Task.sleep(nanoseconds: 500_000_000)
+
+            let session = await chatProvider.createNewSession(skipGreeting: true)
+            guard session != nil else {
+                log("ChatPage: Failed to create session for file indexing analysis")
+                return
+            }
+
+            let prompt = """
+            I just indexed \(pendingFiles) files on your computer. Use the execute_sql tool to explore the indexed_files table — look at file types, project indicators, recent files, and folder structure. Open interesting findings, identify what the user works on, their tech stack, projects, and interests. Share what you learn about them.
+            """
+            await chatProvider.sendMessage(prompt)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .fileIndexingComplete)) { notification in
             let totalFiles = notification.userInfo?["totalFiles"] as? Int ?? 0
             log("ChatPage: Received fileIndexingComplete with \(totalFiles) files, navigating to chat")
