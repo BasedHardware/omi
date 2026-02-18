@@ -162,9 +162,19 @@ class AssistantCoordinator {
     /// Used for time-sensitive detections like refocus tracking.
     func distributeFrameDuringDelay(_ frame: CapturedFrame) {
         for (identifier, assistant) in assistants {
-            let timeSinceLastAnalysis = Date().timeIntervalSince(lastAnalysisTime[identifier] ?? .distantPast)
+            // Backpressure: skip if this assistant is still analyzing a previous frame
+            guard !isAnalyzing.contains(identifier) else { continue }
 
-            Task {
+            let timeSinceLastAnalysis = Date().timeIntervalSince(lastAnalysisTime[identifier] ?? .distantPast)
+            isAnalyzing.insert(identifier)
+
+            Task { [weak self] in
+                defer {
+                    Task { @MainActor in
+                        self?.isAnalyzing.remove(identifier)
+                    }
+                }
+
                 guard await assistant.isEnabled else { return }
                 guard await assistant.needsFrameDuringDelay else { return }
                 guard await assistant.shouldAnalyze(frameNumber: frame.frameNumber, timeSinceLastAnalysis: timeSinceLastAnalysis) else {
@@ -172,7 +182,7 @@ class AssistantCoordinator {
                 }
 
                 await MainActor.run {
-                    lastAnalysisTime[identifier] = Date()
+                    self?.lastAnalysisTime[identifier] = Date()
                 }
 
                 if let result = await assistant.analyze(frame: frame) {
