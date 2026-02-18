@@ -538,14 +538,16 @@ actor ActionItemStorage {
                 if var existingRecord = try ActionItemRecord
                     .filter(Column("backendId") == item.id)
                     .fetchOne(database) {
-                    // Skip if local record is newer than incoming API data
-                    // This prevents auto-refresh from overwriting recent local changes
-                    // (e.g. toggling a task) with stale backend data.
-                    // Exception: during full sync, accept API data for records we locally
-                    // marked as "staged" since that was our guess and the API is the source of truth.
+                    // Skip if local record is newer than incoming API data AND the
+                    // local change is very recent (< 60s). This protects in-flight
+                    // optimistic updates (e.g. toggling a task) from being overwritten
+                    // by stale auto-refresh data. Beyond 60s, trust the API as source
+                    // of truth — this prevents failed optimistic updates from persisting
+                    // forever (e.g. user toggled on desktop but API call failed/app crashed).
                     let incomingTimestamp = item.updatedAt ?? item.createdAt
                     let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
-                    if existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
+                    let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
+                    if isRecentLocalChange && existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
                         skipped += 1
                         continue
                     }
