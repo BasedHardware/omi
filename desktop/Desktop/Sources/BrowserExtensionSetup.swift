@@ -5,6 +5,7 @@ import SwiftUI
 struct BrowserExtensionSetup: View {
     var onComplete: () -> Void
     var onSkip: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
 
     /// Optional ChatProvider for running the connection test.
     /// When nil, Phase 3 is skipped (token is saved and we go straight to Done).
@@ -23,20 +24,29 @@ struct BrowserExtensionSetup: View {
     @State private var verifyError: String? = nil
     @State private var verifySuccess = false
 
-    private let extensionStatusURL = "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html"
-
     var body: some View {
         VStack(spacing: 0) {
-            // Progress dots
-            HStack(spacing: 8) {
-                ForEach(Phase.allCases, id: \.rawValue) { p in
-                    Circle()
-                        .fill(p.rawValue <= phase.rawValue ? OmiColors.purplePrimary : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 8, height: 8)
+            // Top bar: progress dots + dismiss button
+            HStack {
+                Spacer()
+
+                // Progress dots
+                HStack(spacing: 8) {
+                    ForEach(Phase.allCases, id: \.rawValue) { p in
+                        Circle()
+                            .fill(p.rawValue <= phase.rawValue ? OmiColors.purplePrimary : OmiColors.textTertiary.opacity(0.3))
+                            .frame(width: 8, height: 8)
+                    }
                 }
+
+                Spacer()
+
+                // Dismiss button (always visible)
+                DismissButton(action: dismissSheet, showBackground: false)
             }
-            .padding(.top, 24)
-            .padding(.bottom, 20)
+            .padding(.top, 16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
 
             // Phase content
             Group {
@@ -140,9 +150,7 @@ struct BrowserExtensionSetup: View {
 
                     Button(action: {
                         ClaudeAgentBridge.ensureChromeExtensionInstalled()
-                        if let url = URL(string: extensionStatusURL) {
-                            NSWorkspace.shared.open(url)
-                        }
+                        Self.openExtensionInChrome()
                     }) {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.up.right.square")
@@ -293,6 +301,31 @@ struct BrowserExtensionSetup: View {
             .foregroundColor(.white)
             .frame(width: 22, height: 22)
             .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
+    }
+
+    /// Open the extension status page explicitly in Chrome (macOS doesn't handle chrome-extension:// URLs natively)
+    static func openExtensionInChrome() {
+        let extensionURL = URL(string: "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html")!
+        let chromeURL = URL(fileURLWithPath: "/Applications/Google Chrome.app")
+
+        if FileManager.default.fileExists(atPath: chromeURL.path) {
+            NSWorkspace.shared.open(
+                [extensionURL],
+                withApplicationAt: chromeURL,
+                configuration: NSWorkspace.OpenConfiguration()
+            )
+        } else {
+            // Fallback: try default browser (unlikely to work for chrome-extension:// but better than nothing)
+            NSWorkspace.shared.open(extensionURL)
+        }
+    }
+
+    private func dismissSheet() {
+        if let onDismiss = onDismiss {
+            onDismiss()
+        } else {
+            onComplete()
+        }
     }
 
     // MARK: - Button Logic

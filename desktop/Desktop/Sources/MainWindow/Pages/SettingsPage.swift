@@ -1760,7 +1760,10 @@ struct SettingsContentView: View {
             BrowserExtensionSetup(
                 onComplete: {
                     showBrowserSetup = false
-                    // Refresh local token state from UserDefaults
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                onDismiss: {
+                    showBrowserSetup = false
                     playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
                 },
                 chatProvider: chatProvider
