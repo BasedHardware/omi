@@ -217,14 +217,14 @@ struct RewindPage: View {
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored

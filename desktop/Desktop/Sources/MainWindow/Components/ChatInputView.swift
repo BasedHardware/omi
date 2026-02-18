@@ -46,7 +46,7 @@ struct ChatInputView: View {
                         Text(placeholder)
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 17)
                             .padding(.vertical, 12)
                             .allowsHitTesting(false)
                     }
