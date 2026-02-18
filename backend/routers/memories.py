@@ -82,7 +82,7 @@ def delete_memory(memory_id: str, uid: str = Depends(auth.get_current_user_uid))
             delete_conversation_recording(uid, conversation_id)     # memories_recordings_bucket
         except Exception as e:
             # Log the error, but don't block the memory deletion as it's already done
-            logger.error(f"Failed to delete conversation {conversation_id} or its vector for memory {memory_id}: {e}")
+            print(f"Failed to delete conversation {conversation_id} or its vector for memory {memory_id}: {e}")
         
     return {'status': 'ok'}
 
