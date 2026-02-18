@@ -110,6 +110,9 @@ struct SettingsContentView: View {
     @State private var memoryNotificationsEnabled: Bool
     @State private var memoryExcludedApps: Set<String>
 
+    // Goals states
+    @State private var goalsAutoGenerateEnabled: Bool = GoalGenerationService.shared.isAutoGenerationEnabled
+
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
 
@@ -1917,6 +1920,8 @@ struct SettingsContentView: View {
                 memoryAssistantSubsection
             case .analysisThrottle:
                 analysisThrottleSubsection
+            case .goals:
+                goalsSubsection
             case .askOmiFloatingBar:
                 askOmiFloatingBarSubsection
             case .preferences:
@@ -3007,6 +3012,42 @@ struct SettingsContentView: View {
                             AssistantSettings.shared.analysisDelay = newValue
                             SettingsSyncManager.shared.pushPartialUpdate(AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(analysisDelay: newValue)))
                         }
+                }
+            }
+        }
+    }
+
+    private var goalsSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "target")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        Text("Goals")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+                    }
+
+                    Text("Track personal goals with AI-powered progress detection from your conversations")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks") {
+                        Toggle("", isOn: $goalsAutoGenerateEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: goalsAutoGenerateEnabled) { _, newValue in
+                                GoalGenerationService.shared.isAutoGenerationEnabled = newValue
+                            }
+                    }
                 }
             }
         }
