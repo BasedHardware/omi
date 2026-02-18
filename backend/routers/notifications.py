@@ -19,9 +19,9 @@ from models.app import App
 # logger.setLevel(logging.DEBUG)
 router = APIRouter()
 
-# Rate limit settings - more conservative limits to prevent notification fatigue
-RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
-MAX_NOTIFICATIONS_PER_HOUR = 10  # Maximum notifications per hour per app per user
+# Rate limit settings — configurable via environment variables
+RATE_LIMIT_PERIOD = int(os.getenv('NOTIFICATION_RATE_LIMIT_PERIOD', '3600'))
+MAX_NOTIFICATIONS_PER_HOUR = int(os.getenv('MAX_NOTIFICATIONS_PER_HOUR', '100'))
 
 
 def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
