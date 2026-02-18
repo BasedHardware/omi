@@ -487,6 +487,16 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = AssistantSettings.shared.transcriptionLanguage
             autoDetectEnabled = false
+            // Fetch language from Firestore (source of truth) for returning users
+            Task {
+                if let response = try? await APIClient.shared.getUserLanguage(),
+                   !response.language.isEmpty {
+                    await MainActor.run {
+                        selectedLanguage = response.language
+                        AssistantSettings.shared.transcriptionLanguage = response.language
+                    }
+                }
+            }
         }
     }
 

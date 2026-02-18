@@ -146,7 +146,7 @@ class AuthService {
                 self.isSignedIn = true
                 AuthState.shared.userEmail = currentUser.email ?? savedEmail
                 AuthState.shared.isRestoringAuth = false
-                self.loadNameFromFirebaseIfNeeded()
+                self.loadNameFromBackendIfNeeded()
             } else {
                 // Firebase doesn't have user, but we have saved state
                 // This can happen with ad-hoc signing where Keychain doesn't persist
@@ -304,7 +304,7 @@ class AuthService {
         saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
 
         if givenName.isEmpty {
-            loadNameFromFirebaseIfNeeded()
+            loadNameFromBackendIfNeeded()
         }
 
         AnalyticsManager.shared.identify()
@@ -414,9 +414,9 @@ class AuthService {
             let userId = firebaseTokens.localId
             saveAuthState(isSignedIn: true, email: tokenResult.email, userId: userId)
 
-            // Try to load name from Firebase (as backup if OAuth didn't provide it)
+            // Try to load name from backend profile (Firestore), then Firebase Auth as fallback
             if givenName.isEmpty {
-                loadNameFromFirebaseIfNeeded()
+                loadNameFromBackendIfNeeded()
             }
 
             // Identify user first, then track sign-in completed
@@ -671,6 +671,33 @@ class AuthService {
             givenName = nameParts.first.map(String.init) ?? firebaseName
             familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
             NSLog("OMI AUTH: Loaded name from Firebase - given: %@, family: %@", givenName, familyName)
+        }
+    }
+
+    /// Load name from backend profile (Firestore) first, then fall back to Firebase Auth.
+    /// This handles cases like Apple Sign-In where Firebase Auth displayName may be empty
+    /// but the user already has a name stored in Firestore from a previous sign-up.
+    func loadNameFromBackendIfNeeded() {
+        guard givenName.isEmpty else { return }
+        Task {
+            do {
+                let profile = try await APIClient.shared.getUserProfile()
+                if let name = profile.name, !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let nameParts = name.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
+                    await MainActor.run {
+                        givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
+                        familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
+                        NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", givenName, familyName)
+                    }
+                    return
+                }
+            } catch {
+                NSLog("OMI AUTH: Failed to fetch backend profile for name (non-fatal): %@", error.localizedDescription)
+            }
+            // Fall back to Firebase Auth displayName
+            await MainActor.run {
+                loadNameFromFirebaseIfNeeded()
+            }
         }
     }
 
