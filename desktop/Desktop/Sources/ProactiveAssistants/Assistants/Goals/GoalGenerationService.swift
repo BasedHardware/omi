@@ -7,8 +7,15 @@ class GoalGenerationService {
     static let shared = GoalGenerationService()
 
     private static let kLastGenerationDate = "goalGeneration_lastDate"
+    static let kAutoGenerationEnabled = "goalGeneration_autoEnabled"
     private let maxActiveGoals = 3
     private let staleGoalDays: TimeInterval = 3 * 86400 // 3 days
+
+    /// Whether automatic goal generation is enabled. Defaults to false (off).
+    var isAutoGenerationEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.kAutoGenerationEnabled) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kAutoGenerationEnabled) }
+    }
 
     private init() {}
 
@@ -17,6 +24,10 @@ class GoalGenerationService {
     /// Called after each conversation is saved.
     /// Removes stale goals and checks if a day has passed since last generation.
     func onConversationCreated() {
+        guard isAutoGenerationEnabled else {
+            log("GoalGenerationService: Auto-generation disabled, skipping")
+            return
+        }
         Task {
             await removeStaleGoals()
             await checkDailyGeneration()

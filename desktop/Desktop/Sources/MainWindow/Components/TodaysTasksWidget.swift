@@ -40,41 +40,16 @@ struct TasksWidget: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 20)
             } else {
-                let maxVisible = 3
-                let todayVisible = min(combinedTodayTasks.count, maxVisible)
-                let remaining = maxVisible - todayVisible
-                let noDueDateVisible = min(recentTasks.count, remaining)
+                let allTasks = (combinedTodayTasks + recentTasks).prefix(3)
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Today section (includes overdue tasks, like Flutter)
-                        if todayVisible > 0 {
-                            TaskSectionView(
-                                title: "Today",
-                                titleColor: OmiColors.textSecondary,
-                                icon: "calendar",
-                                tasks: Array(combinedTodayTasks.prefix(todayVisible)),
-                                totalCount: combinedTodayTasks.count,
-                                showDueDate: true,
-                                onToggle: onToggleCompletion
-                            )
-                        }
-
-                        // Recent tasks without due date
-                        if noDueDateVisible > 0 {
-                            TaskSectionView(
-                                title: "No Due Date",
-                                titleColor: OmiColors.textSecondary,
-                                icon: "tray",
-                                tasks: Array(recentTasks.prefix(noDueDateVisible)),
-                                totalCount: recentTasks.count,
-                                showDueDate: false,
-                                onToggle: onToggleCompletion
-                            )
-                        }
+                VStack(spacing: 6) {
+                    ForEach(Array(allTasks)) { task in
+                        TaskRowView(
+                            task: task,
+                            onToggle: { onToggleCompletion(task) }
+                        )
                     }
                 }
-                .frame(maxHeight: 280)
 
                 // View all link
                 Button(action: {
@@ -112,70 +87,13 @@ struct TasksWidget: View {
     }
 }
 
-// MARK: - Task Section View
-
-struct TaskSectionView: View {
-    let title: String
-    let titleColor: Color
-    let icon: String
-    let tasks: [TaskActionItem]
-    let totalCount: Int
-    let showDueDate: Bool
-    let onToggle: (TaskActionItem) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Section header
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .scaledFont(size: 12)
-                    .foregroundColor(titleColor)
-                Text(title)
-                    .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(titleColor)
-                if totalCount > tasks.count {
-                    Text("(\(totalCount))")
-                        .scaledMonospacedDigitFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-            }
-
-            // Tasks
-            VStack(spacing: 6) {
-                ForEach(tasks) { task in
-                    TaskRowView(
-                        task: task,
-                        showDueDate: showDueDate,
-                        onToggle: { onToggle(task) }
-                    )
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Task Row View
 
 struct TaskRowView: View {
     let task: TaskActionItem
-    let showDueDate: Bool
-    let isOverdue: Bool
     let onToggle: () -> Void
 
     @State private var isToggling = false
-
-    /// Check if the task's due date is in the past
-    private var taskIsOverdue: Bool {
-        guard let dueAt = task.dueAt else { return false }
-        return dueAt < Calendar.current.startOfDay(for: Date())
-    }
-
-    init(task: TaskActionItem, showDueDate: Bool = false, isOverdue: Bool = false, onToggle: @escaping () -> Void) {
-        self.task = task
-        self.showDueDate = showDueDate
-        self.isOverdue = isOverdue
-        self.onToggle = onToggle
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -184,7 +102,6 @@ struct TaskRowView: View {
                 guard !isToggling else { return }
                 isToggling = true
                 onToggle()
-                // Reset after a short delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     isToggling = false
                 }
@@ -197,42 +114,13 @@ struct TaskRowView: View {
             .disabled(isToggling)
             .opacity(isToggling ? 0.5 : 1)
 
-            // Task description
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.description)
-                    .scaledFont(size: 13)
-                    .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                    .strikethrough(task.completed)
-                    .lineLimit(2)
-
-                // Due date chip
-                if showDueDate, let dueAt = task.dueAt {
-                    Text(formatDueDate(dueAt))
-                        .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(OmiColors.backgroundTertiary)
-                        )
-                }
-            }
+            Text(task.description)
+                .scaledFont(size: 13)
+                .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                .strikethrough(task.completed)
+                .lineLimit(2)
 
             Spacer()
-
-            // Priority indicator
-            if let priority = task.priority, priority != "low" {
-                Text(priority.capitalized)
-                    .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(OmiColors.backgroundTertiary)
-                    )
-            }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
@@ -240,12 +128,6 @@ struct TaskRowView: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(task.completed ? OmiColors.backgroundQuaternary.opacity(0.3) : Color.clear)
         )
-    }
-
-    private func formatDueDate(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
