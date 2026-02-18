@@ -7181,6 +7181,7 @@ impl FirestoreService {
         min_value: f64,
         max_value: f64,
         unit: Option<&str>,
+        source: Option<&str>,
     ) -> Result<GoalDB, Box<dyn std::error::Error + Send + Sync>> {
         // Check existing active goals
         let existing_goals = self.get_user_goals(uid, 10).await?;
@@ -7236,6 +7237,13 @@ impl FirestoreService {
             );
         }
 
+        if let Some(s) = source {
+            fields.as_object_mut().unwrap().insert(
+                "source".to_string(),
+                json!({"stringValue": s}),
+            );
+        }
+
         let doc = json!({"fields": fields});
 
         let response = self
@@ -7264,6 +7272,7 @@ impl FirestoreService {
             created_at: now,
             updated_at: now,
             completed_at: None,
+            source: source.map(|s| s.to_string()),
         };
 
         tracing::info!("Created goal {} for user {}", goal.id, uid);
@@ -7884,6 +7893,7 @@ impl FirestoreService {
                     None
                 }
             },
+            source: self.parse_string(fields, "source"),
         })
     }
 
