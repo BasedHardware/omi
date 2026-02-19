@@ -3368,19 +3368,22 @@ extension APIClient {
 
     // MARK: - Knowledge Graph API
 
+    // Knowledge graph uses the main omi API (not the desktop backend)
+    private var knowledgeGraphBaseURL: String { "https://api.omi.me/" }
+
     /// Get the full knowledge graph (nodes and edges)
     func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-        return try await get("v1/knowledge-graph")
+        return try await get("v1/knowledge-graph", customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Rebuild the knowledge graph from memories
     func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
+        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody(), customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Delete the knowledge graph
     func deleteKnowledgeGraph() async throws {
-        let url = URL(string: baseURL + "v1/knowledge-graph")!
+        let url = URL(string: knowledgeGraphBaseURL + "v1/knowledge-graph")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -3426,7 +3429,11 @@ struct KnowledgeGraphNode: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         label = try container.decode(String.self, forKey: .label)
-        nodeType = try container.decodeIfPresent(KnowledgeGraphNodeType.self, forKey: .nodeType) ?? .concept
+        if let rawType = try container.decodeIfPresent(String.self, forKey: .nodeType) {
+            nodeType = KnowledgeGraphNodeType(rawValue: rawType) ?? .concept
+        } else {
+            nodeType = .concept
+        }
         aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
         memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
@@ -3471,7 +3478,14 @@ struct KnowledgeGraphResponse: Codable {
 /// Response for rebuild operation
 struct RebuildGraphResponse: Codable {
     let status: String
-    let message: String
+    let nodesCount: Int?
+    let edgesCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case nodesCount = "nodes_count"
+        case edgesCount = "edges_count"
+    }
 }
 
 // MARK: - User Settings Models
