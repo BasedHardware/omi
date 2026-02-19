@@ -272,28 +272,33 @@ struct OnboardingView: View {
                 VStack(spacing: 24) {
                     Spacer()
 
-                    VStack(spacing: 24) {
-                        // Progress indicators
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
+                    VStack(spacing: currentStep == 4 ? 0 : 24) {
+                        // Progress indicators (hidden for step 4 — full black card)
+                        if currentStep != 4 {
+                            HStack(spacing: 12) {
+                                ForEach(0..<steps.count, id: \.self) { index in
+                                    progressIndicator(for: index)
+                                }
                             }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
+                            .padding(.top, 20)
+                            .padding(.horizontal, 20)
 
-                        Spacer()
-                            .frame(height: 20)
+                            Spacer()
+                                .frame(height: 20)
+                        }
 
                         stepContent
 
-                        Spacer()
-                            .frame(height: 20)
+                        if currentStep != 4 {
+                            Spacer()
+                                .frame(height: 20)
+                        }
 
                         buttonSection
                     }
-                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 600 : 420))
-                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 650 : 420))
+                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 700 : 420))
+                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 700 : 420))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(OmiColors.backgroundSecondary)
