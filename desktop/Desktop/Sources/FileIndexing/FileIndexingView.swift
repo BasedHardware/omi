@@ -375,11 +375,32 @@ struct FileIndexingView: View {
         }
     }
 
-    /// Stage 3: Build knowledge graph, progress 90% → 100%
+    /// Stage 3: Load knowledge graph (or build from scratch if none exists), progress 90% → 100%
     private func runKnowledgeGraphBuild() async {
         await MainActor.run {
-            statusText = "Building your knowledge graph..."
+            statusText = "Loading your knowledge graph..."
             progress = 0.92
+        }
+
+        // First, try loading the existing graph (user may already have one from mobile)
+        await graphViewModel.loadGraph()
+        log("FileIndexingView: Existing graph check — isEmpty=\(graphViewModel.isEmpty)")
+
+        if !graphViewModel.isEmpty {
+            // User already has a graph (e.g. from mobile app) — use it directly
+            log("FileIndexingView: Using existing knowledge graph")
+            await MainActor.run {
+                progress = 1.0
+                statusText = "Done!"
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            return
+        }
+
+        // No existing graph — build from scratch
+        await MainActor.run {
+            statusText = "Building your knowledge graph..."
+            progress = 0.95
         }
 
         // Fire-and-forget the rebuild with a short timeout — the endpoint can hang
@@ -402,50 +423,17 @@ struct FileIndexingView: View {
             }
         }
 
-        await MainActor.run {
-            progress = 0.95
-        }
-
-        // Poll for graph stability (like Flutter's waitForGraphStability)
-        // Wait for node count to stabilize over multiple checks
-        var lastNodeCount = -1
-        var stableChecks = 0
+        // Poll until graph has data
         let maxAttempts = 15 // 15 × 3s = 45s max
-        var loaded = false
-
         for attempt in 1...maxAttempts {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             await graphViewModel.loadGraph()
-            let currentCount = graphViewModel.isEmpty ? 0 : 1 // simplified: just check non-empty
 
-            if currentCount > 0 {
-                if currentCount == lastNodeCount {
-                    stableChecks += 1
-                } else {
-                    stableChecks = 0
-                }
-                lastNodeCount = currentCount
-
-                // Consider stable after 2 consecutive same counts with data
-                if stableChecks >= 2 {
-                    loaded = true
-                    log("FileIndexingView: Graph stable after \(attempt) polls")
-                    break
-                }
-            }
-
-            // If we have data on first try, accept it immediately
-            if !graphViewModel.isEmpty && attempt >= 2 {
-                loaded = true
-                log("FileIndexingView: Graph has data on attempt \(attempt)")
+            if !graphViewModel.isEmpty {
+                log("FileIndexingView: Graph ready after \(attempt) polls")
                 break
             }
-
-            log("FileIndexingView: Graph poll \(attempt)/\(maxAttempts), nodes=\(currentCount)")
-            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3s between polls
-        }
-
-        if !loaded {
-            log("FileIndexingView: Graph still empty after polling, proceeding with empty state")
+            log("FileIndexingView: Graph poll \(attempt)/\(maxAttempts), still empty")
         }
 
         await MainActor.run {
