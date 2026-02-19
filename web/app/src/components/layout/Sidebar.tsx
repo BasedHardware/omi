@@ -152,13 +152,15 @@ export function Sidebar({
 
   // Click outside handler to close menu and collapse if temporary
   useEffect(() => {
-    if (!showUserMenu || !isTemporaryExpand) return;
+    if (!showUserMenu) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
-        setIsExpanded(false);
-        setIsTemporaryExpand(false);
+        if (isTemporaryExpand) {
+          setIsExpanded(false);
+          setIsTemporaryExpand(false);
+        }
       }
     };
 
