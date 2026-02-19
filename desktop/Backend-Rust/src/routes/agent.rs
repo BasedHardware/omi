@@ -83,9 +83,6 @@ async fn provision_agent_vm(
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
-    let anthropic_key = state.config.anthropic_api_key.clone();
-    let gemini_key = state.config.gemini_api_key.clone();
-
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -93,8 +90,6 @@ async fn provision_agent_vm(
             &firestore,
             &vm_name_clone,
             &auth_token_clone,
-            anthropic_key.as_deref(),
-            gemini_key.as_deref(),
         )
         .await
         {
@@ -436,39 +431,31 @@ async fn create_gce_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     auth_token: &str,
-    anthropic_key: Option<&str>,
-    gemini_key: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let project = "based-hardware";
     let zone = "us-central1-a";
 
     // Build startup script that starts the agent server
     // Uses stdbuf for line-buffered output, writes env to file so restarts work
-    let mut startup_script = format!(
+    let startup_script = format!(
         r#"#!/bin/bash
 cd /home/matthewdi/omi-agent
 
-# Write env vars to file (persists across restarts)
-cat > .env.sh << 'ENVEOF'
-export AUTH_TOKEN='{}'
+# Write per-VM env vars (unique to this VM, set at creation time)
+cat > .env-vm.sh << 'ENVEOF'
+export AUTH_TOKEN='{auth_token}'
 export DB_PATH='data/omi.db'
-"#,
-        auth_token
-    );
-    if let Some(key) = anthropic_key {
-        startup_script.push_str(&format!("export ANTHROPIC_API_KEY='{}'\n", key));
-    }
-    if let Some(key) = gemini_key {
-        startup_script.push_str(&format!("export GEMINI_API_KEY='{}'\n", key));
-    }
-    startup_script.push_str("export BACKEND_URL='https://api.omi.me'\n");
-    startup_script.push_str(
-        r#"ENVEOF
+ENVEOF
 
-source .env.sh
+# Pull shared env vars from GCS (API keys, URLs — updated centrally)
+curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/env-shared.sh || echo 'GCS env pull failed, using existing .env-shared.sh'
 
 # Pull latest agent.mjs from GCS
-curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS pull failed, using existing agent.mjs'
+curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed, using existing agent.mjs'
+
+# Source both env files
+source .env-vm.sh
+[ -f .env-shared.sh ] && source .env-shared.sh
 
 # Kill any existing agent process
 pkill -x node 2>/dev/null || true
@@ -477,6 +464,7 @@ sleep 1
 # Start agent with line-buffered output
 nohup stdbuf -oL node agent.mjs --serve > /home/matthewdi/omi-agent/agent-server.log 2>&1 &
 "#,
+        auth_token = auth_token
     );
 
     // GCE instances.insert REST API
