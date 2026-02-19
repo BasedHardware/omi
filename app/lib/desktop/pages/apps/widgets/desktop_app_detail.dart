@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
@@ -31,8 +32,9 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import '../../../../backend/schema/app.dart';
-import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 
 class DesktopAppDetail extends StatefulWidget {
   final App app;
@@ -358,7 +360,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
               if (!app.private)
                 _buildActionButton(
                   responsive,
-                  icon: Icons.share_rounded,
+                  icon: FontAwesomeIcons.share,
                   onTap: () => _handleShareTap(),
                 ),
 
@@ -879,7 +881,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                       ),
                     ),
                   ),
-                  placeholder: (context, url) => Shimmer.fromColors(
+                  placeholder: (context, url) => ShimmerWithTimeout(
                     baseColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
                     highlightColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.1),
                     child: Container(
@@ -988,7 +990,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  capability.title,
+                                  capability.getLocalizedTitle(context),
                                   style: responsive.bodySmall.copyWith(
                                     color: ResponsiveHelper.purplePrimary,
                                     fontWeight: FontWeight.w500,

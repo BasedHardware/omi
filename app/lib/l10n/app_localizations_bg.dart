@@ -427,7 +427,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceSettings => 'Настройки на устройството';
 
   @override
-  String get chatTools => 'Инструменти за чат';
+  String get integrations => 'Интеграции';
 
   @override
   String get feedbackBug => 'Обратна връзка / Грешка';
@@ -451,7 +451,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appAndDeviceCopied => 'Детайлите за приложението и устройството са копирани';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Обобщение 2025';
 
   @override
   String get yourPrivacyYourControl => 'Вашата поверителност, вашият контрол';
@@ -1017,13 +1017,13 @@ class AppLocalizationsBg extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Свържи';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Скоро';
 
   @override
-  String get chatToolsFooter => 'Свържете вашите приложения, за да виждате данни и метрики в чата.';
+  String get integrationsFooter => 'Свържете вашите приложения, за да виждате данни и метрики в чата.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1658,7 +1658,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get whatShouldWeMake => 'Какво да направим?';
 
   @override
-  String get appName => 'Име на приложение';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Описание';
@@ -2271,7 +2271,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get folderName => 'Име на папка';
 
   @override
-  String get descriptionOptional => 'Описание (по избор)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Неуспешно изтриване на папка';
@@ -7820,5 +7820,437 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Устройството не поддържа WiFi синхронизация, превключване към Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health не е налично на това устройство';
+
+  @override
+  String get downloadAudio => 'Изтегляне на аудио';
+
+  @override
+  String get audioDownloadSuccess => 'Аудиото е изтеглено успешно';
+
+  @override
+  String get audioDownloadFailed => 'Неуспешно изтегляне на аудио';
+
+  @override
+  String get downloadingAudio => 'Изтегляне на аудио...';
+
+  @override
+  String get shareAudio => 'Споделяне на аудио';
+
+  @override
+  String get preparingAudio => 'Подготовка на аудио';
+
+  @override
+  String get gettingAudioFiles => 'Получаване на аудио файлове...';
+
+  @override
+  String get downloadingAudioProgress => 'Изтегляне на аудио';
+
+  @override
+  String get processingAudio => 'Обработка на аудио';
+
+  @override
+  String get combiningAudioFiles => 'Комбиниране на аудио файлове...';
+
+  @override
+  String get audioReady => 'Аудиото е готово';
+
+  @override
+  String get openingShareSheet => 'Отваряне на страницата за споделяне...';
+
+  @override
+  String get audioShareFailed => 'Споделянето е неуспешно';
+
+  @override
+  String get dailyRecaps => 'Дневни резюмета';
+
+  @override
+  String get removeFilter => 'Премахни филтъра';
+
+  @override
+  String get categoryConversationAnalysis => 'Анализ на разговори';
+
+  @override
+  String get categoryPersonalityClone => 'Клониране на личност';
+
+  @override
+  String get categoryHealth => 'Здраве';
+
+  @override
+  String get categoryEducation => 'Образование';
+
+  @override
+  String get categoryCommunication => 'Комуникация';
+
+  @override
+  String get categoryEmotionalSupport => 'Емоционална подкрепа';
+
+  @override
+  String get categoryProductivity => 'Продуктивност';
+
+  @override
+  String get categoryEntertainment => 'Забавление';
+
+  @override
+  String get categoryFinancial => 'Финанси';
+
+  @override
+  String get categoryTravel => 'Пътуване';
+
+  @override
+  String get categorySafety => 'Безопасност';
+
+  @override
+  String get categoryShopping => 'Пазаруване';
+
+  @override
+  String get categorySocial => 'Социални';
+
+  @override
+  String get categoryNews => 'Новини';
+
+  @override
+  String get categoryUtilities => 'Инструменти';
+
+  @override
+  String get categoryOther => 'Други';
+
+  @override
+  String get capabilityChat => 'Чат';
+
+  @override
+  String get capabilityConversations => 'Разговори';
+
+  @override
+  String get capabilityExternalIntegration => 'Външна интеграция';
+
+  @override
+  String get capabilityNotification => 'Известие';
+
+  @override
+  String get triggerAudioBytes => 'Аудио байтове';
+
+  @override
+  String get triggerConversationCreation => 'Създаване на разговор';
+
+  @override
+  String get triggerTranscriptProcessed => 'Обработен транскрипт';
+
+  @override
+  String get actionCreateConversations => 'Създаване на разговори';
+
+  @override
+  String get actionCreateMemories => 'Създаване на спомени';
+
+  @override
+  String get actionReadConversations => 'Четене на разговори';
+
+  @override
+  String get actionReadMemories => 'Четене на спомени';
+
+  @override
+  String get actionReadTasks => 'Четене на задачи';
+
+  @override
+  String get scopeUserName => 'Потребителско име';
+
+  @override
+  String get scopeUserFacts => 'Факти за потребителя';
+
+  @override
+  String get scopeUserConversations => 'Разговори на потребителя';
+
+  @override
+  String get scopeUserChat => 'Чат на потребителя';
+
+  @override
+  String get capabilitySummary => 'Резюме';
+
+  @override
+  String get capabilityFeatured => 'Препоръчани';
+
+  @override
+  String get capabilityTasks => 'Задачи';
+
+  @override
+  String get capabilityIntegrations => 'Интеграции';
+
+  @override
+  String get categoryPersonalityClones => 'Клонове на личности';
+
+  @override
+  String get categoryProductivityLifestyle => 'Продуктивност и начин на живот';
+
+  @override
+  String get categorySocialEntertainment => 'Социални и забавление';
+
+  @override
+  String get categoryProductivityTools => 'Инструменти за продуктивност';
+
+  @override
+  String get categoryPersonalWellness => 'Лично благосъстояние';
+
+  @override
+  String get rating => 'Рейтинг';
+
+  @override
+  String get categories => 'Категории';
+
+  @override
+  String get sortBy => 'Сортиране';
+
+  @override
+  String get highestRating => 'Най-висок рейтинг';
+
+  @override
+  String get lowestRating => 'Най-нисък рейтинг';
+
+  @override
+  String get resetFilters => 'Нулиране на филтрите';
+
+  @override
+  String get applyFilters => 'Прилагане на филтрите';
+
+  @override
+  String get mostInstalls => 'Най-много инсталации';
+
+  @override
+  String get couldNotOpenUrl => 'Не можа да се отвори URL адресът. Моля, опитайте отново.';
+
+  @override
+  String get newTask => 'Нова задача';
+
+  @override
+  String get viewAll => 'Виж всички';
+
+  @override
+  String get addTask => 'Добавяне на задача';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Аудио файлът не е наличен за възпроизвеждане';
+
+  @override
+  String get audioPlaybackFailed => 'Не може да се възпроизведе аудиото. Файлът може да е повреден или липсващ.';
+
+  @override
+  String get connectionGuide => 'Ръководство за свързване';
+
+  @override
+  String get iveDoneThis => 'Направих го';
+
+  @override
+  String get pairNewDevice => 'Сдвояване на ново устройство';
+
+  @override
+  String get dontSeeYourDevice => 'Не виждате устройството си?';
+
+  @override
+  String get reportAnIssue => 'Докладване на проблем';
+
+  @override
+  String get pairingTitleOmi => 'Включете Omi';
+
+  @override
+  String get pairingDescOmi => 'Натиснете и задръжте устройството, докато завибрира, за да го включите.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Поставете Omi DevKit в режим на сдвояване';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Натиснете бутона веднъж, за да включите. Светодиодът ще мига в лилаво в режим на сдвояване.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Включете Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Натиснете и задръжте страничния бутон за 3 секунди, за да включите.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Поставете Plaud Note в режим на сдвояване';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Натиснете и задръжте страничния бутон за 2 секунди. Червеният светодиод ще мига, когато е готов за сдвояване.';
+
+  @override
+  String get pairingTitleBee => 'Поставете Bee в режим на сдвояване';
+
+  @override
+  String get pairingDescBee =>
+      'Натиснете бутона 5 пъти последователно. Светлината ще започне да мига в синьо и зелено.';
+
+  @override
+  String get pairingTitleLimitless => 'Поставете Limitless в режим на сдвояване';
+
+  @override
+  String get pairingDescLimitless =>
+      'Когато свети индикатор, натиснете веднъж, след това натиснете и задръжте, докато устройството покаже розова светлина, след което отпуснете.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Поставете Friend Pendant в режим на сдвояване';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Натиснете бутона на медальона, за да го включите. Той ще влезе в режим на сдвояване автоматично.';
+
+  @override
+  String get pairingTitleFieldy => 'Поставете Fieldy в режим на сдвояване';
+
+  @override
+  String get pairingDescFieldy => 'Натиснете и задръжте устройството, докато се появи светлината, за да го включите.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Свържете Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Инсталирайте и отворете приложението Omi на вашия Apple Watch, след което натиснете Свързване в приложението.';
+
+  @override
+  String get pairingTitleNeoOne => 'Поставете Neo One в режим на сдвояване';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Натиснете и задръжте бутона за захранване, докато светодиодът мигне. Устройството ще бъде видимо.';
+
+  @override
+  String get downloadingFromDevice => 'Изтегляне от устройството';
+
+  @override
+  String get reconnectingToInternet => 'Повторно свързване с интернет...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Качване на $current от $total';
+  }
+
+  @override
+  String get processedStatus => 'Обработено';
+
+  @override
+  String get corruptedStatus => 'Повредено';
+
+  @override
+  String nPending(int count) {
+    return '$count в изчакване';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count обработени';
+  }
+
+  @override
+  String get synced => 'Синхронизирано';
+
+  @override
+  String get noPendingRecordings => 'Няма записи в изчакване';
+
+  @override
+  String get noProcessedRecordings => 'Все още няма обработени записи';
+
+  @override
+  String get pending => 'В изчакване';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Какво ново във $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Добавяне към списъка ви със задачи?';
+
+  @override
+  String get failedToCreateShareLink => 'Неуспешно създаване на линк за споделяне';
+
+  @override
+  String get deleteGoal => 'Изтриване на целта';
+
+  @override
+  String get deviceUpToDate => 'Устройството ви е актуално';
+
+  @override
+  String get wifiConfiguration => 'WiFi конфигурация';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Въведете данните за WiFi, за да може устройството да изтегли фърмуера.';
+
+  @override
+  String get networkNameSsid => 'Име на мрежата (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Въведете името на WiFi мрежата';
+
+  @override
+  String get enterWifiPassword => 'Въведете парола за WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

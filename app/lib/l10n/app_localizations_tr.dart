@@ -426,7 +426,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override
-  String get chatTools => 'Sohbet Araçları';
+  String get integrations => 'Entegrasyonlar';
 
   @override
   String get feedbackBug => 'Geri Bildirim / Hata';
@@ -1014,13 +1014,13 @@ class AppLocalizationsTr extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Bağlan';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Yakında';
 
   @override
-  String get chatToolsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
+  String get integrationsFooter => 'Sohbette veri ve metrikleri görmek için uygulamalarınızı bağlayın.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1658,7 +1658,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get whatShouldWeMake => 'Ne yapalım?';
 
   @override
-  String get appName => 'Uygulama Adı';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Açıklama';
@@ -2272,7 +2272,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get folderName => 'Klasör adı';
 
   @override
-  String get descriptionOptional => 'Açıklama (isteğe bağlı)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Klasör silinemedi';
@@ -7801,5 +7801,435 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth\'a geçiliyor';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health bu cihazda kullanılamıyor';
+
+  @override
+  String get downloadAudio => 'Ses İndir';
+
+  @override
+  String get audioDownloadSuccess => 'Ses başarıyla indirildi';
+
+  @override
+  String get audioDownloadFailed => 'Ses indirme başarısız';
+
+  @override
+  String get downloadingAudio => 'Ses indiriliyor...';
+
+  @override
+  String get shareAudio => 'Sesi Paylaş';
+
+  @override
+  String get preparingAudio => 'Ses Hazırlanıyor';
+
+  @override
+  String get gettingAudioFiles => 'Ses dosyaları alınıyor...';
+
+  @override
+  String get downloadingAudioProgress => 'Ses İndiriliyor';
+
+  @override
+  String get processingAudio => 'Ses İşleniyor';
+
+  @override
+  String get combiningAudioFiles => 'Ses dosyaları birleştiriliyor...';
+
+  @override
+  String get audioReady => 'Ses Hazır';
+
+  @override
+  String get openingShareSheet => 'Paylaşım sayfası açılıyor...';
+
+  @override
+  String get audioShareFailed => 'Paylaşım Başarısız';
+
+  @override
+  String get dailyRecaps => 'Günlük Özetler';
+
+  @override
+  String get removeFilter => 'Filtreyi Kaldır';
+
+  @override
+  String get categoryConversationAnalysis => 'Konuşma Analizi';
+
+  @override
+  String get categoryPersonalityClone => 'Kişilik Klonu';
+
+  @override
+  String get categoryHealth => 'Sağlık';
+
+  @override
+  String get categoryEducation => 'Eğitim';
+
+  @override
+  String get categoryCommunication => 'İletişim';
+
+  @override
+  String get categoryEmotionalSupport => 'Duygusal Destek';
+
+  @override
+  String get categoryProductivity => 'Verimlilik';
+
+  @override
+  String get categoryEntertainment => 'Eğlence';
+
+  @override
+  String get categoryFinancial => 'Finans';
+
+  @override
+  String get categoryTravel => 'Seyahat';
+
+  @override
+  String get categorySafety => 'Güvenlik';
+
+  @override
+  String get categoryShopping => 'Alışveriş';
+
+  @override
+  String get categorySocial => 'Sosyal';
+
+  @override
+  String get categoryNews => 'Haberler';
+
+  @override
+  String get categoryUtilities => 'Araçlar';
+
+  @override
+  String get categoryOther => 'Diğer';
+
+  @override
+  String get capabilityChat => 'Sohbet';
+
+  @override
+  String get capabilityConversations => 'Konuşmalar';
+
+  @override
+  String get capabilityExternalIntegration => 'Harici Entegrasyon';
+
+  @override
+  String get capabilityNotification => 'Bildirim';
+
+  @override
+  String get triggerAudioBytes => 'Ses Baytları';
+
+  @override
+  String get triggerConversationCreation => 'Konuşma Oluşturma';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkript İşlendi';
+
+  @override
+  String get actionCreateConversations => 'Konuşma oluştur';
+
+  @override
+  String get actionCreateMemories => 'Anı oluştur';
+
+  @override
+  String get actionReadConversations => 'Konuşmaları oku';
+
+  @override
+  String get actionReadMemories => 'Anıları oku';
+
+  @override
+  String get actionReadTasks => 'Görevleri oku';
+
+  @override
+  String get scopeUserName => 'Kullanıcı Adı';
+
+  @override
+  String get scopeUserFacts => 'Kullanıcı Bilgileri';
+
+  @override
+  String get scopeUserConversations => 'Kullanıcı Konuşmaları';
+
+  @override
+  String get scopeUserChat => 'Kullanıcı Sohbeti';
+
+  @override
+  String get capabilitySummary => 'Özet';
+
+  @override
+  String get capabilityFeatured => 'Öne Çıkanlar';
+
+  @override
+  String get capabilityTasks => 'Görevler';
+
+  @override
+  String get capabilityIntegrations => 'Entegrasyonlar';
+
+  @override
+  String get categoryPersonalityClones => 'Kişilik Klonları';
+
+  @override
+  String get categoryProductivityLifestyle => 'Verimlilik ve Yaşam Tarzı';
+
+  @override
+  String get categorySocialEntertainment => 'Sosyal ve Eğlence';
+
+  @override
+  String get categoryProductivityTools => 'Verimlilik Araçları';
+
+  @override
+  String get categoryPersonalWellness => 'Kişisel Sağlık';
+
+  @override
+  String get rating => 'Puan';
+
+  @override
+  String get categories => 'Kategoriler';
+
+  @override
+  String get sortBy => 'Sırala';
+
+  @override
+  String get highestRating => 'En yüksek puan';
+
+  @override
+  String get lowestRating => 'En düşük puan';
+
+  @override
+  String get resetFilters => 'Filtreleri sıfırla';
+
+  @override
+  String get applyFilters => 'Filtreleri uygula';
+
+  @override
+  String get mostInstalls => 'En çok yükleme';
+
+  @override
+  String get couldNotOpenUrl => 'URL açılamadı. Lütfen tekrar deneyin.';
+
+  @override
+  String get newTask => 'Yeni görev';
+
+  @override
+  String get viewAll => 'Tümünü gör';
+
+  @override
+  String get addTask => 'Görev ekle';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Ses dosyası oynatma için mevcut değil';
+
+  @override
+  String get audioPlaybackFailed => 'Ses oynatılamıyor. Dosya bozuk veya eksik olabilir.';
+
+  @override
+  String get connectionGuide => 'Bağlantı Rehberi';
+
+  @override
+  String get iveDoneThis => 'Bunu yaptım';
+
+  @override
+  String get pairNewDevice => 'Yeni cihaz eşleştir';
+
+  @override
+  String get dontSeeYourDevice => 'Cihazınızı görmüyor musunuz?';
+
+  @override
+  String get reportAnIssue => 'Sorun bildirin';
+
+  @override
+  String get pairingTitleOmi => 'Omi\'yi Açın';
+
+  @override
+  String get pairingDescOmi => 'Cihazı açmak için titreşene kadar basılı tutun.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit\'i Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescOmiDevkit => 'Açmak için düğmeye bir kez basın. Eşleştirme modunda LED mor renkte yanıp söner.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass\'ı Açın';
+
+  @override
+  String get pairingDescOmiGlass => 'Açmak için yan düğmeyi 3 saniye basılı tutun.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note\'u Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Yan düğmeyi 2 saniye basılı tutun. Eşleştirmeye hazır olduğunda kırmızı LED yanıp söner.';
+
+  @override
+  String get pairingTitleBee => 'Bee\'yi Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescBee => 'Düğmeye art arda 5 kez basın. Işık mavi ve yeşil yanıp sönmeye başlayacaktır.';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless\'ı Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescLimitless =>
+      'Herhangi bir ışık görünürken, bir kez basın, ardından cihaz pembe ışık gösterene kadar basılı tutun, sonra bırakın.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant\'ı Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Açmak için kolye üzerindeki düğmeye basın. Otomatik olarak eşleştirme moduna geçecektir.';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy\'yi Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescFieldy => 'Cihazı açmak için ışık görünene kadar basılı tutun.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch Bağlayın';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Apple Watch\'unuza Omi uygulamasını yükleyin ve açın, ardından uygulamada Bağlan\'a dokunun.';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One\'ı Eşleştirme Moduna Alın';
+
+  @override
+  String get pairingDescNeoOne => 'LED yanıp sönene kadar güç düğmesini basılı tutun. Cihaz keşfedilebilir olacaktır.';
+
+  @override
+  String get downloadingFromDevice => 'Cihazdan indiriliyor';
+
+  @override
+  String get reconnectingToInternet => 'İnternete yeniden bağlanılıyor...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total yükleniyor';
+  }
+
+  @override
+  String get processedStatus => 'İşlendi';
+
+  @override
+  String get corruptedStatus => 'Bozuk';
+
+  @override
+  String nPending(int count) {
+    return '$count beklemede';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count işlendi';
+  }
+
+  @override
+  String get synced => 'Senkronize edildi';
+
+  @override
+  String get noPendingRecordings => 'Bekleyen kayıt yok';
+
+  @override
+  String get noProcessedRecordings => 'Henüz işlenmiş kayıt yok';
+
+  @override
+  String get pending => 'Beklemede';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version sürümündeki yenilikler';
+  }
+
+  @override
+  String get addToYourTaskList => 'Görev listenize eklensin mi?';
+
+  @override
+  String get failedToCreateShareLink => 'Paylaşım bağlantısı oluşturulamadı';
+
+  @override
+  String get deleteGoal => 'Hedefi Sil';
+
+  @override
+  String get deviceUpToDate => 'Cihazınız güncel';
+
+  @override
+  String get wifiConfiguration => 'WiFi Yapılandırması';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Cihazın donanım yazılımını indirebilmesi için WiFi kimlik bilgilerinizi girin.';
+
+  @override
+  String get networkNameSsid => 'Ağ Adı (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi ağ adını girin';
+
+  @override
+  String get enterWifiPassword => 'WiFi şifresini girin';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

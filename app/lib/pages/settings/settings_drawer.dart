@@ -21,13 +21,14 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:omi/backend/http/api/announcements.dart';
+import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
-import 'wrapped_2025_page.dart';
-import '../conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 
 enum SettingsMode {
   no_device,
@@ -301,8 +302,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     });
   }
 
-
-
   Widget _buildOmiModeContent(BuildContext context) {
     return Consumer<UsageProvider>(builder: (context, usageProvider, child) {
       return Column(
@@ -422,7 +421,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: context.l10n.chatTools,
+                title: context.l10n.integrations,
                 icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
@@ -458,7 +457,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   onTap: () async {
                     final Uri url = Uri.parse('https://help.omi.me/en/');
                     if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      try {
+                        await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+                      } catch (e) {
+                        await launchUrl(url, mode: LaunchMode.externalApplication);
+                      }
                     }
                   },
                 ),
@@ -471,7 +474,18 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   await routeToPage(context, const DeveloperSettingsPage());
                 },
               ),
-
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: context.l10n.whatsNew,
+                icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
+                onTap: () {
+                  MixpanelManager().whatsNewOpened();
+                  ChangelogSheet.showWithLoading(
+                    context,
+                    () => getAppChangelogs(limit: 5),
+                  );
+                },
+              ),
             ],
           ),
           const SizedBox(height: 32),

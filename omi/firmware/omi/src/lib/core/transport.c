@@ -29,6 +29,7 @@
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
+#include "rtc.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -191,6 +192,74 @@ static struct bt_gatt_attr features_service_attr[] = {
 };
 
 static struct bt_gatt_service features_service = BT_GATT_SERVICE(features_service_attr);
+
+// --- Time Sync Service ---
+// Service UUID: 19B10030-E8F2-537E-4F6C-D104768A1214
+// Characteristics:
+//   - Time Write (19B10031): Write 4 bytes (uint32_t epoch_s) to sync time
+//   - Time Read  (19B10032): Read 4 bytes (uint32_t epoch_s) current device time
+static struct bt_uuid_128 time_sync_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10030, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 time_sync_write_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10031, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 time_sync_read_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10032, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t time_sync_write_handler(struct bt_conn *conn,
+                                       const struct bt_gatt_attr *attr,
+                                       const void *buf,
+                                       uint16_t len,
+                                       uint16_t offset,
+                                       uint8_t flags)
+{
+    if (len != sizeof(uint32_t)) {
+        LOG_WRN("Invalid length for time sync write: %u (expected %u)", len, sizeof(uint32_t));
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    uint32_t epoch_s;
+    memcpy(&epoch_s, buf, sizeof(epoch_s));
+
+    LOG_INF("Time sync received: %u seconds", epoch_s);
+
+    int err = rtc_set_utc_time((uint64_t)epoch_s);
+    if (err) {
+        LOG_ERR("Failed to set RTC time: %d", err);
+        return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
+    }
+
+    LOG_INF("Time synchronized successfully");
+    return len;
+}
+
+static ssize_t time_sync_read_handler(struct bt_conn *conn,
+                                      const struct bt_gatt_attr *attr,
+                                      void *buf,
+                                      uint16_t len,
+                                      uint16_t offset)
+{
+    uint32_t epoch_s = get_utc_time();
+    LOG_INF("Time sync read: %u seconds", epoch_s);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &epoch_s, sizeof(epoch_s));
+}
+
+static struct bt_gatt_attr time_sync_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&time_sync_service_uuid),
+    BT_GATT_CHARACTERISTIC(&time_sync_write_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_WRITE,
+                           NULL,
+                           time_sync_write_handler,
+                           NULL),
+    BT_GATT_CHARACTERISTIC(&time_sync_read_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           time_sync_read_handler,
+                           NULL,
+                           NULL),
+};
+
+static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
 // Advertisement data
 static const struct bt_data bt_ad[] = {
@@ -951,6 +1020,7 @@ int transport_start()
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
+    bt_gatt_service_register(&time_sync_service);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio

@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import '../payment_method_provider.dart';
+import 'package:omi/pages/payments/payment_method_provider.dart';
 
 class CountryBottomSheet extends StatefulWidget {
   const CountryBottomSheet({super.key});

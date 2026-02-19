@@ -419,7 +419,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceSettings => 'デバイス設定';
 
   @override
-  String get chatTools => 'チャットツール';
+  String get integrations => '連携';
 
   @override
   String get feedbackBug => 'フィードバック / バグ報告';
@@ -443,7 +443,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appAndDeviceCopied => 'アプリとデバイスの詳細をコピーしました';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025年のまとめ';
 
   @override
   String get yourPrivacyYourControl => 'プライバシーはあなたの手に';
@@ -573,7 +573,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get starOngoing => '進行中の会話にスターを付ける';
 
   @override
-  String get off => 'Off';
+  String get off => 'オフ';
 
   @override
   String get max => '最大';
@@ -1001,13 +1001,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => '接続';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => '近日公開';
 
   @override
-  String get chatToolsFooter => 'アプリを接続して、チャットでデータや指標を表示できます。';
+  String get integrationsFooter => 'アプリを接続して、チャットでデータや指標を表示できます。';
 
   @override
   String get completeAuthInBrowser => 'ブラウザで認証を完了してください。完了したらアプリに戻ってください。';
@@ -1633,7 +1633,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get whatShouldWeMake => '何を作りましょうか？';
 
   @override
-  String get appName => 'アプリ名';
+  String get appName => 'App Name';
 
   @override
   String get description => '説明';
@@ -2225,7 +2225,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get folderName => 'フォルダ名';
 
   @override
-  String get descriptionOptional => '説明（任意）';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'フォルダの削除に失敗しました';
@@ -6699,7 +6699,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceIdLabel => 'デバイスID';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'ステータス';
 
   @override
   String get statusProcessed => '処理済み';
@@ -7655,5 +7655,429 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'デバイスはWiFi同期をサポートしていません。Bluetoothに切り替えています';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Healthはこのデバイスでは利用できません';
+
+  @override
+  String get downloadAudio => '音声をダウンロード';
+
+  @override
+  String get audioDownloadSuccess => '音声のダウンロードに成功しました';
+
+  @override
+  String get audioDownloadFailed => '音声のダウンロードに失敗しました';
+
+  @override
+  String get downloadingAudio => '音声をダウンロード中...';
+
+  @override
+  String get shareAudio => '音声を共有';
+
+  @override
+  String get preparingAudio => '音声を準備中';
+
+  @override
+  String get gettingAudioFiles => '音声ファイルを取得中...';
+
+  @override
+  String get downloadingAudioProgress => '音声をダウンロード中';
+
+  @override
+  String get processingAudio => '音声を処理中';
+
+  @override
+  String get combiningAudioFiles => '音声ファイルを結合中...';
+
+  @override
+  String get audioReady => '音声の準備完了';
+
+  @override
+  String get openingShareSheet => '共有シートを開いています...';
+
+  @override
+  String get audioShareFailed => '共有に失敗しました';
+
+  @override
+  String get dailyRecaps => 'デイリーレキャップ';
+
+  @override
+  String get removeFilter => 'フィルターを削除';
+
+  @override
+  String get categoryConversationAnalysis => '会話分析';
+
+  @override
+  String get categoryPersonalityClone => 'パーソナリティクローン';
+
+  @override
+  String get categoryHealth => '健康';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryCommunication => 'コミュニケーション';
+
+  @override
+  String get categoryEmotionalSupport => '感情サポート';
+
+  @override
+  String get categoryProductivity => '生産性';
+
+  @override
+  String get categoryEntertainment => 'エンターテインメント';
+
+  @override
+  String get categoryFinancial => '金融';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categorySafety => '安全';
+
+  @override
+  String get categoryShopping => 'ショッピング';
+
+  @override
+  String get categorySocial => 'ソーシャル';
+
+  @override
+  String get categoryNews => 'ニュース';
+
+  @override
+  String get categoryUtilities => 'ユーティリティ';
+
+  @override
+  String get categoryOther => 'その他';
+
+  @override
+  String get capabilityChat => 'チャット';
+
+  @override
+  String get capabilityConversations => '会話';
+
+  @override
+  String get capabilityExternalIntegration => '外部連携';
+
+  @override
+  String get capabilityNotification => '通知';
+
+  @override
+  String get triggerAudioBytes => 'オーディオバイト';
+
+  @override
+  String get triggerConversationCreation => '会話作成';
+
+  @override
+  String get triggerTranscriptProcessed => 'トランスクリプト処理済み';
+
+  @override
+  String get actionCreateConversations => '会話を作成';
+
+  @override
+  String get actionCreateMemories => 'メモリーを作成';
+
+  @override
+  String get actionReadConversations => '会話を読み取り';
+
+  @override
+  String get actionReadMemories => 'メモリーを読み取り';
+
+  @override
+  String get actionReadTasks => 'タスクを読み取り';
+
+  @override
+  String get scopeUserName => 'ユーザー名';
+
+  @override
+  String get scopeUserFacts => 'ユーザー情報';
+
+  @override
+  String get scopeUserConversations => 'ユーザーの会話';
+
+  @override
+  String get scopeUserChat => 'ユーザーチャット';
+
+  @override
+  String get capabilitySummary => 'サマリー';
+
+  @override
+  String get capabilityFeatured => '注目';
+
+  @override
+  String get capabilityTasks => 'タスク';
+
+  @override
+  String get capabilityIntegrations => '連携';
+
+  @override
+  String get categoryPersonalityClones => 'パーソナリティクローン';
+
+  @override
+  String get categoryProductivityLifestyle => '生産性とライフスタイル';
+
+  @override
+  String get categorySocialEntertainment => 'ソーシャルとエンターテインメント';
+
+  @override
+  String get categoryProductivityTools => '生産性ツール';
+
+  @override
+  String get categoryPersonalWellness => 'パーソナルウェルネス';
+
+  @override
+  String get rating => '評価';
+
+  @override
+  String get categories => 'カテゴリ';
+
+  @override
+  String get sortBy => '並べ替え';
+
+  @override
+  String get highestRating => '高評価順';
+
+  @override
+  String get lowestRating => '低評価順';
+
+  @override
+  String get resetFilters => 'フィルターをリセット';
+
+  @override
+  String get applyFilters => 'フィルターを適用';
+
+  @override
+  String get mostInstalls => 'インストール数順';
+
+  @override
+  String get couldNotOpenUrl => 'URLを開けませんでした。もう一度お試しください。';
+
+  @override
+  String get newTask => '新しいタスク';
+
+  @override
+  String get viewAll => 'すべて表示';
+
+  @override
+  String get addTask => 'タスクを追加';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '音声ファイルは再生できません';
+
+  @override
+  String get audioPlaybackFailed => '音声を再生できません。ファイルが破損しているか見つかりません。';
+
+  @override
+  String get connectionGuide => '接続ガイド';
+
+  @override
+  String get iveDoneThis => '完了しました';
+
+  @override
+  String get pairNewDevice => '新しいデバイスをペアリング';
+
+  @override
+  String get dontSeeYourDevice => 'デバイスが見つかりませんか？';
+
+  @override
+  String get reportAnIssue => '問題を報告';
+
+  @override
+  String get pairingTitleOmi => 'Omiの電源を入れる';
+
+  @override
+  String get pairingDescOmi => 'デバイスが振動するまで長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKitをペアリングモードにする';
+
+  @override
+  String get pairingDescOmiDevkit => 'ボタンを1回押して電源を入れてください。ペアリングモードではLEDが紫色に点滅します。';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glassの電源を入れる';
+
+  @override
+  String get pairingDescOmiGlass => 'サイドボタンを3秒間長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Noteをペアリングモードにする';
+
+  @override
+  String get pairingDescPlaudNote => 'サイドボタンを2秒間長押ししてください。ペアリング準備ができると赤いLEDが点滅します。';
+
+  @override
+  String get pairingTitleBee => 'Beeをペアリングモードにする';
+
+  @override
+  String get pairingDescBee => 'ボタンを5回連続で押してください。ライトが青と緑に点滅し始めます。';
+
+  @override
+  String get pairingTitleLimitless => 'Limitlessをペアリングモードにする';
+
+  @override
+  String get pairingDescLimitless => 'ライトが点灯している時に1回押し、デバイスがピンク色に光るまで長押しして離してください。';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendantをペアリングモードにする';
+
+  @override
+  String get pairingDescFriendPendant => 'ペンダントのボタンを押して電源を入れてください。自動的にペアリングモードになります。';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldyをペアリングモードにする';
+
+  @override
+  String get pairingDescFieldy => 'ライトが表示されるまでデバイスを長押しして電源を入れてください。';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watchを接続';
+
+  @override
+  String get pairingDescAppleWatch => 'Apple WatchにOmiアプリをインストールして開き、アプリ内の接続をタップしてください。';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo Oneをペアリングモードにする';
+
+  @override
+  String get pairingDescNeoOne => '電源ボタンをLEDが点滅するまで長押ししてください。デバイスが検出可能になります。';
+
+  @override
+  String get downloadingFromDevice => 'デバイスからダウンロード中';
+
+  @override
+  String get reconnectingToInternet => 'インターネットに再接続中...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$totalをアップロード中';
+  }
+
+  @override
+  String get processedStatus => '処理済み';
+
+  @override
+  String get corruptedStatus => '破損';
+
+  @override
+  String nPending(int count) {
+    return '$count件が保留中';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count件が処理済み';
+  }
+
+  @override
+  String get synced => '同期済み';
+
+  @override
+  String get noPendingRecordings => '保留中の録音はありません';
+
+  @override
+  String get noProcessedRecordings => '処理済みの録音はまだありません';
+
+  @override
+  String get pending => '保留中';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version の新機能';
+  }
+
+  @override
+  String get addToYourTaskList => 'タスクリストに追加しますか？';
+
+  @override
+  String get failedToCreateShareLink => '共有リンクの作成に失敗しました';
+
+  @override
+  String get deleteGoal => '目標を削除';
+
+  @override
+  String get deviceUpToDate => 'デバイスは最新です';
+
+  @override
+  String get wifiConfiguration => 'WiFi設定';
+
+  @override
+  String get wifiConfigurationSubtitle => 'デバイスがファームウェアをダウンロードできるようにWiFi資格情報を入力してください。';
+
+  @override
+  String get networkNameSsid => 'ネットワーク名（SSID）';
+
+  @override
+  String get enterWifiNetworkName => 'WiFiネットワーク名を入力';
+
+  @override
+  String get enterWifiPassword => 'WiFiパスワードを入力';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

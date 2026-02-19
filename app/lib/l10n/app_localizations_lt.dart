@@ -425,7 +425,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override
-  String get chatTools => 'Pokalbių įrankiai';
+  String get integrations => 'Integracijos';
 
   @override
   String get feedbackBug => 'Atsiliepimai / Klaida';
@@ -449,7 +449,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appAndDeviceCopied => 'Programėlės ir įrenginio informacija nukopijuota';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 apžvalga';
 
   @override
   String get yourPrivacyYourControl => 'Jūsų privatumas, jūsų kontrolė';
@@ -1013,13 +1013,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Prisijungti';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Greitai';
 
   @override
-  String get chatToolsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
+  String get integrationsFooter => 'Prijunkite savo programėles, kad matytumėte duomenis ir metrikas pokalbyje.';
 
   @override
   String get completeAuthInBrowser => 'Užbaikite autentifikaciją naršyklėje. Baigę grįžkite į programą.';
@@ -1651,7 +1651,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get whatShouldWeMake => 'Ką turėtume sukurti?';
 
   @override
-  String get appName => 'Programėlės pavadinimas';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Aprašymas';
@@ -2265,7 +2265,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get folderName => 'Aplanko pavadinimas';
 
   @override
-  String get descriptionOptional => 'Aprašymas (neprivaloma)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Nepavyko ištrinti aplanko';
@@ -7793,5 +7793,437 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health nepasiekiama šiame įrenginyje';
+
+  @override
+  String get downloadAudio => 'Atsisiųsti garsą';
+
+  @override
+  String get audioDownloadSuccess => 'Garsas sėkmingai atsisiųstas';
+
+  @override
+  String get audioDownloadFailed => 'Nepavyko atsisiųsti garso';
+
+  @override
+  String get downloadingAudio => 'Atsisiunčiamas garsas...';
+
+  @override
+  String get shareAudio => 'Bendrinti garsą';
+
+  @override
+  String get preparingAudio => 'Ruošiamas garsas';
+
+  @override
+  String get gettingAudioFiles => 'Gaunami garso failai...';
+
+  @override
+  String get downloadingAudioProgress => 'Atsisiunčiamas garsas';
+
+  @override
+  String get processingAudio => 'Apdorojamas garsas';
+
+  @override
+  String get combiningAudioFiles => 'Sujungiami garso failai...';
+
+  @override
+  String get audioReady => 'Garsas paruoštas';
+
+  @override
+  String get openingShareSheet => 'Atidaromas bendrinimo lapas...';
+
+  @override
+  String get audioShareFailed => 'Bendrinimas nepavyko';
+
+  @override
+  String get dailyRecaps => 'Dienos Apžvalgos';
+
+  @override
+  String get removeFilter => 'Pašalinti Filtrą';
+
+  @override
+  String get categoryConversationAnalysis => 'Pokalbių analizė';
+
+  @override
+  String get categoryPersonalityClone => 'Asmenybės klonas';
+
+  @override
+  String get categoryHealth => 'Sveikata';
+
+  @override
+  String get categoryEducation => 'Švietimas';
+
+  @override
+  String get categoryCommunication => 'Komunikacija';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocinė parama';
+
+  @override
+  String get categoryProductivity => 'Produktyvumas';
+
+  @override
+  String get categoryEntertainment => 'Pramogos';
+
+  @override
+  String get categoryFinancial => 'Finansai';
+
+  @override
+  String get categoryTravel => 'Kelionės';
+
+  @override
+  String get categorySafety => 'Saugumas';
+
+  @override
+  String get categoryShopping => 'Apsipirkimas';
+
+  @override
+  String get categorySocial => 'Socialinis';
+
+  @override
+  String get categoryNews => 'Naujienos';
+
+  @override
+  String get categoryUtilities => 'Įrankiai';
+
+  @override
+  String get categoryOther => 'Kita';
+
+  @override
+  String get capabilityChat => 'Pokalbis';
+
+  @override
+  String get capabilityConversations => 'Pokalbiai';
+
+  @override
+  String get capabilityExternalIntegration => 'Išorinė integracija';
+
+  @override
+  String get capabilityNotification => 'Pranešimas';
+
+  @override
+  String get triggerAudioBytes => 'Garso baitai';
+
+  @override
+  String get triggerConversationCreation => 'Pokalbio kūrimas';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripcija apdorota';
+
+  @override
+  String get actionCreateConversations => 'Kurti pokalbius';
+
+  @override
+  String get actionCreateMemories => 'Kurti prisiminimus';
+
+  @override
+  String get actionReadConversations => 'Skaityti pokalbius';
+
+  @override
+  String get actionReadMemories => 'Skaityti prisiminimus';
+
+  @override
+  String get actionReadTasks => 'Skaityti užduotis';
+
+  @override
+  String get scopeUserName => 'Vartotojo vardas';
+
+  @override
+  String get scopeUserFacts => 'Vartotojo faktai';
+
+  @override
+  String get scopeUserConversations => 'Vartotojo pokalbiai';
+
+  @override
+  String get scopeUserChat => 'Vartotojo pokalbis';
+
+  @override
+  String get capabilitySummary => 'Santrauka';
+
+  @override
+  String get capabilityFeatured => 'Rekomenduojami';
+
+  @override
+  String get capabilityTasks => 'Užduotys';
+
+  @override
+  String get capabilityIntegrations => 'Integracijos';
+
+  @override
+  String get categoryPersonalityClones => 'Asmenybių klonai';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktyvumas ir gyvenimo būdas';
+
+  @override
+  String get categorySocialEntertainment => 'Socialinis ir pramogos';
+
+  @override
+  String get categoryProductivityTools => 'Produktyvumo įrankiai';
+
+  @override
+  String get categoryPersonalWellness => 'Asmeninė gerovė';
+
+  @override
+  String get rating => 'Įvertinimas';
+
+  @override
+  String get categories => 'Kategorijos';
+
+  @override
+  String get sortBy => 'Rūšiuoti';
+
+  @override
+  String get highestRating => 'Aukščiausias įvertinimas';
+
+  @override
+  String get lowestRating => 'Žemiausias įvertinimas';
+
+  @override
+  String get resetFilters => 'Atstatyti filtrus';
+
+  @override
+  String get applyFilters => 'Taikyti filtrus';
+
+  @override
+  String get mostInstalls => 'Daugiausia įdiegimų';
+
+  @override
+  String get couldNotOpenUrl => 'Nepavyko atidaryti URL. Bandykite dar kartą.';
+
+  @override
+  String get newTask => 'Nauja užduotis';
+
+  @override
+  String get viewAll => 'Peržiūrėti viską';
+
+  @override
+  String get addTask => 'Pridėti užduotį';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Garso failas nepasiekiamas atkūrimui';
+
+  @override
+  String get audioPlaybackFailed => 'Nepavyksta atkurti garso. Failas gali būti pažeistas arba trūkstamas.';
+
+  @override
+  String get connectionGuide => 'Prisijungimo vadovas';
+
+  @override
+  String get iveDoneThis => 'Tai padariau';
+
+  @override
+  String get pairNewDevice => 'Susieti naują įrenginį';
+
+  @override
+  String get dontSeeYourDevice => 'Nematote savo įrenginio?';
+
+  @override
+  String get reportAnIssue => 'Pranešti apie problemą';
+
+  @override
+  String get pairingTitleOmi => 'Įjunkite Omi';
+
+  @override
+  String get pairingDescOmi => 'Paspauskite ir palaikykite įrenginį, kol jis suvibruos, kad įjungtumėte.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Įjunkite Omi DevKit susiejimo režimą';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Paspauskite mygtuką vieną kartą, kad įjungtumėte. LED mirksės violetine spalva susiejimo režimu.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Įjunkite Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Paspauskite ir palaikykite šoninį mygtuką 3 sekundes, kad įjungtumėte.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Įjunkite Plaud Note susiejimo režimą';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Paspauskite ir palaikykite šoninį mygtuką 2 sekundes. Raudonas LED mirksės, kai bus paruoštas susiejimui.';
+
+  @override
+  String get pairingTitleBee => 'Įjunkite Bee susiejimo režimą';
+
+  @override
+  String get pairingDescBee => 'Paspauskite mygtuką 5 kartus iš eilės. Šviesa pradės mirksėti mėlynai ir žaliai.';
+
+  @override
+  String get pairingTitleLimitless => 'Įjunkite Limitless susiejimo režimą';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kai matoma bet kokia šviesa, paspauskite vieną kartą, tada paspauskite ir palaikykite, kol įrenginys parodys rožinę šviesą, tada atleiskite.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Įjunkite Friend Pendant susiejimo režimą';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Paspauskite mygtuką ant pakabuko, kad jį įjungtumėte. Jis automatiškai persijungs į susiejimo režimą.';
+
+  @override
+  String get pairingTitleFieldy => 'Įjunkite Fieldy susiejimo režimą';
+
+  @override
+  String get pairingDescFieldy => 'Paspauskite ir palaikykite įrenginį, kol pasirodys šviesa, kad jį įjungtumėte.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Prijunkite Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Įdiekite ir atidarykite Omi programėlę savo Apple Watch, tada bakstelėkite Prisijungti programėlėje.';
+
+  @override
+  String get pairingTitleNeoOne => 'Įjunkite Neo One susiejimo režimą';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Paspauskite ir palaikykite maitinimo mygtuką, kol LED pradės mirksėti. Įrenginys bus aptinkamas.';
+
+  @override
+  String get downloadingFromDevice => 'Atsisiunčiama iš įrenginio';
+
+  @override
+  String get reconnectingToInternet => 'Jungiamasi prie interneto iš naujo...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Įkeliama $current iš $total';
+  }
+
+  @override
+  String get processedStatus => 'Apdorota';
+
+  @override
+  String get corruptedStatus => 'Sugadinta';
+
+  @override
+  String nPending(int count) {
+    return '$count laukiančių';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count apdorotų';
+  }
+
+  @override
+  String get synced => 'Sinchronizuota';
+
+  @override
+  String get noPendingRecordings => 'Nėra laukiančių įrašų';
+
+  @override
+  String get noProcessedRecordings => 'Dar nėra apdorotų įrašų';
+
+  @override
+  String get pending => 'Laukiama';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas naujo $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pridėti prie užduočių sąrašo?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepavyko sukurti bendrinimo nuorodos';
+
+  @override
+  String get deleteGoal => 'Ištrinti tikslą';
+
+  @override
+  String get deviceUpToDate => 'Jūsų įrenginys yra atnaujintas';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigūracija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Įveskite WiFi prisijungimo duomenis, kad įrenginys galėtų atsisiųsti programinę įrangą.';
+
+  @override
+  String get networkNameSsid => 'Tinklo pavadinimas (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Įveskite WiFi tinklo pavadinimą';
+
+  @override
+  String get enterWifiPassword => 'Įveskite WiFi slaptažodį';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

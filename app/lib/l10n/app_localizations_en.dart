@@ -425,7 +425,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceSettings => 'Device Settings';
 
   @override
-  String get chatTools => 'Chat Tools';
+  String get integrations => 'Integrations';
 
   @override
   String get feedbackBug => 'Feedback / Bug';
@@ -1018,7 +1018,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get comingSoon => 'Coming Soon';
 
   @override
-  String get chatToolsFooter => 'Connect your apps to view data and metrics in chat.';
+  String get integrationsFooter => 'Connect your apps to view data and metrics in chat.';
 
   @override
   String get completeAuthInBrowser => 'Please complete authentication in your browser. Once done, return to the app.';
@@ -2674,7 +2674,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get getInsightsInstantly => 'Get insights and summaries instantly';
 
   @override
-  String get showAll => 'Show all →';
+  String get showAll => 'Show All';
 
   @override
   String get noTasksForToday => 'No tasks for today.\\nAsk Omi for more tasks or create manually.';
@@ -7787,4 +7787,433 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health is not available on this device';
+
+  @override
+  String get downloadAudio => 'Download Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio downloaded successfully';
+
+  @override
+  String get audioDownloadFailed => 'Failed to download audio';
+
+  @override
+  String get downloadingAudio => 'Downloading audio...';
+
+  @override
+  String get shareAudio => 'Share Audio';
+
+  @override
+  String get preparingAudio => 'Preparing Audio';
+
+  @override
+  String get gettingAudioFiles => 'Getting audio files...';
+
+  @override
+  String get downloadingAudioProgress => 'Downloading Audio';
+
+  @override
+  String get processingAudio => 'Processing Audio';
+
+  @override
+  String get combiningAudioFiles => 'Combining audio files...';
+
+  @override
+  String get audioReady => 'Audio Ready';
+
+  @override
+  String get openingShareSheet => 'Opening share sheet...';
+
+  @override
+  String get audioShareFailed => 'Share Failed';
+
+  @override
+  String get dailyRecaps => 'Daily Recaps';
+
+  @override
+  String get removeFilter => 'Remove Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Conversation Analysis';
+
+  @override
+  String get categoryPersonalityClone => 'Personality Clone';
+
+  @override
+  String get categoryHealth => 'Health';
+
+  @override
+  String get categoryEducation => 'Education';
+
+  @override
+  String get categoryCommunication => 'Communication';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotional Support';
+
+  @override
+  String get categoryProductivity => 'Productivity';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryFinancial => 'Financial';
+
+  @override
+  String get categoryTravel => 'Travel';
+
+  @override
+  String get categorySafety => 'Safety';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'News';
+
+  @override
+  String get categoryUtilities => 'Utilities';
+
+  @override
+  String get categoryOther => 'Other';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversations';
+
+  @override
+  String get capabilityExternalIntegration => 'External Integration';
+
+  @override
+  String get capabilityNotification => 'Notification';
+
+  @override
+  String get triggerAudioBytes => 'Audio Bytes';
+
+  @override
+  String get triggerConversationCreation => 'Conversation Creation';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcript Processed';
+
+  @override
+  String get actionCreateConversations => 'Create conversations';
+
+  @override
+  String get actionCreateMemories => 'Create memories';
+
+  @override
+  String get actionReadConversations => 'Read conversations';
+
+  @override
+  String get actionReadMemories => 'Read memories';
+
+  @override
+  String get actionReadTasks => 'Read tasks';
+
+  @override
+  String get scopeUserName => 'User Name';
+
+  @override
+  String get scopeUserFacts => 'User Facts';
+
+  @override
+  String get scopeUserConversations => 'User Conversations';
+
+  @override
+  String get scopeUserChat => 'User Chat';
+
+  @override
+  String get capabilitySummary => 'Summary';
+
+  @override
+  String get capabilityFeatured => 'Featured';
+
+  @override
+  String get capabilityTasks => 'Tasks';
+
+  @override
+  String get capabilityIntegrations => 'Integrations';
+
+  @override
+  String get categoryPersonalityClones => 'Personality Clones';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivity & Lifestyle';
+
+  @override
+  String get categorySocialEntertainment => 'Social & Entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productivity & Tools';
+
+  @override
+  String get categoryPersonalWellness => 'Personal & Lifestyle';
+
+  @override
+  String get rating => 'Rating';
+
+  @override
+  String get categories => 'Categories';
+
+  @override
+  String get sortBy => 'Sort';
+
+  @override
+  String get highestRating => 'Highest Rating';
+
+  @override
+  String get lowestRating => 'Lowest Rating';
+
+  @override
+  String get resetFilters => 'Reset filters';
+
+  @override
+  String get applyFilters => 'Apply filters';
+
+  @override
+  String get mostInstalls => 'Most Installs';
+
+  @override
+  String get couldNotOpenUrl => 'Could not open URL. Please try again.';
+
+  @override
+  String get newTask => 'New Task';
+
+  @override
+  String get viewAll => 'View All';
+
+  @override
+  String get addTask => 'Add Task';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audio file is not available for playback';
+
+  @override
+  String get audioPlaybackFailed => 'Unable to play audio. The file may be corrupted or missing.';
+
+  @override
+  String get connectionGuide => 'Connection Guide';
+
+  @override
+  String get iveDoneThis => 'I\'ve done this';
+
+  @override
+  String get pairNewDevice => 'Pair new device';
+
+  @override
+  String get dontSeeYourDevice => 'Don\'t see your device?';
+
+  @override
+  String get reportAnIssue => 'Report an issue';
+
+  @override
+  String get pairingTitleOmi => 'Turn On Omi';
+
+  @override
+  String get pairingDescOmi => 'Press and hold the device until it vibrates to turn it on.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Put Omi DevKit in Pairing Mode';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Press the button once to turn on. The LED will blink purple when in pairing mode.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Turn On Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Power on by pressing the side button for 3 seconds.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Put Plaud Note in Pairing Mode';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.';
+
+  @override
+  String get pairingTitleBee => 'Put Bee in Pairing Mode';
+
+  @override
+  String get pairingDescBee => 'Press the button 5 times continuously. The light will start blinking blue and green.';
+
+  @override
+  String get pairingTitleLimitless => 'Put Limitless in Pairing Mode';
+
+  @override
+  String get pairingDescLimitless =>
+      'When any light is visible, press once and then press and hold until the device shows a pink light, then release.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Put Friend Pendant in Pairing Mode';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Press the button on the pendant to turn it on. It will enter pairing mode automatically.';
+
+  @override
+  String get pairingTitleFieldy => 'Put Fieldy in Pairing Mode';
+
+  @override
+  String get pairingDescFieldy => 'Press and hold the device until the light appears to turn it on.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Connect Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => 'Install and open the Omi app on your Apple Watch, then tap Connect in the app.';
+
+  @override
+  String get pairingTitleNeoOne => 'Put Neo One in Pairing Mode';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Press and hold the power button until the LED blinks. The device will be discoverable.';
+
+  @override
+  String get downloadingFromDevice => 'Downloading from device';
+
+  @override
+  String get reconnectingToInternet => 'Reconnecting to internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Uploading $current of $total';
+  }
+
+  @override
+  String get processedStatus => 'Processed';
+
+  @override
+  String get corruptedStatus => 'Corrupted';
+
+  @override
+  String nPending(int count) {
+    return '$count pending';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processed';
+  }
+
+  @override
+  String get synced => 'Synced';
+
+  @override
+  String get noPendingRecordings => 'No pending recordings';
+
+  @override
+  String get noProcessedRecordings => 'No processed recordings yet';
+
+  @override
+  String get pending => 'Pending';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'What\'s New in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Add to your task list?';
+
+  @override
+  String get failedToCreateShareLink => 'Failed to create share link';
+
+  @override
+  String get deleteGoal => 'Delete Goal';
+
+  @override
+  String get deviceUpToDate => 'Your device is up to date';
+
+  @override
+  String get wifiConfiguration => 'WiFi Configuration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Enter your WiFi credentials to allow the device to download the firmware.';
+
+  @override
+  String get networkNameSsid => 'Network Name (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Enter WiFi network name';
+
+  @override
+  String get enterWifiPassword => 'Enter WiFi password';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

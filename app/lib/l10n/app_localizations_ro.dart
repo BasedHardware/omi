@@ -428,7 +428,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceSettings => 'Setări dispozitiv';
 
   @override
-  String get chatTools => 'Instrumente chat';
+  String get integrations => 'Integrări';
 
   @override
   String get feedbackBug => 'Feedback / Eroare';
@@ -1018,13 +1018,13 @@ class AppLocalizationsRo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Conectează';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'În curând';
 
   @override
-  String get chatToolsFooter => 'Conectează aplicațiile tale pentru a vizualiza date și statistici în chat.';
+  String get integrationsFooter => 'Conectează aplicațiile tale pentru a vizualiza date și statistici în chat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1663,7 +1663,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get whatShouldWeMake => 'Ce ar trebui să facem?';
 
   @override
-  String get appName => 'Nume aplicație';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Descriere';
@@ -2277,7 +2277,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get folderName => 'Nume dosar';
 
   @override
-  String get descriptionOptional => 'Descriere (opțional)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Nu s-a putut șterge dosarul';
@@ -7826,5 +7826,437 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Dispozitivul nu acceptă sincronizare WiFi, comutare la Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health nu este disponibil pe acest dispozitiv';
+
+  @override
+  String get downloadAudio => 'Descarcă audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio descărcat cu succes';
+
+  @override
+  String get audioDownloadFailed => 'Descărcarea audio a eșuat';
+
+  @override
+  String get downloadingAudio => 'Se descarcă audio...';
+
+  @override
+  String get shareAudio => 'Partajează audio';
+
+  @override
+  String get preparingAudio => 'Se pregătește audio';
+
+  @override
+  String get gettingAudioFiles => 'Se obțin fișierele audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Se descarcă audio';
+
+  @override
+  String get processingAudio => 'Se procesează audio';
+
+  @override
+  String get combiningAudioFiles => 'Se combină fișierele audio...';
+
+  @override
+  String get audioReady => 'Audio pregătit';
+
+  @override
+  String get openingShareSheet => 'Se deschide foaia de partajare...';
+
+  @override
+  String get audioShareFailed => 'Partajarea a eșuat';
+
+  @override
+  String get dailyRecaps => 'Recapitulări Zilnice';
+
+  @override
+  String get removeFilter => 'Eliminare Filtru';
+
+  @override
+  String get categoryConversationAnalysis => 'Analiză conversații';
+
+  @override
+  String get categoryPersonalityClone => 'Clonă de personalitate';
+
+  @override
+  String get categoryHealth => 'Sănătate';
+
+  @override
+  String get categoryEducation => 'Educație';
+
+  @override
+  String get categoryCommunication => 'Comunicare';
+
+  @override
+  String get categoryEmotionalSupport => 'Suport emoțional';
+
+  @override
+  String get categoryProductivity => 'Productivitate';
+
+  @override
+  String get categoryEntertainment => 'Divertisment';
+
+  @override
+  String get categoryFinancial => 'Financiar';
+
+  @override
+  String get categoryTravel => 'Călătorii';
+
+  @override
+  String get categorySafety => 'Siguranță';
+
+  @override
+  String get categoryShopping => 'Cumpărături';
+
+  @override
+  String get categorySocial => 'Social';
+
+  @override
+  String get categoryNews => 'Știri';
+
+  @override
+  String get categoryUtilities => 'Utilitare';
+
+  @override
+  String get categoryOther => 'Altele';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Conversații';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrare externă';
+
+  @override
+  String get capabilityNotification => 'Notificare';
+
+  @override
+  String get triggerAudioBytes => 'Octeți audio';
+
+  @override
+  String get triggerConversationCreation => 'Creare conversație';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcriere procesată';
+
+  @override
+  String get actionCreateConversations => 'Creează conversații';
+
+  @override
+  String get actionCreateMemories => 'Creează amintiri';
+
+  @override
+  String get actionReadConversations => 'Citește conversații';
+
+  @override
+  String get actionReadMemories => 'Citește amintiri';
+
+  @override
+  String get actionReadTasks => 'Citește sarcini';
+
+  @override
+  String get scopeUserName => 'Nume utilizator';
+
+  @override
+  String get scopeUserFacts => 'Date utilizator';
+
+  @override
+  String get scopeUserConversations => 'Conversații utilizator';
+
+  @override
+  String get scopeUserChat => 'Chat utilizator';
+
+  @override
+  String get capabilitySummary => 'Rezumat';
+
+  @override
+  String get capabilityFeatured => 'Recomandate';
+
+  @override
+  String get capabilityTasks => 'Sarcini';
+
+  @override
+  String get capabilityIntegrations => 'Integrări';
+
+  @override
+  String get categoryPersonalityClones => 'Clone de personalitate';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productivitate și stil de viață';
+
+  @override
+  String get categorySocialEntertainment => 'Social și divertisment';
+
+  @override
+  String get categoryProductivityTools => 'Instrumente de productivitate';
+
+  @override
+  String get categoryPersonalWellness => 'Bunăstare personală';
+
+  @override
+  String get rating => 'Evaluare';
+
+  @override
+  String get categories => 'Categorii';
+
+  @override
+  String get sortBy => 'Sortare';
+
+  @override
+  String get highestRating => 'Cea mai mare evaluare';
+
+  @override
+  String get lowestRating => 'Cea mai mică evaluare';
+
+  @override
+  String get resetFilters => 'Resetare filtre';
+
+  @override
+  String get applyFilters => 'Aplică filtre';
+
+  @override
+  String get mostInstalls => 'Cele mai multe instalări';
+
+  @override
+  String get couldNotOpenUrl => 'Nu s-a putut deschide URL-ul. Vă rugăm să încercați din nou.';
+
+  @override
+  String get newTask => 'Sarcină nouă';
+
+  @override
+  String get viewAll => 'Vezi tot';
+
+  @override
+  String get addTask => 'Adaugă sarcină';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Fișierul audio nu este disponibil pentru redare';
+
+  @override
+  String get audioPlaybackFailed => 'Nu se poate reda audio. Fișierul poate fi corupt sau lipsă.';
+
+  @override
+  String get connectionGuide => 'Ghid de conectare';
+
+  @override
+  String get iveDoneThis => 'Am făcut asta';
+
+  @override
+  String get pairNewDevice => 'Asociază un dispozitiv nou';
+
+  @override
+  String get dontSeeYourDevice => 'Nu vedeți dispozitivul?';
+
+  @override
+  String get reportAnIssue => 'Raportați o problemă';
+
+  @override
+  String get pairingTitleOmi => 'Porniți Omi';
+
+  @override
+  String get pairingDescOmi => 'Apăsați și mențineți apăsat dispozitivul până vibrează pentru a-l porni.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Puneți Omi DevKit în modul de asociere';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Apăsați butonul o dată pentru a porni. LED-ul va clipi violet în modul de asociere.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Porniți Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Apăsați și mențineți apăsat butonul lateral timp de 3 secunde pentru a porni.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Puneți Plaud Note în modul de asociere';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Apăsați și mențineți apăsat butonul lateral timp de 2 secunde. LED-ul roșu va clipi când este gata de asociere.';
+
+  @override
+  String get pairingTitleBee => 'Puneți Bee în modul de asociere';
+
+  @override
+  String get pairingDescBee => 'Apăsați butonul de 5 ori consecutiv. Lumina va începe să clipească albastru și verde.';
+
+  @override
+  String get pairingTitleLimitless => 'Puneți Limitless în modul de asociere';
+
+  @override
+  String get pairingDescLimitless =>
+      'Când orice lumină este vizibilă, apăsați o dată apoi apăsați și mențineți apăsat până când dispozitivul arată o lumină roz, apoi eliberați.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Puneți Friend Pendant în modul de asociere';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Apăsați butonul de pe pandantiv pentru a-l porni. Va intra automat în modul de asociere.';
+
+  @override
+  String get pairingTitleFieldy => 'Puneți Fieldy în modul de asociere';
+
+  @override
+  String get pairingDescFieldy => 'Apăsați și mențineți apăsat dispozitivul până apare lumina pentru a-l porni.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Conectați Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instalați și deschideți aplicația Omi pe Apple Watch, apoi apăsați Conectare în aplicație.';
+
+  @override
+  String get pairingTitleNeoOne => 'Puneți Neo One în modul de asociere';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Apăsați și mențineți apăsat butonul de alimentare până când LED-ul clipește. Dispozitivul va fi detectabil.';
+
+  @override
+  String get downloadingFromDevice => 'Se descarcă de pe dispozitiv';
+
+  @override
+  String get reconnectingToInternet => 'Se reconectează la internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Se încarcă $current din $total';
+  }
+
+  @override
+  String get processedStatus => 'Procesat';
+
+  @override
+  String get corruptedStatus => 'Corupt';
+
+  @override
+  String nPending(int count) {
+    return '$count în așteptare';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count procesate';
+  }
+
+  @override
+  String get synced => 'Sincronizat';
+
+  @override
+  String get noPendingRecordings => 'Nu există înregistrări în așteptare';
+
+  @override
+  String get noProcessedRecordings => 'Nu există încă înregistrări procesate';
+
+  @override
+  String get pending => 'În așteptare';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Ce este nou în $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Adăugați în lista de sarcini?';
+
+  @override
+  String get failedToCreateShareLink => 'Nu s-a putut crea linkul de partajare';
+
+  @override
+  String get deleteGoal => 'Șterge obiectivul';
+
+  @override
+  String get deviceUpToDate => 'Dispozitivul dvs. este la zi';
+
+  @override
+  String get wifiConfiguration => 'Configurare WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduceți datele WiFi pentru a permite dispozitivului să descarce firmware-ul.';
+
+  @override
+  String get networkNameSsid => 'Numele rețelei (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduceți numele rețelei WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduceți parola WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

@@ -589,3 +589,83 @@ Future<String?> generateDailySummary({String? date}) async {
     return null;
   }
 }
+
+// Onboarding State
+
+Future<Map<String, dynamic>?> getUserOnboardingState() async {
+  print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
+Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource}) async {
+  Map<String, dynamic> body = {};
+  if (completed != null) {
+    body['completed'] = completed;
+  }
+  if (acquisitionSource != null) {
+    body['acquisition_source'] = acquisitionSource;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  Logger.debug('updateUserOnboardingState response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+// Mentor Notification Settings
+
+class MentorNotificationSettings {
+  final int frequency; // 0-5 where 0=disabled, 1=most selective, 5=most proactive
+
+  MentorNotificationSettings({required this.frequency});
+
+  factory MentorNotificationSettings.fromJson(Map<String, dynamic> json) {
+    return MentorNotificationSettings(
+      frequency: json['frequency'] ?? 0, // Default to 0 (disabled)
+    );
+  }
+}
+
+Future<MentorNotificationSettings?> getMentorNotificationSettings() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/mentor-notification-settings',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  Logger.debug('getMentorNotificationSettings response: ${response?.body}');
+  if (response != null && response.statusCode == 200) {
+    return MentorNotificationSettings.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<bool> setMentorNotificationSettings(int frequency) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/mentor-notification-settings',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'frequency': frequency}),
+  );
+  if (response == null) return false;
+
+  Logger.debug('setMentorNotificationSettings response: ${response.body}');
+  return response.statusCode == 200;
+}

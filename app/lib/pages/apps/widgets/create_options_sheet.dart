@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -40,9 +41,10 @@ class CreateOptionsSheet extends StatelessWidget {
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               titleAlignment: ListTileTitleAlignment.center,
               leading: const Icon(Icons.apps, color: Colors.white),
-              title:
-                  Text(context.l10n.createAnApp, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle: Text(context.l10n.createAndShareYourApp, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              title: Text(context.l10n.createAnApp,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle:
+                  Text(context.l10n.createAndShareYourApp, style: TextStyle(color: Colors.white.withOpacity(0.7))),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Submit App');
@@ -61,7 +63,8 @@ class CreateOptionsSheet extends StatelessWidget {
               titleAlignment: ListTileTitleAlignment.center,
               title: Text(context.l10n.createMyClone,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
-              subtitle: Text(context.l10n.createYourDigitalClone, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              subtitle:
+                  Text(context.l10n.createYourDigitalClone, style: TextStyle(color: Colors.white.withOpacity(0.7))),
               onTap: () {
                 Navigator.pop(context);
                 MixpanelManager().pageOpened('Create Persona');
@@ -75,8 +78,26 @@ class CreateOptionsSheet extends StatelessWidget {
                     ),
                   ),
                 );
-                // Provider.of<HomeProvider>(context, listen: false).setIndex(3);
-                // Provider.of<HomeProvider>(context, listen: false).onSelectedIndexChanged!(3);
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              leading: const Icon(Icons.cable, color: Colors.white),
+              titleAlignment: ListTileTitleAlignment.center,
+              title: Text(context.l10n.addMcpServer,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
+              subtitle:
+                  Text(context.l10n.connectExternalAiTools, style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              onTap: () {
+                Navigator.pop(context);
+                MixpanelManager().pageOpened('Add MCP Server');
+                routeToPage(context, const AddMcpServerPage());
               },
             ),
           ),

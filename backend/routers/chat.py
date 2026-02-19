@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -29,6 +29,7 @@ from utils.apps import get_available_app_by_id
 from utils.chat import (
     process_voice_message_segment,
     process_voice_message_segment_stream,
+    resolve_voice_message_language,
     transcribe_voice_message_segment,
 )
 from utils.llm.persona import initial_persona_chat_message
@@ -37,6 +38,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
+from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
@@ -119,6 +121,7 @@ def send_message(
         langsmith_run_id = callback_data.get('langsmith_run_id')
         prompt_name = callback_data.get('prompt_name')
         prompt_commit = callback_data.get('prompt_commit')
+        chart_data = callback_data.get('chart_data')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -145,6 +148,7 @@ def send_message(
             app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
+            chart_data=chart_data,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
@@ -162,24 +166,35 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
-        # Using the new agentic system via graph routing
-        async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session, context=data.context
-        ):
-            if chunk:
-                msg = chunk.replace("\n", "__CRLF__")
-                yield f'{msg}\n\n'
-            else:
-                response = callback_data.get('answer')
-                if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
-                        'utf-8'
-                    )
-                    yield f"done: {encoded_response}\n\n"
+        # Set usage context for streaming (can't use 'with' across yields)
+        usage_token = set_usage_context(uid, Features.CHAT)
+        try:
+            # Using the new agentic system via graph routing
+            async for chunk in execute_graph_chat_stream(
+                uid,
+                messages,
+                app,
+                cited=True,
+                callback_data=callback_data,
+                chat_session=chat_session,
+                context=data.context,
+            ):
+                if chunk:
+                    msg = chunk.replace("\n", "__CRLF__")
+                    yield f'{msg}\n\n'
+                else:
+                    response = callback_data.get('answer')
+                    if response:
+                        ai_message, ask_for_nps = process_message(response, callback_data)
+                        ai_message_dict = ai_message.dict()
+                        response_message = ResponseMessage(**ai_message_dict)
+                        response_message.ask_for_nps = ask_for_nps
+                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                            'utf-8'
+                        )
+                        yield f"done: {encoded_response}\n\n"
+        finally:
+            reset_usage_context(usage_token)
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -307,7 +322,9 @@ def get_messages(
 
 @router.post("/v2/voice-messages")
 async def create_voice_message_stream(
-    files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = Form(None),
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -318,16 +335,22 @@ async def create_voice_message_stream(
     if len(wav_paths) == 0:
         raise HTTPException(status_code=400, detail='Wav path is invalid')
 
+    resolved_language = resolve_voice_message_language(uid, language)
+
     # process
     async def generate_stream():
-        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid):
+        async for chunk in process_voice_message_segment_stream(list(wav_paths)[0], uid, language=resolved_language):
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
 @router.post("/v2/voice-message/transcribe")
-async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def transcribe_voice_message(
+    files: List[UploadFile] = File(...),
+    language: Optional[str] = Form(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
     # Check if files are empty
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail='No files provided')
@@ -357,11 +380,16 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
 
     # Process all WAV files and collect transcripts
     transcripts = []
+    detected_languages = []
+    resolved_language = resolve_voice_message_language(uid, language)
+    is_multi = resolved_language == 'multi'
     for wav_path in wav_paths:
         try:
-            transcript = transcribe_voice_message_segment(wav_path)
+            transcript, detected_language = transcribe_voice_message_segment(wav_path, uid, language=resolved_language)
             if transcript:
                 transcripts.append(transcript)
+            if is_multi and detected_language:
+                detected_languages.append(detected_language)
         except Exception as e:
             print(f"Error transcribing {wav_path}: {e}")
             # Cleanup all remaining temp files before raising
@@ -380,12 +408,36 @@ async def transcribe_voice_message(files: List[UploadFile] = File(...), uid: str
                 except:
                     pass
 
+    if is_multi:
+        unique_languages = {lang for lang in detected_languages if lang}
+        detected_language = None
+        if len(unique_languages) == 1:
+            detected_language = unique_languages.pop()
+        elif len(unique_languages) > 1:
+            detected_language = "multi"
+    else:
+        detected_language = None
+
     # Combine all transcripts
     if transcripts:
-        return {"transcript": " ".join(transcripts)}
+        response = {"transcript": " ".join(transcripts)}
+        if detected_language:
+            response["language"] = detected_language
+        transcripts.clear()
+        detected_languages.clear()
+        wav_paths.clear()
+        other_file_paths.clear()
+        return response
 
     # If we got here, no transcript was produced
-    return {"transcript": ""}
+    response = {"transcript": ""}
+    if detected_language:
+        response["language"] = detected_language
+    transcripts.clear()
+    detected_languages.clear()
+    wav_paths.clear()
+    other_file_paths.clear()
+    return response
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])

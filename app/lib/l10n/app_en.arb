@@ -559,9 +559,9 @@
   "@deviceSettings": {
     "description": "Device settings menu item"
   },
-  "chatTools": "Chat Tools",
-  "@chatTools": {
-    "description": "Chat tools menu item"
+  "integrations": "Integrations",
+  "@integrations": {
+    "description": "Integrations menu item"
   },
   "feedbackBug": "Feedback / Bug",
   "@feedbackBug": {
@@ -1197,7 +1197,7 @@
   "vocabularyHint": "Omi, Callie, OpenAI",
   "connect": "Connect",
   "comingSoon": "Coming Soon",
-  "chatToolsFooter": "Connect your apps to view data and metrics in chat.",
+  "integrationsFooter": "Connect your apps to view data and metrics in chat.",
   "completeAuthInBrowser": "Please complete authentication in your browser. Once done, return to the app.",
   "failedToStartAuth": "Failed to start {appName} authentication",
   "@failedToStartAuth": {
@@ -2955,7 +2955,7 @@
   },
   "addGoal": "Add Goal",
   "@addGoal": {
-    "description": "Button/title for adding a new goal"
+    "description": "Menu option to add a new goal"
   },
   "editGoal": "Edit Goal",
   "@editGoal": {
@@ -3022,7 +3022,7 @@
   "@getInsightsInstantly": {
     "description": "Tip about instant insights feature"
   },
-  "showAll": "Show all →",
+  "showAll": "Show All",
   "@showAll": {
     "description": "Button text to show all items"
   },
@@ -9766,5 +9766,263 @@
   "deviceDoesNotSupportWifiSwitchingToBle": "Device does not support WiFi sync, switching to Bluetooth",
   "@deviceDoesNotSupportWifiSwitchingToBle": {
     "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
-  }
+  },
+  "appleHealthNotAvailable": "Apple Health is not available on this device",
+  "downloadAudio": "Download Audio",
+  "audioDownloadSuccess": "Audio downloaded successfully",
+  "audioDownloadFailed": "Failed to download audio",
+  "downloadingAudio": "Downloading audio...",
+  "shareAudio": "Share Audio",
+  "preparingAudio": "Preparing Audio",
+  "gettingAudioFiles": "Getting audio files...",
+  "downloadingAudioProgress": "Downloading Audio",
+  "processingAudio": "Processing Audio",
+  "combiningAudioFiles": "Combining audio files...",
+  "audioReady": "Audio Ready",
+  "openingShareSheet": "Opening share sheet...",
+  "audioShareFailed": "Share Failed",
+  "dailyRecaps": "Daily Recaps",
+  "removeFilter": "Remove Filter",
+  "categoryConversationAnalysis": "Conversation Analysis",
+  "categoryPersonalityClone": "Personality Clone",
+  "categoryHealth": "Health",
+  "categoryEducation": "Education",
+  "categoryCommunication": "Communication",
+  "categoryEmotionalSupport": "Emotional Support",
+  "categoryProductivity": "Productivity",
+  "categoryEntertainment": "Entertainment",
+  "categoryFinancial": "Financial",
+  "categoryTravel": "Travel",
+  "categorySafety": "Safety",
+  "categoryShopping": "Shopping",
+  "categorySocial": "Social",
+  "categoryNews": "News",
+  "categoryUtilities": "Utilities",
+  "categoryOther": "Other",
+  "capabilityChat": "Chat",
+  "capabilityConversations": "Conversations",
+  "capabilityExternalIntegration": "External Integration",
+  "capabilityNotification": "Notification",
+  "triggerAudioBytes": "Audio Bytes",
+  "triggerConversationCreation": "Conversation Creation",
+  "triggerTranscriptProcessed": "Transcript Processed",
+  "actionCreateConversations": "Create conversations",
+  "actionCreateMemories": "Create memories",
+  "actionReadConversations": "Read conversations",
+  "actionReadMemories": "Read memories",
+  "actionReadTasks": "Read tasks",
+  "scopeUserName": "User Name",
+  "scopeUserFacts": "User Facts",
+  "scopeUserConversations": "User Conversations",
+  "scopeUserChat": "User Chat",
+  "capabilitySummary": "Summary",
+  "capabilityFeatured": "Featured",
+  "capabilityTasks": "Tasks",
+  "capabilityIntegrations": "Integrations",
+  "categoryPersonalityClones": "Personality Clones",
+  "categoryProductivityLifestyle": "Productivity & Lifestyle",
+  "categorySocialEntertainment": "Social & Entertainment",
+  "categoryProductivityTools": "Productivity & Tools",
+  "categoryPersonalWellness": "Personal & Lifestyle",
+  "rating": "Rating",
+  "categories": "Categories",
+  "sortBy": "Sort",
+  "highestRating": "Highest Rating",
+  "lowestRating": "Lowest Rating",
+  "resetFilters": "Reset filters",
+  "applyFilters": "Apply filters",
+  "mostInstalls": "Most Installs",
+  "couldNotOpenUrl": "Could not open URL. Please try again.",
+  "newTask": "New Task",
+  "@newTask": {
+    "description": "Button text for creating a new task"
+  },
+  "viewAll": "View All",
+  "@viewAll": {
+    "description": "Button text to view all items"
+  },
+  "addTask": "Add Task",
+  "@addTask": {
+    "description": "Menu option to add a new task"
+  },
+  "addMcpServer": "Add MCP Server",
+  "connectExternalAiTools": "Connect external AI tools",
+  "mcpServerUrl": "MCP Server URL",
+  "mcpServerConnected": "{count} tools connected successfully",
+  "@mcpServerConnected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mcpConnectionFailed": "Failed to connect to MCP server",
+  "authorizingMcpServer": "Authorizing...",
+  "whereDidYouHearAboutOmi": "How did you find us?",
+  "tiktok": "TikTok",
+  "youtube": "YouTube",
+  "instagram": "Instagram",
+  "xTwitter": "X (Twitter)",
+  "reddit": "Reddit",
+  "friendWordOfMouth": "Friend",
+  "otherSource": "Other",
+  "pleaseSpecify": "Please specify",
+  "event": "Event",
+  "coworker": "Coworker",
+  "linkedIn": "LinkedIn",
+  "appStore": "App Store",
+  "googleSearch": "Google Search",
+  "audioPlaybackUnavailable": "Audio file is not available for playback",
+  "audioPlaybackFailed": "Unable to play audio. The file may be corrupted or missing.",
+  "connectionGuide": "Connection Guide",
+  "iveDoneThis": "I've done this",
+  "pairNewDevice": "Pair new device",
+  "dontSeeYourDevice": "Don't see your device?",
+  "reportAnIssue": "Report an issue",
+  "pairingTitleOmi": "Turn On Omi",
+  "@pairingTitleOmi": {
+    "description": "Pairing title for Omi device"
+  },
+  "pairingDescOmi": "Press and hold the device until it vibrates to turn it on.",
+  "@pairingDescOmi": {
+    "description": "Pairing description for Omi device"
+  },
+  "pairingTitleOmiDevkit": "Put Omi DevKit in Pairing Mode",
+  "@pairingTitleOmiDevkit": {
+    "description": "Pairing title for Omi DevKit"
+  },
+  "pairingDescOmiDevkit": "Press the button once to turn on. The LED will blink purple when in pairing mode.",
+  "@pairingDescOmiDevkit": {
+    "description": "Pairing description for Omi DevKit"
+  },
+  "pairingTitleOmiGlass": "Turn On Omi Glass",
+  "@pairingTitleOmiGlass": {
+    "description": "Pairing title for Omi Glass"
+  },
+  "pairingDescOmiGlass": "Power on by pressing the side button for 3 seconds.",
+  "@pairingDescOmiGlass": {
+    "description": "Pairing description for Omi Glass"
+  },
+  "pairingTitlePlaudNote": "Put Plaud Note in Pairing Mode",
+  "@pairingTitlePlaudNote": {
+    "description": "Pairing title for Plaud Note"
+  },
+  "pairingDescPlaudNote": "Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.",
+  "@pairingDescPlaudNote": {
+    "description": "Pairing description for Plaud Note"
+  },
+  "pairingTitleBee": "Put Bee in Pairing Mode",
+  "@pairingTitleBee": {
+    "description": "Pairing title for Bee device"
+  },
+  "pairingDescBee": "Press the button 5 times continuously. The light will start blinking blue and green.",
+  "@pairingDescBee": {
+    "description": "Pairing description for Bee device"
+  },
+  "pairingTitleLimitless": "Put Limitless in Pairing Mode",
+  "@pairingTitleLimitless": {
+    "description": "Pairing title for Limitless device"
+  },
+  "pairingDescLimitless": "When any light is visible, press once and then press and hold until the device shows a pink light, then release.",
+  "@pairingDescLimitless": {
+    "description": "Pairing description for Limitless device"
+  },
+  "pairingTitleFriendPendant": "Put Friend Pendant in Pairing Mode",
+  "@pairingTitleFriendPendant": {
+    "description": "Pairing title for Friend Pendant"
+  },
+  "pairingDescFriendPendant": "Press the button on the pendant to turn it on. It will enter pairing mode automatically.",
+  "@pairingDescFriendPendant": {
+    "description": "Pairing description for Friend Pendant"
+  },
+  "pairingTitleFieldy": "Put Fieldy in Pairing Mode",
+  "@pairingTitleFieldy": {
+    "description": "Pairing title for Fieldy device"
+  },
+  "pairingDescFieldy": "Press and hold the device until the light appears to turn it on.",
+  "@pairingDescFieldy": {
+    "description": "Pairing description for Fieldy device"
+  },
+  "pairingTitleAppleWatch": "Connect Apple Watch",
+  "@pairingTitleAppleWatch": {
+    "description": "Pairing title for Apple Watch"
+  },
+  "pairingDescAppleWatch": "Install and open the Omi app on your Apple Watch, then tap Connect in the app.",
+  "@pairingDescAppleWatch": {
+    "description": "Pairing description for Apple Watch"
+  },
+  "pairingTitleNeoOne": "Put Neo One in Pairing Mode",
+  "@pairingTitleNeoOne": {
+    "description": "Pairing title for Neo One device"
+  },
+  "pairingDescNeoOne": "Press and hold the power button until the LED blinks. The device will be discoverable.",
+  "@pairingDescNeoOne": {
+    "description": "Pairing description for Neo One device"
+  },
+  "downloadingFromDevice": "Downloading from device",
+  "reconnectingToInternet": "Reconnecting to internet...",
+  "uploadingToCloud": "Uploading {current} of {total}",
+  "@uploadingToCloud": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "processedStatus": "Processed",
+  "corruptedStatus": "Corrupted",
+  "nPending": "{count} pending",
+  "@nPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nProcessed": "{count} processed",
+  "@nProcessed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "synced": "Synced",
+  "@synced": {
+    "description": "Label for synced/processed recordings tab"
+  },
+  "noPendingRecordings": "No pending recordings",
+  "@noPendingRecordings": {
+    "description": "Empty state when no pending recordings"
+  },
+  "noProcessedRecordings": "No processed recordings yet",
+  "@noProcessedRecordings": {
+    "description": "Empty state when no processed recordings"
+  },
+  "pending": "Pending",
+  "@pending": {
+    "description": "Pending tab label for sync page"
+  },
+  "whatsNewInVersion": "What's New in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Add to your task list?",
+  "failedToCreateShareLink": "Failed to create share link",
+  "deleteGoal": "Delete Goal",
+  "deviceUpToDate": "Your device is up to date",
+  "wifiConfiguration": "WiFi Configuration",
+  "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
+  "networkNameSsid": "Network Name (SSID)",
+  "enterWifiNetworkName": "Enter WiFi network name",
+  "enterWifiPassword": "Enter WiFi password",
+  "appIconLabel": "App Icon"
 }

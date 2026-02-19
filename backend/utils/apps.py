@@ -251,13 +251,13 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         print('get_app_cache_by_id from cache')
-        if cached_app['private'] and cached_app['uid'] != uid:
+        if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid and not is_tester(uid):
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     set_app_cache_by_id(app_id, app)
     return app
@@ -267,7 +267,7 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app = get_app_by_id_db(app_id)
     if not app:
         return None
-    if app['private'] and app['uid'] != uid:
+    if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
     app['money_made'] = get_app_money_made_amount(app['id']) if not app['private'] else None
     app['usage_count'] = get_app_usage_count(app['id']) if not app['private'] else None
@@ -313,10 +313,7 @@ def invalidate_approved_apps_cache():
     pubsub_manager = get_pubsub_manager()
 
     # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [
-        'get_public_approved_apps_data:reviews=0',
-        'get_public_approved_apps_data:reviews=1'
-    ]
+    cache_keys = ['get_public_approved_apps_data:reviews=0', 'get_public_approved_apps_data:reviews=1']
 
     # Clear local memory cache
     for key in cache_keys:
@@ -1271,7 +1268,7 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> Dict[str, Any] | None:
     """
     Fetch chat tools definitions from an app's manifest endpoint.
 
@@ -1283,7 +1280,7 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
         timeout: Request timeout in seconds
 
     Returns:
-        List of chat tool definitions, or None if fetch fails
+        Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
 
     Example manifest response:
     {
@@ -1303,7 +1300,10 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
                 "auth_required": true,
                 "status_message": "Adding to playlist..."
             }
-        ]
+        ],
+        "proactive_messages": {
+            "enabled": true
+        }
     }
     """
     import requests
@@ -1344,8 +1344,21 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
             else:
                 print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
 
-        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
-        return validated_tools if validated_tools else None
+        # Parse chat_messages configuration
+        chat_messages = data.get('chat_messages', {})
+        chat_messages_config = {}
+        if isinstance(chat_messages, dict) and chat_messages.get('enabled', False):
+            chat_messages_config = {
+                'enabled': True,
+                'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
+                'notify': chat_messages.get('notify', True),  # send push notification, default True
+            }
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})")
+        return {
+            'tools': validated_tools if validated_tools else None,
+            'chat_messages': chat_messages_config if chat_messages_config else None,
+        }
 
     except requests.Timeout:
         print(f"⚠️ Manifest fetch timed out: {manifest_url}")

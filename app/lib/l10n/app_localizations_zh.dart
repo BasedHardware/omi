@@ -419,7 +419,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceSettings => '设备设置';
 
   @override
-  String get chatTools => '聊天工具';
+  String get integrations => '集成';
 
   @override
   String get feedbackBug => '反馈 / Bug';
@@ -999,13 +999,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => '连接';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => '即将推出';
 
   @override
-  String get chatToolsFooter => '连接您的应用以在聊天中查看数据和指标。';
+  String get integrationsFooter => '连接您的应用以在聊天中查看数据和指标。';
 
   @override
   String get completeAuthInBrowser => '请在浏览器中完成身份验证。';
@@ -1631,7 +1631,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get whatShouldWeMake => '我们应该做什么？';
 
   @override
-  String get appName => '应用名称';
+  String get appName => 'App Name';
 
   @override
   String get description => '描述';
@@ -2221,7 +2221,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get folderName => '文件夹名称';
 
   @override
-  String get descriptionOptional => '描述（可选）';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => '删除文件夹失败';
@@ -7645,5 +7645,429 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => '设备不支持WiFi同步,正在切换到蓝牙';
+
+  @override
+  String get appleHealthNotAvailable => '此设备上不可用Apple Health';
+
+  @override
+  String get downloadAudio => '下载音频';
+
+  @override
+  String get audioDownloadSuccess => '音频下载成功';
+
+  @override
+  String get audioDownloadFailed => '音频下载失败';
+
+  @override
+  String get downloadingAudio => '正在下载音频...';
+
+  @override
+  String get shareAudio => '分享音频';
+
+  @override
+  String get preparingAudio => '正在准备音频';
+
+  @override
+  String get gettingAudioFiles => '正在获取音频文件...';
+
+  @override
+  String get downloadingAudioProgress => '正在下载音频';
+
+  @override
+  String get processingAudio => '正在处理音频';
+
+  @override
+  String get combiningAudioFiles => '正在合并音频文件...';
+
+  @override
+  String get audioReady => '音频已准备好';
+
+  @override
+  String get openingShareSheet => '正在打开分享页面...';
+
+  @override
+  String get audioShareFailed => '分享失败';
+
+  @override
+  String get dailyRecaps => '每日回顾';
+
+  @override
+  String get removeFilter => '移除筛选';
+
+  @override
+  String get categoryConversationAnalysis => '对话分析';
+
+  @override
+  String get categoryPersonalityClone => '人格克隆';
+
+  @override
+  String get categoryHealth => '健康';
+
+  @override
+  String get categoryEducation => '教育';
+
+  @override
+  String get categoryCommunication => '沟通';
+
+  @override
+  String get categoryEmotionalSupport => '情感支持';
+
+  @override
+  String get categoryProductivity => '生产力';
+
+  @override
+  String get categoryEntertainment => '娱乐';
+
+  @override
+  String get categoryFinancial => '金融';
+
+  @override
+  String get categoryTravel => '旅行';
+
+  @override
+  String get categorySafety => '安全';
+
+  @override
+  String get categoryShopping => '购物';
+
+  @override
+  String get categorySocial => '社交';
+
+  @override
+  String get categoryNews => '新闻';
+
+  @override
+  String get categoryUtilities => '工具';
+
+  @override
+  String get categoryOther => '其他';
+
+  @override
+  String get capabilityChat => '聊天';
+
+  @override
+  String get capabilityConversations => '对话';
+
+  @override
+  String get capabilityExternalIntegration => '外部集成';
+
+  @override
+  String get capabilityNotification => '通知';
+
+  @override
+  String get triggerAudioBytes => '音频字节';
+
+  @override
+  String get triggerConversationCreation => '创建对话';
+
+  @override
+  String get triggerTranscriptProcessed => '转录已处理';
+
+  @override
+  String get actionCreateConversations => '创建对话';
+
+  @override
+  String get actionCreateMemories => '创建记忆';
+
+  @override
+  String get actionReadConversations => '读取对话';
+
+  @override
+  String get actionReadMemories => '读取记忆';
+
+  @override
+  String get actionReadTasks => '读取任务';
+
+  @override
+  String get scopeUserName => '用户名';
+
+  @override
+  String get scopeUserFacts => '用户信息';
+
+  @override
+  String get scopeUserConversations => '用户对话';
+
+  @override
+  String get scopeUserChat => '用户聊天';
+
+  @override
+  String get capabilitySummary => '摘要';
+
+  @override
+  String get capabilityFeatured => '精选';
+
+  @override
+  String get capabilityTasks => '任务';
+
+  @override
+  String get capabilityIntegrations => '集成';
+
+  @override
+  String get categoryPersonalityClones => '人格克隆';
+
+  @override
+  String get categoryProductivityLifestyle => '生产力与生活方式';
+
+  @override
+  String get categorySocialEntertainment => '社交与娱乐';
+
+  @override
+  String get categoryProductivityTools => '生产力工具';
+
+  @override
+  String get categoryPersonalWellness => '个人健康';
+
+  @override
+  String get rating => '评分';
+
+  @override
+  String get categories => '分类';
+
+  @override
+  String get sortBy => '排序';
+
+  @override
+  String get highestRating => '最高评分';
+
+  @override
+  String get lowestRating => '最低评分';
+
+  @override
+  String get resetFilters => '重置筛选';
+
+  @override
+  String get applyFilters => '应用筛选';
+
+  @override
+  String get mostInstalls => '安装最多';
+
+  @override
+  String get couldNotOpenUrl => '无法打开链接，请重试。';
+
+  @override
+  String get newTask => '新任务';
+
+  @override
+  String get viewAll => '查看全部';
+
+  @override
+  String get addTask => '添加任务';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '音频文件无法播放';
+
+  @override
+  String get audioPlaybackFailed => '无法播放音频。文件可能已损坏或丢失。';
+
+  @override
+  String get connectionGuide => '连接指南';
+
+  @override
+  String get iveDoneThis => '我已完成';
+
+  @override
+  String get pairNewDevice => '配对新设备';
+
+  @override
+  String get dontSeeYourDevice => '看不到你的设备？';
+
+  @override
+  String get reportAnIssue => '报告问题';
+
+  @override
+  String get pairingTitleOmi => '开启Omi';
+
+  @override
+  String get pairingDescOmi => '按住设备直到振动以开机。';
+
+  @override
+  String get pairingTitleOmiDevkit => '将Omi DevKit设置为配对模式';
+
+  @override
+  String get pairingDescOmiDevkit => '按一次按钮开机。配对模式下LED将闪烁紫色。';
+
+  @override
+  String get pairingTitleOmiGlass => '开启Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => '按住侧面按钮3秒以开机。';
+
+  @override
+  String get pairingTitlePlaudNote => '将Plaud Note设置为配对模式';
+
+  @override
+  String get pairingDescPlaudNote => '按住侧面按钮2秒。准备好配对时红色LED将闪烁。';
+
+  @override
+  String get pairingTitleBee => '将Bee设置为配对模式';
+
+  @override
+  String get pairingDescBee => '连续按下按钮5次。指示灯将开始闪烁蓝色和绿色。';
+
+  @override
+  String get pairingTitleLimitless => '将Limitless设置为配对模式';
+
+  @override
+  String get pairingDescLimitless => '当有灯亮时，按一次然后按住直到设备显示粉色灯光，然后松开。';
+
+  @override
+  String get pairingTitleFriendPendant => '将Friend Pendant设置为配对模式';
+
+  @override
+  String get pairingDescFriendPendant => '按下吊坠上的按钮以开机。设备将自动进入配对模式。';
+
+  @override
+  String get pairingTitleFieldy => '将Fieldy设置为配对模式';
+
+  @override
+  String get pairingDescFieldy => '按住设备直到灯亮以开机。';
+
+  @override
+  String get pairingTitleAppleWatch => '连接Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch => '在Apple Watch上安装并打开Omi应用，然后在应用中点击连接。';
+
+  @override
+  String get pairingTitleNeoOne => '将Neo One设置为配对模式';
+
+  @override
+  String get pairingDescNeoOne => '按住电源按钮直到LED闪烁。设备将变为可发现状态。';
+
+  @override
+  String get downloadingFromDevice => '正在从设备下载';
+
+  @override
+  String get reconnectingToInternet => '正在重新连接互联网...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '正在上传 $current/$total';
+  }
+
+  @override
+  String get processedStatus => '已处理';
+
+  @override
+  String get corruptedStatus => '已损坏';
+
+  @override
+  String nPending(int count) {
+    return '$count 个待处理';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count 个已处理';
+  }
+
+  @override
+  String get synced => '已同步';
+
+  @override
+  String get noPendingRecordings => '没有待处理的录音';
+
+  @override
+  String get noProcessedRecordings => '暂无已处理的录音';
+
+  @override
+  String get pending => '待处理';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version 的新功能';
+  }
+
+  @override
+  String get addToYourTaskList => '添加到您的任务列表？';
+
+  @override
+  String get failedToCreateShareLink => '无法创建分享链接';
+
+  @override
+  String get deleteGoal => '删除目标';
+
+  @override
+  String get deviceUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get wifiConfiguration => 'WiFi 配置';
+
+  @override
+  String get wifiConfigurationSubtitle => '输入您的WiFi凭据以允许设备下载固件。';
+
+  @override
+  String get networkNameSsid => '网络名称 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => '输入WiFi网络名称';
+
+  @override
+  String get enterWifiPassword => '输入WiFi密码';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

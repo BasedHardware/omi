@@ -45,3 +45,5 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
 fi
 
 flutter test test/providers/capture_provider_test.dart
+flutter test test/widgets/transcript_test.dart
+flutter test test/unit/audio_player_utils_test.dart

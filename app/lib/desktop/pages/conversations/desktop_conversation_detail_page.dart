@@ -22,6 +22,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/desktop/pages/conversations/widgets/desktop_audio_player.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'widgets/desktop_action_items_section.dart';
@@ -498,6 +499,9 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                             editSegment: _showSpeakerAssignmentDialog,
                           )
                         : _buildEmptyTranscript(),
+                  ),
+                  DesktopAudioPlayer(
+                    conversation: widget.conversation,
                   ),
                 ],
               ),

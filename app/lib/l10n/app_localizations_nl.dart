@@ -427,7 +427,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override
-  String get chatTools => 'Chat-tools';
+  String get integrations => 'Integraties';
 
   @override
   String get feedbackBug => 'Feedback / Fout';
@@ -1016,13 +1016,13 @@ class AppLocalizationsNl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Verbinden';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Binnenkort beschikbaar';
 
   @override
-  String get chatToolsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
+  String get integrationsFooter => 'Verbind je apps om gegevens en statistieken in de chat te bekijken.';
 
   @override
   String get completeAuthInBrowser => 'Voltooi de authenticatie in je browser. Keer daarna terug naar de app.';
@@ -1658,7 +1658,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get whatShouldWeMake => 'Wat zullen we maken?';
 
   @override
-  String get appName => 'App-naam';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beschrijving';
@@ -2274,7 +2274,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get folderName => 'Mapnaam';
 
   @override
-  String get descriptionOptional => 'Beschrijving (optioneel)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kan map niet verwijderen';
@@ -7813,5 +7813,436 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Apparaat ondersteunt geen WiFi-synchronisatie, overschakelen naar Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health is niet beschikbaar op dit apparaat';
+
+  @override
+  String get downloadAudio => 'Audio downloaden';
+
+  @override
+  String get audioDownloadSuccess => 'Audio succesvol gedownload';
+
+  @override
+  String get audioDownloadFailed => 'Audio downloaden mislukt';
+
+  @override
+  String get downloadingAudio => 'Audio downloaden...';
+
+  @override
+  String get shareAudio => 'Audio delen';
+
+  @override
+  String get preparingAudio => 'Audio voorbereiden';
+
+  @override
+  String get gettingAudioFiles => 'Audiobestanden ophalen...';
+
+  @override
+  String get downloadingAudioProgress => 'Audio downloaden';
+
+  @override
+  String get processingAudio => 'Audio verwerken';
+
+  @override
+  String get combiningAudioFiles => 'Audiobestanden combineren...';
+
+  @override
+  String get audioReady => 'Audio klaar';
+
+  @override
+  String get openingShareSheet => 'Deelvenster openen...';
+
+  @override
+  String get audioShareFailed => 'Delen mislukt';
+
+  @override
+  String get dailyRecaps => 'Dagelijkse Samenvattingen';
+
+  @override
+  String get removeFilter => 'Filter Verwijderen';
+
+  @override
+  String get categoryConversationAnalysis => 'Gesprekanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Persoonlijkheidskloon';
+
+  @override
+  String get categoryHealth => 'Gezondheid';
+
+  @override
+  String get categoryEducation => 'Onderwijs';
+
+  @override
+  String get categoryCommunication => 'Communicatie';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionele ondersteuning';
+
+  @override
+  String get categoryProductivity => 'Productiviteit';
+
+  @override
+  String get categoryEntertainment => 'Entertainment';
+
+  @override
+  String get categoryFinancial => 'Financiën';
+
+  @override
+  String get categoryTravel => 'Reizen';
+
+  @override
+  String get categorySafety => 'Veiligheid';
+
+  @override
+  String get categoryShopping => 'Winkelen';
+
+  @override
+  String get categorySocial => 'Sociaal';
+
+  @override
+  String get categoryNews => 'Nieuws';
+
+  @override
+  String get categoryUtilities => 'Hulpmiddelen';
+
+  @override
+  String get categoryOther => 'Overig';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Gesprekken';
+
+  @override
+  String get capabilityExternalIntegration => 'Externe integratie';
+
+  @override
+  String get capabilityNotification => 'Melding';
+
+  @override
+  String get triggerAudioBytes => 'Audiobytes';
+
+  @override
+  String get triggerConversationCreation => 'Gesprek aanmaken';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transcript verwerkt';
+
+  @override
+  String get actionCreateConversations => 'Gesprekken aanmaken';
+
+  @override
+  String get actionCreateMemories => 'Herinneringen aanmaken';
+
+  @override
+  String get actionReadConversations => 'Gesprekken lezen';
+
+  @override
+  String get actionReadMemories => 'Herinneringen lezen';
+
+  @override
+  String get actionReadTasks => 'Taken lezen';
+
+  @override
+  String get scopeUserName => 'Gebruikersnaam';
+
+  @override
+  String get scopeUserFacts => 'Gebruikersgegevens';
+
+  @override
+  String get scopeUserConversations => 'Gebruikersgesprekken';
+
+  @override
+  String get scopeUserChat => 'Gebruikerschat';
+
+  @override
+  String get capabilitySummary => 'Samenvatting';
+
+  @override
+  String get capabilityFeatured => 'Uitgelicht';
+
+  @override
+  String get capabilityTasks => 'Taken';
+
+  @override
+  String get capabilityIntegrations => 'Integraties';
+
+  @override
+  String get categoryPersonalityClones => 'Persoonlijkheidsklonen';
+
+  @override
+  String get categoryProductivityLifestyle => 'Productiviteit & levensstijl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociaal & entertainment';
+
+  @override
+  String get categoryProductivityTools => 'Productiviteitstools';
+
+  @override
+  String get categoryPersonalWellness => 'Persoonlijk welzijn';
+
+  @override
+  String get rating => 'Beoordeling';
+
+  @override
+  String get categories => 'Categorieën';
+
+  @override
+  String get sortBy => 'Sorteren';
+
+  @override
+  String get highestRating => 'Hoogste beoordeling';
+
+  @override
+  String get lowestRating => 'Laagste beoordeling';
+
+  @override
+  String get resetFilters => 'Filters resetten';
+
+  @override
+  String get applyFilters => 'Filters toepassen';
+
+  @override
+  String get mostInstalls => 'Meeste installaties';
+
+  @override
+  String get couldNotOpenUrl => 'Kan de URL niet openen. Probeer het opnieuw.';
+
+  @override
+  String get newTask => 'Nieuwe taak';
+
+  @override
+  String get viewAll => 'Alles bekijken';
+
+  @override
+  String get addTask => 'Taak toevoegen';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audiobestand is niet beschikbaar voor afspelen';
+
+  @override
+  String get audioPlaybackFailed => 'Kan audio niet afspelen. Het bestand is mogelijk beschadigd of ontbreekt.';
+
+  @override
+  String get connectionGuide => 'Verbindingshandleiding';
+
+  @override
+  String get iveDoneThis => 'Dit heb ik gedaan';
+
+  @override
+  String get pairNewDevice => 'Nieuw apparaat koppelen';
+
+  @override
+  String get dontSeeYourDevice => 'Zie je je apparaat niet?';
+
+  @override
+  String get reportAnIssue => 'Een probleem melden';
+
+  @override
+  String get pairingTitleOmi => 'Zet Omi aan';
+
+  @override
+  String get pairingDescOmi => 'Houd het apparaat ingedrukt totdat het trilt om het in te schakelen.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Zet Omi DevKit in koppelingsmodus';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Druk eenmaal op de knop om in te schakelen. De LED knippert paars in koppelingsmodus.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Zet Omi Glass aan';
+
+  @override
+  String get pairingDescOmiGlass => 'Houd de zijknop 3 seconden ingedrukt om in te schakelen.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Zet Plaud Note in koppelingsmodus';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Houd de zijknop 2 seconden ingedrukt. De rode LED knippert wanneer het klaar is om te koppelen.';
+
+  @override
+  String get pairingTitleBee => 'Zet Bee in koppelingsmodus';
+
+  @override
+  String get pairingDescBee => 'Druk 5 keer achter elkaar op de knop. Het lampje gaat blauw en groen knipperen.';
+
+  @override
+  String get pairingTitleLimitless => 'Zet Limitless in koppelingsmodus';
+
+  @override
+  String get pairingDescLimitless =>
+      'Wanneer een lampje brandt, druk eenmaal en houd dan ingedrukt totdat het apparaat een roze licht toont, laat dan los.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Zet Friend Pendant in koppelingsmodus';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Druk op de knop op de hanger om deze in te schakelen. Het gaat automatisch naar de koppelingsmodus.';
+
+  @override
+  String get pairingTitleFieldy => 'Zet Fieldy in koppelingsmodus';
+
+  @override
+  String get pairingDescFieldy => 'Houd het apparaat ingedrukt totdat het lampje verschijnt om het in te schakelen.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Verbind Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installeer en open de Omi-app op je Apple Watch en tik vervolgens op Verbinden in de app.';
+
+  @override
+  String get pairingTitleNeoOne => 'Zet Neo One in koppelingsmodus';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Houd de aan-/uitknop ingedrukt totdat de LED knippert. Het apparaat is dan vindbaar.';
+
+  @override
+  String get downloadingFromDevice => 'Downloaden van apparaat';
+
+  @override
+  String get reconnectingToInternet => 'Opnieuw verbinden met internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current van $total uploaden';
+  }
+
+  @override
+  String get processedStatus => 'Verwerkt';
+
+  @override
+  String get corruptedStatus => 'Beschadigd';
+
+  @override
+  String nPending(int count) {
+    return '$count in afwachting';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count verwerkt';
+  }
+
+  @override
+  String get synced => 'Gesynchroniseerd';
+
+  @override
+  String get noPendingRecordings => 'Geen wachtende opnames';
+
+  @override
+  String get noProcessedRecordings => 'Nog geen verwerkte opnames';
+
+  @override
+  String get pending => 'In afwachting';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nieuw in $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Toevoegen aan je takenlijst?';
+
+  @override
+  String get failedToCreateShareLink => 'Kan deellink niet aanmaken';
+
+  @override
+  String get deleteGoal => 'Doel verwijderen';
+
+  @override
+  String get deviceUpToDate => 'Uw apparaat is up-to-date';
+
+  @override
+  String get wifiConfiguration => 'WiFi-configuratie';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Voer uw WiFi-gegevens in zodat het apparaat de firmware kan downloaden.';
+
+  @override
+  String get networkNameSsid => 'Netwerknaam (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Voer de WiFi-netwerknaam in';
+
+  @override
+  String get enterWifiPassword => 'Voer het WiFi-wachtwoord in';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

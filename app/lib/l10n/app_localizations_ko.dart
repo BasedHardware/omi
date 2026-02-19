@@ -419,7 +419,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceSettings => '기기 설정';
 
   @override
-  String get chatTools => '채팅 도구';
+  String get integrations => '연동';
 
   @override
   String get feedbackBug => '피드백 / 버그';
@@ -443,7 +443,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appAndDeviceCopied => '앱 및 기기 정보가 복사되었습니다';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 요약';
 
   @override
   String get yourPrivacyYourControl => '당신의 개인정보, 당신의 제어';
@@ -1000,13 +1000,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => '연결';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => '곧 출시';
 
   @override
-  String get chatToolsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
+  String get integrationsFooter => '채팅에서 데이터 및 지표를 보려면 앱을 연결하세요.';
 
   @override
   String get completeAuthInBrowser => '브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.';
@@ -1633,7 +1633,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get whatShouldWeMake => '무엇을 만들까요?';
 
   @override
-  String get appName => '앱 이름';
+  String get appName => 'App Name';
 
   @override
   String get description => '설명';
@@ -2225,7 +2225,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get folderName => '폴더 이름';
 
   @override
-  String get descriptionOptional => '설명 (선택사항)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => '폴더 삭제 실패';
@@ -7657,5 +7657,429 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => '기기가 WiFi 동기화를 지원하지 않습니다. Bluetooth로 전환 중';
+
+  @override
+  String get appleHealthNotAvailable => '이 기기에서는 Apple Health를 사용할 수 없습니다';
+
+  @override
+  String get downloadAudio => '오디오 다운로드';
+
+  @override
+  String get audioDownloadSuccess => '오디오가 성공적으로 다운로드되었습니다';
+
+  @override
+  String get audioDownloadFailed => '오디오 다운로드 실패';
+
+  @override
+  String get downloadingAudio => '오디오 다운로드 중...';
+
+  @override
+  String get shareAudio => '오디오 공유';
+
+  @override
+  String get preparingAudio => '오디오 준비 중';
+
+  @override
+  String get gettingAudioFiles => '오디오 파일 가져오는 중...';
+
+  @override
+  String get downloadingAudioProgress => '오디오 다운로드 중';
+
+  @override
+  String get processingAudio => '오디오 처리 중';
+
+  @override
+  String get combiningAudioFiles => '오디오 파일 결합 중...';
+
+  @override
+  String get audioReady => '오디오 준비 완료';
+
+  @override
+  String get openingShareSheet => '공유 시트 여는 중...';
+
+  @override
+  String get audioShareFailed => '공유 실패';
+
+  @override
+  String get dailyRecaps => '일일 요약';
+
+  @override
+  String get removeFilter => '필터 제거';
+
+  @override
+  String get categoryConversationAnalysis => '대화 분석';
+
+  @override
+  String get categoryPersonalityClone => '성격 복제';
+
+  @override
+  String get categoryHealth => '건강';
+
+  @override
+  String get categoryEducation => '교육';
+
+  @override
+  String get categoryCommunication => '소통';
+
+  @override
+  String get categoryEmotionalSupport => '감정 지원';
+
+  @override
+  String get categoryProductivity => '생산성';
+
+  @override
+  String get categoryEntertainment => '엔터테인먼트';
+
+  @override
+  String get categoryFinancial => '금융';
+
+  @override
+  String get categoryTravel => '여행';
+
+  @override
+  String get categorySafety => '안전';
+
+  @override
+  String get categoryShopping => '쇼핑';
+
+  @override
+  String get categorySocial => '소셜';
+
+  @override
+  String get categoryNews => '뉴스';
+
+  @override
+  String get categoryUtilities => '유틸리티';
+
+  @override
+  String get categoryOther => '기타';
+
+  @override
+  String get capabilityChat => '채팅';
+
+  @override
+  String get capabilityConversations => '대화';
+
+  @override
+  String get capabilityExternalIntegration => '외부 연동';
+
+  @override
+  String get capabilityNotification => '알림';
+
+  @override
+  String get triggerAudioBytes => '오디오 바이트';
+
+  @override
+  String get triggerConversationCreation => '대화 생성';
+
+  @override
+  String get triggerTranscriptProcessed => '트랜스크립트 처리됨';
+
+  @override
+  String get actionCreateConversations => '대화 생성';
+
+  @override
+  String get actionCreateMemories => '메모리 생성';
+
+  @override
+  String get actionReadConversations => '대화 읽기';
+
+  @override
+  String get actionReadMemories => '메모리 읽기';
+
+  @override
+  String get actionReadTasks => '작업 읽기';
+
+  @override
+  String get scopeUserName => '사용자 이름';
+
+  @override
+  String get scopeUserFacts => '사용자 정보';
+
+  @override
+  String get scopeUserConversations => '사용자 대화';
+
+  @override
+  String get scopeUserChat => '사용자 채팅';
+
+  @override
+  String get capabilitySummary => '요약';
+
+  @override
+  String get capabilityFeatured => '추천';
+
+  @override
+  String get capabilityTasks => '작업';
+
+  @override
+  String get capabilityIntegrations => '연동';
+
+  @override
+  String get categoryPersonalityClones => '성격 복제';
+
+  @override
+  String get categoryProductivityLifestyle => '생산성 및 라이프스타일';
+
+  @override
+  String get categorySocialEntertainment => '소셜 및 엔터테인먼트';
+
+  @override
+  String get categoryProductivityTools => '생산성 도구';
+
+  @override
+  String get categoryPersonalWellness => '개인 웰빙';
+
+  @override
+  String get rating => '평점';
+
+  @override
+  String get categories => '카테고리';
+
+  @override
+  String get sortBy => '정렬';
+
+  @override
+  String get highestRating => '최고 평점';
+
+  @override
+  String get lowestRating => '최저 평점';
+
+  @override
+  String get resetFilters => '필터 초기화';
+
+  @override
+  String get applyFilters => '필터 적용';
+
+  @override
+  String get mostInstalls => '설치 수';
+
+  @override
+  String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
+
+  @override
+  String get newTask => '새 작업';
+
+  @override
+  String get viewAll => '모두 보기';
+
+  @override
+  String get addTask => '작업 추가';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => '오디오 파일을 재생할 수 없습니다';
+
+  @override
+  String get audioPlaybackFailed => '오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.';
+
+  @override
+  String get connectionGuide => '연결 가이드';
+
+  @override
+  String get iveDoneThis => '완료했습니다';
+
+  @override
+  String get pairNewDevice => '새 기기 페어링';
+
+  @override
+  String get dontSeeYourDevice => '기기가 보이지 않나요?';
+
+  @override
+  String get reportAnIssue => '문제 신고';
+
+  @override
+  String get pairingTitleOmi => 'Omi 전원 켜기';
+
+  @override
+  String get pairingDescOmi => '기기가 진동할 때까지 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescOmiDevkit => '버튼을 한 번 눌러 전원을 켜세요. 페어링 모드에서 LED가 보라색으로 깜빡입니다.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass 전원 켜기';
+
+  @override
+  String get pairingDescOmiGlass => '측면 버튼을 3초간 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescPlaudNote => '측면 버튼을 2초간 길게 누르세요. 페어링 준비가 되면 빨간 LED가 깜빡입니다.';
+
+  @override
+  String get pairingTitleBee => 'Bee를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescBee => '버튼을 연속으로 5번 누르세요. 표시등이 파란색과 녹색으로 깜빡이기 시작합니다.';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescLimitless => '표시등이 켜져 있을 때 한 번 누른 다음 기기가 분홍색 빛을 보일 때까지 길게 누른 후 놓으세요.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFriendPendant => '펜던트의 버튼을 눌러 전원을 켜세요. 자동으로 페어링 모드로 전환됩니다.';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFieldy => '표시등이 나타날 때까지 기기를 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch 연결';
+
+  @override
+  String get pairingDescAppleWatch => 'Apple Watch에 Omi 앱을 설치하고 열어서 앱에서 연결을 탭하세요.';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescNeoOne => '전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.';
+
+  @override
+  String get downloadingFromDevice => '기기에서 다운로드 중';
+
+  @override
+  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total 업로드 중';
+  }
+
+  @override
+  String get processedStatus => '처리됨';
+
+  @override
+  String get corruptedStatus => '손상됨';
+
+  @override
+  String nPending(int count) {
+    return '$count개 대기 중';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count개 처리됨';
+  }
+
+  @override
+  String get synced => '동기화됨';
+
+  @override
+  String get noPendingRecordings => '대기 중인 녹음이 없습니다';
+
+  @override
+  String get noProcessedRecordings => '아직 처리된 녹음이 없습니다';
+
+  @override
+  String get pending => '대기 중';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version의 새로운 기능';
+  }
+
+  @override
+  String get addToYourTaskList => '작업 목록에 추가하시겠습니까?';
+
+  @override
+  String get failedToCreateShareLink => '공유 링크 생성에 실패했습니다';
+
+  @override
+  String get deleteGoal => '목표 삭제';
+
+  @override
+  String get deviceUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get wifiConfiguration => 'WiFi 설정';
+
+  @override
+  String get wifiConfigurationSubtitle => '기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.';
+
+  @override
+  String get networkNameSsid => '네트워크 이름 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi 네트워크 이름을 입력하세요';
+
+  @override
+  String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

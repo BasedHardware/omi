@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import * as Dialog from '@radix-ui/react-dialog';
 import { X, Loader2, FolderPlus, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FOLDER_EMOJIS, FOLDER_COLORS } from '@/types/folder';
@@ -61,31 +61,28 @@ export function FolderDialog({
   const isValid = name.trim().length > 0;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          />
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        {/* Backdrop */}
+        <Dialog.Overlay
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
 
-          {/* Dialog */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        {/* Dialog Container - Centered with flexbox */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-center">
+          <Dialog.Content
             className={cn(
-              'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
-              'w-full max-w-md p-6 rounded-2xl',
-              'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'w-full max-w-md p-6 rounded-2xl text-left align-middle',
+              'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
+              'max-h-[85vh] overflow-y-auto',
+              'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+              'outline-none focus:outline-none' // Remove default browser focus ring
             )}
           >
+            <Dialog.Title className="sr-only">
+              {isEditing ? 'Edit Folder' : 'Create Folder'}
+            </Dialog.Title>
+
             {/* Close button */}
             <button
               onClick={onClose}
@@ -112,7 +109,7 @@ export function FolderDialog({
               )}
             </div>
 
-            {/* Title */}
+            {/* Visible Title */}
             <h2 className="text-lg font-semibold text-text-primary mb-4">
               {isEditing ? 'Edit Folder' : 'Create Folder'}
             </h2>
@@ -263,10 +260,10 @@ export function FolderDialog({
                 </button>
               </div>
             </form>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </Dialog.Content>
+        </div>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -289,31 +286,28 @@ export function DeleteFolderDialog({
   if (!folder) return null;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          />
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        {/* Backdrop */}
+        <Dialog.Overlay
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+        />
 
-          {/* Dialog */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        {/* Dialog Container */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 text-center">
+          <Dialog.Content
             className={cn(
-              'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
-              'w-full max-w-sm p-6 rounded-2xl',
-              'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'w-full max-w-sm p-6 rounded-2xl text-left align-middle',
+              'bg-bg-secondary border border-bg-tertiary shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
+              'max-h-[85vh] overflow-y-auto',
+              'duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
+              'outline-none focus:outline-none'
             )}
           >
+            <Dialog.Title className="sr-only">
+              Delete Folder Confirmation
+            </Dialog.Title>
+
             {/* Icon */}
             <div className={cn(
               'w-12 h-12 rounded-xl mb-4',
@@ -324,12 +318,12 @@ export function DeleteFolderDialog({
 
             {/* Title */}
             <h2 className="text-lg font-semibold text-text-primary mb-2">
-              Delete "{folder.name}"?
+              Delete &quot;{folder.name}&quot;?
             </h2>
 
             {/* Description */}
             <p className="text-sm text-text-secondary mb-6">
-              Conversations in this folder will be moved back to "All".
+              Conversations in this folder will be moved back to &quot;All&quot;.
               This action cannot be undone.
             </p>
 
@@ -366,9 +360,9 @@ export function DeleteFolderDialog({
                 <span>Delete Folder</span>
               </button>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </Dialog.Content>
+        </div>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

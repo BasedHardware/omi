@@ -34,6 +34,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     var device = widget.device!;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
       setState(() {
         isLoading = true;
       });
@@ -64,9 +65,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void dispose() {
+    killMcuUpdateManager();
     final provider = _deviceProvider;
     if (provider != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        provider.setOnFirmwareUpdatePage(false);
         provider.resetFirmwareUpdateState();
       });
     }

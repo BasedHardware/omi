@@ -25,4 +25,4 @@ class Person(BaseModel):
     updated_at: datetime
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
-    speech_samples_version: int = 1
+    speech_samples_version: int = 3

@@ -179,6 +179,9 @@ class MixpanelManager {
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
+  void onboardingUserAcquisitionSource(String source) =>
+      track('User Acquisition Source', properties: {'source': source});
+
   void settingsSaved({
     bool hasWebhookConversationCreated = false,
     bool hasWebhookTranscriptReceived = false,
@@ -548,6 +551,12 @@ class MixpanelManager {
   void taggedSegment(String assignType) => track('Tagged Segment $assignType');
 
   void untaggedSegment() => track('Untagged Segment');
+
+  void editSegmentTextStarted() => track('Edit Segment Text Started');
+
+  void editSegmentTextSaved() => track('Edit Segment Text Saved');
+
+  void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
 
   void deleteAccountClicked() => track('Delete Account Clicked');
 
@@ -1121,6 +1130,60 @@ class MixpanelManager {
     });
   }
 
+  void transcriptSegmentTapped({
+    required String conversationId,
+    required double segmentStartSeconds,
+    required double seekPositionSeconds,
+  }) {
+    track('Transcript Segment Tapped', properties: {
+      'conversation_id': conversationId,
+      'segment_start_seconds': segmentStartSeconds,
+      'seek_position_seconds': seekPositionSeconds,
+    });
+  }
+
+  void audioShareStarted({
+    required String conversationId,
+    required int audioFileCount,
+  }) {
+    track('Audio Share Started', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+    });
+  }
+
+  void audioShareCompleted({
+    required String conversationId,
+    required int audioFileCount,
+    required bool wasCombined,
+    required int durationSeconds,
+  }) {
+    track('Audio Share Completed', properties: {
+      'conversation_id': conversationId,
+      'audio_file_count': audioFileCount,
+      'was_combined': wasCombined,
+      'duration_seconds': durationSeconds,
+    });
+  }
+
+  void audioShareFailed({
+    required String conversationId,
+    String? errorMessage,
+  }) {
+    track('Audio Share Failed', properties: {
+      'conversation_id': conversationId,
+      if (errorMessage != null) 'error_message': errorMessage,
+    });
+  }
+
+  void audioShareCancelled({
+    required String conversationId,
+  }) {
+    track('Audio Share Cancelled', properties: {
+      'conversation_id': conversationId,
+    });
+  }
+
   void actionItemExported({
     required String actionItemId,
     required String appName,
@@ -1679,5 +1742,207 @@ class MixpanelManager {
       'summary_id': summaryId,
       'section_name': sectionName,
     });
+  }
+
+  // ============================================================================
+  // ANNOUNCEMENT TRACKING
+  // ============================================================================
+
+  void announcementShown({
+    required String announcementId,
+    required String type,
+    String? trigger,
+    int? priority,
+  }) {
+    track('Announcement Shown', properties: {
+      'announcement_id': announcementId,
+      'type': type,
+      if (trigger != null) 'trigger': trigger,
+      if (priority != null) 'priority': priority,
+    });
+  }
+
+  void announcementDismissed({
+    required String announcementId,
+    required String type,
+    required bool ctaClicked,
+  }) {
+    track('Announcement Dismissed', properties: {
+      'announcement_id': announcementId,
+      'type': type,
+      'cta_clicked': ctaClicked,
+    });
+  }
+
+  void changelogShown({
+    required int changelogCount,
+    required String fromVersion,
+    required String toVersion,
+  }) {
+    track('Changelog Shown', properties: {
+      'changelog_count': changelogCount,
+      'from_version': fromVersion,
+      'to_version': toVersion,
+    });
+  }
+
+  void changelogDismissed({
+    required int changelogCount,
+  }) {
+    track('Changelog Dismissed', properties: {
+      'changelog_count': changelogCount,
+    });
+  }
+
+  void whatsNewOpened() => track('Whats New Opened');
+
+  // ============================================================================
+  // GOALS TRACKING
+  // ============================================================================
+
+  void goalAddButtonTapped({required String source}) {
+    track('Goal Add Button Tapped', properties: {'source': source});
+  }
+
+  void goalCreated(
+      {required String goalId, required int titleLength, required double targetValue, required String source}) {
+    track('Goal Created', properties: {
+      'goal_id': goalId,
+      'title_length': titleLength,
+      'target_value': targetValue,
+      'source': source,
+    });
+  }
+
+  void goalUpdated({required String goalId, required String source}) {
+    track('Goal Updated', properties: {
+      'goal_id': goalId,
+      'source': source,
+    });
+  }
+
+  void goalDeleted({required String goalId, required String source, required String method}) {
+    track('Goal Deleted', properties: {
+      'goal_id': goalId,
+      'source': source,
+      'method': method,
+    });
+  }
+
+  void goalItemTappedForEdit({required String goalId, required String source}) {
+    track('Goal Item Tapped For Edit', properties: {
+      'goal_id': goalId,
+      'source': source,
+    });
+  }
+
+  void goalEmojiSelected({required String emoji}) {
+    track('Goal Emoji Selected', properties: {'emoji': emoji});
+  }
+
+  void goalProgressChanged({
+    required String goalId,
+    required double oldValue,
+    required double newValue,
+    required double targetValue,
+  }) {
+    track('Goal Progress Changed', properties: {
+      'goal_id': goalId,
+      'old_value': oldValue,
+      'new_value': newValue,
+      'target_value': targetValue,
+      'progress_percentage': targetValue > 0 ? (newValue / targetValue * 100).round() : 0,
+    });
+  }
+
+  void taskDraggedToGoal({required String taskId, required String goalId}) {
+    track('Task Dragged To Goal', properties: {
+      'task_id': taskId,
+      'goal_id': goalId,
+    });
+  }
+
+  void dailyScoreCtaTapped({required String ctaType}) {
+    track('Daily Score CTA Tapped', properties: {'cta_type': ctaType});
+  }
+
+  void dailyScoreHelpTapped() => track('Daily Score Help Tapped');
+
+  // ============================================================================
+  // INTEGRATIONS PAGE TRACKING
+  // ============================================================================
+
+  void integrationsPageOpened() => track('Integrations Page Opened');
+
+  void integrationConnectAttempted({required String integrationName}) {
+    track('Integration Connect Attempted', properties: {'integration_name': integrationName});
+  }
+
+  void integrationConnectSucceeded({required String integrationName}) {
+    track('Integration Connect Succeeded', properties: {'integration_name': integrationName});
+  }
+
+  void integrationConnectFailed({required String integrationName}) {
+    track('Integration Connect Failed', properties: {'integration_name': integrationName});
+  }
+
+  void integrationDisconnected({required String integrationName}) {
+    track('Integration Disconnected', properties: {'integration_name': integrationName});
+  }
+
+  // ============================================================================
+  // PAYMENTS PAGE TRACKING
+  // ============================================================================
+
+  void paymentsPageOpened() => track('Payments Page Opened');
+
+  void paymentMethodSelected({required String methodName}) {
+    track('Payment Method Selected', properties: {'method_name': methodName});
+  }
+
+  // ============================================================================
+  // OTHER PAGES TRACKING
+  // ============================================================================
+
+  void connectDevicePageOpened() => track('Connect Device Page Opened');
+
+  void connectionGuideOpened() => track('Connection Guide Opened');
+
+  void connectionGuideDeviceTapped(String deviceId) =>
+      track('Connection Guide Device Tapped', properties: {'device_id': deviceId});
+
+  void connectionGuideDismissed(String deviceId) =>
+      track('Connection Guide Dismissed', properties: {'device_id': deviceId});
+
+  void connectionGuideReportIssue(String deviceId) =>
+      track('Connection Guide Report Issue', properties: {'device_id': deviceId});
+
+  void dataPrivacyPageOpened() => track('Data Privacy Page Opened');
+
+  void aiAppGeneratorPageOpened() => track('AI App Generator Page Opened');
+
+  void aiAppGeneratorPromptSubmitted({required int promptLength}) {
+    track('AI App Generator Prompt Submitted', properties: {'prompt_length': promptLength});
+  }
+
+  void aiAppGeneratorAppGenerated({required bool success}) {
+    track('AI App Generator App Generated', properties: {'success': success});
+  }
+
+  void importHistoryPageOpened() => track('Import History Page Opened');
+
+  void importStarted({required String source}) {
+    track('Import Started', properties: {'source': source});
+  }
+
+  void notificationFrequencyChanged({required int oldFrequency, required int newFrequency}) {
+    track('Notification Frequency Changed', properties: {
+      'old_frequency': oldFrequency,
+      'new_frequency': newFrequency,
+    });
+  }
+
+  void dailyReflectionToggled({required bool enabled}) {
+    track('Daily Reflection Toggled', properties: {'enabled': enabled});
   }
 }

@@ -426,7 +426,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override
-  String get chatTools => 'Alat Obrolan';
+  String get integrations => 'Integrasi';
 
   @override
   String get feedbackBug => 'Masukan / Bug';
@@ -450,7 +450,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get appAndDeviceCopied => 'Detail aplikasi dan perangkat disalin';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Rangkuman 2025';
 
   @override
   String get yourPrivacyYourControl => 'Privasi Anda, Kontrol Anda';
@@ -1015,13 +1015,13 @@ class AppLocalizationsId extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Hubungkan';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Segera Hadir';
 
   @override
-  String get chatToolsFooter => 'Hubungkan aplikasi Anda untuk melihat data dan metrik dalam obrolan.';
+  String get integrationsFooter => 'Hubungkan aplikasi Anda untuk melihat data dan metrik dalam obrolan.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1659,7 +1659,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get whatShouldWeMake => 'Apa yang harus kita buat?';
 
   @override
-  String get appName => 'Nama Aplikasi';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Deskripsi';
@@ -2273,7 +2273,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get folderName => 'Nama folder';
 
   @override
-  String get descriptionOptional => 'Deskripsi (opsional)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Gagal menghapus folder';
@@ -7800,5 +7800,435 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Perangkat tidak mendukung sinkronisasi WiFi, beralih ke Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health tidak tersedia di perangkat ini';
+
+  @override
+  String get downloadAudio => 'Unduh Audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio berhasil diunduh';
+
+  @override
+  String get audioDownloadFailed => 'Gagal mengunduh audio';
+
+  @override
+  String get downloadingAudio => 'Mengunduh audio...';
+
+  @override
+  String get shareAudio => 'Bagikan Audio';
+
+  @override
+  String get preparingAudio => 'Menyiapkan Audio';
+
+  @override
+  String get gettingAudioFiles => 'Mendapatkan file audio...';
+
+  @override
+  String get downloadingAudioProgress => 'Mengunduh Audio';
+
+  @override
+  String get processingAudio => 'Memproses Audio';
+
+  @override
+  String get combiningAudioFiles => 'Menggabungkan file audio...';
+
+  @override
+  String get audioReady => 'Audio Siap';
+
+  @override
+  String get openingShareSheet => 'Membuka lembar berbagi...';
+
+  @override
+  String get audioShareFailed => 'Gagal Berbagi';
+
+  @override
+  String get dailyRecaps => 'Ringkasan Harian';
+
+  @override
+  String get removeFilter => 'Hapus Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Analisis Percakapan';
+
+  @override
+  String get categoryPersonalityClone => 'Klon Kepribadian';
+
+  @override
+  String get categoryHealth => 'Kesehatan';
+
+  @override
+  String get categoryEducation => 'Pendidikan';
+
+  @override
+  String get categoryCommunication => 'Komunikasi';
+
+  @override
+  String get categoryEmotionalSupport => 'Dukungan Emosional';
+
+  @override
+  String get categoryProductivity => 'Produktivitas';
+
+  @override
+  String get categoryEntertainment => 'Hiburan';
+
+  @override
+  String get categoryFinancial => 'Keuangan';
+
+  @override
+  String get categoryTravel => 'Perjalanan';
+
+  @override
+  String get categorySafety => 'Keamanan';
+
+  @override
+  String get categoryShopping => 'Belanja';
+
+  @override
+  String get categorySocial => 'Sosial';
+
+  @override
+  String get categoryNews => 'Berita';
+
+  @override
+  String get categoryUtilities => 'Utilitas';
+
+  @override
+  String get categoryOther => 'Lainnya';
+
+  @override
+  String get capabilityChat => 'Obrolan';
+
+  @override
+  String get capabilityConversations => 'Percakapan';
+
+  @override
+  String get capabilityExternalIntegration => 'Integrasi Eksternal';
+
+  @override
+  String get capabilityNotification => 'Notifikasi';
+
+  @override
+  String get triggerAudioBytes => 'Byte Audio';
+
+  @override
+  String get triggerConversationCreation => 'Pembuatan Percakapan';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkrip Diproses';
+
+  @override
+  String get actionCreateConversations => 'Buat percakapan';
+
+  @override
+  String get actionCreateMemories => 'Buat kenangan';
+
+  @override
+  String get actionReadConversations => 'Baca percakapan';
+
+  @override
+  String get actionReadMemories => 'Baca kenangan';
+
+  @override
+  String get actionReadTasks => 'Baca tugas';
+
+  @override
+  String get scopeUserName => 'Nama Pengguna';
+
+  @override
+  String get scopeUserFacts => 'Fakta Pengguna';
+
+  @override
+  String get scopeUserConversations => 'Percakapan Pengguna';
+
+  @override
+  String get scopeUserChat => 'Obrolan Pengguna';
+
+  @override
+  String get capabilitySummary => 'Ringkasan';
+
+  @override
+  String get capabilityFeatured => 'Unggulan';
+
+  @override
+  String get capabilityTasks => 'Tugas';
+
+  @override
+  String get capabilityIntegrations => 'Integrasi';
+
+  @override
+  String get categoryPersonalityClones => 'Klon Kepribadian';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitas & Gaya Hidup';
+
+  @override
+  String get categorySocialEntertainment => 'Sosial & Hiburan';
+
+  @override
+  String get categoryProductivityTools => 'Alat Produktivitas';
+
+  @override
+  String get categoryPersonalWellness => 'Kesejahteraan Pribadi';
+
+  @override
+  String get rating => 'Peringkat';
+
+  @override
+  String get categories => 'Kategori';
+
+  @override
+  String get sortBy => 'Urutkan';
+
+  @override
+  String get highestRating => 'Peringkat tertinggi';
+
+  @override
+  String get lowestRating => 'Peringkat terendah';
+
+  @override
+  String get resetFilters => 'Reset filter';
+
+  @override
+  String get applyFilters => 'Terapkan filter';
+
+  @override
+  String get mostInstalls => 'Paling banyak diinstal';
+
+  @override
+  String get couldNotOpenUrl => 'Tidak dapat membuka URL. Silakan coba lagi.';
+
+  @override
+  String get newTask => 'Tugas baru';
+
+  @override
+  String get viewAll => 'Lihat semua';
+
+  @override
+  String get addTask => 'Tambah tugas';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'File audio tidak tersedia untuk diputar';
+
+  @override
+  String get audioPlaybackFailed => 'Tidak dapat memutar audio. File mungkin rusak atau hilang.';
+
+  @override
+  String get connectionGuide => 'Panduan Koneksi';
+
+  @override
+  String get iveDoneThis => 'Saya sudah melakukannya';
+
+  @override
+  String get pairNewDevice => 'Pasangkan perangkat baru';
+
+  @override
+  String get dontSeeYourDevice => 'Tidak melihat perangkat Anda?';
+
+  @override
+  String get reportAnIssue => 'Laporkan masalah';
+
+  @override
+  String get pairingTitleOmi => 'Nyalakan Omi';
+
+  @override
+  String get pairingDescOmi => 'Tekan dan tahan perangkat hingga bergetar untuk menyalakannya.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Masukkan Omi DevKit ke Mode Pemasangan';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Tekan tombol sekali untuk menyalakan. LED akan berkedip ungu saat dalam mode pemasangan.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Nyalakan Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tekan dan tahan tombol samping selama 3 detik untuk menyalakan.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Masukkan Plaud Note ke Mode Pemasangan';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tekan dan tahan tombol samping selama 2 detik. LED merah akan berkedip saat siap dipasangkan.';
+
+  @override
+  String get pairingTitleBee => 'Masukkan Bee ke Mode Pemasangan';
+
+  @override
+  String get pairingDescBee => 'Tekan tombol 5 kali berturut-turut. Lampu akan mulai berkedip biru dan hijau.';
+
+  @override
+  String get pairingTitleLimitless => 'Masukkan Limitless ke Mode Pemasangan';
+
+  @override
+  String get pairingDescLimitless =>
+      'Saat lampu menyala, tekan sekali lalu tekan dan tahan hingga perangkat menunjukkan lampu merah muda, lalu lepaskan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Masukkan Friend Pendant ke Mode Pemasangan';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tekan tombol pada liontin untuk menyalakannya. Perangkat akan masuk mode pemasangan secara otomatis.';
+
+  @override
+  String get pairingTitleFieldy => 'Masukkan Fieldy ke Mode Pemasangan';
+
+  @override
+  String get pairingDescFieldy => 'Tekan dan tahan perangkat hingga lampu muncul untuk menyalakannya.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Hubungkan Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instal dan buka aplikasi Omi di Apple Watch Anda, lalu ketuk Hubungkan di aplikasi.';
+
+  @override
+  String get pairingTitleNeoOne => 'Masukkan Neo One ke Mode Pemasangan';
+
+  @override
+  String get pairingDescNeoOne => 'Tekan dan tahan tombol daya hingga LED berkedip. Perangkat akan dapat ditemukan.';
+
+  @override
+  String get downloadingFromDevice => 'Mengunduh dari perangkat';
+
+  @override
+  String get reconnectingToInternet => 'Menyambung kembali ke internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Mengunggah $current dari $total';
+  }
+
+  @override
+  String get processedStatus => 'Diproses';
+
+  @override
+  String get corruptedStatus => 'Rusak';
+
+  @override
+  String nPending(int count) {
+    return '$count tertunda';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count diproses';
+  }
+
+  @override
+  String get synced => 'Tersinkronisasi';
+
+  @override
+  String get noPendingRecordings => 'Tidak ada rekaman tertunda';
+
+  @override
+  String get noProcessedRecordings => 'Belum ada rekaman yang diproses';
+
+  @override
+  String get pending => 'Tertunda';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Yang Baru di $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Tambahkan ke daftar tugas Anda?';
+
+  @override
+  String get failedToCreateShareLink => 'Gagal membuat tautan berbagi';
+
+  @override
+  String get deleteGoal => 'Hapus Tujuan';
+
+  @override
+  String get deviceUpToDate => 'Perangkat Anda sudah diperbarui';
+
+  @override
+  String get wifiConfiguration => 'Konfigurasi WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Masukkan kredensial WiFi Anda agar perangkat dapat mengunduh firmware.';
+
+  @override
+  String get networkNameSsid => 'Nama Jaringan (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Masukkan nama jaringan WiFi';
+
+  @override
+  String get enterWifiPassword => 'Masukkan kata sandi WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

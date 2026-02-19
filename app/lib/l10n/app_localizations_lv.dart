@@ -426,7 +426,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override
-  String get chatTools => 'Tērzēšanas rīki';
+  String get integrations => 'Integrācijas';
 
   @override
   String get feedbackBug => 'Atsauksmes / Kļūda';
@@ -1014,13 +1014,13 @@ class AppLocalizationsLv extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Savienot';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Drīzumā';
 
   @override
-  String get chatToolsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
+  String get integrationsFooter => 'Savienojiet savas lietotnes, lai skatītu datus un metriku tērzēšanā.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1656,7 +1656,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get whatShouldWeMake => 'Ko mums vajadzētu izveidot?';
 
   @override
-  String get appName => 'Lietotnes nosaukums';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Apraksts';
@@ -2271,7 +2271,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get folderName => 'Mapes nosaukums';
 
   @override
-  String get descriptionOptional => 'Apraksts (pēc izvēles)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Neizdevās dzēst mapi';
@@ -7806,5 +7806,435 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health nav pieejams šajā ierīcē';
+
+  @override
+  String get downloadAudio => 'Lejupielādēt audio';
+
+  @override
+  String get audioDownloadSuccess => 'Audio veiksmīgi lejupielādēts';
+
+  @override
+  String get audioDownloadFailed => 'Audio lejupielāde neizdevās';
+
+  @override
+  String get downloadingAudio => 'Lejupielādē audio...';
+
+  @override
+  String get shareAudio => 'Kopīgot audio';
+
+  @override
+  String get preparingAudio => 'Sagatavo audio';
+
+  @override
+  String get gettingAudioFiles => 'Iegūst audio failus...';
+
+  @override
+  String get downloadingAudioProgress => 'Lejupielādē audio';
+
+  @override
+  String get processingAudio => 'Apstrādā audio';
+
+  @override
+  String get combiningAudioFiles => 'Apvieno audio failus...';
+
+  @override
+  String get audioReady => 'Audio gatavs';
+
+  @override
+  String get openingShareSheet => 'Atver kopīgošanas lapu...';
+
+  @override
+  String get audioShareFailed => 'Kopīgošana neizdevās';
+
+  @override
+  String get dailyRecaps => 'Dienas Kopsavilkumi';
+
+  @override
+  String get removeFilter => 'Noņemt Filtru';
+
+  @override
+  String get categoryConversationAnalysis => 'Sarunu analīze';
+
+  @override
+  String get categoryPersonalityClone => 'Personības klons';
+
+  @override
+  String get categoryHealth => 'Veselība';
+
+  @override
+  String get categoryEducation => 'Izglītība';
+
+  @override
+  String get categoryCommunication => 'Komunikācija';
+
+  @override
+  String get categoryEmotionalSupport => 'Emocionālais atbalsts';
+
+  @override
+  String get categoryProductivity => 'Produktivitāte';
+
+  @override
+  String get categoryEntertainment => 'Izklaide';
+
+  @override
+  String get categoryFinancial => 'Finanses';
+
+  @override
+  String get categoryTravel => 'Ceļojumi';
+
+  @override
+  String get categorySafety => 'Drošība';
+
+  @override
+  String get categoryShopping => 'Iepirkšanās';
+
+  @override
+  String get categorySocial => 'Sociālais';
+
+  @override
+  String get categoryNews => 'Ziņas';
+
+  @override
+  String get categoryUtilities => 'Rīki';
+
+  @override
+  String get categoryOther => 'Citi';
+
+  @override
+  String get capabilityChat => 'Tērzēšana';
+
+  @override
+  String get capabilityConversations => 'Sarunas';
+
+  @override
+  String get capabilityExternalIntegration => 'Ārējā integrācija';
+
+  @override
+  String get capabilityNotification => 'Paziņojums';
+
+  @override
+  String get triggerAudioBytes => 'Audio baiti';
+
+  @override
+  String get triggerConversationCreation => 'Sarunas izveide';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripcija apstrādāta';
+
+  @override
+  String get actionCreateConversations => 'Izveidot sarunas';
+
+  @override
+  String get actionCreateMemories => 'Izveidot atmiņas';
+
+  @override
+  String get actionReadConversations => 'Lasīt sarunas';
+
+  @override
+  String get actionReadMemories => 'Lasīt atmiņas';
+
+  @override
+  String get actionReadTasks => 'Lasīt uzdevumus';
+
+  @override
+  String get scopeUserName => 'Lietotājvārds';
+
+  @override
+  String get scopeUserFacts => 'Lietotāja fakti';
+
+  @override
+  String get scopeUserConversations => 'Lietotāja sarunas';
+
+  @override
+  String get scopeUserChat => 'Lietotāja tērzēšana';
+
+  @override
+  String get capabilitySummary => 'Kopsavilkums';
+
+  @override
+  String get capabilityFeatured => 'Ieteiktie';
+
+  @override
+  String get capabilityTasks => 'Uzdevumi';
+
+  @override
+  String get capabilityIntegrations => 'Integrācijas';
+
+  @override
+  String get categoryPersonalityClones => 'Personības kloni';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitāte un dzīvesveids';
+
+  @override
+  String get categorySocialEntertainment => 'Sociālais un izklaide';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitātes rīki';
+
+  @override
+  String get categoryPersonalWellness => 'Personīgā labklājība';
+
+  @override
+  String get rating => 'Vērtējums';
+
+  @override
+  String get categories => 'Kategorijas';
+
+  @override
+  String get sortBy => 'Kārtot';
+
+  @override
+  String get highestRating => 'Augstākais vērtējums';
+
+  @override
+  String get lowestRating => 'Zemākais vērtējums';
+
+  @override
+  String get resetFilters => 'Atiestatīt filtrus';
+
+  @override
+  String get applyFilters => 'Lietot filtrus';
+
+  @override
+  String get mostInstalls => 'Visvairāk instalāciju';
+
+  @override
+  String get couldNotOpenUrl => 'Nevarēja atvērt URL. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get newTask => 'Jauns uzdevums';
+
+  @override
+  String get viewAll => 'Skatīt visu';
+
+  @override
+  String get addTask => 'Pievienot uzdevumu';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Audio fails nav pieejams atskaņošanai';
+
+  @override
+  String get audioPlaybackFailed => 'Nevar atskaņot audio. Fails var būt bojāts vai trūkst.';
+
+  @override
+  String get connectionGuide => 'Savienošanas ceļvedis';
+
+  @override
+  String get iveDoneThis => 'Esmu to izdarījis';
+
+  @override
+  String get pairNewDevice => 'Savienot jaunu ierīci';
+
+  @override
+  String get dontSeeYourDevice => 'Neredzat savu ierīci?';
+
+  @override
+  String get reportAnIssue => 'Ziņot par problēmu';
+
+  @override
+  String get pairingTitleOmi => 'Ieslēdziet Omi';
+
+  @override
+  String get pairingDescOmi => 'Nospiediet un turiet ierīci, līdz tā vibrē, lai to ieslēgtu.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Ieslēdziet Omi DevKit savienošanas režīmā';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nospiediet pogu vienu reizi, lai ieslēgtu. LED mirgos violeti savienošanas režīmā.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ieslēdziet Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Nospiediet un turiet sānu pogu 3 sekundes, lai ieslēgtu.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Ieslēdziet Plaud Note savienošanas režīmā';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Nospiediet un turiet sānu pogu 2 sekundes. Sarkanais LED mirgos, kad ierīce ir gatava savienošanai.';
+
+  @override
+  String get pairingTitleBee => 'Ieslēdziet Bee savienošanas režīmā';
+
+  @override
+  String get pairingDescBee => 'Nospiediet pogu 5 reizes pēc kārtas. Gaisma sāks mirgot zilā un zaļā krāsā.';
+
+  @override
+  String get pairingTitleLimitless => 'Ieslēdziet Limitless savienošanas režīmā';
+
+  @override
+  String get pairingDescLimitless =>
+      'Kad redzama jebkura gaisma, nospiediet vienu reizi, tad nospiediet un turiet, līdz ierīce rāda rozā gaismu, tad atlaidiet.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Ieslēdziet Friend Pendant savienošanas režīmā';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nospiediet pogu uz kulona, lai to ieslēgtu. Tas automātiski pārslēgsies savienošanas režīmā.';
+
+  @override
+  String get pairingTitleFieldy => 'Ieslēdziet Fieldy savienošanas režīmā';
+
+  @override
+  String get pairingDescFieldy => 'Nospiediet un turiet ierīci, līdz parādās gaisma, lai to ieslēgtu.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Pievienojiet Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instalējiet un atveriet Omi lietotni savā Apple Watch, tad pieskarieties Savienot lietotnē.';
+
+  @override
+  String get pairingTitleNeoOne => 'Ieslēdziet Neo One savienošanas režīmā';
+
+  @override
+  String get pairingDescNeoOne => 'Nospiediet un turiet barošanas pogu, līdz LED sāk mirgot. Ierīce būs atrodama.';
+
+  @override
+  String get downloadingFromDevice => 'Lejupielāde no ierīces';
+
+  @override
+  String get reconnectingToInternet => 'Atkārtota savienošana ar internetu...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Augšupielāde $current no $total';
+  }
+
+  @override
+  String get processedStatus => 'Apstrādāts';
+
+  @override
+  String get corruptedStatus => 'Bojāts';
+
+  @override
+  String nPending(int count) {
+    return '$count gaida';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count apstrādāti';
+  }
+
+  @override
+  String get synced => 'Sinhronizēts';
+
+  @override
+  String get noPendingRecordings => 'Nav gaidošu ierakstu';
+
+  @override
+  String get noProcessedRecordings => 'Vēl nav apstrādātu ierakstu';
+
+  @override
+  String get pending => 'Gaida';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Kas jauns $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Pievienot uzdevumu sarakstam?';
+
+  @override
+  String get failedToCreateShareLink => 'Neizdevās izveidot kopīgošanas saiti';
+
+  @override
+  String get deleteGoal => 'Dzēst mērķi';
+
+  @override
+  String get deviceUpToDate => 'Jūsu ierīce ir atjaunināta';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfigurācija';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Ievadiet WiFi akreditācijas datus, lai ierīce varētu lejupielādēt programmaparatūru.';
+
+  @override
+  String get networkNameSsid => 'Tīkla nosaukums (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ievadiet WiFi tīkla nosaukumu';
+
+  @override
+  String get enterWifiPassword => 'Ievadiet WiFi paroli';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

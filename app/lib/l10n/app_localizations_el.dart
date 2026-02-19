@@ -429,7 +429,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
-  String get chatTools => 'Εργαλεία Συνομιλίας';
+  String get integrations => 'Ενσωματώσεις';
 
   @override
   String get feedbackBug => 'Σχόλια / Σφάλμα';
@@ -589,7 +589,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get starOngoing => 'Αγαπημένη Τρέχουσα Συνομιλία';
 
   @override
-  String get off => 'Off';
+  String get off => 'Απενεργ.';
 
   @override
   String get max => 'Μέγιστο';
@@ -1019,13 +1019,13 @@ class AppLocalizationsEl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Σύνδεση';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Σύντομα Διαθέσιμο';
 
   @override
-  String get chatToolsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
+  String get integrationsFooter => 'Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1666,7 +1666,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get whatShouldWeMake => 'Τι να φτιάξουμε;';
 
   @override
-  String get appName => 'Όνομα Εφαρμογής';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Περιγραφή';
@@ -2285,7 +2285,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get folderName => 'Όνομα φακέλου';
 
   @override
-  String get descriptionOptional => 'Περιγραφή (προαιρετικό)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Αποτυχία διαγραφής φακέλου';
@@ -7845,5 +7845,440 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Η συσκευή δεν υποστηρίζει συγχρονισμό WiFi, μετάβαση σε Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Το Apple Health δεν είναι διαθέσιμο σε αυτήν τη συσκευή';
+
+  @override
+  String get downloadAudio => 'Λήψη ήχου';
+
+  @override
+  String get audioDownloadSuccess => 'Ο ήχος λήφθηκε επιτυχώς';
+
+  @override
+  String get audioDownloadFailed => 'Αποτυχία λήψης ήχου';
+
+  @override
+  String get downloadingAudio => 'Λήψη ήχου...';
+
+  @override
+  String get shareAudio => 'Κοινοποίηση ήχου';
+
+  @override
+  String get preparingAudio => 'Προετοιμασία ήχου';
+
+  @override
+  String get gettingAudioFiles => 'Λήψη αρχείων ήχου...';
+
+  @override
+  String get downloadingAudioProgress => 'Λήψη ήχου';
+
+  @override
+  String get processingAudio => 'Επεξεργασία ήχου';
+
+  @override
+  String get combiningAudioFiles => 'Συνδυασμός αρχείων ήχου...';
+
+  @override
+  String get audioReady => 'Ο ήχος είναι έτοιμος';
+
+  @override
+  String get openingShareSheet => 'Άνοιγμα φύλλου κοινοποίησης...';
+
+  @override
+  String get audioShareFailed => 'Η κοινοποίηση απέτυχε';
+
+  @override
+  String get dailyRecaps => 'Ημερήσιες Περιλήψεις';
+
+  @override
+  String get removeFilter => 'Κατάργηση Φίλτρου';
+
+  @override
+  String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
+
+  @override
+  String get categoryPersonalityClone => 'Κλώνος προσωπικότητας';
+
+  @override
+  String get categoryHealth => 'Υγεία';
+
+  @override
+  String get categoryEducation => 'Εκπαίδευση';
+
+  @override
+  String get categoryCommunication => 'Επικοινωνία';
+
+  @override
+  String get categoryEmotionalSupport => 'Συναισθηματική υποστήριξη';
+
+  @override
+  String get categoryProductivity => 'Παραγωγικότητα';
+
+  @override
+  String get categoryEntertainment => 'Ψυχαγωγία';
+
+  @override
+  String get categoryFinancial => 'Οικονομικά';
+
+  @override
+  String get categoryTravel => 'Ταξίδια';
+
+  @override
+  String get categorySafety => 'Ασφάλεια';
+
+  @override
+  String get categoryShopping => 'Αγορές';
+
+  @override
+  String get categorySocial => 'Κοινωνικά';
+
+  @override
+  String get categoryNews => 'Ειδήσεις';
+
+  @override
+  String get categoryUtilities => 'Εργαλεία';
+
+  @override
+  String get categoryOther => 'Άλλα';
+
+  @override
+  String get capabilityChat => 'Συνομιλία';
+
+  @override
+  String get capabilityConversations => 'Συνομιλίες';
+
+  @override
+  String get capabilityExternalIntegration => 'Εξωτερική ενσωμάτωση';
+
+  @override
+  String get capabilityNotification => 'Ειδοποίηση';
+
+  @override
+  String get triggerAudioBytes => 'Bytes ήχου';
+
+  @override
+  String get triggerConversationCreation => 'Δημιουργία συνομιλίας';
+
+  @override
+  String get triggerTranscriptProcessed => 'Απομαγνητοφώνηση επεξεργάστηκε';
+
+  @override
+  String get actionCreateConversations => 'Δημιουργία συνομιλιών';
+
+  @override
+  String get actionCreateMemories => 'Δημιουργία αναμνήσεων';
+
+  @override
+  String get actionReadConversations => 'Ανάγνωση συνομιλιών';
+
+  @override
+  String get actionReadMemories => 'Ανάγνωση αναμνήσεων';
+
+  @override
+  String get actionReadTasks => 'Ανάγνωση εργασιών';
+
+  @override
+  String get scopeUserName => 'Όνομα χρήστη';
+
+  @override
+  String get scopeUserFacts => 'Στοιχεία χρήστη';
+
+  @override
+  String get scopeUserConversations => 'Συνομιλίες χρήστη';
+
+  @override
+  String get scopeUserChat => 'Συνομιλία χρήστη';
+
+  @override
+  String get capabilitySummary => 'Περίληψη';
+
+  @override
+  String get capabilityFeatured => 'Προτεινόμενα';
+
+  @override
+  String get capabilityTasks => 'Εργασίες';
+
+  @override
+  String get capabilityIntegrations => 'Ενσωματώσεις';
+
+  @override
+  String get categoryPersonalityClones => 'Κλώνοι προσωπικότητας';
+
+  @override
+  String get categoryProductivityLifestyle => 'Παραγωγικότητα & Τρόπος ζωής';
+
+  @override
+  String get categorySocialEntertainment => 'Κοινωνικά & Ψυχαγωγία';
+
+  @override
+  String get categoryProductivityTools => 'Εργαλεία παραγωγικότητας';
+
+  @override
+  String get categoryPersonalWellness => 'Προσωπική ευεξία';
+
+  @override
+  String get rating => 'Βαθμολογία';
+
+  @override
+  String get categories => 'Κατηγορίες';
+
+  @override
+  String get sortBy => 'Ταξινόμηση';
+
+  @override
+  String get highestRating => 'Υψηλότερη βαθμολογία';
+
+  @override
+  String get lowestRating => 'Χαμηλότερη βαθμολογία';
+
+  @override
+  String get resetFilters => 'Επαναφορά φίλτρων';
+
+  @override
+  String get applyFilters => 'Εφαρμογή φίλτρων';
+
+  @override
+  String get mostInstalls => 'Περισσότερες εγκαταστάσεις';
+
+  @override
+  String get couldNotOpenUrl => 'Δεν ήταν δυνατό το άνοιγμα του URL. Παρακαλώ δοκιμάστε ξανά.';
+
+  @override
+  String get newTask => 'Νέα εργασία';
+
+  @override
+  String get viewAll => 'Προβολή όλων';
+
+  @override
+  String get addTask => 'Προσθήκη εργασίας';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Το αρχείο ήχου δεν είναι διαθέσιμο για αναπαραγωγή';
+
+  @override
+  String get audioPlaybackFailed =>
+      'Δεν είναι δυνατή η αναπαραγωγή ήχου. Το αρχείο μπορεί να είναι κατεστραμμένο ή να λείπει.';
+
+  @override
+  String get connectionGuide => 'Οδηγός σύνδεσης';
+
+  @override
+  String get iveDoneThis => 'Το έκανα';
+
+  @override
+  String get pairNewDevice => 'Σύζευξη νέας συσκευής';
+
+  @override
+  String get dontSeeYourDevice => 'Δεν βλέπετε τη συσκευή σας;';
+
+  @override
+  String get reportAnIssue => 'Αναφορά προβλήματος';
+
+  @override
+  String get pairingTitleOmi => 'Ενεργοποιήστε το Omi';
+
+  @override
+  String get pairingDescOmi => 'Πατήστε παρατεταμένα τη συσκευή μέχρι να δονηθεί για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Θέστε το Omi DevKit σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Πατήστε το κουμπί μία φορά για ενεργοποίηση. Το LED θα αναβοσβήνει μωβ στη λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Ενεργοποιήστε το Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 3 δευτερόλεπτα για ενεργοποίηση.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Θέστε το Plaud Note σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Πατήστε παρατεταμένα το πλαϊνό κουμπί για 2 δευτερόλεπτα. Το κόκκινο LED θα αναβοσβήνει όταν είναι έτοιμο για σύζευξη.';
+
+  @override
+  String get pairingTitleBee => 'Θέστε το Bee σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescBee =>
+      'Πατήστε το κουμπί 5 φορές συνεχόμενα. Το φως θα αρχίσει να αναβοσβήνει μπλε και πράσινο.';
+
+  @override
+  String get pairingTitleLimitless => 'Θέστε το Limitless σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescLimitless =>
+      'Όταν είναι ορατό οποιοδήποτε φως, πατήστε μία φορά και μετά πατήστε παρατεταμένα μέχρι η συσκευή να δείξει ροζ φως, μετά αφήστε.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Θέστε το Friend Pendant σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Πατήστε το κουμπί στο μενταγιόν για να το ενεργοποιήσετε. Θα εισέλθει αυτόματα σε λειτουργία σύζευξης.';
+
+  @override
+  String get pairingTitleFieldy => 'Θέστε το Fieldy σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescFieldy =>
+      'Πατήστε παρατεταμένα τη συσκευή μέχρι να εμφανιστεί το φως για να την ενεργοποιήσετε.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Συνδέστε το Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Εγκαταστήστε και ανοίξτε την εφαρμογή Omi στο Apple Watch σας, μετά πατήστε Σύνδεση στην εφαρμογή.';
+
+  @override
+  String get pairingTitleNeoOne => 'Θέστε το Neo One σε λειτουργία σύζευξης';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Πατήστε παρατεταμένα το κουμπί τροφοδοσίας μέχρι να αναβοσβήσει το LED. Η συσκευή θα είναι ανιχνεύσιμη.';
+
+  @override
+  String get downloadingFromDevice => 'Λήψη από τη συσκευή';
+
+  @override
+  String get reconnectingToInternet => 'Επανασύνδεση στο διαδίκτυο...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Μεταφόρτωση $current από $total';
+  }
+
+  @override
+  String get processedStatus => 'Επεξεργασμένο';
+
+  @override
+  String get corruptedStatus => 'Κατεστραμμένο';
+
+  @override
+  String nPending(int count) {
+    return '$count σε αναμονή';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count επεξεργασμένα';
+  }
+
+  @override
+  String get synced => 'Συγχρονισμένο';
+
+  @override
+  String get noPendingRecordings => 'Δεν υπάρχουν εκκρεμείς εγγραφές';
+
+  @override
+  String get noProcessedRecordings => 'Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα';
+
+  @override
+  String get pending => 'Εκκρεμεί';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Τι νέο υπάρχει στο $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Προσθήκη στη λίστα εργασιών σας;';
+
+  @override
+  String get failedToCreateShareLink => 'Αποτυχία δημιουργίας συνδέσμου κοινοποίησης';
+
+  @override
+  String get deleteGoal => 'Διαγραφή στόχου';
+
+  @override
+  String get deviceUpToDate => 'Η συσκευή σας είναι ενημερωμένη';
+
+  @override
+  String get wifiConfiguration => 'Ρύθμιση WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.';
+
+  @override
+  String get networkNameSsid => 'Όνομα δικτύου (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Εισαγάγετε το όνομα δικτύου WiFi';
+
+  @override
+  String get enterWifiPassword => 'Εισαγάγετε τον κωδικό WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

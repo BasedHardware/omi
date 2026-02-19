@@ -12,7 +12,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v5
+          - codemagic_v4
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4
@@ -166,6 +166,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: true
@@ -328,6 +329,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: true
@@ -349,7 +351,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v5
+          - codemagic_v4
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4
@@ -519,6 +521,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -708,6 +711,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -875,6 +879,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -894,7 +899,7 @@ workflows:
     environment:
       ios_signing:
         provisioning_profiles:
-          - codemagic_v5
+          - codemagic_v4
           - codemagic_watchos_v4
         certificates:
           - codemagic_v4
@@ -1019,6 +1024,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -1114,6 +1120,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
         script: |
@@ -1164,6 +1171,44 @@ workflows:
       - name: Install pods
         script: |
           cd macos && pod install --repo-update
+
+      - name: Download Omi Computer app for bundling
+        script: |
+          # Get latest Omi Computer release (Swift app) to bundle into Flutter app
+          echo "Looking for latest Omi Computer release..."
+          LATEST_MACOS_TAG=$(gh release list --repo BasedHardware/omi --limit 50 | grep -E '\-macos\s' | head -1 | awk -F'\t' '{print $3}')
+
+          if [ -n "$LATEST_MACOS_TAG" ]; then
+            echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
+
+            # Create directory where bundle_helper.sh expects to find the app
+            # bundle_helper.sh looks at: $PROJECT_DIR/../../../omi-desktop/build/
+            # PROJECT_DIR = /path/clone/app/macos
+            # ../../../omi-desktop = /path/omi-desktop (sibling to clone dir)
+            # From working_directory (app/), that's ../../omi-desktop
+            mkdir -p ../../omi-desktop/build
+
+            # Download the signed app ZIP from GitHub releases
+            gh release download "$LATEST_MACOS_TAG" \
+              --repo BasedHardware/omi \
+              --pattern "Omi.zip" \
+              --dir /tmp
+
+            # Extract - the ZIP contains "Omi Computer.app"
+            unzip -o /tmp/Omi.zip -d ../../omi-desktop/build/
+
+            # Verify extraction
+            if [ -d "../../omi-desktop/build/Omi Computer.app" ]; then
+              echo "SUCCESS: Omi Computer app ready for bundling"
+              ls -la "../../omi-desktop/build/"
+            else
+              echo "WARNING: Extraction may have failed, checking contents..."
+              ls -la ../../omi-desktop/build/
+            fi
+          else
+            echo "WARNING: No Omi Computer release found with -macos tag"
+            echo "The Flutter app will be built without bundled Omi Computer"
+          fi
 
       - name: Verify Sparkle signing key
         script: |
@@ -1270,6 +1315,13 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod
 
+      - name: Bundle .env into app
+        script: |
+          # Copy .env file into app bundle for native Swift code to access
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+          cp .env "$APP_PATH/Contents/Resources/.env"
+          echo "Bundled .env into $APP_PATH/Contents/Resources/.env"
+
       - name: Sign app for notarization
         script: |
           # Find the built app
@@ -1324,6 +1376,27 @@ workflows:
               --sign "$DEVELOPER_ID_CERT" \
               "$dylib"
           done
+
+          # Sign bundled Omi Computer.app (if present)
+          # The bundled app was signed with a different cert, must re-sign with our Developer ID
+          BUNDLED_APP="$APP_PATH/Contents/MacOS/Omi Computer.app"
+          if [ -d "$BUNDLED_APP" ]; then
+            echo "Signing bundled Omi Computer.app..."
+            # Sign all nested code first
+            find "$BUNDLED_APP" -name "*.framework" -type d | while read fw; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$fw"
+            done
+            find "$BUNDLED_APP" -name "*.dylib" -type f | while read lib; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$lib"
+            done
+            # Sign the bundled app itself
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$BUNDLED_APP"
+            echo "Bundled Omi Computer.app signed"
+          fi
 
           # Sign Sparkle framework and its components first
           SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
@@ -1589,8 +1662,10 @@ workflows:
       email:
         recipients:
           - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false
@@ -1750,6 +1825,7 @@ workflows:
           - joan@basedhardware.com
           - nik@basedhardware.com
           - mohsin.lp710@gmail.com
+          - i@m13v.com
         notify:
           success: true
           failure: false

@@ -130,7 +130,7 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
             transcripts.extend([''] * (existing_sample_count - len(transcripts)))
         transcripts.append(transcript)
         update_data['speech_sample_transcripts'] = transcripts
-        update_data['speech_samples_version'] = 2
+        update_data['speech_samples_version'] = 3
 
     transaction.update(person_ref, update_data)
     return True
@@ -663,6 +663,22 @@ def set_user_language_preference(uid: str, language: str) -> None:
     """
     user_ref = db.collection('users').document(uid)
     user_ref.set({'language': language}, merge=True)
+
+
+def get_user_onboarding_state(uid: str) -> dict:
+    """Get the user's onboarding state from Firestore."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('onboarding', {})
+    return {}
+
+
+def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
+    """Update the user's onboarding state in Firestore (merge with existing)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'onboarding': onboarding_data}, merge=True)
 
 
 def get_user_subscription(uid: str) -> Subscription:

@@ -18,10 +18,11 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
-#include "spi_flash.h"
 #ifdef CONFIG_OMI_ENABLE_WIFI
 #include "wifi.h"
 #endif
+
+#include "imu.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -221,6 +222,7 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_INF("single tap detected\n");
         btn_last_event = event;
+
         notify_tap();
     }
 
@@ -384,11 +386,6 @@ void turnoff_all()
     k_msleep(100);
 #endif
 
-    rc = flash_off();
-    if (rc) {
-        LOG_ERR("Can not suspend the spi flash module: %d", rc);
-    }
-
     if (is_sd_on()) {
         app_sd_off();
     }
@@ -429,8 +426,11 @@ void turnoff_all()
         return;
     }
 
-    LOG_INF("Entering system off; press usr_btn to restart");
+    
+    /* Persist an IMU timestamp base so we can estimate time across system_off. */
+    lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);
+    LOG_INF("Entering system off; press usr_btn to restart");
 
     // Power off the system using sys_poweroff
     sys_poweroff();

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:crypto/crypto.dart';
@@ -12,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
@@ -32,27 +34,26 @@ class AuthService {
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    Logger.debug('Using standard Google Sign In for mobile');
+    print('DEBUG_AUTH: Using standard Google Sign In for mobile');
 
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(
       scopes: ['profile', 'email'],
     ).signIn();
-    Logger.debug('Google User: $googleUser');
+    print('DEBUG_AUTH: Google User: $googleUser');
 
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    Logger.debug('Google Auth: $googleAuth');
+    print(
+        'DEBUG_AUTH: Google Auth accessToken=${googleAuth?.accessToken != null}, idToken=${googleAuth?.idToken != null}');
     if (googleAuth == null) {
-      Logger.debug('Failed to sign in with Google: googleAuth is NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
+      print('DEBUG_AUTH: Failed - googleAuth is NULL');
       return null;
     }
 
     // Create a new credential
     if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      Logger.debug('Failed to sign in with Google: accessToken, idToken are NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
+      print('DEBUG_AUTH: Failed - accessToken and idToken are both NULL');
       return null;
     }
     final credential = GoogleAuthProvider.credential(
@@ -61,9 +62,16 @@ class AuthService {
     );
 
     // Once signed in, return the UserCredential
-    var result = await FirebaseAuth.instance.signInWithCredential(credential);
-    await _updateUserPreferences(result, 'google');
-    return result;
+    try {
+      print('DEBUG_AUTH: Calling signInWithCredential...');
+      var result = await FirebaseAuth.instance.signInWithCredential(credential);
+      print('DEBUG_AUTH: signInWithCredential SUCCESS - uid=${result.user?.uid}');
+      await _updateUserPreferences(result, 'google');
+      return result;
+    } catch (e) {
+      print('DEBUG_AUTH: signInWithCredential FAILED: $e');
+      rethrow;
+    }
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a
@@ -184,13 +192,23 @@ class AuthService {
             SharedPreferencesUtil().familyName = '';
           }
         }
+        return newToken?.token;
       }
-      return newToken?.token;
+      // Fallback: use cached token if Firebase has no user (for dev builds)
+      final cachedToken = SharedPreferencesUtil().authToken;
+      if (cachedToken.isNotEmpty) {
+        print('DEBUG AuthService.getIdToken: Using cached token fallback');
+        return cachedToken;
+      }
+      return null;
     } catch (e) {
       Logger.debug(e.toString());
       return SharedPreferencesUtil().authToken;
     }
   }
+
+  // Method channel for direct deep link delivery (fallback for app_links)
+  static const _deepLinkChannel = MethodChannel('com.omi/deep_links');
 
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
@@ -206,39 +224,64 @@ class AuthService {
 
       Logger.debug('Authorization URL: $authUrl');
 
+      // Set up listeners before launching URL
+      final appLinks = AppLinks();
+      late StreamSubscription linkSubscription;
+      final completer = Completer<String>();
+
+      // Listen via app_links
+      linkSubscription = appLinks.uriLinkStream.listen(
+        (Uri uri) {
+          Logger.debug('Received callback URI via app_links: $uri');
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            if (!completer.isCompleted) {
+              linkSubscription.cancel();
+              completer.complete(uri.toString());
+            }
+          }
+        },
+        onError: (error) {
+          Logger.debug('App link error: $error');
+          if (!completer.isCompleted) {
+            linkSubscription.cancel();
+            completer.completeError(error);
+          }
+        },
+      );
+
+      // Also listen via direct method channel (fallback)
+      _deepLinkChannel.setMethodCallHandler((call) async {
+        if (call.method == 'onDeepLink') {
+          final urlString = call.arguments as String;
+          Logger.debug('Received callback URI via method channel: $urlString');
+          final uri = Uri.parse(urlString);
+          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+            if (!completer.isCompleted) {
+              linkSubscription.cancel();
+              _deepLinkChannel.setMethodCallHandler(null);
+              completer.complete(urlString);
+            }
+          }
+        }
+      });
+
+      // Now launch the URL
       final launched = await launchUrl(
         Uri.parse(authUrl),
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched) {
+        linkSubscription.cancel();
+        _deepLinkChannel.setMethodCallHandler(null);
         throw Exception('Failed to launch authentication URL');
       }
-
-      // Listen for the callback URL using app_links
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            linkSubscription.cancel();
-            completer.complete(uri.toString());
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          linkSubscription.cancel();
-          completer.completeError(error);
-        },
-      );
 
       final result = await completer.future.timeout(
         const Duration(minutes: 5),
         onTimeout: () {
           linkSubscription.cancel();
+          _deepLinkChannel.setMethodCallHandler(null);
           throw Exception('Authentication timeout');
         },
       );
@@ -407,8 +450,44 @@ class AuthService {
       Logger.debug('Given Name: ${SharedPreferencesUtil().givenName}');
       Logger.debug('Family Name: ${SharedPreferencesUtil().familyName}');
       Logger.debug('UID: ${SharedPreferencesUtil().uid}');
+
+      // Restore onboarding state from server
+      await _restoreOnboardingState();
     } catch (e) {
       Logger.debug('Error updating user preferences: $e');
+    }
+  }
+
+  /// Restore onboarding state from server. Call this on app startup when using cached credentials.
+  Future<void> restoreOnboardingState() async {
+    return _restoreOnboardingState();
+  }
+
+  Future<void> _restoreOnboardingState() async {
+    try {
+      print('DEBUG _restoreOnboardingState: fetching from server...');
+      final state = await getUserOnboardingState();
+      print('DEBUG _restoreOnboardingState: got state=$state');
+      if (state != null) {
+        if (state['completed'] == true) {
+          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
+          SharedPreferencesUtil().onboardingCompleted = true;
+        }
+        final acquisitionSource = state['acquisition_source'] as String? ?? '';
+        if (acquisitionSource.isNotEmpty) {
+          SharedPreferencesUtil().foundOmiSource = acquisitionSource;
+        }
+        // Restore language from server if not already set locally
+        final serverLanguage = await getUserPrimaryLanguage();
+        if (serverLanguage != null && serverLanguage.isNotEmpty) {
+          SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
+          SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+        }
+        print(
+            'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+      }
+    } catch (e) {
+      print('DEBUG _restoreOnboardingState: error=$e');
     }
   }
 

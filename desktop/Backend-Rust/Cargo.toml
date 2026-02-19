@@ -1,0 +1,57 @@
+[package]
+name = "omi-desktop-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# HTTP client (for LLM API calls)
+reqwest = { version = "0.11", features = ["json", "stream"] }
+
+# Authentication
+jsonwebtoken = "9"
+
+# Utilities
+dotenvy = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+uuid = { version = "1", features = ["v4"] }
+ulid = "1.1"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.21"
+regex = "1"
+
+# Encryption (for decrypting user data with enhanced protection level)
+aes-gcm = "0.10"
+hkdf = "0.12"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
+tracing-appender = "0.2"
+time = { version = "0.3.36", features = ["macros", "formatting", "local-offset"] }
+
+# Async utilities
+futures = "0.3"
+async-stream = "0.3"
+
+# Compression (for transcript decompression)
+flate2 = "1.0"
+
+# URL encoding for OAuth
+urlencoding = "2.1"
+
+# Redis for conversation visibility
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# Note: Using Firestore REST API directly instead of gcloud-sdk for compatibility

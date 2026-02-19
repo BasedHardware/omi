@@ -32,6 +32,7 @@ class ConversationBottomBar extends StatefulWidget {
   final bool hasSegments;
   final bool hasActionItems;
   final ServerConversation? conversation;
+  final Function(Future<void> Function(double))? onSeekFunctionReady;
 
   const ConversationBottomBar({
     super.key,
@@ -42,6 +43,7 @@ class ConversationBottomBar extends StatefulWidget {
     this.hasSegments = true,
     this.hasActionItems = true,
     this.conversation,
+    this.onSeekFunctionReady,
   });
 
   @override
@@ -56,10 +58,23 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
+  List<AudioFile> _getSortedAudioFiles() {
+    if (widget.conversation == null) return [];
+    final files = List<AudioFile>.from(widget.conversation!.audioFiles);
+    files.sort((a, b) {
+      final aTime = a.startedAt?.millisecondsSinceEpoch ?? 0;
+      final bTime = b.startedAt?.millisecondsSinceEpoch ?? 0;
+      return aTime.compareTo(bTime);
+    });
+    return files;
+  }
+
   @override
   void initState() {
     super.initState();
     _calculateTotalDuration();
+    // Provide the seek function to parent widget
+    widget.onSeekFunctionReady?.call(seekToTranscriptSegment);
   }
 
   @override
@@ -80,7 +95,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (widget.conversation == null) return;
     double totalSeconds = 0;
     _trackStartOffsets = [];
-    for (final audioFile in widget.conversation!.audioFiles) {
+    for (final audioFile in _getSortedAudioFiles()) {
       _trackStartOffsets.add(Duration(milliseconds: (totalSeconds * 1000).toInt()));
       totalSeconds += audioFile.duration;
     }
@@ -92,6 +107,103 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return trackPosition;
     }
     return _trackStartOffsets[currentIndex] + trackPosition;
+  }
+
+  int _findRelevantAudioFileIndex() {
+    final sortedFiles = _getSortedAudioFiles();
+    if (sortedFiles.isEmpty) {
+      return 0;
+    }
+
+    if (sortedFiles.length == 1) {
+      return 0;
+    }
+
+    final conversationStartTs = widget.conversation?.startedAt?.millisecondsSinceEpoch ?? 0;
+    var bestAudioIdx = 0;
+    var minDiff = double.infinity;
+
+    for (int i = 0; i < sortedFiles.length; i++) {
+      final audioStartTs = sortedFiles[i].startedAt?.millisecondsSinceEpoch ?? 0;
+      final diff = (audioStartTs - conversationStartTs).abs().toDouble();
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestAudioIdx = i;
+      }
+    }
+
+    return bestAudioIdx;
+  }
+
+  /// Calculate the correct file position for a transcript timestamp.
+  ///
+  /// Transcript segment timestamps are relative to conversation.startedAt.
+  /// The merged audio file starts at the first chunk timestamp.
+  ///
+  /// Formula: filePosition = segment.start - chunkOffset
+  /// Where: chunkOffset = firstChunkTimestamp - conversationStartedAt
+  double _calculateFilePositionForTimestamp(double transcriptTimestamp) {
+    final conversation = widget.conversation;
+    final sortedFiles = _getSortedAudioFiles();
+    if (conversation == null || sortedFiles.isEmpty || conversation.startedAt == null) {
+      return transcriptTimestamp;
+    }
+
+    final audioFile = sortedFiles[_findRelevantAudioFileIndex()];
+
+    final double firstChunkTs;
+    if (audioFile.startedAt != null) {
+      firstChunkTs = audioFile.startedAt!.millisecondsSinceEpoch / 1000.0;
+    } else if (audioFile.chunkTimestamps.isNotEmpty) {
+      firstChunkTs = audioFile.chunkTimestamps.first;
+    } else {
+      return transcriptTimestamp;
+    }
+
+    final conversationStartTs = conversation.startedAt!.millisecondsSinceEpoch / 1000.0;
+
+    // chunkOffset = firstChunkTimestamp - conversationStartedAt
+    final chunkOffset = firstChunkTs - conversationStartTs;
+
+    // filePosition = segment.start - chunkOffset
+    return transcriptTimestamp - chunkOffset;
+  }
+
+  /// Seek to a transcript segment's timestamp and start playing.
+  /// Calculates the correct position in the merged audio file.
+  Future<void> seekToTranscriptSegment(double segmentStartSeconds) async {
+    if (!_isAudioInitialized) {
+      await _initAudioIfNeeded();
+    }
+    if (!mounted || _audioPlayer == null) return;
+
+    // Calculate the correct file position
+    final filePosition = _calculateFilePositionForTimestamp(segmentStartSeconds);
+
+    // Ensure position is not negative
+    final targetPosition = Duration(
+      milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt(),
+    );
+
+    // Track transcript segment tap
+    final conversationId = widget.conversation?.id ?? '';
+    MixpanelManager().transcriptSegmentTapped(
+      conversationId: conversationId,
+      segmentStartSeconds: segmentStartSeconds,
+      seekPositionSeconds: filePosition,
+    );
+
+    await _seekToCombinedPosition(targetPosition);
+
+    // Auto-play after seeking to segment
+    if (_audioPlayer != null && !_audioPlayer!.playing) {
+      MixpanelManager().audioPlaybackStarted(
+        conversationId: conversationId,
+        durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
+      );
+      await _audioPlayer!.play();
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _initAudioIfNeeded() async {
@@ -110,12 +222,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _audioPlayer = AudioPlayer();
 
       final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
+      final sortedAudioFiles = _getSortedAudioFiles();
 
       List<AudioSource> audioSources = [];
       Map<String, String>? fallbackHeaders;
 
-      for (final fileId in audioFileIds) {
+      for (final audioFile in sortedAudioFiles) {
+        final fileId = audioFile.id;
         // Find matching signed URL info
         final urlInfo = signedUrlInfos.firstWhere(
           (info) => info.id == fileId,

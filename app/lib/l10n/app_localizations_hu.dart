@@ -428,7 +428,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
-  String get chatTools => 'Csevegés eszközök';
+  String get integrations => 'Integrációk';
 
   @override
   String get feedbackBug => 'Visszajelzés / hiba';
@@ -452,7 +452,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appAndDeviceCopied => 'Alkalmazás és eszköz részletei másolva';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => '2025 összefoglaló';
 
   @override
   String get yourPrivacyYourControl => 'Adatvédelem, saját ellenőrzésed alatt';
@@ -1019,13 +1019,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Csatlakozás';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Hamarosan';
 
   @override
-  String get chatToolsFooter =>
+  String get integrationsFooter =>
       'Csatlakoztasd az alkalmazásaidat az adatok és metrikák megjelenítéséhez a csevegésben.';
 
   @override
@@ -1665,7 +1665,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get whatShouldWeMake => 'Mit készítsünk?';
 
   @override
-  String get appName => 'Alkalmazás neve';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Leírás';
@@ -2281,7 +2281,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get folderName => 'Mappa neve';
 
   @override
-  String get descriptionOptional => 'Leírás (opcionális)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'A mappa törlése sikertelen';
@@ -6849,7 +6849,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceIdLabel => 'Eszköz azonosító';
 
   @override
-  String get statusLabel => 'Status';
+  String get statusLabel => 'Állapot';
 
   @override
   String get statusProcessed => 'Processed';
@@ -7825,5 +7825,436 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
+
+  @override
+  String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';
+
+  @override
+  String get downloadAudio => 'Hang letöltése';
+
+  @override
+  String get audioDownloadSuccess => 'Hang sikeresen letöltve';
+
+  @override
+  String get audioDownloadFailed => 'Hang letöltése sikertelen';
+
+  @override
+  String get downloadingAudio => 'Hang letöltése...';
+
+  @override
+  String get shareAudio => 'Hang megosztása';
+
+  @override
+  String get preparingAudio => 'Hang előkészítése';
+
+  @override
+  String get gettingAudioFiles => 'Hangfájlok lekérése...';
+
+  @override
+  String get downloadingAudioProgress => 'Hang letöltése';
+
+  @override
+  String get processingAudio => 'Hang feldolgozása';
+
+  @override
+  String get combiningAudioFiles => 'Hangfájlok egyesítése...';
+
+  @override
+  String get audioReady => 'Hang kész';
+
+  @override
+  String get openingShareSheet => 'Megosztási lap megnyitása...';
+
+  @override
+  String get audioShareFailed => 'Megosztás sikertelen';
+
+  @override
+  String get dailyRecaps => 'Napi Összefoglalók';
+
+  @override
+  String get removeFilter => 'Szűrő Eltávolítása';
+
+  @override
+  String get categoryConversationAnalysis => 'Beszélgetéselemzés';
+
+  @override
+  String get categoryPersonalityClone => 'Személyiségklón';
+
+  @override
+  String get categoryHealth => 'Egészség';
+
+  @override
+  String get categoryEducation => 'Oktatás';
+
+  @override
+  String get categoryCommunication => 'Kommunikáció';
+
+  @override
+  String get categoryEmotionalSupport => 'Érzelmi támogatás';
+
+  @override
+  String get categoryProductivity => 'Termelékenység';
+
+  @override
+  String get categoryEntertainment => 'Szórakozás';
+
+  @override
+  String get categoryFinancial => 'Pénzügyek';
+
+  @override
+  String get categoryTravel => 'Utazás';
+
+  @override
+  String get categorySafety => 'Biztonság';
+
+  @override
+  String get categoryShopping => 'Vásárlás';
+
+  @override
+  String get categorySocial => 'Közösségi';
+
+  @override
+  String get categoryNews => 'Hírek';
+
+  @override
+  String get categoryUtilities => 'Eszközök';
+
+  @override
+  String get categoryOther => 'Egyéb';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Beszélgetések';
+
+  @override
+  String get capabilityExternalIntegration => 'Külső integráció';
+
+  @override
+  String get capabilityNotification => 'Értesítés';
+
+  @override
+  String get triggerAudioBytes => 'Hang bájtok';
+
+  @override
+  String get triggerConversationCreation => 'Beszélgetés létrehozása';
+
+  @override
+  String get triggerTranscriptProcessed => 'Átirat feldolgozva';
+
+  @override
+  String get actionCreateConversations => 'Beszélgetések létrehozása';
+
+  @override
+  String get actionCreateMemories => 'Emlékek létrehozása';
+
+  @override
+  String get actionReadConversations => 'Beszélgetések olvasása';
+
+  @override
+  String get actionReadMemories => 'Emlékek olvasása';
+
+  @override
+  String get actionReadTasks => 'Feladatok olvasása';
+
+  @override
+  String get scopeUserName => 'Felhasználónév';
+
+  @override
+  String get scopeUserFacts => 'Felhasználói adatok';
+
+  @override
+  String get scopeUserConversations => 'Felhasználói beszélgetések';
+
+  @override
+  String get scopeUserChat => 'Felhasználói chat';
+
+  @override
+  String get capabilitySummary => 'Összefoglaló';
+
+  @override
+  String get capabilityFeatured => 'Kiemelt';
+
+  @override
+  String get capabilityTasks => 'Feladatok';
+
+  @override
+  String get capabilityIntegrations => 'Integrációk';
+
+  @override
+  String get categoryPersonalityClones => 'Személyiségklónok';
+
+  @override
+  String get categoryProductivityLifestyle => 'Termelékenység és életmód';
+
+  @override
+  String get categorySocialEntertainment => 'Közösségi és szórakozás';
+
+  @override
+  String get categoryProductivityTools => 'Termelékenységi eszközök';
+
+  @override
+  String get categoryPersonalWellness => 'Személyes jólét';
+
+  @override
+  String get rating => 'Értékelés';
+
+  @override
+  String get categories => 'Kategóriák';
+
+  @override
+  String get sortBy => 'Rendezés';
+
+  @override
+  String get highestRating => 'Legmagasabb értékelés';
+
+  @override
+  String get lowestRating => 'Legalacsonyabb értékelés';
+
+  @override
+  String get resetFilters => 'Szűrők visszaállítása';
+
+  @override
+  String get applyFilters => 'Szűrők alkalmazása';
+
+  @override
+  String get mostInstalls => 'Legtöbb telepítés';
+
+  @override
+  String get couldNotOpenUrl => 'Az URL nem nyitható meg. Kérjük, próbálja újra.';
+
+  @override
+  String get newTask => 'Új feladat';
+
+  @override
+  String get viewAll => 'Összes megtekintése';
+
+  @override
+  String get addTask => 'Feladat hozzáadása';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'A hangfájl nem érhető el lejátszásra';
+
+  @override
+  String get audioPlaybackFailed => 'Nem sikerült lejátszani a hangot. A fájl sérült vagy hiányzik.';
+
+  @override
+  String get connectionGuide => 'Csatlakozási útmutató';
+
+  @override
+  String get iveDoneThis => 'Megcsináltam';
+
+  @override
+  String get pairNewDevice => 'Új eszköz párosítása';
+
+  @override
+  String get dontSeeYourDevice => 'Nem látja az eszközét?';
+
+  @override
+  String get reportAnIssue => 'Probléma jelentése';
+
+  @override
+  String get pairingTitleOmi => 'Kapcsolja be az Omi-t';
+
+  @override
+  String get pairingDescOmi => 'Tartsa nyomva az eszközt, amíg rezeg, a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Állítsa Omi DevKit-et párosítási módba';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nyomja meg a gombot egyszer a bekapcsoláshoz. A LED lilán villog párosítási módban.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Kapcsolja be az Omi Glass-t';
+
+  @override
+  String get pairingDescOmiGlass => 'Tartsa nyomva az oldalgombot 3 másodpercig a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Állítsa Plaud Note-ot párosítási módba';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tartsa nyomva az oldalgombot 2 másodpercig. A piros LED villogni kezd, amikor párosításra kész.';
+
+  @override
+  String get pairingTitleBee => 'Állítsa Bee-t párosítási módba';
+
+  @override
+  String get pairingDescBee => 'Nyomja meg a gombot 5-ször egymás után. A fény kéken és zölden villogni kezd.';
+
+  @override
+  String get pairingTitleLimitless => 'Állítsa Limitless-t párosítási módba';
+
+  @override
+  String get pairingDescLimitless =>
+      'Amikor bármilyen fény látható, nyomja meg egyszer, majd tartsa nyomva, amíg az eszköz rózsaszín fényt nem mutat, majd engedje el.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Állítsa Friend Pendant-et párosítási módba';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nyomja meg a gombot a medálon a bekapcsoláshoz. Automatikusan párosítási módba lép.';
+
+  @override
+  String get pairingTitleFieldy => 'Állítsa Fieldy-t párosítási módba';
+
+  @override
+  String get pairingDescFieldy => 'Tartsa nyomva az eszközt, amíg a fény meg nem jelenik a bekapcsoláshoz.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch csatlakoztatása';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Telepítse és nyissa meg az Omi alkalmazást Apple Watch-ján, majd koppintson a Csatlakozás gombra az alkalmazásban.';
+
+  @override
+  String get pairingTitleNeoOne => 'Állítsa Neo One-t párosítási módba';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Tartsa nyomva a bekapcsoló gombot, amíg a LED villogni nem kezd. Az eszköz felfedezhető lesz.';
+
+  @override
+  String get downloadingFromDevice => 'Letöltés az eszközről';
+
+  @override
+  String get reconnectingToInternet => 'Újracsatlakozás az internethez...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total feltöltése';
+  }
+
+  @override
+  String get processedStatus => 'Feldolgozva';
+
+  @override
+  String get corruptedStatus => 'Sérült';
+
+  @override
+  String nPending(int count) {
+    return '$count függőben';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count feldolgozva';
+  }
+
+  @override
+  String get synced => 'Szinkronizálva';
+
+  @override
+  String get noPendingRecordings => 'Nincsenek függőben lévő felvételek';
+
+  @override
+  String get noProcessedRecordings => 'Még nincsenek feldolgozott felvételek';
+
+  @override
+  String get pending => 'Függőben';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Újdonságok a $version verzióban';
+  }
+
+  @override
+  String get addToYourTaskList => 'Hozzáadás a feladatlistádhoz?';
+
+  @override
+  String get failedToCreateShareLink => 'Nem sikerült megosztási linket létrehozni';
+
+  @override
+  String get deleteGoal => 'Cél törlése';
+
+  @override
+  String get deviceUpToDate => 'Az eszköze naprakész';
+
+  @override
+  String get wifiConfiguration => 'WiFi konfiguráció';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Adja meg WiFi hitelesítő adatait, hogy az eszköz letölthesse a firmware-t.';
+
+  @override
+  String get networkNameSsid => 'Hálózat neve (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Adja meg a WiFi hálózat nevét';
+
+  @override
+  String get enterWifiPassword => 'Adja meg a WiFi jelszót';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

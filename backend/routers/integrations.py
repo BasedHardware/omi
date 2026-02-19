@@ -28,10 +28,6 @@ templates = Jinja2Templates(directory="templates")
 # OAuth provider configurations
 OAUTH_CONFIGS = {
     'google_calendar': {'name': 'Google Calendar'},
-    'whoop': {'name': 'Whoop'},
-    'notion': {'name': 'Notion'},
-    'twitter': {'name': 'Twitter'},
-    'github': {'name': 'GitHub'},
 }
 
 # Provider-specific OAuth URL configuration
@@ -48,52 +44,6 @@ AUTH_PROVIDERS = {
         },
         'log_name': 'Google Calendar',
         'error_detail': 'Google Calendar not configured - GOOGLE_CLIENT_ID missing',
-    },
-    'whoop': {
-        'client_env': 'WHOOP_CLIENT_ID',
-        'auth_base': 'https://api.prod.whoop.com/oauth/oauth2/auth',
-        'redirect_path': '/v2/integrations/whoop/callback',
-        'query': {
-            'response_type': 'code',
-            'scope': 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement offline',
-        },
-        'log_name': 'Whoop',
-        'error_detail': 'Whoop not configured - WHOOP_CLIENT_ID missing',
-    },
-    'notion': {
-        'client_env': 'NOTION_CLIENT_ID',
-        'auth_base': 'https://api.notion.com/v1/oauth/authorize',
-        'redirect_path': '/v2/integrations/notion/callback',
-        'query': {
-            'response_type': 'code',
-            'owner': 'user',
-        },
-        'log_name': 'Notion',
-        'error_detail': 'Notion not configured - NOTION_CLIENT_ID missing',
-    },
-    'twitter': {
-        'client_env': 'TWITTER_CLIENT_ID',
-        'auth_base': 'https://twitter.com/i/oauth2/authorize',
-        'redirect_path': '/v2/integrations/twitter/callback',
-        'query': {
-            'response_type': 'code',
-            'scope': 'tweet.read users.read offline.access',
-            'code_challenge_method': 'S256',
-        },
-        'log_name': 'Twitter',
-        'error_detail': 'Twitter not configured - TWITTER_CLIENT_ID missing',
-        'requires_pkce': True,
-    },
-    'github': {
-        'client_env': 'GITHUB_CLIENT_ID',
-        'auth_base': 'https://github.com/login/oauth/authorize',
-        'redirect_path': '/v2/integrations/github/callback',
-        'query': {
-            'response_type': 'code',
-            'scope': 'repo issues pull_requests read:user',
-        },
-        'log_name': 'GitHub',
-        'error_detail': 'GitHub not configured - GITHUB_CLIENT_ID missing',
     },
 }
 
@@ -202,6 +152,37 @@ class IntegrationData(BaseModel):
     refresh_token: Optional[str] = None
 
 
+class AppleHealthSyncData(BaseModel):
+    """Health data synced from Apple Health on iOS device"""
+
+    period_days: int = Field(default=7, description="Number of days of data")
+
+    # Steps data
+    total_steps: Optional[int] = Field(default=None, description="Total steps in period")
+    average_steps_per_day: Optional[float] = Field(default=None, description="Average steps per day")
+    daily_steps: Optional[list] = Field(default=None, description="Daily steps breakdown [{date, steps}]")
+
+    # Sleep data
+    total_sleep_hours: Optional[float] = Field(default=None, description="Total sleep hours")
+    total_in_bed_hours: Optional[float] = Field(default=None, description="Total time in bed hours")
+    sleep_sessions_count: Optional[int] = Field(default=None, description="Number of sleep sessions")
+    sleep_sessions: Optional[list] = Field(default=None, description="Sleep session details")
+    daily_sleep: Optional[list] = Field(default=None, description="Daily sleep breakdown [{date, sleepHours}]")
+
+    # Heart rate data
+    heart_rate_average: Optional[float] = Field(default=None, description="Average heart rate")
+    heart_rate_min: Optional[float] = Field(default=None, description="Minimum heart rate")
+    heart_rate_max: Optional[float] = Field(default=None, description="Maximum heart rate")
+
+    # Active energy data
+    total_active_energy: Optional[float] = Field(default=None, description="Total active energy kcal")
+    average_active_energy_per_day: Optional[float] = Field(default=None, description="Average daily active energy")
+    daily_active_energy: Optional[list] = Field(default=None, description="Daily energy breakdown [{date, calories}]")
+
+    # Workouts data
+    workouts: Optional[list] = Field(default=None, description="List of workout records")
+
+
 class IntegrationResponse(BaseModel):
     """Response containing integration status"""
 
@@ -247,70 +228,76 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     return None
 
 
-@router.get("/v1/integrations/github/repositories", tags=['integrations'])
-def get_github_repositories(uid: str = Depends(auth.get_current_user_uid)):
-    """Get list of GitHub repositories accessible to the authenticated user."""
-    integration = users_db.get_integration(uid, 'github')
+@router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
+def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Sync Apple Health data from the iOS device.
 
-    if not integration or not integration.get('connected'):
-        raise HTTPException(status_code=401, detail="GitHub is not connected")
+    This endpoint receives health data collected from Apple HealthKit on the user's
+    iPhone/Apple Watch and stores it for use in chat queries.
 
-    access_token = integration.get('access_token')
-    if not access_token:
-        raise HTTPException(status_code=401, detail="GitHub access token not found")
+    Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
+    """
+    # Build the health data structure
+    health_data = {
+        'period_days': data.period_days,
+    }
 
-    try:
-        from utils.retrieval.tools.github_tools import github_api_request
-
-        url = 'https://api.github.com/user/repos'
-        params = {
-            'per_page': 100,
-            'sort': 'updated',
-            'direction': 'desc',
-            'affiliation': 'owner,collaborator,organization_member',
+    # Steps
+    if data.total_steps is not None:
+        health_data['steps'] = {
+            'total': data.total_steps,
+            'average_per_day': data.average_steps_per_day or (data.total_steps / max(data.period_days, 1)),
+            'period_days': data.period_days,
+            'daily': data.daily_steps or [],  # Daily breakdown [{date, steps}]
         }
 
-        repos = github_api_request('GET', url, access_token, params=params)
+    # Sleep
+    if data.total_sleep_hours is not None or data.sleep_sessions:
+        health_data['sleep'] = {
+            'total_sleep_hours': data.total_sleep_hours or 0,
+            'total_in_bed_hours': data.total_in_bed_hours or 0,
+            'sessions_count': data.sleep_sessions_count or 0,
+            'sessions': data.sleep_sessions or [],
+            'daily': data.daily_sleep or [],  # Daily breakdown [{date, sleepHours}]
+        }
 
-        # Format repositories for frontend
-        formatted_repos = []
-        if isinstance(repos, list):
-            for repo in repos:
-                owner = repo.get('owner', {})
-                owner_login = owner.get('login', '') if isinstance(owner, dict) else ''
-                formatted_repos.append(
-                    {
-                        'full_name': repo.get('full_name', ''),
-                        'name': repo.get('name', ''),
-                        'owner': owner_login,
-                        'private': repo.get('private', False),
-                        'description': repo.get('description', ''),
-                        'updated_at': repo.get('updated_at', ''),
-                    }
-                )
+    # Heart rate
+    if data.heart_rate_average is not None:
+        health_data['heart_rate'] = {
+            'average': data.heart_rate_average,
+            'minimum': data.heart_rate_min,
+            'maximum': data.heart_rate_max,
+        }
 
-        return {'repositories': formatted_repos}
-    except Exception as e:
-        print(f"Error fetching GitHub repositories: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch repositories: {str(e)}")
+    # Active energy
+    if data.total_active_energy is not None:
+        health_data['active_energy'] = {
+            'total': data.total_active_energy,
+            'average_per_day': data.average_active_energy_per_day
+            or (data.total_active_energy / max(data.period_days, 1)),
+            'daily': data.daily_active_energy or [],  # Daily breakdown [{date, calories}]
+        }
 
+    # Workouts
+    if data.workouts:
+        health_data['workouts'] = data.workouts
 
-@router.put("/v1/integrations/github/default-repo", tags=['integrations'])
-def set_github_default_repo(
-    default_repo: str = Query(..., description="Repository in format 'owner/repo'"),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    """Set the default GitHub repository for creating issues."""
-    integration = users_db.get_integration(uid, 'github')
+    # Save the integration with health data
+    integration_data = {
+        'connected': True,
+        'health_data': health_data,
+        'last_synced': datetime.now(timezone.utc).isoformat(),
+    }
 
-    if not integration or not integration.get('connected'):
-        raise HTTPException(status_code=401, detail="GitHub is not connected")
+    users_db.set_integration(uid, 'apple_health', integration_data)
 
-    # Update integration with default repo
-    integration['default_repo'] = default_repo
-    users_db.set_integration(uid, 'github', integration)
-
-    return {"status": "ok", "default_repo": default_repo}
+    return {
+        "status": "ok",
+        "app_key": "apple_health",
+        "synced_at": integration_data['last_synced'],
+        "data_types_synced": list(health_data.keys()),
+    }
 
 
 # *****************************
@@ -518,19 +505,11 @@ async def oauth_callback(
 ):
     key_map = {
         'google-calendar': 'google_calendar',
-        'whoop': 'whoop',
-        'notion': 'notion',
-        'twitter': 'twitter',
-        'github': 'github',
     }
     normalized_key = key_map.get(app_key, app_key)
 
     client_envs = {
         'google_calendar': ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
-        'whoop': ('WHOOP_CLIENT_ID', 'WHOOP_CLIENT_SECRET'),
-        'notion': ('NOTION_CLIENT_ID', 'NOTION_CLIENT_SECRET'),
-        'twitter': ('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'),
-        'github': ('GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'),
     }
 
     if normalized_key not in client_envs:
@@ -548,10 +527,6 @@ async def oauth_callback(
     # Preserve existing redirect paths used during auth initiation
     redirect_path_map = {
         'google_calendar': '/v2/integrations/google-calendar/callback',
-        'whoop': '/v2/integrations/whoop/callback',
-        'notion': '/v2/integrations/notion/callback',
-        'twitter': '/v2/integrations/twitter/callback',
-        'github': '/v2/integrations/github/callback',
     }
     redirect_uri = f"{base_url_clean}{redirect_path_map[normalized_key]}"
 
@@ -565,81 +540,6 @@ async def oauth_callback(
                 'client_secret': client_secret,
                 'redirect_uri': redirect_uri,
                 'grant_type': 'authorization_code',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
-
-    if normalized_key == 'whoop':
-        config = OAuthProviderConfig(
-            token_endpoint='https://api.prod.whoop.com/oauth/oauth2/token',
-            token_request_type='form',
-            token_request_data={
-                'code': code,
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-                'grant_type': 'authorization_code',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
-
-    if normalized_key == 'notion':
-        credentials = f'{client_id}:{client_secret}'
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        config = OAuthProviderConfig(
-            token_endpoint='https://api.notion.com/v1/oauth/token',
-            token_request_type='json',
-            token_request_data={
-                'grant_type': 'authorization_code',
-                'code': code,
-                'redirect_uri': redirect_uri,
-            },
-            additional_headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Basic {encoded_credentials}',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
-
-    if normalized_key == 'twitter':
-        verifier_key = f"oauth_code_verifier:{state}"
-        code_verifier = redis_db.r.get(verifier_key)
-        if code_verifier:
-            code_verifier = code_verifier.decode() if isinstance(code_verifier, bytes) else code_verifier
-            redis_db.r.delete(verifier_key)
-        else:
-            print(f'ERROR: Code verifier not found for state {state}')
-            return render_oauth_response(request, normalized_key, success=False, error_type='invalid_state')
-
-        credentials = f'{client_id}:{client_secret}'
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        config = OAuthProviderConfig(
-            token_endpoint='https://api.twitter.com/2/oauth2/token',
-            token_request_type='form',
-            token_request_data={
-                'code': code,
-                'grant_type': 'authorization_code',
-                'redirect_uri': redirect_uri,
-                'code_verifier': code_verifier,
-            },
-            additional_headers={
-                'Authorization': f'Basic {encoded_credentials}',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
-
-    if normalized_key == 'github':
-        config = OAuthProviderConfig(
-            token_endpoint='https://github.com/login/oauth/access_token',
-            token_request_type='form',
-            token_request_data={
-                'code': code,
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-            },
-            additional_headers={
-                'Accept': 'application/json',
             },
         )
         return await handle_oauth_callback(request, normalized_key, code, state, config)

@@ -424,7 +424,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get deviceSettings => 'डिवाइस सेटिंग्स';
 
   @override
-  String get chatTools => 'चैट टूल्स';
+  String get integrations => 'एकीकरण';
 
   @override
   String get feedbackBug => 'प्रतिक्रिया / बग';
@@ -1010,13 +1010,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get vocabularyHint => 'शब्दावली (अल्पविराम से अलग)';
 
   @override
-  String get connect => 'कनेक्ट करें';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'जल्द आ रहा है';
 
   @override
-  String get chatToolsFooter => 'चैट में डेटा और मेट्रिक्स देखने के लिए अपने ऐप्स कनेक्ट करें।';
+  String get integrationsFooter => 'चैट में डेटा और मेट्रिक्स देखने के लिए अपने ऐप्स कनेक्ट करें।';
 
   @override
   String get completeAuthInBrowser => 'कृपया अपने ब्राउज़र में प्रमाणीकरण पूरा करें।';
@@ -1647,7 +1647,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get whatShouldWeMake => 'हमें क्या बनाना चाहिए?';
 
   @override
-  String get appName => 'ऐप का नाम';
+  String get appName => 'App Name';
 
   @override
   String get description => 'विवरण';
@@ -2240,7 +2240,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get folderName => 'फ़ोल्डर नाम';
 
   @override
-  String get descriptionOptional => 'विवरण (वैकल्पिक)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'फ़ोल्डर हटाने में विफल';
@@ -7768,5 +7768,436 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'डिवाइस WiFi सिंक का समर्थन नहीं करता, Bluetooth पर स्विच कर रहा है';
+
+  @override
+  String get appleHealthNotAvailable => 'इस डिवाइस पर Apple Health उपलब्ध नहीं है';
+
+  @override
+  String get downloadAudio => 'ऑडियो डाउनलोड करें';
+
+  @override
+  String get audioDownloadSuccess => 'ऑडियो सफलतापूर्वक डाउनलोड हुआ';
+
+  @override
+  String get audioDownloadFailed => 'ऑडियो डाउनलोड विफल';
+
+  @override
+  String get downloadingAudio => 'ऑडियो डाउनलोड हो रहा है...';
+
+  @override
+  String get shareAudio => 'ऑडियो साझा करें';
+
+  @override
+  String get preparingAudio => 'ऑडियो तैयार हो रहा है';
+
+  @override
+  String get gettingAudioFiles => 'ऑडियो फाइलें प्राप्त हो रही हैं...';
+
+  @override
+  String get downloadingAudioProgress => 'ऑडियो डाउनलोड हो रहा है';
+
+  @override
+  String get processingAudio => 'ऑडियो संसाधित हो रहा है';
+
+  @override
+  String get combiningAudioFiles => 'ऑडियो फाइलें मिलाई जा रही हैं...';
+
+  @override
+  String get audioReady => 'ऑडियो तैयार है';
+
+  @override
+  String get openingShareSheet => 'साझा करने की शीट खुल रही है...';
+
+  @override
+  String get audioShareFailed => 'साझा करना विफल';
+
+  @override
+  String get dailyRecaps => 'दैनिक सारांश';
+
+  @override
+  String get removeFilter => 'फ़िल्टर हटाएं';
+
+  @override
+  String get categoryConversationAnalysis => 'वार्तालाप विश्लेषण';
+
+  @override
+  String get categoryPersonalityClone => 'व्यक्तित्व क्लोन';
+
+  @override
+  String get categoryHealth => 'स्वास्थ्य';
+
+  @override
+  String get categoryEducation => 'शिक्षा';
+
+  @override
+  String get categoryCommunication => 'संचार';
+
+  @override
+  String get categoryEmotionalSupport => 'भावनात्मक सहायता';
+
+  @override
+  String get categoryProductivity => 'उत्पादकता';
+
+  @override
+  String get categoryEntertainment => 'मनोरंजन';
+
+  @override
+  String get categoryFinancial => 'वित्तीय';
+
+  @override
+  String get categoryTravel => 'यात्रा';
+
+  @override
+  String get categorySafety => 'सुरक्षा';
+
+  @override
+  String get categoryShopping => 'खरीदारी';
+
+  @override
+  String get categorySocial => 'सामाजिक';
+
+  @override
+  String get categoryNews => 'समाचार';
+
+  @override
+  String get categoryUtilities => 'उपकरण';
+
+  @override
+  String get categoryOther => 'अन्य';
+
+  @override
+  String get capabilityChat => 'चैट';
+
+  @override
+  String get capabilityConversations => 'वार्तालाप';
+
+  @override
+  String get capabilityExternalIntegration => 'बाहरी एकीकरण';
+
+  @override
+  String get capabilityNotification => 'सूचना';
+
+  @override
+  String get triggerAudioBytes => 'ऑडियो बाइट्स';
+
+  @override
+  String get triggerConversationCreation => 'वार्तालाप निर्माण';
+
+  @override
+  String get triggerTranscriptProcessed => 'प्रतिलिपि संसाधित';
+
+  @override
+  String get actionCreateConversations => 'वार्तालाप बनाएं';
+
+  @override
+  String get actionCreateMemories => 'यादें बनाएं';
+
+  @override
+  String get actionReadConversations => 'वार्तालाप पढ़ें';
+
+  @override
+  String get actionReadMemories => 'यादें पढ़ें';
+
+  @override
+  String get actionReadTasks => 'कार्य पढ़ें';
+
+  @override
+  String get scopeUserName => 'उपयोगकर्ता नाम';
+
+  @override
+  String get scopeUserFacts => 'उपयोगकर्ता तथ्य';
+
+  @override
+  String get scopeUserConversations => 'उपयोगकर्ता वार्तालाप';
+
+  @override
+  String get scopeUserChat => 'उपयोगकर्ता चैट';
+
+  @override
+  String get capabilitySummary => 'सारांश';
+
+  @override
+  String get capabilityFeatured => 'विशेष रुप से प्रदर्शित';
+
+  @override
+  String get capabilityTasks => 'कार्य';
+
+  @override
+  String get capabilityIntegrations => 'एकीकरण';
+
+  @override
+  String get categoryPersonalityClones => 'व्यक्तित्व क्लोन';
+
+  @override
+  String get categoryProductivityLifestyle => 'उत्पादकता और जीवनशैली';
+
+  @override
+  String get categorySocialEntertainment => 'सामाजिक और मनोरंजन';
+
+  @override
+  String get categoryProductivityTools => 'उत्पादकता उपकरण';
+
+  @override
+  String get categoryPersonalWellness => 'व्यक्तिगत कल्याण';
+
+  @override
+  String get rating => 'रेटिंग';
+
+  @override
+  String get categories => 'श्रेणियाँ';
+
+  @override
+  String get sortBy => 'क्रमबद्ध करें';
+
+  @override
+  String get highestRating => 'उच्चतम रेटिंग';
+
+  @override
+  String get lowestRating => 'न्यूनतम रेटिंग';
+
+  @override
+  String get resetFilters => 'फ़िल्टर रीसेट करें';
+
+  @override
+  String get applyFilters => 'फ़िल्टर लागू करें';
+
+  @override
+  String get mostInstalls => 'सबसे अधिक इंस्टॉल';
+
+  @override
+  String get couldNotOpenUrl => 'URL खोला नहीं जा सका। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get newTask => 'नया कार्य';
+
+  @override
+  String get viewAll => 'सभी देखें';
+
+  @override
+  String get addTask => 'कार्य जोड़ें';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ऑडियो फ़ाइल प्लेबैक के लिए उपलब्ध नहीं है';
+
+  @override
+  String get audioPlaybackFailed => 'ऑडियो चलाने में असमर्थ। फ़ाइल दूषित या अनुपलब्ध हो सकती है।';
+
+  @override
+  String get connectionGuide => 'कनेक्शन गाइड';
+
+  @override
+  String get iveDoneThis => 'मैंने यह कर लिया';
+
+  @override
+  String get pairNewDevice => 'नया डिवाइस पेयर करें';
+
+  @override
+  String get dontSeeYourDevice => 'अपना डिवाइस नहीं दिख रहा?';
+
+  @override
+  String get reportAnIssue => 'समस्या की रिपोर्ट करें';
+
+  @override
+  String get pairingTitleOmi => 'Omi चालू करें';
+
+  @override
+  String get pairingDescOmi => 'डिवाइस को तब तक दबाकर रखें जब तक वह वाइब्रेट न करे।';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'चालू करने के लिए बटन एक बार दबाएं। पेयरिंग मोड में LED बैंगनी रंग में ब्लिंक करेगी।';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass चालू करें';
+
+  @override
+  String get pairingDescOmiGlass => 'चालू करने के लिए साइड बटन को 3 सेकंड तक दबाकर रखें।';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'साइड बटन को 2 सेकंड तक दबाकर रखें। पेयर करने के लिए तैयार होने पर लाल LED ब्लिंक करेगी।';
+
+  @override
+  String get pairingTitleBee => 'Bee को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescBee => 'बटन को लगातार 5 बार दबाएं। लाइट नीले और हरे रंग में ब्लिंक करने लगेगी।';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescLimitless =>
+      'जब कोई भी लाइट दिखाई दे, एक बार दबाएं और फिर दबाकर रखें जब तक डिवाइस गुलाबी लाइट न दिखाए, फिर छोड़ दें।';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'पेंडेंट पर बटन दबाकर इसे चालू करें। यह स्वचालित रूप से पेयरिंग मोड में प्रवेश करेगा।';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescFieldy => 'डिवाइस को तब तक दबाकर रखें जब तक लाइट न दिखे।';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch कनेक्ट करें';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'अपने Apple Watch पर Omi ऐप इंस्टॉल करें और खोलें, फिर ऐप में कनेक्ट पर टैप करें।';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One को पेयरिंग मोड में डालें';
+
+  @override
+  String get pairingDescNeoOne => 'पावर बटन को तब तक दबाकर रखें जब तक LED ब्लिंक न करे। डिवाइस खोजने योग्य होगा।';
+
+  @override
+  String get downloadingFromDevice => 'डिवाइस से डाउनलोड हो रहा है';
+
+  @override
+  String get reconnectingToInternet => 'इंटरनेट से पुनः कनेक्ट हो रहा है...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$total में से $current अपलोड हो रहा है';
+  }
+
+  @override
+  String get processedStatus => 'संसाधित';
+
+  @override
+  String get corruptedStatus => 'दूषित';
+
+  @override
+  String nPending(int count) {
+    return '$count लंबित';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count संसाधित';
+  }
+
+  @override
+  String get synced => 'सिंक हो गया';
+
+  @override
+  String get noPendingRecordings => 'कोई लंबित रिकॉर्डिंग नहीं';
+
+  @override
+  String get noProcessedRecordings => 'अभी तक कोई संसाधित रिकॉर्डिंग नहीं';
+
+  @override
+  String get pending => 'लंबित';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version में नया क्या है';
+  }
+
+  @override
+  String get addToYourTaskList => 'अपनी कार्य सूची में जोड़ें?';
+
+  @override
+  String get failedToCreateShareLink => 'शेयर लिंक बनाने में विफल';
+
+  @override
+  String get deleteGoal => 'लक्ष्य हटाएं';
+
+  @override
+  String get deviceUpToDate => 'आपका डिवाइस अप टू डेट है';
+
+  @override
+  String get wifiConfiguration => 'वाईफाई कॉन्फ़िगरेशन';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'डिवाइस को फ़र्मवेयर डाउनलोड करने देने के लिए अपने वाईफाई क्रेडेंशियल दर्ज करें।';
+
+  @override
+  String get networkNameSsid => 'नेटवर्क नाम (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'वाईफाई नेटवर्क का नाम दर्ज करें';
+
+  @override
+  String get enterWifiPassword => 'वाईफाई पासवर्ड दर्ज करें';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

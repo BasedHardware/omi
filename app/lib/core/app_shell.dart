@@ -5,15 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/mobile/mobile_app.dart';
+import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
-import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -47,7 +49,14 @@ class _AppShellState extends State<AppShell> {
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
-    // Handle links
+    // Handle initial link (cold start — app launched by deep link)
+    final initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) {
+      Logger.debug('onInitialAppLink: $initialUri');
+      openAppLink(initialUri);
+    }
+
+    // Handle subsequent links (warm start — app already running)
     _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
       Logger.debug('onAppLink: $uri');
       openAppLink(uri);
@@ -60,7 +69,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    if (uri.pathSegments.first == 'apps') {
+    if (uri.pathSegments.first == 'apps' && uri.pathSegments.length > 1) {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
@@ -76,20 +85,18 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Wrapped Opened From DeepLink');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const Wrapped2025Page(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
+      }
+    } else if (uri.pathSegments.first == 'tasks' && uri.pathSegments.length > 1) {
+      if (mounted) {
+        final token = uri.pathSegments[1];
+        PlatformManager.instance.mixpanel.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
+        _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const UsagePage(showUpgradeDialog: true),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback
@@ -157,21 +164,19 @@ class _AppShellState extends State<AppShell> {
       } else {
         Logger.debug('ClickUp callback received but no success flag');
       }
-    } else if (uri.host == 'notion' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      await _handleOAuthCallback(uri, 'Notion', 'Notion', _handleNotionCallback);
     } else if (uri.host == 'google_calendar' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       await _handleOAuthCallback(uri, 'Google', 'Google Calendar', _handleGoogleCalendarCallback);
-    } else if (uri.host == 'whoop' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      await _handleOAuthCallback(uri, 'Whoop', 'Whoop', _handleWhoopCallback);
-    } else if (uri.host == 'github' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
-      await _handleOAuthCallback(uri, 'GitHub', 'GitHub', _handleGitHubCallback);
     } else {
       Logger.debug('Unknown link: $uri');
     }
   }
 
   Future<void> _handleOAuthCallback(
-      Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
+    Uri uri,
+    String errorDisplayName,
+    String oauthLogName,
+    Future<void> Function() onSuccess,
+  ) async {
     final error = uri.queryParameters['error'];
     if (error != null) {
       Logger.debug('$oauthLogName OAuth error: $error');
@@ -186,6 +191,35 @@ class _AppShellState extends State<AppShell> {
     } else {
       Logger.debug('$oauthLogName callback received but no success flag');
     }
+  }
+
+  Future<void> _handleSharedTasksDeepLink(String token) async {
+    final data = await action_items_api.getSharedActionItems(token);
+    if (!mounted) return;
+
+    if (data == null) {
+      AppSnackbar.showSnackbarError('Shared tasks not found or link expired');
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AcceptSharedTasksSheet(
+        token: token,
+        senderName: data['sender_name'] ?? 'Someone',
+        tasks: (data['tasks'] as List<dynamic>? ?? [])
+            .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
+            .toList(),
+        onAccepted: () {
+          // Refresh action items after accepting
+          if (mounted) {
+            context.read<ActionItemsProvider>().forceRefreshActionItems();
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _handleTodoistCallback() async {
@@ -274,28 +308,6 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleNotionCallback() async {
-    if (!mounted) return;
-
-    try {
-      // Capture provider before async operation to avoid use_build_context_synchronously
-      final integrationProvider = context.read<IntegrationProvider>();
-
-      // IntegrationProvider.loadFromBackend() fetches all connection statuses
-      // and syncs SharedPreferences for backward compatibility
-      await integrationProvider.loadFromBackend();
-
-      if (!mounted) return;
-      Logger.debug('✓ Notion authentication completed successfully');
-      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedNotion);
-    } catch (e) {
-      Logger.debug('Error handling Notion callback: $e');
-      if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshNotionStatus);
-      }
-    }
-  }
-
   Future<void> _handleGoogleCalendarCallback() async {
     if (!mounted) return;
 
@@ -318,93 +330,48 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleWhoopCallback() async {
-    if (!mounted) return;
-
-    try {
-      // Capture provider before async operation to avoid use_build_context_synchronously
-      final integrationProvider = context.read<IntegrationProvider>();
-
-      // IntegrationProvider.loadFromBackend() fetches all connection statuses
-      // and syncs SharedPreferences for backward compatibility
-      await integrationProvider.loadFromBackend();
-
-      if (!mounted) return;
-      Logger.debug('✓ Whoop authentication completed successfully');
-      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedWhoop);
-    } catch (e) {
-      Logger.debug('Error handling Whoop callback: $e');
-      if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshWhoopStatus);
-      }
-    }
-  }
-
-  Future<void> _handleGitHubCallback() async {
-    if (!mounted) return;
-
-    try {
-      // Capture provider before async operation to avoid use_build_context_synchronously
-      final integrationProvider = context.read<IntegrationProvider>();
-
-      // IntegrationProvider.loadFromBackend() fetches all connection statuses
-      // and syncs SharedPreferences for backward compatibility
-      await integrationProvider.loadFromBackend();
-
-      if (!mounted) return;
-      Logger.debug('✓ GitHub authentication completed successfully');
-      AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGitHub);
-
-      // Open GitHub settings page to select default repository
-      if (mounted) {
-        await Future.delayed(const Duration(milliseconds: 500)); // Small delay for UI
-        if (mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const GitHubSettingsPage(),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      Logger.debug('Error handling GitHub callback: $e');
-      if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToRefreshGitHubStatus);
-      }
-    }
-  }
-
   @override
   void initState() {
-    initDeepLinks();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
-        try {
-          await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
-        } catch (e) {
-          Logger.debug('Failed to login to Intercom: $e');
-        }
-
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-        context.read<UsageProvider>().fetchSubscription();
-        context.read<TaskIntegrationProvider>().loadFromBackend();
-
-        NotificationService.instance.saveNotificationToken();
-      } else {
-        if (!PlatformManager.instance.isAnalyticsSupported) {
-          await PlatformManager.instance.intercom.loginUnidentifiedUser();
-        }
-      }
-      PlatformManager.instance.intercom.setUserAttributes();
-    });
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initializeProviders();
+      // Start deep link handling AFTER providers are ready,
+      // so getInitialLink() doesn't race against cache loading (#4763)
+      if (mounted) {
+        initDeepLinks();
+      }
+    });
+  }
+
+  Future<void> _initializeProviders() async {
+    if (!mounted) return;
+    final isSignedIn = context.read<AuthenticationProvider>().isSignedIn();
+    if (isSignedIn) {
+      context.read<HomeProvider>().setupHasSpeakerProfile();
+      context.read<HomeProvider>().setupUserPrimaryLanguage();
+      context.read<UserProvider>().initialize();
+      context.read<PeopleProvider>().initialize();
+      try {
+        await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
+      } catch (e) {
+        Logger.debug('Failed to login to Intercom: $e');
+      }
+
+      if (!mounted) return;
+      context.read<MessageProvider>().setMessagesFromCache();
+      context.read<AppProvider>().setAppsFromCache();
+      context.read<MessageProvider>().refreshMessages();
+      context.read<UsageProvider>().fetchSubscription();
+      context.read<TaskIntegrationProvider>().loadFromBackend();
+
+      NotificationService.instance.saveNotificationToken();
+    } else {
+      if (!PlatformManager.instance.isAnalyticsSupported) {
+        await PlatformManager.instance.intercom.loginUnidentifiedUser();
+      }
+      if (!mounted) return;
+    }
+    PlatformManager.instance.intercom.setUserAttributes();
   }
 
   @override

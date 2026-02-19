@@ -35,6 +35,7 @@ import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/calendar_provider.dart';
@@ -44,6 +45,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
@@ -138,15 +140,14 @@ Future _init() async {
   await ServiceManager.init();
 
   // Firebase
-  if (PlatformService.isWindows) {
-    // Windows does not support flavors
-    await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
+  if (Firebase.apps.isEmpty) {
+    final options = (PlatformService.isWindows || F.env == Environment.prod)
+        ? prod.DefaultFirebaseOptions.currentPlatform
+        : dev.DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp(options: options);
   } else {
-    if (F.env == Environment.prod) {
-      await Firebase.initializeApp(options: prod.DefaultFirebaseOptions.currentPlatform);
-    } else {
-      await Firebase.initializeApp(options: dev.DefaultFirebaseOptions.currentPlatform);
-    }
+    // Firebase may already be initialized by native SDK (macOS)
+    debugPrint('Firebase already initialized.');
   }
 
   await PlatformManager.initializeServices();
@@ -159,8 +160,20 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
+  // DEBUG: Log Firebase Auth state before getIdToken
+  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  if (isAuth) PlatformManager.instance.mixpanel.identify();
+  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
+  if (isAuth) {
+    PlatformManager.instance.mixpanel.identify();
+    // Restore onboarding state from server if not already set locally
+    // This handles the case where cached credentials are used on startup
+    if (!SharedPreferencesUtil().onboardingCompleted) {
+      print('DEBUG main: Restoring onboarding state from server...');
+      await AuthService.instance.restoreOnboardingState();
+      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
+    }
+  }
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
 
   await GrowthbookUtil.init();
@@ -362,6 +375,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
+          ChangeNotifierProvider(create: (context) => GoalsProvider()..init()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
           ChangeNotifierProvider(create: (context) => IntegrationProvider()),
@@ -369,6 +383,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => FolderProvider()),
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
           ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+          ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

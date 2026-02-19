@@ -10,6 +10,7 @@ import 'package:upgrader/upgrader.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/desktop/pages/settings/desktop_settings_modal.dart';
@@ -37,7 +38,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
-import '../../pages/conversations/sync_page.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'actions/desktop_actions_page.dart';
 import 'apps/desktop_add_app_page.dart';
 import 'apps/desktop_apps_page.dart';
@@ -168,6 +169,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   void initState() {
     super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
+    updateUserOnboardingState(completed: true);
     _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
 
     // Initialize shortcut service to listen for native navigation requests
@@ -512,6 +514,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             onTap: () => _navigateToIndex(4, homeProvider),
                           ),
 
+                          const SizedBox(height: 16),
+
+                          // Rewind - launches bundled Swift app
+                          _buildRewindItem(),
+
                           const Spacer(),
 
                           // Subscription upgrade banner
@@ -791,8 +798,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            MixpanelManager()
-                .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
+            MixpanelManager().bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Tasks', 'Apps'][index]);
             onTap();
           },
           borderRadius: BorderRadius.circular(10),
@@ -838,6 +844,94 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeInOut,
     );
+  }
+
+  /// Rewind button - launches the bundled Swift app in rewind mode
+  Widget _buildRewindItem() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _launchRewindApp,
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                // Rewind icon
+                const Icon(
+                  FontAwesomeIcons.clockRotateLeft,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 15,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Rewind',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: ResponsiveHelper.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        'Search your screen history',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Arrow indicator
+                const Icon(
+                  Icons.chevron_right,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Launch the bundled Omi Computer app in rewind mode
+  Future<void> _launchRewindApp() async {
+    MixpanelManager().track('Rewind Launched');
+
+    try {
+      // Get path to bundled app inside our own bundle
+      // The app is at: Omi.app/Contents/MacOS/Omi Computer.app
+      final executablePath = Platform.resolvedExecutable;
+      final macOSDir = File(executablePath).parent.path;
+      final bundledAppPath = '$macOSDir/Omi Computer.app';
+
+      Logger.debug('Launching Rewind app from: $bundledAppPath');
+
+      await Process.run('open', [bundledAppPath, '--args', '--mode=rewind']);
+    } catch (e) {
+      Logger.error('Failed to launch Rewind app: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open Rewind. Please try again.'),
+          ),
+        );
+      }
+    }
   }
 
   /// Navigate to create app page (index 5)

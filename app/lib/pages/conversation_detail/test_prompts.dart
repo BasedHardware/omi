@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import '../../backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 
 class TestPromptsPage extends StatefulWidget {
   final ServerConversation conversation;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -131,7 +131,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
           5,
           (index) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: Shimmer.fromColors(
+            child: ShimmerWithTimeout(
               baseColor: AppStyles.backgroundSecondary,
               highlightColor: AppStyles.backgroundTertiary,
               child: Container(

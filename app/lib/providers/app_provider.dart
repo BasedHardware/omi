@@ -419,8 +419,14 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -430,11 +436,18 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
       await Future.delayed(const Duration(milliseconds: 50));
       filterApps();
+      updatePrefApps();
     } catch (e) {
       Logger.debug('Error loading apps: $e');
       // Fallback to cached data
@@ -577,8 +590,14 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       Logger.debug('Refreshing apps after installation/change...');
-      // Fetch grouped apps from server (backend handles all filtering and grouping)
-      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      // Fetch grouped apps and user's enabled app IDs in parallel
+      final results = await Future.wait([
+        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsServer(),
+      ]);
+      final groups = results[0] as List<Map<String, dynamic>>;
+      final enabledAppIds = (results[1] as List<String>).toSet();
+
       groupedApps = groups;
 
       // Flatten for search/filter views
@@ -588,6 +607,12 @@ class AppProvider extends BaseProvider {
         flat.addAll(data);
       }
       apps = flat;
+
+      // Set enabled state from server
+      for (final app in apps) {
+        app.enabled = enabledAppIds.contains(app.id);
+      }
+
       appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too

@@ -1,0 +1,40 @@
+name: Create Pull Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch name to create PR from'
+        required: true
+        default: 'cursor-test-1769836655'
+      title:
+        description: 'PR Title'
+        required: true
+        default: 'Test PR - Automated PR Creation Demo'
+      base:
+        description: 'Base branch'
+        required: true
+        default: 'main'
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --title "${{ github.event.inputs.title }}" \
+            --body "This is a test pull request created automatically to demonstrate the PR creation workflow. This PR can be safely closed or merged." \
+            --base "${{ github.event.inputs.base }}" \
+            --head "${{ github.event.inputs.branch }}"

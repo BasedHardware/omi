@@ -426,7 +426,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceSettings => 'Enhetsinställningar';
 
   @override
-  String get chatTools => 'Chattverktyg';
+  String get integrations => 'Integrationer';
 
   @override
   String get feedbackBug => 'Återkoppling / Bugg';
@@ -1015,13 +1015,13 @@ class AppLocalizationsSv extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Anslut';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Anslut dina appar för att visa data och mått i chatten.';
+  String get integrationsFooter => 'Anslut dina appar för att visa data och mått i chatten.';
 
   @override
   String get completeAuthInBrowser => 'Slutför autentiseringen i din webbläsare. När du är klar, återvänd till appen.';
@@ -1656,7 +1656,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get whatShouldWeMake => 'Vad ska vi skapa?';
 
   @override
-  String get appName => 'Appnamn';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beskrivning';
@@ -2269,7 +2269,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get folderName => 'Mappnamn';
 
   @override
-  String get descriptionOptional => 'Beskrivning (valfritt)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Det gick inte att ta bort mappen';
@@ -7794,5 +7794,433 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Enheten stöder inte WiFi-synkronisering, byter till Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health är inte tillgängligt på denna enhet';
+
+  @override
+  String get downloadAudio => 'Ladda ner ljud';
+
+  @override
+  String get audioDownloadSuccess => 'Ljud nedladdat framgångsrikt';
+
+  @override
+  String get audioDownloadFailed => 'Misslyckades att ladda ner ljud';
+
+  @override
+  String get downloadingAudio => 'Laddar ner ljud...';
+
+  @override
+  String get shareAudio => 'Dela ljud';
+
+  @override
+  String get preparingAudio => 'Förbereder ljud';
+
+  @override
+  String get gettingAudioFiles => 'Hämtar ljudfiler...';
+
+  @override
+  String get downloadingAudioProgress => 'Laddar ner ljud';
+
+  @override
+  String get processingAudio => 'Bearbetar ljud';
+
+  @override
+  String get combiningAudioFiles => 'Kombinerar ljudfiler...';
+
+  @override
+  String get audioReady => 'Ljud klart';
+
+  @override
+  String get openingShareSheet => 'Öppnar delningsblad...';
+
+  @override
+  String get audioShareFailed => 'Delning misslyckades';
+
+  @override
+  String get dailyRecaps => 'Dagliga Sammanfattningar';
+
+  @override
+  String get removeFilter => 'Ta Bort Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtalsanalys';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighetsklon';
+
+  @override
+  String get categoryHealth => 'Hälsa';
+
+  @override
+  String get categoryEducation => 'Utbildning';
+
+  @override
+  String get categoryCommunication => 'Kommunikation';
+
+  @override
+  String get categoryEmotionalSupport => 'Emotionellt stöd';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underhållning';
+
+  @override
+  String get categoryFinancial => 'Ekonomi';
+
+  @override
+  String get categoryTravel => 'Resor';
+
+  @override
+  String get categorySafety => 'Säkerhet';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Socialt';
+
+  @override
+  String get categoryNews => 'Nyheter';
+
+  @override
+  String get categoryUtilities => 'Verktyg';
+
+  @override
+  String get categoryOther => 'Övrigt';
+
+  @override
+  String get capabilityChat => 'Chatt';
+
+  @override
+  String get capabilityConversations => 'Samtal';
+
+  @override
+  String get capabilityExternalIntegration => 'Extern integration';
+
+  @override
+  String get capabilityNotification => 'Avisering';
+
+  @override
+  String get triggerAudioBytes => 'Ljudbytes';
+
+  @override
+  String get triggerConversationCreation => 'Skapande av samtal';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkription bearbetad';
+
+  @override
+  String get actionCreateConversations => 'Skapa samtal';
+
+  @override
+  String get actionCreateMemories => 'Skapa minnen';
+
+  @override
+  String get actionReadConversations => 'Läs samtal';
+
+  @override
+  String get actionReadMemories => 'Läs minnen';
+
+  @override
+  String get actionReadTasks => 'Läs uppgifter';
+
+  @override
+  String get scopeUserName => 'Användarnamn';
+
+  @override
+  String get scopeUserFacts => 'Användarfakta';
+
+  @override
+  String get scopeUserConversations => 'Användarsamtal';
+
+  @override
+  String get scopeUserChat => 'Användarchatt';
+
+  @override
+  String get capabilitySummary => 'Sammanfattning';
+
+  @override
+  String get capabilityFeatured => 'Utvalda';
+
+  @override
+  String get capabilityTasks => 'Uppgifter';
+
+  @override
+  String get capabilityIntegrations => 'Integrationer';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighetskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet & livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Socialt & underhållning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsverktyg';
+
+  @override
+  String get categoryPersonalWellness => 'Personligt välbefinnande';
+
+  @override
+  String get rating => 'Betyg';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sortera';
+
+  @override
+  String get highestRating => 'Högsta betyg';
+
+  @override
+  String get lowestRating => 'Lägsta betyg';
+
+  @override
+  String get resetFilters => 'Återställ filter';
+
+  @override
+  String get applyFilters => 'Tillämpa filter';
+
+  @override
+  String get mostInstalls => 'Flest installationer';
+
+  @override
+  String get couldNotOpenUrl => 'Det gick inte att öppna URL:en. Försök igen.';
+
+  @override
+  String get newTask => 'Ny uppgift';
+
+  @override
+  String get viewAll => 'Visa alla';
+
+  @override
+  String get addTask => 'Lägg till uppgift';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Ljudfilen är inte tillgänglig för uppspelning';
+
+  @override
+  String get audioPlaybackFailed => 'Kan inte spela upp ljud. Filen kan vara skadad eller saknas.';
+
+  @override
+  String get connectionGuide => 'Anslutningsguide';
+
+  @override
+  String get iveDoneThis => 'Jag har gjort detta';
+
+  @override
+  String get pairNewDevice => 'Parkoppla ny enhet';
+
+  @override
+  String get dontSeeYourDevice => 'Ser du inte din enhet?';
+
+  @override
+  String get reportAnIssue => 'Rapportera ett problem';
+
+  @override
+  String get pairingTitleOmi => 'Slå på Omi';
+
+  @override
+  String get pairingDescOmi => 'Tryck och håll enheten tills den vibrerar för att slå på den.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sätt Omi DevKit i parkopplingsläge';
+
+  @override
+  String get pairingDescOmiDevkit => 'Tryck på knappen en gång för att slå på. LED:en blinkar lila i parkopplingsläge.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Slå på Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Tryck och håll sidoknappen i 3 sekunder för att slå på.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sätt Plaud Note i parkopplingsläge';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Tryck och håll sidoknappen i 2 sekunder. Den röda LED:en blinkar när den är redo att parkoppla.';
+
+  @override
+  String get pairingTitleBee => 'Sätt Bee i parkopplingsläge';
+
+  @override
+  String get pairingDescBee => 'Tryck på knappen 5 gånger i rad. Ljuset börjar blinka blått och grönt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sätt Limitless i parkopplingsläge';
+
+  @override
+  String get pairingDescLimitless =>
+      'När en lampa lyser, tryck en gång och tryck sedan och håll tills enheten visar ett rosa ljus, släpp sedan.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sätt Friend Pendant i parkopplingsläge';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Tryck på knappen på hänget för att slå på det. Det går automatiskt till parkopplingsläge.';
+
+  @override
+  String get pairingTitleFieldy => 'Sätt Fieldy i parkopplingsläge';
+
+  @override
+  String get pairingDescFieldy => 'Tryck och håll enheten tills ljuset visas för att slå på den.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Anslut Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installera och öppna Omi-appen på din Apple Watch, tryck sedan på Anslut i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sätt Neo One i parkopplingsläge';
+
+  @override
+  String get pairingDescNeoOne => 'Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.';
+
+  @override
+  String get downloadingFromDevice => 'Laddar ner från enhet';
+
+  @override
+  String get reconnectingToInternet => 'Återansluter till internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laddar upp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Bearbetad';
+
+  @override
+  String get corruptedStatus => 'Skadad';
+
+  @override
+  String nPending(int count) {
+    return '$count väntande';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count bearbetade';
+  }
+
+  @override
+  String get synced => 'Synkroniserad';
+
+  @override
+  String get noPendingRecordings => 'Inga väntande inspelningar';
+
+  @override
+  String get noProcessedRecordings => 'Inga bearbetade inspelningar ännu';
+
+  @override
+  String get pending => 'Väntande';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lägg till i din uppgiftslista?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunde inte skapa delningslänk';
+
+  @override
+  String get deleteGoal => 'Ta bort mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhet är uppdaterad';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.';
+
+  @override
+  String get networkNameSsid => 'Nätverksnamn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ange WiFi-nätverksnamn';
+
+  @override
+  String get enterWifiPassword => 'Ange WiFi-lösenord';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

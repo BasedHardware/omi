@@ -9,13 +9,14 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
@@ -32,9 +33,9 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import '../../../backend/http/api/payment.dart';
-import '../../../backend/schema/app.dart';
-import '../widgets/show_app_options_sheet.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
 
@@ -122,7 +123,38 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return '$day $month ${date.year}';
   }
 
+  /// Safely launches a URL with fallback from in-app browser to external browser.
+  /// Returns true if the URL was launched successfully, false otherwise.
+  Future<bool> _launchUrlSafely(Uri uri) async {
+    final supportsInAppBrowser = uri.scheme == 'http' || uri.scheme == 'https';
+
+    try {
+      if (supportsInAppBrowser) {
+        await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return true;
+    } catch (e) {
+      Logger.warning('Failed to launch URL with in-app browser: $e');
+      // Fall back to external browser
+      try {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return true;
+      } catch (e) {
+        Logger.warning('Failed to launch URL with external browser: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.couldNotOpenUrl)),
+          );
+        }
+        return false;
+      }
+    }
+  }
+
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
+    if (app.externalIntegration == null) return;
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
@@ -272,6 +304,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       await _refreshAppDetails();
     });
     if (app.worksExternally()) {
+      checkSetupCompleted();
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
@@ -862,9 +895,24 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  app.author.decodeString,
-                                  style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        app.author.decodeString,
+                                        style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (app.official) ...[
+                                      const SizedBox(width: 4),
+                                      const FaIcon(
+                                        FontAwesomeIcons.solidCircleCheck,
+                                        size: 14,
+                                        color: Colors.deepPurpleAccent,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
@@ -905,7 +953,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   return;
                                                 }
                                                 _checkPaymentStatus(app.id);
-                                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                                await _launchUrlSafely(uri);
                                               } else {
                                                 await _toggleApp(app.id, true);
                                               }
@@ -1338,7 +1386,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                                 checkSetupCompleted(autoInstallIfCompleted: true);
                               },
                               child: Padding(
@@ -1428,7 +1476,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                                await _launchUrlSafely(uri);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(
@@ -1502,7 +1550,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     fit: BoxFit.contain,
                                     placeholder: (context, url) => SizedBox(
                                       width: 150,
-                                      child: Shimmer.fromColors(
+                                      child: ShimmerWithTimeout(
                                         baseColor: Colors.grey[900]!,
                                         highlightColor: Colors.grey[800]!,
                                         child: Container(
@@ -1714,7 +1762,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
         return;
       }
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      await _launchUrlSafely(uri);
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1732,7 +1780,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             }
             return;
           }
-          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+          await _launchUrlSafely(uri);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
@@ -1805,6 +1853,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
         app.enabled = true;
         appLoading = false;
       });
+      if (app.worksExternally()) {
+        checkSetupCompleted();
+      }
 
       // Automatically open app home page after installation if available
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
@@ -2127,7 +2178,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       mainAxisSize: MainAxisSize.min,
       children: [
         // Recent reviews from others
-        ...filteredReviews.map((review) => _buildReviewItem(review)),
+        ...filteredReviews.map((review) => _buildReviewItem(context, review)),
         // User's review section (editable)
         if (showUserReviewSection) ...[
           if (filteredReviews.isNotEmpty) const SizedBox(height: 8),
@@ -2153,7 +2204,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
             editRating = userReview.score;
           });
         },
-        child: _buildReviewItem(userReview, isUserReview: true),
+        child: _buildReviewItem(context, userReview, isUserReview: true),
       );
     }
   }
@@ -2261,7 +2312,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : Text(widget.userReview == null ? 'Submit Review' : 'Update Review'),
+                  : Text(widget.userReview == null
+                      ? AppLocalizations.of(context)!.submitReview
+                      : AppLocalizations.of(context)!.updateReview),
             ),
           ),
         ],
@@ -2269,9 +2322,10 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     );
   }
 
-  Widget _buildReviewItem(AppReview review, {bool isUserReview = false}) {
+  Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
+    final l10n = AppLocalizations.of(context)!;
     final displayName =
-        isUserReview ? 'Your Review' : (review.username.isNotEmpty ? review.username : 'Anonymous User');
+        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(

@@ -375,10 +375,11 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.grey),
-                onPressed: widget.onCollapse,
-              ),
+              if (widget.onCollapse != null)
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: widget.onCollapse,
+                ),
             ],
           ),
           const SizedBox(height: 8),

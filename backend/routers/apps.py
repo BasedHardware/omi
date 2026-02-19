@@ -1,18 +1,34 @@
 import json
 import os
 import asyncio
+import time
 from datetime import datetime, timezone
-from typing import List
-from pydantic import ValidationError
+from typing import List, Optional
+from urllib.parse import urlparse
+from pydantic import BaseModel as PydanticBaseModel, ValidationError
 import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi.responses import HTMLResponse
 
 from utils.apps import fetch_app_chat_tools_from_manifest
+from utils.mcp_client import (
+    discover_oauth_metadata,
+    register_oauth_client,
+    build_authorization_url,
+    exchange_oauth_code,
+    refresh_oauth_token,
+    discover_mcp_tools,
+    fetch_brandfetch_logo,
+    generate_state_token,
+    parse_state_token,
+    generate_pkce_pair,
+)
 
 from database.apps import (
     change_app_approval_status,
     get_unapproved_public_apps_db,
+    get_app_by_id_db,
     add_app_to_db,
     update_app_in_db,
     delete_app_from_db,
@@ -103,6 +119,55 @@ from utils.social import (
 router = APIRouter()
 
 
+def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
+    """Fetch and process chat tools manifest, updating and returning app_dict.
+
+    Fetches the manifest from chat_tools_manifest_url, resolves relative endpoints
+    to absolute URLs using app_home_url, and stores chat_messages config.
+
+    Args:
+        external_integration: The external_integration dict from app data
+        app_dict: The app dict to update with chat_tools and chat_messages config
+
+    Returns:
+        The updated app_dict
+    """
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        return app_dict
+
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+    if not manifest_result:
+        return app_dict
+
+    fetched_tools = manifest_result.get('tools')
+    if fetched_tools:
+        # Resolve relative endpoints to absolute URLs
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        if base_url:
+            for tool in fetched_tools:
+                endpoint = tool.get('endpoint', '')
+                if endpoint.startswith('/') and not endpoint.startswith('//'):
+                    tool['endpoint'] = f"{base_url}{endpoint}"
+        app_dict['chat_tools'] = fetched_tools
+
+    # Store chat_messages config in external_integration
+    chat_messages = manifest_result.get('chat_messages')
+    if 'external_integration' not in app_dict:
+        app_dict['external_integration'] = {}
+    if chat_messages:
+        app_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        app_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
+        app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', False)
+    else:
+        # Reset all chat_messages fields to defaults when not in manifest
+        app_dict['external_integration']['chat_messages_enabled'] = False
+        app_dict['external_integration']['chat_messages_target'] = 'app'
+        app_dict['external_integration']['chat_messages_notify'] = False
+
+    return app_dict
+
+
 def _get_categories():
     return [
         {'title': 'Popular', 'id': 'popular'},
@@ -134,6 +199,12 @@ def _get_categories():
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     apps = get_available_apps(uid, include_reviews=include_reviews)
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
+
+
+@router.get('/v1/apps/enabled', tags=['v1'])
+def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
+    """Returns the list of app IDs the user has enabled/installed."""
+    return get_enabled_apps(uid)
 
 
 @router.get('/v2/apps', tags=['v2'])
@@ -446,18 +517,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # Fetch chat tools from manifest URL (only way to add chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                app_dict['chat_tools'] = fetched_tools
+        app_dict = _process_chat_tools_manifest(external_integration, app_dict)
 
     add_app_to_db(app_dict)
 
@@ -681,18 +741,7 @@ def update_app(
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                update_dict['chat_tools'] = fetched_tools
+        update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     update_app_in_db(update_dict)
 
@@ -836,7 +885,7 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
         'review': data.get('review', ''),
         'updated_at': datetime.now(timezone.utc).isoformat(),
         'rated_at': old_review['rated_at'],
-        'username': old_review.get('username', ''),
+        'username': data.get('username', old_review.get('username', '')),
         'response': old_review.get('response', ''),
         'uid': uid,
     }
@@ -1284,6 +1333,326 @@ async def update_omi_persona_connected_accounts(uid: str):
                 delete_app_cache_by_id(persona['id'])
     except Exception as e:
         print(f"Error updating persona connected accounts: {e}")
+
+
+# ******************************************************
+# ******************* MCP SERVERS **********************
+# ******************************************************
+
+
+class McpServerRequest(PydanticBaseModel):
+    name: str
+    mcp_server_url: str
+    description: Optional[str] = None
+
+
+def _serialize_chat_tools_for_firestore(tools) -> list:
+    """Serialize ChatTool objects for Firestore, converting parameters dict to JSON string.
+
+    Firestore has nesting depth limits that MCP tool schemas can exceed,
+    so we store the parameters field as a JSON string.
+    """
+    result = []
+    for t in tools:
+        d = t.model_dump()
+        if d.get('parameters') is not None:
+            d['parameters'] = json.dumps(d['parameters'])
+        result.append(d)
+    return result
+
+
+@router.post('/v1/apps/mcp', tags=['v1'])
+async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Add a remote MCP server as a private app with chat tools.
+
+    1. Extracts domain from URL and fetches logo via Brandfetch / logo.dev
+    2. Checks for OAuth metadata at /.well-known/oauth-authorization-server
+    3. If OAuth required: registers client, returns auth URL for the user
+    4. If no OAuth: discovers tools directly, creates app immediately
+    """
+    server_url = data.mcp_server_url.strip().rstrip('/')
+    app_name = data.name.strip()
+    app_description = data.description.strip() if data.description else f"MCP server tools from {app_name}"
+
+    if not app_name:
+        raise HTTPException(status_code=422, detail='App name is required')
+    if not server_url:
+        raise HTTPException(status_code=422, detail='MCP server URL is required')
+
+    # Extract domain for logo
+    parsed = urlparse(server_url)
+    domain = parsed.netloc
+    logo_url = await fetch_brandfetch_logo(domain) or ''
+
+    app_id = str(ULID())
+    user = get_user_from_uid(uid)
+
+    # Check for OAuth metadata
+    oauth_meta = await discover_oauth_metadata(server_url)
+
+    if oauth_meta and oauth_meta.get('authorization_endpoint'):
+        # OAuth required — register client and return auth URL
+        base_url = os.getenv('BASE_API_URL', '').rstrip('/')
+        if not base_url:
+            raise HTTPException(status_code=500, detail='BASE_API_URL not configured')
+
+        redirect_uri = f"{base_url}/v1/apps/mcp/callback"
+
+        client_info = {}
+        if oauth_meta.get('registration_endpoint'):
+            try:
+                client_info = await register_oauth_client(
+                    oauth_meta['registration_endpoint'], redirect_uri, scopes=oauth_meta.get('scopes_supported')
+                )
+            except Exception as e:
+                raise HTTPException(status_code=502, detail=f'OAuth client registration failed: {str(e)}')
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail='MCP server requires OAuth but does not support dynamic client registration',
+            )
+
+        state = generate_state_token(app_id, uid)
+
+        # Generate PKCE pair (required by MCP OAuth 2.1 spec)
+        code_verifier, code_challenge = generate_pkce_pair()
+
+        auth_url = build_authorization_url(
+            oauth_meta['authorization_endpoint'],
+            client_info['client_id'],
+            redirect_uri,
+            state,
+            scopes=oauth_meta.get('scopes_supported'),
+            code_challenge=code_challenge,
+        )
+        print(f"[MCP OAuth] client_id={client_info['client_id']}, redirect_uri={redirect_uri}")
+        print(f"[MCP OAuth] auth_url={auth_url}")
+
+        # Create app in pending state (no tools yet)
+        app_dict = {
+            'id': app_id,
+            'name': app_name,
+            'description': app_description,
+            'image': logo_url,
+            'uid': uid,
+            'author': user.get('display_name', ''),
+            'email': user.get('email', ''),
+            'private': True,
+            'approved': True,
+            'status': 'pending_mcp_auth',
+            'category': 'utilities-and-tools',
+            'capabilities': ['chat'],
+            'created_at': datetime.now(timezone.utc),
+            'external_integration': {
+                'mcp_server_url': server_url,
+                'mcp_oauth_tokens': {
+                    'client_id': client_info['client_id'],
+                    'client_secret': client_info.get('client_secret'),
+                    'token_endpoint': oauth_meta['token_endpoint'],
+                    'redirect_uri': redirect_uri,
+                    'code_verifier': code_verifier,
+                },
+            },
+            'chat_tools': [],
+        }
+        add_app_to_db(app_dict)
+
+        return {
+            'app_id': app_id,
+            'requires_oauth': True,
+            'auth_url': auth_url,
+        }
+
+    else:
+        # No OAuth — discover tools directly
+        try:
+            tools = await discover_mcp_tools(server_url)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f'Failed to discover MCP tools: {str(e)}')
+
+        if not tools:
+            raise HTTPException(status_code=422, detail='No tools found on the MCP server')
+
+        # Use the resolved URL from discovery (may differ from user input if /http or /sse was needed)
+        resolved_url = tools[0].endpoint if tools else server_url
+
+        app_dict = {
+            'id': app_id,
+            'name': app_name,
+            'description': app_description,
+            'image': logo_url,
+            'uid': uid,
+            'author': user.get('display_name', ''),
+            'email': user.get('email', ''),
+            'private': True,
+            'approved': True,
+            'status': 'approved',
+            'category': 'utilities-and-tools',
+            'capabilities': ['chat'],
+            'created_at': datetime.now(timezone.utc),
+            'external_integration': {
+                'mcp_server_url': resolved_url,
+            },
+            'chat_tools': _serialize_chat_tools_for_firestore(tools),
+        }
+        add_app_to_db(app_dict)
+
+        return {
+            'app_id': app_id,
+            'requires_oauth': False,
+            'tools_count': len(tools),
+            'tool_names': [t.name for t in tools],
+        }
+
+
+@router.get('/v1/apps/mcp/callback', tags=['v1'])
+async def mcp_oauth_callback(code: str, state: str):
+    """OAuth callback for MCP server authorization.
+
+    Exchanges the authorization code for tokens, discovers tools, updates the app.
+    Returns an HTML success/failure page.
+    """
+    try:
+        app_id, uid = parse_state_token(state)
+    except ValueError:
+        return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
+
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+
+    ext = app_data.get('external_integration', {})
+    oauth_tokens = ext.get('mcp_oauth_tokens', {})
+    server_url = ext.get('mcp_server_url', '')
+
+    if not oauth_tokens or not oauth_tokens.get('token_endpoint'):
+        return HTMLResponse('<html><body><h1>OAuth configuration missing</h1></body></html>', status_code=400)
+
+    # Exchange code for tokens (include PKCE code_verifier)
+    try:
+        token_data = await exchange_oauth_code(
+            oauth_tokens['token_endpoint'],
+            code,
+            oauth_tokens.get('redirect_uri', ''),
+            oauth_tokens['client_id'],
+            oauth_tokens.get('client_secret'),
+            code_verifier=oauth_tokens.get('code_verifier'),
+        )
+    except Exception as e:
+        return HTMLResponse(f'<html><body><h1>Token exchange failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+
+    # Update stored tokens
+    oauth_tokens['access_token'] = token_data['access_token']
+    oauth_tokens['refresh_token'] = token_data.get('refresh_token')
+    if token_data.get('expires_in'):
+        oauth_tokens['expires_at'] = time.time() + token_data['expires_in']
+
+    # Discover tools with the new access token
+    try:
+        tools = await discover_mcp_tools(server_url, token_data['access_token'])
+    except Exception as e:
+        return HTMLResponse(f'<html><body><h1>Tool discovery failed</h1><p>{str(e)}</p></body></html>', status_code=502)
+
+    # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
+    resolved_url = tools[0].endpoint if tools else server_url
+
+    # Update app with tokens and tools
+    update_dict = {
+        'id': app_id,
+        'status': 'approved',
+        'external_integration': {
+            'mcp_server_url': resolved_url,
+            'mcp_oauth_tokens': oauth_tokens,
+        },
+        'chat_tools': _serialize_chat_tools_for_firestore(tools),
+    }
+    update_app_in_db(update_dict)
+    delete_app_cache_by_id(app_id)
+
+    # Auto-enable the app for the user
+    enable_app(uid, app_id)
+
+    tool_count = len(tools)
+    tool_names = ', '.join(t.name for t in tools)
+
+    return HTMLResponse(f"""
+    <html>
+    <head><meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        body {{ font-family: -apple-system, system-ui, sans-serif; background: #111; color: #fff;
+               display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+        .card {{ background: #1a1a1a; border-radius: 16px; padding: 40px; text-align: center; max-width: 400px; }}
+        h1 {{ color: #4ade80; margin-bottom: 8px; }}
+        p {{ color: #aaa; }}
+        .count {{ font-size: 2em; font-weight: bold; color: #fff; }}
+    </style></head>
+    <body><div class="card">
+        <h1>Connected!</h1>
+        <p class="count">{tool_count} tools</p>
+        <p>{tool_names}</p>
+        <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
+    </div></body></html>
+    """)
+
+
+@router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
+async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Re-discover tools from an MCP server and update the app."""
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app_data.get('uid') != uid:
+        raise HTTPException(status_code=403, detail='Not authorized')
+
+    ext = app_data.get('external_integration', {})
+    server_url = ext.get('mcp_server_url')
+    if not server_url:
+        raise HTTPException(status_code=422, detail='App is not an MCP server app')
+
+    oauth_tokens = ext.get('mcp_oauth_tokens')
+    access_token = oauth_tokens.get('access_token') if oauth_tokens else None
+
+    try:
+        tools = await discover_mcp_tools(server_url, access_token)
+    except PermissionError:
+        # Try token refresh
+        if oauth_tokens and oauth_tokens.get('refresh_token'):
+            new_tokens = await refresh_oauth_token(
+                oauth_tokens['token_endpoint'],
+                oauth_tokens['refresh_token'],
+                oauth_tokens['client_id'],
+                oauth_tokens.get('client_secret'),
+            )
+            oauth_tokens['access_token'] = new_tokens['access_token']
+            if new_tokens.get('refresh_token'):
+                oauth_tokens['refresh_token'] = new_tokens['refresh_token']
+
+            tools = await discover_mcp_tools(server_url, new_tokens['access_token'])
+
+            update_dict = {
+                'id': app_id,
+                'external_integration': {
+                    'mcp_server_url': server_url,
+                    'mcp_oauth_tokens': oauth_tokens,
+                },
+                'chat_tools': _serialize_chat_tools_for_firestore(tools),
+            }
+            update_app_in_db(update_dict)
+            delete_app_cache_by_id(app_id)
+
+            return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
+        raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f'Failed to discover tools: {str(e)}')
+
+    update_dict = {
+        'id': app_id,
+        'chat_tools': _serialize_chat_tools_for_firestore(tools),
+    }
+    update_app_in_db(update_dict)
+    delete_app_cache_by_id(app_id)
+
+    return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
 
 
 # ******************************************************

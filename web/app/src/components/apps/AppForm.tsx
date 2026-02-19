@@ -160,6 +160,9 @@ export function AppForm({ mode, app }: AppFormProps) {
   const [price, setPrice] = useState('');
   const [paymentPlan, setPaymentPlan] = useState('');
 
+  // Source code URL
+  const [sourceCodeUrl, setSourceCodeUrl] = useState('');
+
   // Error state
   const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +205,8 @@ export function AppForm({ mode, app }: AppFormProps) {
       setIsPaid(app.is_paid || false);
       setPrice(app.price?.toString() || '');
       setPaymentPlan(app.payment_plan || '');
+
+      setSourceCodeUrl(app.source_code_url || '');
 
       if (app.external_integration) {
         setTriggerEvent(app.external_integration.triggers_on || '');
@@ -340,6 +345,10 @@ export function AppForm({ mode, app }: AppFormProps) {
       setError('Please select at least one notification scope');
       return false;
     }
+    if ((hasExternalIntegration || hasProactiveNotification) && !sourceCodeUrl.trim()) {
+      setError('GitHub repository URL is required for external integration and notification apps');
+      return false;
+    }
     if (isPaid) {
       if (!price || parseFloat(price) < 1) {
         setError('Price must be at least $1.00');
@@ -392,6 +401,9 @@ export function AppForm({ mode, app }: AppFormProps) {
       }
       if (hasProactiveNotification) {
         data.proactive_notification_scopes = selectedScopes;
+      }
+      if ((hasExternalIntegration || hasProactiveNotification) && sourceCodeUrl.trim()) {
+        data.source_code_url = sourceCodeUrl.trim();
       }
       if (isPaid) {
         data.is_paid = true;
@@ -893,6 +905,23 @@ export function AppForm({ mode, app }: AppFormProps) {
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* Source Code URL Section */}
+      {(hasExternalIntegration || hasProactiveNotification) && (
+        <section className={cn(sectionCardClass, 'space-y-4')}>
+          <h2 className="text-lg font-medium text-text-primary">GitHub Repository *</h2>
+          <p className="text-sm text-text-tertiary">
+            Link to your app&apos;s source code repository. Required for external integration and notification apps.
+          </p>
+          <input
+            type="url"
+            value={sourceCodeUrl}
+            onChange={(e) => setSourceCodeUrl(e.target.value)}
+            placeholder="https://github.com/username/repo"
+            className={inputClass}
+          />
         </section>
       )}
 

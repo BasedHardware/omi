@@ -425,7 +425,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override
-  String get chatTools => 'Narzędzia czatu';
+  String get integrations => 'Integracje';
 
   @override
   String get feedbackBug => 'Opinia / Błąd';
@@ -585,7 +585,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get starOngoing => 'Oznacz bieżącą rozmowę gwiazdką';
 
   @override
-  String get off => 'Off';
+  String get off => 'Wyłączone';
 
   @override
   String get max => 'Maks.';
@@ -1015,13 +1015,13 @@ class AppLocalizationsPl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Połącz';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Wkrótce';
 
   @override
-  String get chatToolsFooter => 'Połącz swoje aplikacje, aby wyświetlać dane i metryki w czacie.';
+  String get integrationsFooter => 'Połącz swoje aplikacje, aby wyświetlać dane i metryki w czacie.';
 
   @override
   String get completeAuthInBrowser => 'Ukończ uwierzytelnianie w przeglądarce. Po zakończeniu wróć do aplikacji.';
@@ -1656,7 +1656,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get whatShouldWeMake => 'Co powinniśmy stworzyć?';
 
   @override
-  String get appName => 'Nazwa aplikacji';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Opis';
@@ -2270,7 +2270,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get folderName => 'Nazwa folderu';
 
   @override
-  String get descriptionOptional => 'Opis (opcjonalnie)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Nie udało się usunąć folderu';
@@ -7806,5 +7806,436 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Urządzenie nie obsługuje synchronizacji WiFi, przełączanie na Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health nie jest dostępne na tym urządzeniu';
+
+  @override
+  String get downloadAudio => 'Pobierz dźwięk';
+
+  @override
+  String get audioDownloadSuccess => 'Dźwięk został pomyślnie pobrany';
+
+  @override
+  String get audioDownloadFailed => 'Nie udało się pobrać dźwięku';
+
+  @override
+  String get downloadingAudio => 'Pobieranie dźwięku...';
+
+  @override
+  String get shareAudio => 'Udostępnij dźwięk';
+
+  @override
+  String get preparingAudio => 'Przygotowywanie dźwięku';
+
+  @override
+  String get gettingAudioFiles => 'Pobieranie plików dźwiękowych...';
+
+  @override
+  String get downloadingAudioProgress => 'Pobieranie dźwięku';
+
+  @override
+  String get processingAudio => 'Przetwarzanie dźwięku';
+
+  @override
+  String get combiningAudioFiles => 'Łączenie plików dźwiękowych...';
+
+  @override
+  String get audioReady => 'Dźwięk gotowy';
+
+  @override
+  String get openingShareSheet => 'Otwieranie arkusza udostępniania...';
+
+  @override
+  String get audioShareFailed => 'Udostępnianie nie powiodło się';
+
+  @override
+  String get dailyRecaps => 'Podsumowania Dnia';
+
+  @override
+  String get removeFilter => 'Usuń Filtr';
+
+  @override
+  String get categoryConversationAnalysis => 'Analiza rozmów';
+
+  @override
+  String get categoryPersonalityClone => 'Klon osobowości';
+
+  @override
+  String get categoryHealth => 'Zdrowie';
+
+  @override
+  String get categoryEducation => 'Edukacja';
+
+  @override
+  String get categoryCommunication => 'Komunikacja';
+
+  @override
+  String get categoryEmotionalSupport => 'Wsparcie emocjonalne';
+
+  @override
+  String get categoryProductivity => 'Produktywność';
+
+  @override
+  String get categoryEntertainment => 'Rozrywka';
+
+  @override
+  String get categoryFinancial => 'Finanse';
+
+  @override
+  String get categoryTravel => 'Podróże';
+
+  @override
+  String get categorySafety => 'Bezpieczeństwo';
+
+  @override
+  String get categoryShopping => 'Zakupy';
+
+  @override
+  String get categorySocial => 'Społeczne';
+
+  @override
+  String get categoryNews => 'Wiadomości';
+
+  @override
+  String get categoryUtilities => 'Narzędzia';
+
+  @override
+  String get categoryOther => 'Inne';
+
+  @override
+  String get capabilityChat => 'Czat';
+
+  @override
+  String get capabilityConversations => 'Rozmowy';
+
+  @override
+  String get capabilityExternalIntegration => 'Integracja zewnętrzna';
+
+  @override
+  String get capabilityNotification => 'Powiadomienie';
+
+  @override
+  String get triggerAudioBytes => 'Bajty audio';
+
+  @override
+  String get triggerConversationCreation => 'Tworzenie rozmowy';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkrypcja przetworzona';
+
+  @override
+  String get actionCreateConversations => 'Utwórz rozmowy';
+
+  @override
+  String get actionCreateMemories => 'Utwórz wspomnienia';
+
+  @override
+  String get actionReadConversations => 'Czytaj rozmowy';
+
+  @override
+  String get actionReadMemories => 'Czytaj wspomnienia';
+
+  @override
+  String get actionReadTasks => 'Czytaj zadania';
+
+  @override
+  String get scopeUserName => 'Nazwa użytkownika';
+
+  @override
+  String get scopeUserFacts => 'Fakty o użytkowniku';
+
+  @override
+  String get scopeUserConversations => 'Rozmowy użytkownika';
+
+  @override
+  String get scopeUserChat => 'Czat użytkownika';
+
+  @override
+  String get capabilitySummary => 'Podsumowanie';
+
+  @override
+  String get capabilityFeatured => 'Polecane';
+
+  @override
+  String get capabilityTasks => 'Zadania';
+
+  @override
+  String get capabilityIntegrations => 'Integracje';
+
+  @override
+  String get categoryPersonalityClones => 'Klony osobowości';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktywność i styl życia';
+
+  @override
+  String get categorySocialEntertainment => 'Społeczne i rozrywka';
+
+  @override
+  String get categoryProductivityTools => 'Narzędzia produktywności';
+
+  @override
+  String get categoryPersonalWellness => 'Osobiste samopoczucie';
+
+  @override
+  String get rating => 'Ocena';
+
+  @override
+  String get categories => 'Kategorie';
+
+  @override
+  String get sortBy => 'Sortuj';
+
+  @override
+  String get highestRating => 'Najwyższa ocena';
+
+  @override
+  String get lowestRating => 'Najniższa ocena';
+
+  @override
+  String get resetFilters => 'Resetuj filtry';
+
+  @override
+  String get applyFilters => 'Zastosuj filtry';
+
+  @override
+  String get mostInstalls => 'Najwięcej instalacji';
+
+  @override
+  String get couldNotOpenUrl => 'Nie można otworzyć adresu URL. Spróbuj ponownie.';
+
+  @override
+  String get newTask => 'Nowe zadanie';
+
+  @override
+  String get viewAll => 'Pokaż wszystko';
+
+  @override
+  String get addTask => 'Dodaj zadanie';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Plik audio nie jest dostępny do odtwarzania';
+
+  @override
+  String get audioPlaybackFailed => 'Nie można odtworzyć dźwięku. Plik może być uszkodzony lub brakujący.';
+
+  @override
+  String get connectionGuide => 'Przewodnik połączenia';
+
+  @override
+  String get iveDoneThis => 'Zrobiłem to';
+
+  @override
+  String get pairNewDevice => 'Sparuj nowe urządzenie';
+
+  @override
+  String get dontSeeYourDevice => 'Nie widzisz swojego urządzenia?';
+
+  @override
+  String get reportAnIssue => 'Zgłoś problem';
+
+  @override
+  String get pairingTitleOmi => 'Włącz Omi';
+
+  @override
+  String get pairingDescOmi => 'Naciśnij i przytrzymaj urządzenie, aż zawibruje, aby je włączyć.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Przełącz Omi DevKit w tryb parowania';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Naciśnij przycisk raz, aby włączyć. LED będzie migać na fioletowo w trybie parowania.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Włącz Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Naciśnij i przytrzymaj boczny przycisk przez 3 sekundy, aby włączyć.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Przełącz Plaud Note w tryb parowania';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Naciśnij i przytrzymaj boczny przycisk przez 2 sekundy. Czerwona dioda LED zacznie migać, gdy będzie gotowy do parowania.';
+
+  @override
+  String get pairingTitleBee => 'Przełącz Bee w tryb parowania';
+
+  @override
+  String get pairingDescBee => 'Naciśnij przycisk 5 razy z rzędu. Światło zacznie migać na niebiesko i zielono.';
+
+  @override
+  String get pairingTitleLimitless => 'Przełącz Limitless w tryb parowania';
+
+  @override
+  String get pairingDescLimitless =>
+      'Gdy świeci się jakakolwiek kontrolka, naciśnij raz, a następnie naciśnij i przytrzymaj, aż urządzenie pokaże różowe światło, następnie puść.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Przełącz Friend Pendant w tryb parowania';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Naciśnij przycisk na wisiorku, aby go włączyć. Automatycznie przejdzie w tryb parowania.';
+
+  @override
+  String get pairingTitleFieldy => 'Przełącz Fieldy w tryb parowania';
+
+  @override
+  String get pairingDescFieldy => 'Naciśnij i przytrzymaj urządzenie, aż pojawi się światło, aby je włączyć.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Połącz Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Zainstaluj i otwórz aplikację Omi na swoim Apple Watch, a następnie dotknij Połącz w aplikacji.';
+
+  @override
+  String get pairingTitleNeoOne => 'Przełącz Neo One w tryb parowania';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Naciśnij i przytrzymaj przycisk zasilania, aż dioda LED zacznie migać. Urządzenie będzie wykrywalne.';
+
+  @override
+  String get downloadingFromDevice => 'Pobieranie z urządzenia';
+
+  @override
+  String get reconnectingToInternet => 'Ponowne łączenie z internetem...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Przesyłanie $current z $total';
+  }
+
+  @override
+  String get processedStatus => 'Przetworzono';
+
+  @override
+  String get corruptedStatus => 'Uszkodzony';
+
+  @override
+  String nPending(int count) {
+    return '$count oczekujących';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count przetworzonych';
+  }
+
+  @override
+  String get synced => 'Zsynchronizowano';
+
+  @override
+  String get noPendingRecordings => 'Brak oczekujących nagrań';
+
+  @override
+  String get noProcessedRecordings => 'Brak przetworzonych nagrań';
+
+  @override
+  String get pending => 'Oczekujące';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Co nowego w $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Dodać do listy zadań?';
+
+  @override
+  String get failedToCreateShareLink => 'Nie udało się utworzyć linku do udostępniania';
+
+  @override
+  String get deleteGoal => 'Usuń cel';
+
+  @override
+  String get deviceUpToDate => 'Twoje urządzenie jest aktualne';
+
+  @override
+  String get wifiConfiguration => 'Konfiguracja WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Wprowadź dane WiFi, aby urządzenie mogło pobrać oprogramowanie.';
+
+  @override
+  String get networkNameSsid => 'Nazwa sieci (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Wprowadź nazwę sieci WiFi';
+
+  @override
+  String get enterWifiPassword => 'Wprowadź hasło WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

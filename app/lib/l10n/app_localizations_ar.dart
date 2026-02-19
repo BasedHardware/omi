@@ -421,7 +421,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override
-  String get chatTools => 'أدوات الدردشة';
+  String get integrations => 'التكاملات';
 
   @override
   String get feedbackBug => 'ملاحظات / خطأ';
@@ -1006,13 +1006,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get vocabularyHint => 'Omi، Callie، OpenAI';
 
   @override
-  String get connect => 'اتصال';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'قريباً';
 
   @override
-  String get chatToolsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
+  String get integrationsFooter => 'قم بتوصيل تطبيقاتك لعرض البيانات والمقاييس في الدردشة.';
 
   @override
   String get completeAuthInBrowser => 'يرجى إكمال المصادقة في متصفحك. بعد الانتهاء، ارجع إلى التطبيق.';
@@ -1640,7 +1640,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get whatShouldWeMake => 'ماذا يجب أن نصنع؟';
 
   @override
-  String get appName => 'اسم التطبيق';
+  String get appName => 'App Name';
 
   @override
   String get description => 'الوصف';
@@ -2249,7 +2249,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get folderName => 'اسم المجلد';
 
   @override
-  String get descriptionOptional => 'الوصف (اختياري)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'فشل حذف المجلد';
@@ -7733,5 +7733,432 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'الجهاز لا يدعم مزامنة WiFi، التبديل إلى البلوتوث';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health غير متاح على هذا الجهاز';
+
+  @override
+  String get downloadAudio => 'تنزيل الصوت';
+
+  @override
+  String get audioDownloadSuccess => 'تم تنزيل الصوت بنجاح';
+
+  @override
+  String get audioDownloadFailed => 'فشل تنزيل الصوت';
+
+  @override
+  String get downloadingAudio => 'جاري تنزيل الصوت...';
+
+  @override
+  String get shareAudio => 'مشاركة الصوت';
+
+  @override
+  String get preparingAudio => 'جاري تحضير الصوت';
+
+  @override
+  String get gettingAudioFiles => 'جاري الحصول على ملفات الصوت...';
+
+  @override
+  String get downloadingAudioProgress => 'جاري تنزيل الصوت';
+
+  @override
+  String get processingAudio => 'جاري معالجة الصوت';
+
+  @override
+  String get combiningAudioFiles => 'جاري دمج ملفات الصوت...';
+
+  @override
+  String get audioReady => 'الصوت جاهز';
+
+  @override
+  String get openingShareSheet => 'جاري فتح صفحة المشاركة...';
+
+  @override
+  String get audioShareFailed => 'فشلت المشاركة';
+
+  @override
+  String get dailyRecaps => 'الملخصات اليومية';
+
+  @override
+  String get removeFilter => 'إزالة الفلتر';
+
+  @override
+  String get categoryConversationAnalysis => 'تحليل المحادثة';
+
+  @override
+  String get categoryPersonalityClone => 'استنساخ الشخصية';
+
+  @override
+  String get categoryHealth => 'الصحة';
+
+  @override
+  String get categoryEducation => 'التعليم';
+
+  @override
+  String get categoryCommunication => 'التواصل';
+
+  @override
+  String get categoryEmotionalSupport => 'الدعم العاطفي';
+
+  @override
+  String get categoryProductivity => 'الإنتاجية';
+
+  @override
+  String get categoryEntertainment => 'الترفيه';
+
+  @override
+  String get categoryFinancial => 'المالية';
+
+  @override
+  String get categoryTravel => 'السفر';
+
+  @override
+  String get categorySafety => 'الأمان';
+
+  @override
+  String get categoryShopping => 'التسوق';
+
+  @override
+  String get categorySocial => 'اجتماعي';
+
+  @override
+  String get categoryNews => 'الأخبار';
+
+  @override
+  String get categoryUtilities => 'الأدوات';
+
+  @override
+  String get categoryOther => 'أخرى';
+
+  @override
+  String get capabilityChat => 'الدردشة';
+
+  @override
+  String get capabilityConversations => 'المحادثات';
+
+  @override
+  String get capabilityExternalIntegration => 'التكامل الخارجي';
+
+  @override
+  String get capabilityNotification => 'الإشعارات';
+
+  @override
+  String get triggerAudioBytes => 'بايتات الصوت';
+
+  @override
+  String get triggerConversationCreation => 'إنشاء المحادثة';
+
+  @override
+  String get triggerTranscriptProcessed => 'معالجة النص';
+
+  @override
+  String get actionCreateConversations => 'إنشاء المحادثات';
+
+  @override
+  String get actionCreateMemories => 'إنشاء الذكريات';
+
+  @override
+  String get actionReadConversations => 'قراءة المحادثات';
+
+  @override
+  String get actionReadMemories => 'قراءة الذكريات';
+
+  @override
+  String get actionReadTasks => 'قراءة المهام';
+
+  @override
+  String get scopeUserName => 'اسم المستخدم';
+
+  @override
+  String get scopeUserFacts => 'معلومات المستخدم';
+
+  @override
+  String get scopeUserConversations => 'محادثات المستخدم';
+
+  @override
+  String get scopeUserChat => 'دردشة المستخدم';
+
+  @override
+  String get capabilitySummary => 'الملخص';
+
+  @override
+  String get capabilityFeatured => 'المميزة';
+
+  @override
+  String get capabilityTasks => 'المهام';
+
+  @override
+  String get capabilityIntegrations => 'التكاملات';
+
+  @override
+  String get categoryPersonalityClones => 'استنساخ الشخصيات';
+
+  @override
+  String get categoryProductivityLifestyle => 'الإنتاجية ونمط الحياة';
+
+  @override
+  String get categorySocialEntertainment => 'التواصل والترفيه';
+
+  @override
+  String get categoryProductivityTools => 'أدوات الإنتاجية';
+
+  @override
+  String get categoryPersonalWellness => 'الصحة الشخصية';
+
+  @override
+  String get rating => 'التقييم';
+
+  @override
+  String get categories => 'الفئات';
+
+  @override
+  String get sortBy => 'ترتيب';
+
+  @override
+  String get highestRating => 'الأعلى تقييماً';
+
+  @override
+  String get lowestRating => 'الأقل تقييماً';
+
+  @override
+  String get resetFilters => 'إعادة تعيين الفلاتر';
+
+  @override
+  String get applyFilters => 'تطبيق الفلاتر';
+
+  @override
+  String get mostInstalls => 'الأكثر تثبيتاً';
+
+  @override
+  String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
+
+  @override
+  String get newTask => 'مهمة جديدة';
+
+  @override
+  String get viewAll => 'عرض الكل';
+
+  @override
+  String get addTask => 'إضافة مهمة';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'ملف الصوت غير متاح للتشغيل';
+
+  @override
+  String get audioPlaybackFailed => 'تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا.';
+
+  @override
+  String get connectionGuide => 'دليل الاتصال';
+
+  @override
+  String get iveDoneThis => 'لقد فعلت هذا';
+
+  @override
+  String get pairNewDevice => 'إقران جهاز جديد';
+
+  @override
+  String get dontSeeYourDevice => 'لا ترى جهازك؟';
+
+  @override
+  String get reportAnIssue => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get pairingTitleOmi => 'تشغيل Omi';
+
+  @override
+  String get pairingDescOmi => 'اضغط مع الاستمرار على الجهاز حتى يهتز لتشغيله.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'ضع Omi DevKit في وضع الإقران';
+
+  @override
+  String get pairingDescOmiDevkit => 'اضغط على الزر مرة واحدة للتشغيل. سيومض مؤشر LED باللون الأرجواني في وضع الإقران.';
+
+  @override
+  String get pairingTitleOmiGlass => 'تشغيل Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'اضغط مع الاستمرار على الزر الجانبي لمدة 3 ثوانٍ لتشغيل الجهاز.';
+
+  @override
+  String get pairingTitlePlaudNote => 'ضع Plaud Note في وضع الإقران';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'اضغط مع الاستمرار على الزر الجانبي لمدة ثانيتين. سيومض مؤشر LED الأحمر عندما يكون جاهزًا للإقران.';
+
+  @override
+  String get pairingTitleBee => 'ضع Bee في وضع الإقران';
+
+  @override
+  String get pairingDescBee => 'اضغط على الزر 5 مرات متتالية. سيبدأ الضوء بالوميض بالأزرق والأخضر.';
+
+  @override
+  String get pairingTitleLimitless => 'ضع Limitless في وضع الإقران';
+
+  @override
+  String get pairingDescLimitless =>
+      'عندما يكون أي ضوء مرئيًا، اضغط مرة واحدة ثم اضغط مع الاستمرار حتى يظهر الجهاز ضوءًا ورديًا، ثم حرر.';
+
+  @override
+  String get pairingTitleFriendPendant => 'ضع Friend Pendant في وضع الإقران';
+
+  @override
+  String get pairingDescFriendPendant => 'اضغط على الزر الموجود على القلادة لتشغيلها. ستدخل وضع الإقران تلقائيًا.';
+
+  @override
+  String get pairingTitleFieldy => 'ضع Fieldy في وضع الإقران';
+
+  @override
+  String get pairingDescFieldy => 'اضغط مع الاستمرار على الجهاز حتى يظهر الضوء لتشغيله.';
+
+  @override
+  String get pairingTitleAppleWatch => 'توصيل Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'قم بتثبيت وفتح تطبيق Omi على Apple Watch الخاص بك، ثم اضغط على اتصال في التطبيق.';
+
+  @override
+  String get pairingTitleNeoOne => 'ضع Neo One في وضع الإقران';
+
+  @override
+  String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
+
+  @override
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
+
+  @override
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'جارٍ رفع $current من $total';
+  }
+
+  @override
+  String get processedStatus => 'تمت المعالجة';
+
+  @override
+  String get corruptedStatus => 'تالف';
+
+  @override
+  String nPending(int count) {
+    return '$count قيد الانتظار';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count تمت معالجتها';
+  }
+
+  @override
+  String get synced => 'تمت المزامنة';
+
+  @override
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
+
+  @override
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
+
+  @override
+  String get pending => 'قيد الانتظار';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'ما الجديد في $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'إضافة إلى قائمة مهامك؟';
+
+  @override
+  String get failedToCreateShareLink => 'فشل إنشاء رابط المشاركة';
+
+  @override
+  String get deleteGoal => 'حذف الهدف';
+
+  @override
+  String get deviceUpToDate => 'جهازك محدّث';
+
+  @override
+  String get wifiConfiguration => 'إعدادات الواي فاي';
+
+  @override
+  String get wifiConfigurationSubtitle => 'أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.';
+
+  @override
+  String get networkNameSsid => 'اسم الشبكة (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'أدخل اسم شبكة الواي فاي';
+
+  @override
+  String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

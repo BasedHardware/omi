@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -33,6 +34,8 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Function(TranscriptSegment)? onSegmentTap;
+  final Function(int segmentIndex)? onEditSegmentText;
 
   const TranscriptWidget({
     super.key,
@@ -51,6 +54,8 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.onSegmentTap,
+    this.onEditSegmentText,
   });
 
   @override
@@ -256,10 +261,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottomGently();
-    });
   }
 
   void _scrollToSearchResult() {
@@ -471,7 +472,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
-    final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
     return Container(
@@ -526,28 +526,18 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               child: Text(
                                 data.speakerId == omiSpeakerId
                                     ? 'omi'
-                                    : (suggestion != null && person == null
-                                        ? '${suggestion.personName}?'
-                                        : (person != null ? person.name : 'Speaker ${data.speakerId}')),
+                                    : (person?.name ??
+                                        context.l10n.speakerWithId(
+                                            '${TranscriptSegment.getDisplaySpeakerId(data.speakerId, widget.segments)}')),
                                 style: TextStyle(
                                   color: data.speakerId == omiSpeakerId || person != null
                                       ? Colors.grey.shade300
-                                      : (isTagging ? Colors.grey.shade300 : Colors.grey.shade400),
+                                      : Colors.grey.shade400,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
-                            if (!data.speechProfileProcessed &&
-                                (data.personId ?? "").isEmpty &&
-                                data.speakerId != omiSpeakerId) ...[
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.help_outline,
-                                color: Colors.orange,
-                                size: 12,
-                              ),
-                            ],
                             if (isTagging) ...[
                               const SizedBox(width: 6),
                               const SizedBox(
@@ -556,20 +546,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 1.5,
                                   valueColor: AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            ] else if (suggestion != null && person == null) ...[
-                              const SizedBox(width: 6),
-                              GestureDetector(
-                                onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: Colors.white,
-                                  ),
                                 ),
                               )
                             ],
@@ -609,93 +585,100 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               ],
                             ),
                             child: SelectionArea(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  RichText(
-                                    textAlign: TextAlign.left,
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white : Colors.grey.shade100,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
-                                      children: widget.searchQuery.isNotEmpty
-                                          ? _highlightSearchMatchesWithKeys(
-                                              _getDecodedText(data.text),
-                                              widget.searchQuery,
-                                              segmentIdx,
-                                            )
-                                          : [
-                                              TextSpan(
-                                                text: _getDecodedText(data.text),
-                                              )
-                                            ],
-                                    ),
-                                  ),
-                                  if (data.translations.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    ...data.translations.map((translation) => Padding(
-                                          padding: const EdgeInsets.only(top: 4),
-                                          child: Text(
-                                            _getDecodedText(translation.text),
-                                            style: TextStyle(
-                                              letterSpacing: 0.0,
-                                              color: isUser
-                                                  ? Colors.white.withValues(alpha: 0.8)
-                                                  : Colors.grey.shade300.withValues(alpha: 0.8),
-                                              fontSize: 14,
-                                              fontStyle: FontStyle.italic,
-                                              height: 1.3,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onDoubleTap: widget.isConversationDetail && widget.onEditSegmentText != null
+                                    ? () {
+                                        HapticFeedback.mediumImpact();
+                                        widget.onEditSegmentText!(segmentIdx);
+                                      }
+                                    : null,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _buildSegmentText(data, segmentIdx, isUser),
+                                    if (data.translations.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      ...data.translations.map((translation) => Padding(
+                                            padding: const EdgeInsets.only(top: 4),
+                                            child: Text(
+                                              _getDecodedText(translation.text),
+                                              style: TextStyle(
+                                                letterSpacing: 0.0,
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.8)
+                                                    : Colors.grey.shade300.withValues(alpha: 0.8),
+                                                fontSize: 14,
+                                                fontStyle: FontStyle.italic,
+                                                height: 1.3,
+                                              ),
+                                              textAlign: TextAlign.left,
                                             ),
-                                            textAlign: TextAlign.left,
-                                          ),
-                                        )),
-                                    const SizedBox(height: 4),
-                                    _buildTranslationNotice(),
-                                  ],
-                                  // Timestamp and provider
-                                  if (widget.canDisplaySeconds || data.sttProvider != null) ...[
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        if (data.sttProvider != null) ...[
-                                          Text(
-                                            SttProviderConfig.getDisplayName(data.sttProvider),
-                                            style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
-                                              fontSize: 10,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                          ),
-                                          if (widget.canDisplaySeconds) ...[
+                                          )),
+                                      const SizedBox(height: 4),
+                                      _buildTranslationNotice(),
+                                    ],
+                                    // Timestamp, provider, and play button
+                                    if (widget.canDisplaySeconds ||
+                                        data.sttProvider != null ||
+                                        widget.onSegmentTap != null) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          if (data.sttProvider != null) ...[
                                             Text(
-                                              ' · ',
+                                              SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
                                                 color:
                                                     isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
+                                                fontStyle: FontStyle.italic,
                                               ),
                                             ),
+                                            if (widget.canDisplaySeconds) ...[
+                                              Text(
+                                                ' · ',
+                                                style: TextStyle(
+                                                  color: isUser
+                                                      ? Colors.white.withValues(alpha: 0.5)
+                                                      : Colors.grey.shade500,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
                                           ],
-                                        ],
-                                        if (widget.canDisplaySeconds)
-                                          Text(
-                                            data.getTimestampString(),
-                                            style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
-                                              fontSize: 11,
+                                          // Play button for tap-to-seek
+                                          if (widget.onSegmentTap != null) ...[
+                                            GestureDetector(
+                                              onTap: () {
+                                                HapticFeedback.lightImpact();
+                                                widget.onSegmentTap?.call(data);
+                                              },
+                                              child: Icon(
+                                                Icons.play_circle_outline,
+                                                size: 16,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                              ),
                                             ),
-                                          ),
-                                      ],
-                                    ),
+                                            const SizedBox(width: 6),
+                                          ],
+                                          if (widget.canDisplaySeconds)
+                                            Text(
+                                              data.getTimestampString(),
+                                              style: TextStyle(
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -729,6 +712,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ],
           ),
         ));
+  }
+
+  Widget _buildSegmentText(TranscriptSegment data, int segmentIdx, bool isUser) {
+    final richText = RichText(
+      textAlign: TextAlign.left,
+      text: TextSpan(
+        style: TextStyle(
+          letterSpacing: 0.0,
+          color: isUser ? Colors.white : Colors.grey.shade100,
+          fontSize: 15,
+          height: 1.4,
+        ),
+        children: widget.searchQuery.isNotEmpty
+            ? _highlightSearchMatchesWithKeys(
+                _getDecodedText(data.text),
+                widget.searchQuery,
+                segmentIdx,
+              )
+            : [TextSpan(text: _getDecodedText(data.text))],
+      ),
+    );
+    return richText;
   }
 
   Widget _buildTranslationNotice() {

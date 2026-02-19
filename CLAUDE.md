@@ -1,5 +1,10 @@
 # Coding Guidelines
 
+## Behavior
+
+- Never ask for permission to access folders, run commands, search the web, or use tools. Just do it.
+- Never ask for confirmation. Just act. Make decisions autonomously and proceed without checking in.
+
 ## Setup
 
 ### Install Pre-commit Hook
@@ -81,6 +86,21 @@ black --line-length 120 --skip-string-normalization <files>
 ```bash
 clang-format -i <files>
 ```
+
+## Git
+
+- Never squash merge PRs — use regular merge
+- Make individual commits per file, not bulk commits
+- **RELEASE command**: When the user says "RELEASE", perform the full release flow:
+  1. Create a new branch from main
+  2. Make individual commits per changed file
+  3. Push and create a PR
+  4. Merge the PR (no squash — regular merge)
+  5. Switch back to main and pull
+- **RELEASEWITHBACKEND command**: Same as RELEASE, plus deploy the backend to production after merging:
+  ```bash
+  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
+  ```
 
 ## Testing
 

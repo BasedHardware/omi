@@ -363,10 +363,16 @@ class Conversation(BaseModel):
                 )
                 conversation_str += f"Finished: {formatted_finished}\n"
 
-            conversation_str += (
-                f"{str(conversation.structured.title).capitalize()}\n"
-                f"{str(conversation.structured.overview).capitalize()}\n"
-            )
+            conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
+
+            if (
+                conversation.apps_results
+                and len(conversation.apps_results) > 0
+                and conversation.apps_results[0].content.strip()
+            ):
+                conversation_str += f"{conversation.apps_results[0].content}\n"
+            else:
+                conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
 
             # attendees
             if people_map:
@@ -386,10 +392,6 @@ class Conversation(BaseModel):
                 conversation_str += "Events:\n"
                 for event in conversation.structured.events:
                     conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
-
-            if conversation.apps_results and len(conversation.apps_results) > 0:
-                conversation_str += "Summarization:\n"
-                conversation_str += f"{conversation.apps_results[0].content}"
 
             if use_transcript:
                 conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people)}\n"
@@ -510,6 +512,11 @@ class BulkAssignSegmentsRequest(BaseModel):
     segment_ids: List[str]
     assign_type: str
     value: Optional[str] = None
+
+
+class UpdateSegmentTextRequest(BaseModel):
+    segment_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=10000)
 
 
 class DeleteActionItemRequest(BaseModel):

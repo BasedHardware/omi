@@ -425,7 +425,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
-  String get chatTools => 'Chatverktøy';
+  String get integrations => 'Integrasjoner';
 
   @override
   String get feedbackBug => 'Tilbakemelding / Feil';
@@ -1014,13 +1014,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Koble til';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Kommer snart';
 
   @override
-  String get chatToolsFooter => 'Koble til appene dine for å se data og måledata i chat.';
+  String get integrationsFooter => 'Koble til appene dine for å se data og måledata i chat.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1653,7 +1653,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get whatShouldWeMake => 'Hva skal vi lage?';
 
   @override
-  String get appName => 'Appnavn';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Beskrivelse';
@@ -2264,7 +2264,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get folderName => 'Mappenavn';
 
   @override
-  String get descriptionOptional => 'Beskrivelse (valgfritt)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Kunne ikke slette mappe';
@@ -7784,5 +7784,433 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Enheten støtter ikke WiFi-synkronisering, bytter til Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health er ikke tilgjengelig på denne enheten';
+
+  @override
+  String get downloadAudio => 'Last ned lyd';
+
+  @override
+  String get audioDownloadSuccess => 'Lyd lastet ned vellykket';
+
+  @override
+  String get audioDownloadFailed => 'Nedlasting av lyd mislyktes';
+
+  @override
+  String get downloadingAudio => 'Laster ned lyd...';
+
+  @override
+  String get shareAudio => 'Del lyd';
+
+  @override
+  String get preparingAudio => 'Forbereder lyd';
+
+  @override
+  String get gettingAudioFiles => 'Henter lydfiler...';
+
+  @override
+  String get downloadingAudioProgress => 'Laster ned lyd';
+
+  @override
+  String get processingAudio => 'Behandler lyd';
+
+  @override
+  String get combiningAudioFiles => 'Kombinerer lydfiler...';
+
+  @override
+  String get audioReady => 'Lyd klar';
+
+  @override
+  String get openingShareSheet => 'Åpner delingsark...';
+
+  @override
+  String get audioShareFailed => 'Deling mislyktes';
+
+  @override
+  String get dailyRecaps => 'Daglige Oppsummeringer';
+
+  @override
+  String get removeFilter => 'Fjern Filter';
+
+  @override
+  String get categoryConversationAnalysis => 'Samtaleanalyse';
+
+  @override
+  String get categoryPersonalityClone => 'Personlighetsklon';
+
+  @override
+  String get categoryHealth => 'Helse';
+
+  @override
+  String get categoryEducation => 'Utdanning';
+
+  @override
+  String get categoryCommunication => 'Kommunikasjon';
+
+  @override
+  String get categoryEmotionalSupport => 'Emosjonell støtte';
+
+  @override
+  String get categoryProductivity => 'Produktivitet';
+
+  @override
+  String get categoryEntertainment => 'Underholdning';
+
+  @override
+  String get categoryFinancial => 'Økonomi';
+
+  @override
+  String get categoryTravel => 'Reise';
+
+  @override
+  String get categorySafety => 'Sikkerhet';
+
+  @override
+  String get categoryShopping => 'Shopping';
+
+  @override
+  String get categorySocial => 'Sosialt';
+
+  @override
+  String get categoryNews => 'Nyheter';
+
+  @override
+  String get categoryUtilities => 'Verktøy';
+
+  @override
+  String get categoryOther => 'Annet';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Samtaler';
+
+  @override
+  String get capabilityExternalIntegration => 'Ekstern integrasjon';
+
+  @override
+  String get capabilityNotification => 'Varsel';
+
+  @override
+  String get triggerAudioBytes => 'Lydbytes';
+
+  @override
+  String get triggerConversationCreation => 'Samtaleoppretting';
+
+  @override
+  String get triggerTranscriptProcessed => 'Transkripsjon behandlet';
+
+  @override
+  String get actionCreateConversations => 'Opprett samtaler';
+
+  @override
+  String get actionCreateMemories => 'Opprett minner';
+
+  @override
+  String get actionReadConversations => 'Les samtaler';
+
+  @override
+  String get actionReadMemories => 'Les minner';
+
+  @override
+  String get actionReadTasks => 'Les oppgaver';
+
+  @override
+  String get scopeUserName => 'Brukernavn';
+
+  @override
+  String get scopeUserFacts => 'Brukerfakta';
+
+  @override
+  String get scopeUserConversations => 'Brukersamtaler';
+
+  @override
+  String get scopeUserChat => 'Brukerchat';
+
+  @override
+  String get capabilitySummary => 'Sammendrag';
+
+  @override
+  String get capabilityFeatured => 'Utvalgte';
+
+  @override
+  String get capabilityTasks => 'Oppgaver';
+
+  @override
+  String get capabilityIntegrations => 'Integrasjoner';
+
+  @override
+  String get categoryPersonalityClones => 'Personlighetskloner';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivitet og livsstil';
+
+  @override
+  String get categorySocialEntertainment => 'Sosialt og underholdning';
+
+  @override
+  String get categoryProductivityTools => 'Produktivitetsverktøy';
+
+  @override
+  String get categoryPersonalWellness => 'Personlig velvære';
+
+  @override
+  String get rating => 'Vurdering';
+
+  @override
+  String get categories => 'Kategorier';
+
+  @override
+  String get sortBy => 'Sorter';
+
+  @override
+  String get highestRating => 'Høyeste vurdering';
+
+  @override
+  String get lowestRating => 'Laveste vurdering';
+
+  @override
+  String get resetFilters => 'Tilbakestill filtre';
+
+  @override
+  String get applyFilters => 'Bruk filtre';
+
+  @override
+  String get mostInstalls => 'Flest installasjoner';
+
+  @override
+  String get couldNotOpenUrl => 'Kunne ikke åpne URL. Vennligst prøv igjen.';
+
+  @override
+  String get newTask => 'Ny oppgave';
+
+  @override
+  String get viewAll => 'Vis alle';
+
+  @override
+  String get addTask => 'Legg til oppgave';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Lydfilen er ikke tilgjengelig for avspilling';
+
+  @override
+  String get audioPlaybackFailed => 'Kan ikke spille av lyd. Filen kan være skadet eller mangler.';
+
+  @override
+  String get connectionGuide => 'Tilkoblingsguide';
+
+  @override
+  String get iveDoneThis => 'Jeg har gjort dette';
+
+  @override
+  String get pairNewDevice => 'Par ny enhet';
+
+  @override
+  String get dontSeeYourDevice => 'Ser du ikke enheten din?';
+
+  @override
+  String get reportAnIssue => 'Rapporter et problem';
+
+  @override
+  String get pairingTitleOmi => 'Slå på Omi';
+
+  @override
+  String get pairingDescOmi => 'Trykk og hold enheten til den vibrerer for å slå den på.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Sett Omi DevKit i paringsmodus';
+
+  @override
+  String get pairingDescOmiDevkit => 'Trykk på knappen én gang for å slå på. LED-en blinker lilla i paringsmodus.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Slå på Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Trykk og hold sideknappen i 3 sekunder for å slå på.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Sett Plaud Note i paringsmodus';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Trykk og hold sideknappen i 2 sekunder. Den røde LED-en blinker når den er klar til paring.';
+
+  @override
+  String get pairingTitleBee => 'Sett Bee i paringsmodus';
+
+  @override
+  String get pairingDescBee => 'Trykk på knappen 5 ganger etter hverandre. Lyset begynner å blinke blått og grønt.';
+
+  @override
+  String get pairingTitleLimitless => 'Sett Limitless i paringsmodus';
+
+  @override
+  String get pairingDescLimitless =>
+      'Når et lys er synlig, trykk én gang og trykk deretter og hold til enheten viser et rosa lys, slipp deretter.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Sett Friend Pendant i paringsmodus';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Trykk på knappen på anhengeren for å slå den på. Den går automatisk i paringsmodus.';
+
+  @override
+  String get pairingTitleFieldy => 'Sett Fieldy i paringsmodus';
+
+  @override
+  String get pairingDescFieldy => 'Trykk og hold enheten til lyset vises for å slå den på.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Koble til Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Installer og åpne Omi-appen på Apple Watch, trykk deretter på Koble til i appen.';
+
+  @override
+  String get pairingTitleNeoOne => 'Sett Neo One i paringsmodus';
+
+  @override
+  String get pairingDescNeoOne => 'Trykk og hold strømknappen til LED-en blinker. Enheten vil være synlig.';
+
+  @override
+  String get downloadingFromDevice => 'Laster ned fra enhet';
+
+  @override
+  String get reconnectingToInternet => 'Kobler til internett på nytt...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laster opp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Behandlet';
+
+  @override
+  String get corruptedStatus => 'Ødelagt';
+
+  @override
+  String nPending(int count) {
+    return '$count ventende';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count behandlet';
+  }
+
+  @override
+  String get synced => 'Synkronisert';
+
+  @override
+  String get noPendingRecordings => 'Ingen ventende opptak';
+
+  @override
+  String get noProcessedRecordings => 'Ingen behandlede opptak ennå';
+
+  @override
+  String get pending => 'Ventende';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Legge til i oppgavelisten din?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunne ikke opprette delingslenke';
+
+  @override
+  String get deleteGoal => 'Slett mål';
+
+  @override
+  String get deviceUpToDate => 'Enheten din er oppdatert';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfigurasjon';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Skriv inn WiFi-legitimasjonen din slik at enheten kan laste ned fastvaren.';
+
+  @override
+  String get networkNameSsid => 'Nettverksnavn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Skriv inn WiFi-nettverksnavn';
+
+  @override
+  String get enterWifiPassword => 'Skriv inn WiFi-passord';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

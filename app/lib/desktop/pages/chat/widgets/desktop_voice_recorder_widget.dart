@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:shimmer/shimmer.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/services/services.dart';
@@ -334,7 +334,7 @@ class _DesktopVoiceRecorderWidgetState extends State<DesktopVoiceRecorderWidget>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Shimmer.fromColors(
+              ShimmerWithTimeout(
                 baseColor: ResponsiveHelper.textTertiary,
                 highlightColor: ResponsiveHelper.textPrimary,
                 child: Text(

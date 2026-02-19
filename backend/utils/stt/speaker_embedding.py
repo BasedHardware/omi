@@ -1,4 +1,7 @@
+import io
 import os
+import struct
+import wave
 from typing import Optional, Tuple
 
 import numpy as np
@@ -8,6 +11,22 @@ from scipy.spatial.distance import cdist
 # Cosine distance threshold for speaker matching
 # Based on VoxCeleb 1 test set EER of 2.8%
 SPEAKER_MATCH_THRESHOLD = 0.45
+
+# Minimum audio duration (seconds) for speaker embedding extraction.
+# Audio shorter than this crashes pyannote wespeaker fbank (see issue #4572).
+MIN_EMBEDDING_AUDIO_DURATION = float(os.getenv("MIN_EMBEDDING_AUDIO_DURATION", "0.5"))
+
+
+def _get_wav_duration(audio_data: bytes) -> float:
+    """Get duration in seconds from WAV bytes. Returns 0.0 on parse failure."""
+    try:
+        with wave.open(io.BytesIO(audio_data), "rb") as wf:
+            framerate = wf.getframerate()
+            if framerate <= 0:
+                return 0.0
+            return wf.getnframes() / framerate
+    except (wave.Error, EOFError, struct.error):
+        return 0.0
 
 
 def _get_api_url() -> str:
@@ -32,7 +51,7 @@ def extract_embedding(audio_path: str) -> np.ndarray:
 
     with open(audio_path, 'rb') as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
-        response = requests.post(f"{api_url}/v1/embedding", files=files, timeout=300)
+        response = requests.post(f"{api_url}/v2/embedding", files=files, timeout=300)
         response.raise_for_status()
 
     result = response.json()
@@ -60,11 +79,18 @@ def extract_embedding_from_bytes(audio_data: bytes, filename: str = "audio.wav")
 
     Returns:
         numpy array of shape (1, D) where D is embedding dimension
+
+    Raises:
+        ValueError: If audio is too short for speaker embedding
     """
+    duration = _get_wav_duration(audio_data)
+    if duration < MIN_EMBEDDING_AUDIO_DURATION:
+        raise ValueError(f"Audio too short for speaker embedding: {duration:.3f}s < {MIN_EMBEDDING_AUDIO_DURATION}s")
+
     api_url = _get_api_url()
 
     files = {'file': (filename, audio_data, 'audio/wav')}
-    response = requests.post(f"{api_url}/v1/embedding", files=files, timeout=300)
+    response = requests.post(f"{api_url}/v2/embedding", files=files, timeout=300)
     response.raise_for_status()
 
     result = response.json()

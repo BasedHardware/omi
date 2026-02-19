@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
@@ -20,11 +22,6 @@ class GoalsWidget extends StatefulWidget {
 }
 
 class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
-  List<Goal> _goals = [];
-  bool _isLoading = true;
-  bool _isExpanded = false;
-
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
 
@@ -64,11 +61,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadGoals();
+    _loadEmojis();
   }
 
   void refresh() {
-    _loadGoals();
+    Provider.of<GoalsProvider>(context, listen: false).refresh();
   }
 
   @override
@@ -83,70 +80,31 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadGoals();
+      Provider.of<GoalsProvider>(context, listen: false).refresh();
     }
   }
 
-  Future<void> _loadGoals() async {
+  Future<void> _loadEmojis() async {
     try {
-      // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
 
-      if (emojisJson != null) {
+      if (emojisJson != null && mounted) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
-        _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
-      }
-
-      // Fetch goals from backend (source of truth for cross-device sync)
-      final backendGoals = await getAllGoals();
-
-      if (backendGoals.isNotEmpty && mounted) {
         setState(() {
-          _goals = backendGoals;
-          _isLoading = false;
+          _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
         });
-        // Save to local storage as cache
-        await _saveGoalsLocally();
-      } else {
-        // Fallback: try to load from local storage if backend is empty/unavailable
-        final goalsJson = prefs.getString(_goalsStorageKey);
-        if (goalsJson != null) {
-          try {
-            final List<dynamic> decoded = json.decode(goalsJson);
-            final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-            if (localGoals.isNotEmpty && mounted) {
-              setState(() {
-                _goals = localGoals;
-                _isLoading = false;
-              });
-              return;
-            }
-          } catch (e) {
-            Logger.debug('[GOALS] Error parsing local goals: $e');
-          }
-        }
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
       }
-    } catch (e) {
-      Logger.debug('[GOALS] Error loading goals: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+    } catch (_) {}
   }
 
-  Future<void> _saveGoalsLocally() async {
+  Future<void> _saveEmojis() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final goalsJson = json.encode(_goals.map((g) => g.toJson()).toList());
-      await prefs.setString(_goalsStorageKey, goalsJson);
-      // Also save emojis
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
-    } catch (e) {
-      Logger.debug('[GOALS] Error saving goals: $e');
-    }
+      widget.onRefresh?.call();
+    } catch (_) {}
   }
 
   String _getSmartEmoji(String title) {
@@ -235,8 +193,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return _goalEmojis[goalId] ?? '🎯';
   }
 
-  void _addGoal() {
-    if (_goals.length >= _maxGoals) {
+  void addGoal() {
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    if (goalsProvider.goals.length >= _maxGoals) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)),
@@ -246,6 +205,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return;
     }
 
+    MixpanelManager().goalAddButtonTapped(source: 'home');
     HapticFeedback.lightImpact();
     _titleController.clear();
     _currentController.text = '0';
@@ -335,6 +295,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             return GestureDetector(
                               onTap: () {
                                 HapticFeedback.selectionClick();
+                                MixpanelManager().goalEmojiSelected(emoji: emoji);
                                 setSheetState(() => _selectedEmoji = emoji);
                               },
                               child: Container(
@@ -373,6 +334,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
+                      autofocus: true,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         filled: true,
@@ -460,6 +422,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       Expanded(
                         child: TextButton(
                           onPressed: () async {
+                            MixpanelManager().goalDeleted(goalId: existingGoal.id, source: 'home', method: 'button');
                             Navigator.pop(context);
                             await _deleteGoal(existingGoal);
                           },
@@ -506,58 +469,26 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
     final current = double.tryParse(_currentController.text) ?? 0;
     final target = double.tryParse(_targetController.text) ?? 100;
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
 
     if (existingGoal != null) {
-      // Update existing goal
-      final updated = Goal(
-        id: existingGoal.id,
+      // Update existing goal via provider
+      await goalsProvider.updateGoal(
+        existingGoal.id,
         title: title,
-        goalType: existingGoal.goalType,
         currentValue: current,
         targetValue: target,
-        minValue: existingGoal.minValue,
-        maxValue: target,
-        isActive: true,
-        createdAt: existingGoal.createdAt,
-        updatedAt: DateTime.now(),
       );
 
-      final index = _goals.indexWhere((g) => g.id == existingGoal.id);
-      if (index >= 0) {
-        setState(() {
-          _goals[index] = updated;
-          _goalEmojis[existingGoal.id] = _selectedEmoji; // Save emoji
-        });
-      }
-
-      // Try to sync to backend
-      if (!existingGoal.id.startsWith('local_')) {
-        await updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
-      }
-    } else {
-      // Create new goal
-      final newGoalId = 'local_${DateTime.now().millisecondsSinceEpoch}';
-      final smartEmoji = _getSmartEmoji(title); // Auto-select emoji based on title
-      final newGoal = Goal(
-        id: newGoalId,
-        title: title,
-        goalType: 'numeric',
-        currentValue: current,
-        targetValue: target,
-        minValue: 0,
-        maxValue: target,
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
+      MixpanelManager().goalUpdated(goalId: existingGoal.id, source: 'home');
+      // Save emoji
       setState(() {
-        _goals.add(newGoal);
-        _goalEmojis[newGoalId] = smartEmoji; // Save smart emoji for new goal
+        _goalEmojis[existingGoal.id] = _selectedEmoji;
       });
-
-      // Try to create on backend
-      final created = await createGoal(
+    } else {
+      // Create new goal via provider
+      final smartEmoji = _getSmartEmoji(title);
+      final created = await goalsProvider.createGoal(
         title: title,
         goalType: 'numeric',
         targetValue: target,
@@ -565,42 +496,30 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       );
 
       if (created != null) {
-        final index = _goals.indexWhere((g) => g.id == newGoal.id);
-        if (index >= 0 && mounted) {
-          setState(() {
-            _goals[index] = created;
-            // Move emoji to the new backend id
-            _goalEmojis[created.id] = smartEmoji;
-            _goalEmojis.remove(newGoalId);
-          });
-        }
+        MixpanelManager()
+            .goalCreated(goalId: created.id, titleLength: title.length, targetValue: target, source: 'home');
+        setState(() {
+          _goalEmojis[created.id] = smartEmoji;
+        });
       }
     }
 
-    await _saveGoalsLocally();
+    await _saveEmojis();
   }
 
   Future<void> _deleteGoal(Goal goal) async {
     HapticFeedback.mediumImpact();
-    setState(() {
-      _goals.removeWhere((g) => g.id == goal.id);
-      _goalEmojis.remove(goal.id); // Remove emoji mapping
-    });
-    await _saveGoalsLocally();
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.deleteGoal(goal.id);
 
-    if (!goal.id.startsWith('local_')) {
-      await deleteGoal(goal.id);
-    }
+    setState(() {
+      _goalEmojis.remove(goal.id);
+    });
+    await _saveEmojis();
   }
 
   String _rawNum(double v) {
     return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-  }
-
-  String _formatNum(double v) {
-    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
-    return _rawNum(v);
   }
 
   Color _getColor(double progress) {
@@ -613,82 +532,69 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const SizedBox.shrink();
-    }
+    return Consumer<GoalsProvider>(
+      builder: (context, goalsProvider, child) {
+        if (goalsProvider.isLoading) {
+          return const SizedBox.shrink();
+        }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.only(top: 16, bottom: 20),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.08),
-            width: 1,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  context.l10n.goals,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (_goals.length < _maxGoals)
-                  GestureDetector(
-                    onTap: _addGoal,
-                    child: Icon(
-                      Icons.add_rounded,
-                      size: 22,
-                      color: Colors.white.withOpacity(0.5),
+        final goals = goalsProvider.goals;
+
+        // If no goals, hide the widget (Add Goals button is now in Daily Score widget)
+        if (goals.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(left: 16, right: 16),
+          padding: const EdgeInsets.only(top: 16, bottom: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      context.l10n.goals,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          // Goals list
-          if (_goals.isEmpty)
-            GestureDetector(
-              onTap: _addGoal,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
-                      const SizedBox(width: 8),
-                      Text(
-                        context.l10n.tapToAddGoal,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.4),
+                    if (goals.length < _maxGoals)
+                      GestureDetector(
+                        onTap: addGoal,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.add,
+                            size: 18,
+                            color: Colors.grey[400],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            )
-          else
-            ..._goals.asMap().entries.map((entry) {
-              final goal = entry.value;
-              final isLast = entry.key == _goals.length - 1;
-              return _buildGoalItem(goal, isLast);
-            }),
-        ],
-      ),
+              // Goals list
+              ...goals.asMap().entries.map((entry) {
+                final goal = entry.value;
+                final isLast = entry.key == goals.length - 1;
+                return _buildGoalItem(goal, isLast);
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -697,78 +603,129 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     final color = _getColor(progress);
     final emoji = _getGoalEmoji(goal.id);
 
-    return GestureDetector(
-      onTap: () => _editGoal(goal),
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-        child: Row(
-          children: [
-            // Emoji icon
-            Container(
-              width: 36,
-              height: 36,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Dismissible(
+      key: Key(goal.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      onDismissed: (direction) async {
+        MixpanelManager().goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
+        await _deleteGoal(goal);
+      },
+      child: GestureDetector(
+        onTap: () {
+          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'home');
+          _editGoal(goal);
+        },
+        child: Container(
+          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          child: Row(
+            children: [
+              // Emoji icon
+              Container(
+                width: 40,
+                height: 40,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 18)),
+                ),
               ),
-              child: Center(
-                child: Text(emoji, style: const TextStyle(fontSize: 18)),
-              ),
-            ),
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    goal.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  // Progress bar
-                  Stack(
-                    children: [
-                      Container(
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      goal.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
-                      FractionallySizedBox(
-                        widthFactor: progress.clamp(0.0, 1.0),
-                        child: Container(
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    // Progress bar with completion text
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Transform.translate(
+                            offset: const Offset(-12, 0),
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 6,
+                                activeTrackColor: color,
+                                inactiveTrackColor: Colors.white.withOpacity(0.1),
+                                thumbColor: color,
+                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                trackShape: const RoundedRectSliderTrackShape(),
+                                tickMarkShape: SliderTickMarkShape.noTickMark,
+                              ),
+                              child: Slider(
+                                value: goal.currentValue.clamp(0.0, goal.targetValue),
+                                min: 0,
+                                max: goal.targetValue,
+                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
+                                onChanged: (value) => _updateGoalProgressUI(goal, value),
+                                onChangeEnd: (value) {
+                                  MixpanelManager().goalProgressChanged(
+                                    goalId: goal.id,
+                                    oldValue: goal.currentValue,
+                                    newValue: value,
+                                    targetValue: goal.targetValue,
+                                  );
+                                  _saveGoalProgress(goal, value);
+                                },
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            // Expand icon
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Icon(
-                _isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                size: 20,
-                color: Colors.white.withOpacity(0.3),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // Update UI state only (called during drag) - use provider for immediate feedback
+  void _updateGoalProgressUI(Goal goal, double newValue) {
+    if (newValue == goal.currentValue) return;
+    HapticFeedback.lightImpact();
+    // The provider will notify listeners and the UI will update
+  }
+
+  // Save to storage and API (called when drag ends)
+  Future<void> _saveGoalProgress(Goal goal, double newValue) async {
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    await goalsProvider.updateGoalProgress(goal.id, newValue);
   }
 }

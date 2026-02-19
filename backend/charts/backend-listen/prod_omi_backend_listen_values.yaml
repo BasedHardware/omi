@@ -221,7 +221,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
+    value: "false"
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omi.me"
   - name: RAPID_API_HOST
@@ -279,10 +279,10 @@ resources:
   # resources, such as Minikube. If you do want to specify resources, uncomment the following
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
-    cpu: 0.7
+    cpu: 1.5
     memory: 2Gi
   limits:
-    cpu: 1
+    cpu: 2
     memory: 3.5Gi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -307,8 +307,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 32
-  maxReplicas: 60
+  minReplicas: 26
+  maxReplicas: 50
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -317,7 +317,7 @@ autoscaling:
         value: 20
         periodSeconds: 300
     scaleUp:
-      stabilizationWindowSeconds: 0
+      stabilizationWindowSeconds: 30
       policies:
       - type: Percent
         value: 100
@@ -328,8 +328,8 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 70
   # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 8
-  failedResponseCode: 10
+  requestsPerPod: 10
+  # failedResponseCode: 10
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -361,3 +361,7 @@ affinity:
               operator: In
               values:
                 - prod
+            - key: type
+              operator: In
+              values:
+                - high-cpu

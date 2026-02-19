@@ -4,6 +4,8 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -537,7 +539,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const FaIcon(FontAwesomeIcons.share, size: 20),
             onPressed: _shareGraph,
           ),
         ],

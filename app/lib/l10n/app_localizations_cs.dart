@@ -425,7 +425,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceSettings => 'Nastavení zařízení';
 
   @override
-  String get chatTools => 'Nástroje chatu';
+  String get integrations => 'Integrace';
 
   @override
   String get feedbackBug => 'Zpětná vazba / Chyba';
@@ -449,7 +449,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get appAndDeviceCopied => 'Podrobnosti o aplikaci a zařízení zkopírovány';
 
   @override
-  String get wrapped2025 => 'Wrapped 2025';
+  String get wrapped2025 => 'Shrnutí 2025';
 
   @override
   String get yourPrivacyYourControl => 'Vaše soukromí, vaše kontrola';
@@ -1013,13 +1013,13 @@ class AppLocalizationsCs extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Připojit';
+  String get connect => 'Connect';
 
   @override
   String get comingSoon => 'Již brzy';
 
   @override
-  String get chatToolsFooter => 'Připojte své aplikace k zobrazení dat a metrik v chatu.';
+  String get integrationsFooter => 'Připojte své aplikace k zobrazení dat a metrik v chatu.';
 
   @override
   String get completeAuthInBrowser =>
@@ -1654,7 +1654,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get whatShouldWeMake => 'Co bychom měli vytvořit?';
 
   @override
-  String get appName => 'Název aplikace';
+  String get appName => 'App Name';
 
   @override
   String get description => 'Popis';
@@ -2268,7 +2268,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get folderName => 'Název složky';
 
   @override
-  String get descriptionOptional => 'Popis (volitelné)';
+  String get descriptionOptional => 'Description (optional)';
 
   @override
   String get failedToDeleteFolder => 'Odstranění složky selhalo';
@@ -7783,5 +7783,436 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+  String get deviceDoesNotSupportWifiSwitchingToBle =>
+      'Zařízení nepodporuje WiFi synchronizaci, přepínání na Bluetooth';
+
+  @override
+  String get appleHealthNotAvailable => 'Apple Health není na tomto zařízení k dispozici';
+
+  @override
+  String get downloadAudio => 'Stáhnout zvuk';
+
+  @override
+  String get audioDownloadSuccess => 'Zvuk byl úspěšně stažen';
+
+  @override
+  String get audioDownloadFailed => 'Stažení zvuku se nezdařilo';
+
+  @override
+  String get downloadingAudio => 'Stahování zvuku...';
+
+  @override
+  String get shareAudio => 'Sdílet zvuk';
+
+  @override
+  String get preparingAudio => 'Příprava zvuku';
+
+  @override
+  String get gettingAudioFiles => 'Získávání zvukových souborů...';
+
+  @override
+  String get downloadingAudioProgress => 'Stahování zvuku';
+
+  @override
+  String get processingAudio => 'Zpracování zvuku';
+
+  @override
+  String get combiningAudioFiles => 'Kombinování zvukových souborů...';
+
+  @override
+  String get audioReady => 'Zvuk je připraven';
+
+  @override
+  String get openingShareSheet => 'Otevírání listu sdílení...';
+
+  @override
+  String get audioShareFailed => 'Sdílení se nezdařilo';
+
+  @override
+  String get dailyRecaps => 'Denní Souhrny';
+
+  @override
+  String get removeFilter => 'Odstranit Filtr';
+
+  @override
+  String get categoryConversationAnalysis => 'Analýza konverzací';
+
+  @override
+  String get categoryPersonalityClone => 'Klon osobnosti';
+
+  @override
+  String get categoryHealth => 'Zdraví';
+
+  @override
+  String get categoryEducation => 'Vzdělávání';
+
+  @override
+  String get categoryCommunication => 'Komunikace';
+
+  @override
+  String get categoryEmotionalSupport => 'Emoční podpora';
+
+  @override
+  String get categoryProductivity => 'Produktivita';
+
+  @override
+  String get categoryEntertainment => 'Zábava';
+
+  @override
+  String get categoryFinancial => 'Finance';
+
+  @override
+  String get categoryTravel => 'Cestování';
+
+  @override
+  String get categorySafety => 'Bezpečnost';
+
+  @override
+  String get categoryShopping => 'Nakupování';
+
+  @override
+  String get categorySocial => 'Sociální';
+
+  @override
+  String get categoryNews => 'Zprávy';
+
+  @override
+  String get categoryUtilities => 'Nástroje';
+
+  @override
+  String get categoryOther => 'Ostatní';
+
+  @override
+  String get capabilityChat => 'Chat';
+
+  @override
+  String get capabilityConversations => 'Konverzace';
+
+  @override
+  String get capabilityExternalIntegration => 'Externí integrace';
+
+  @override
+  String get capabilityNotification => 'Oznámení';
+
+  @override
+  String get triggerAudioBytes => 'Audio bajty';
+
+  @override
+  String get triggerConversationCreation => 'Vytvoření konverzace';
+
+  @override
+  String get triggerTranscriptProcessed => 'Přepis zpracován';
+
+  @override
+  String get actionCreateConversations => 'Vytvořit konverzace';
+
+  @override
+  String get actionCreateMemories => 'Vytvořit vzpomínky';
+
+  @override
+  String get actionReadConversations => 'Číst konverzace';
+
+  @override
+  String get actionReadMemories => 'Číst vzpomínky';
+
+  @override
+  String get actionReadTasks => 'Číst úkoly';
+
+  @override
+  String get scopeUserName => 'Uživatelské jméno';
+
+  @override
+  String get scopeUserFacts => 'Fakta o uživateli';
+
+  @override
+  String get scopeUserConversations => 'Konverzace uživatele';
+
+  @override
+  String get scopeUserChat => 'Chat uživatele';
+
+  @override
+  String get capabilitySummary => 'Souhrn';
+
+  @override
+  String get capabilityFeatured => 'Doporučené';
+
+  @override
+  String get capabilityTasks => 'Úkoly';
+
+  @override
+  String get capabilityIntegrations => 'Integrace';
+
+  @override
+  String get categoryPersonalityClones => 'Klony osobností';
+
+  @override
+  String get categoryProductivityLifestyle => 'Produktivita a životní styl';
+
+  @override
+  String get categorySocialEntertainment => 'Sociální a zábava';
+
+  @override
+  String get categoryProductivityTools => 'Nástroje produktivity';
+
+  @override
+  String get categoryPersonalWellness => 'Osobní pohoda';
+
+  @override
+  String get rating => 'Hodnocení';
+
+  @override
+  String get categories => 'Kategorie';
+
+  @override
+  String get sortBy => 'Řadit';
+
+  @override
+  String get highestRating => 'Nejvyšší hodnocení';
+
+  @override
+  String get lowestRating => 'Nejnižší hodnocení';
+
+  @override
+  String get resetFilters => 'Resetovat filtry';
+
+  @override
+  String get applyFilters => 'Použít filtry';
+
+  @override
+  String get mostInstalls => 'Nejvíce instalací';
+
+  @override
+  String get couldNotOpenUrl => 'Nepodařilo se otevřít URL. Zkuste to prosím znovu.';
+
+  @override
+  String get newTask => 'Nový úkol';
+
+  @override
+  String get viewAll => 'Zobrazit vše';
+
+  @override
+  String get addTask => 'Přidat úkol';
+
+  @override
+  String get addMcpServer => 'Add MCP Server';
+
+  @override
+  String get connectExternalAiTools => 'Connect external AI tools';
+
+  @override
+  String get mcpServerUrl => 'MCP Server URL';
+
+  @override
+  String mcpServerConnected(int count) {
+    return '$count tools connected successfully';
+  }
+
+  @override
+  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+
+  @override
+  String get authorizingMcpServer => 'Authorizing...';
+
+  @override
+  String get whereDidYouHearAboutOmi => 'How did you find us?';
+
+  @override
+  String get tiktok => 'TikTok';
+
+  @override
+  String get youtube => 'YouTube';
+
+  @override
+  String get instagram => 'Instagram';
+
+  @override
+  String get xTwitter => 'X (Twitter)';
+
+  @override
+  String get reddit => 'Reddit';
+
+  @override
+  String get friendWordOfMouth => 'Friend';
+
+  @override
+  String get otherSource => 'Other';
+
+  @override
+  String get pleaseSpecify => 'Please specify';
+
+  @override
+  String get event => 'Event';
+
+  @override
+  String get coworker => 'Coworker';
+
+  @override
+  String get linkedIn => 'LinkedIn';
+
+  @override
+  String get appStore => 'App Store';
+
+  @override
+  String get googleSearch => 'Google Search';
+
+  @override
+  String get audioPlaybackUnavailable => 'Zvukový soubor není k dispozici pro přehrávání';
+
+  @override
+  String get audioPlaybackFailed => 'Nelze přehrát zvuk. Soubor může být poškozený nebo chybět.';
+
+  @override
+  String get connectionGuide => 'Průvodce připojením';
+
+  @override
+  String get iveDoneThis => 'Hotovo';
+
+  @override
+  String get pairNewDevice => 'Spárovat nové zařízení';
+
+  @override
+  String get dontSeeYourDevice => 'Nevidíte své zařízení?';
+
+  @override
+  String get reportAnIssue => 'Nahlásit problém';
+
+  @override
+  String get pairingTitleOmi => 'Zapněte Omi';
+
+  @override
+  String get pairingDescOmi => 'Stiskněte a podržte zařízení, dokud nezavibruje, pro zapnutí.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Přepněte Omi DevKit do režimu párování';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Stiskněte tlačítko jednou pro zapnutí. LED bude blikat fialově v režimu párování.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Zapněte Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Stiskněte a podržte boční tlačítko po dobu 3 sekund pro zapnutí.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Přepněte Plaud Note do režimu párování';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Stiskněte a podržte boční tlačítko po dobu 2 sekund. Červená LED bude blikat, když je připraveno k párování.';
+
+  @override
+  String get pairingTitleBee => 'Přepněte Bee do režimu párování';
+
+  @override
+  String get pairingDescBee => 'Stiskněte tlačítko 5krát za sebou. Kontrolka začne blikat modře a zeleně.';
+
+  @override
+  String get pairingTitleLimitless => 'Přepněte Limitless do režimu párování';
+
+  @override
+  String get pairingDescLimitless =>
+      'Když svítí jakýkoli indikátor, stiskněte jednou a poté stiskněte a podržte, dokud zařízení neukáže růžové světlo, poté uvolněte.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Přepněte Friend Pendant do režimu párování';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Stiskněte tlačítko na přívěsku pro zapnutí. Automaticky přejde do režimu párování.';
+
+  @override
+  String get pairingTitleFieldy => 'Přepněte Fieldy do režimu párování';
+
+  @override
+  String get pairingDescFieldy => 'Stiskněte a podržte zařízení, dokud se nerozsvítí kontrolka pro zapnutí.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Připojte Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Nainstalujte a otevřete aplikaci Omi na Apple Watch, poté klepněte na Připojit v aplikaci.';
+
+  @override
+  String get pairingTitleNeoOne => 'Přepněte Neo One do režimu párování';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Stiskněte a podržte tlačítko napájení, dokud LED nezabliká. Zařízení bude viditelné.';
+
+  @override
+  String get downloadingFromDevice => 'Stahování ze zařízení';
+
+  @override
+  String get reconnectingToInternet => 'Opětovné připojování k internetu...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Nahrávání $current z $total';
+  }
+
+  @override
+  String get processedStatus => 'Zpracováno';
+
+  @override
+  String get corruptedStatus => 'Poškozeno';
+
+  @override
+  String nPending(int count) {
+    return '$count čekajících';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count zpracovaných';
+  }
+
+  @override
+  String get synced => 'Synchronizováno';
+
+  @override
+  String get noPendingRecordings => 'Žádné čekající nahrávky';
+
+  @override
+  String get noProcessedRecordings => 'Zatím žádné zpracované nahrávky';
+
+  @override
+  String get pending => 'Čekající';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Co je nového ve $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Přidat do seznamu úkolů?';
+
+  @override
+  String get failedToCreateShareLink => 'Nepodařilo se vytvořit odkaz ke sdílení';
+
+  @override
+  String get deleteGoal => 'Smazat cíl';
+
+  @override
+  String get deviceUpToDate => 'Vaše zařízení je aktuální';
+
+  @override
+  String get wifiConfiguration => 'Konfigurace WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Zadejte přihlašovací údaje WiFi, aby zařízení mohlo stáhnout firmware.';
+
+  @override
+  String get networkNameSsid => 'Název sítě (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Zadejte název WiFi sítě';
+
+  @override
+  String get enterWifiPassword => 'Zadejte heslo WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

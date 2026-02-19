@@ -1,0 +1,40 @@
+---
+description: "Code formatting standards for all languages"
+alwaysApply: false
+---
+
+# Formatting Standards
+
+Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually.
+
+## Formatting Commands
+
+### Dart (app/)
+```bash
+dart format --line-length 120 <files>
+```
+**Note**: Files ending in `.gen.dart` or `.g.dart` are auto-generated and should not be formatted manually.
+
+### Python (backend/)
+```bash
+black --line-length 120 <files>
+```
+**Note**: String normalization settings come from `backend/pyproject.toml` (skip-string-normalization = true).
+
+### C/C++ (firmware: omi/, omiGlass/)
+```bash
+clang-format -i <files>
+```
+
+## Auto-Formatting
+
+The pre-commit hook automatically formats code on commit. To install:
+```bash
+ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
+```
+
+## Related Cursor Resources
+
+### Commands
+- `/format` - Format code according to project standards
+- `/lint-and-fix` - Run linter and auto-fix issues
