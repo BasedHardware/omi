@@ -162,6 +162,18 @@ gcloud run services update "$CLOUD_RUN_SERVICE" \
 echo "  ✓ Backend deployed"
 
 # -----------------------------------------------------------------------------
+# Step 1.1: Check settings search coverage
+# -----------------------------------------------------------------------------
+echo "[1.1/12] Checking settings search coverage..."
+if xcrun swift scripts/check_settings_search.swift; then
+    echo "  ✓ Settings search coverage verified"
+else
+    echo "  Settings search coverage check FAILED!"
+    echo "  Fix missing entries in SettingsSidebar.swift before releasing."
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Step 1.5: Prepare Universal ffmpeg (arm64 + x86_64)
 # -----------------------------------------------------------------------------
 echo "[1.5/12] Preparing universal ffmpeg binary..."
