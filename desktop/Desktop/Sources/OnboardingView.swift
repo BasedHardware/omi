@@ -25,6 +25,7 @@ struct OnboardingView: View {
 
     // State for file indexing step (step 4)
     @State private var fileIndexingDone = false
+    @State private var isBrainMapPhase = false
 
 
     // Privacy sheet
@@ -236,79 +237,45 @@ struct OnboardingView: View {
     private var onboardingContent: some View {
         Group {
             if currentStep == 0 {
-                // Full-window video with overlaid controls, capped at native resolution
+                // Full-window video
                 ZStack {
                     OnboardingVideoView()
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
                         .frame(maxWidth: 960)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    // Overlay progress indicators and button
                     VStack {
-                        // Progress indicators at top
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
-                            }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
-
                         Spacer()
-
-                        // Continue button at bottom
                         Button(action: handleMainAction) {
                             Text("Continue")
-                                .frame(maxWidth: 200)
-                                .padding(.vertical, 8)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: 220)
+                                .padding(.vertical, 12)
+                                .background(OmiColors.purplePrimary)
+                                .cornerRadius(12)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .padding(.bottom, 24)
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 32)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if currentStep == 4 && isBrainMapPhase {
+                // Full-bleed brain map
+                stepContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Standard card layout for all other steps
-                VStack(spacing: 24) {
-                    Spacer()
-
-                    VStack(spacing: currentStep == 4 ? 0 : 24) {
-                        // Progress indicators (hidden for step 4 — full black card)
-                        if currentStep != 4 {
-                            HStack(spacing: 12) {
-                                ForEach(0..<steps.count, id: \.self) { index in
-                                    progressIndicator(for: index)
-                                }
-                            }
-                            .padding(.top, 20)
-                            .padding(.horizontal, 20)
-
-                            Spacer()
-                                .frame(height: 20)
-                        }
-
+                // Minimal centered content — no card
+                ZStack {
+                    VStack(spacing: 24) {
                         stepContent
 
                         if currentStep != 4 {
-                            Spacer()
-                                .frame(height: 20)
+                            buttonSection
                         }
-
-                        buttonSection
                     }
-                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 700 : 420))
-                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 700 : 420))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(OmiColors.backgroundSecondary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-
-                    Spacer()
+                    .frame(maxWidth: currentStep == 3 ? 720 : 420)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -360,7 +327,7 @@ struct OnboardingView: View {
         case 3:
             permissionsStepView
         case 4:
-            FileIndexingView(chatProvider: chatProvider) { fileCount in
+            FileIndexingView(chatProvider: chatProvider, isBrainMapPhase: $isBrainMapPhase) { fileCount in
                 handleFileIndexingComplete(fileCount: fileCount)
             }
         default:
@@ -485,6 +452,9 @@ struct OnboardingView: View {
     private func handleFileIndexingComplete(fileCount: Int) {
         fileIndexingDone = true
 
+        // Mark file indexing as done so DesktopHomeView doesn't show it again as a sheet
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+
         if fileCount > 0 {
             log("OnboardingView: File indexing completed with \(fileCount) files")
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
@@ -504,6 +474,24 @@ struct OnboardingView: View {
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
+
+        // Create a welcome task for the new user
+        Task {
+            await TasksStore.shared.createTask(
+                description: "Run Omi for two days to start receiving helpful advice",
+                dueAt: Date(),
+                priority: "low"
+            )
+        }
+
+        // Send a welcome notification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            NotificationService.shared.sendNotification(
+                title: "You're all set!",
+                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
+            )
+        }
+
         if let onComplete = onComplete {
             onComplete()
         }
@@ -612,9 +600,9 @@ struct OnboardingView: View {
                 AnimatedGIFView(gifName: gifName)
                     .id(gifName)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 280)
             } else if activePermissionIndex >= 0 {
-                Spacer()
                 Image(systemName: activePermissionIcon)
                     .scaledFont(size: 40)
                     .foregroundColor(OmiColors.purplePrimary)
@@ -626,9 +614,7 @@ struct OnboardingView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
-                Spacer()
             } else {
-                Spacer()
                 Image(systemName: "checkmark.circle.fill")
                     .scaledFont(size: 48)
                     .foregroundColor(.green)
@@ -638,7 +624,6 @@ struct OnboardingView: View {
                     .scaledFont(size: 13)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
-                Spacer()
             }
         }
         .padding(12)
@@ -835,8 +820,9 @@ struct OnboardingVideoView: NSViewRepresentable {
         if let url = Bundle.resourceBundle.url(forResource: "omi-demo", withExtension: "mp4") {
             let player = AVPlayer(url: url)
             playerView.player = player
-            playerView.controlsStyle = .inline
+            playerView.controlsStyle = .none
             playerView.showsFullScreenToggleButton = false
+            playerView.showsSharingServiceButton = false
             player.play()
 
             NotificationCenter.default.addObserver(
