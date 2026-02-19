@@ -26,8 +26,6 @@ struct OnboardingView: View {
     // State for file indexing step (step 4)
     @State private var fileIndexingDone = false
 
-    // Track whether we've initialized bluetooth on the permissions step
-    @State private var hasInitializedBluetoothForPermissions = false
 
     // Privacy sheet
     @State private var showPrivacySheet = false
@@ -110,30 +108,11 @@ struct OnboardingView: View {
                 bringToFront()
             }
         }
-        .onChange(of: appState.hasBluetoothPermission) { _, granted in
-            if granted && currentStep == 3 {
-                log("Bluetooth permission granted on permissions step, bringing to front")
-                bringToFront()
-            }
-        }
-        .onChange(of: currentStep) { _, newStep in
-            // Initialize Bluetooth when reaching permissions step
-            if newStep == 3 && !hasInitializedBluetoothForPermissions {
-                log("Reached Permissions step, initializing Bluetooth manager")
-                appState.initializeBluetoothIfNeeded()
-                hasInitializedBluetoothForPermissions = true
-            }
-        }
         .onAppear {
             // Handle relaunch case: if app restarts on step 3 (e.g., after Screen Recording quit & reopen),
-            // immediately initialize Bluetooth and check all permissions.
+            // immediately check all permissions.
             // onChange(of: currentStep) won't fire since the value didn't change.
             if currentStep == 3 {
-                if !hasInitializedBluetoothForPermissions {
-                    log("OnboardingView onAppear: on permissions step, initializing Bluetooth")
-                    appState.initializeBluetoothIfNeeded()
-                    hasInitializedBluetoothForPermissions = true
-                }
                 log("OnboardingView onAppear: on permissions step, checking all permissions immediately")
                 appState.checkAllPermissions()
             }
@@ -188,7 +167,6 @@ struct OnboardingView: View {
             && appState.hasNotificationPermission
             && appState.hasAccessibilityPermission
             && appState.hasAutomationPermission
-            && (appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied)
     }
 
     private var requiredPermissionsGranted: Bool {
@@ -206,7 +184,6 @@ struct OnboardingView: View {
         if !appState.hasNotificationPermission { return 2 }
         if !appState.hasAccessibilityPermission { return 3 }
         if !appState.hasAutomationPermission { return 4 }
-        if !(appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied) { return 5 }
         return -1 // All granted
     }
 
@@ -230,7 +207,6 @@ struct OnboardingView: View {
                 return "Having trouble? Open System Settings → Privacy & Security → Automation, find Omi and toggle it ON. If Omi isn't listed, try quitting and reopening the app."
             }
             return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
-        case 5: return "Click 'Grant Access' to allow Omi to connect to Bluetooth wearable devices."
         default: return "All permissions granted! Click Continue to finish setup."
         }
     }
@@ -242,7 +218,6 @@ struct OnboardingView: View {
         case 2: return "bell"
         case 3: return "hand.raised"
         case 4: return "gearshape.2"
-        case 5: return "antenna.radiowaves.left.and.right"
         default: return "checkmark.circle"
         }
     }
@@ -254,7 +229,6 @@ struct OnboardingView: View {
         case 2: return "Notifications"
         case 3: return "Accessibility"
         case 4: return "Automation"
-        case 5: return "Bluetooth"
         default: return ""
         }
     }
@@ -601,19 +575,6 @@ struct OnboardingView: View {
                             appState.triggerAutomationPermission()
                         }
                     )
-                    permissionRow(
-                        number: 6,
-                        icon: "antenna.radiowaves.left.and.right",
-                        name: "Bluetooth",
-                        isGranted: appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied,
-                        isActive: activePermissionIndex == 5,
-                        action: {
-                            AnalyticsManager.shared.permissionRequested(permission: "bluetooth")
-                            appState.initializeBluetoothIfNeeded()
-                            appState.triggerBluetoothPermission()
-                        }
-                    )
-
                     // Privacy link
                     Button(action: { showPrivacySheet = true }) {
                         HStack(spacing: 6) {
@@ -731,14 +692,6 @@ struct OnboardingView: View {
         )
     }
 
-    private var isBluetoothPermissionDenied: Bool {
-        appState.isBluetoothPermissionDenied()
-    }
-
-    private var isBluetoothUnsupported: Bool {
-        appState.isBluetoothUnsupported()
-    }
-
     @ViewBuilder
     private var buttonSection: some View {
         VStack(spacing: 8) {
@@ -835,9 +788,6 @@ struct OnboardingView: View {
             }
             if appState.hasAutomationPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "automation")
-            }
-            if appState.hasBluetoothPermission {
-                AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
             }
             // Log skipped permissions
             if !appState.hasScreenRecordingPermission {
