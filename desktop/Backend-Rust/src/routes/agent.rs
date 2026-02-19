@@ -455,19 +455,27 @@ curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/ag
 
 chown matthewdi:matthewdi .env-vm.sh .env-shared.sh agent.mjs 2>/dev/null
 
-# Kill any existing agent process
+# Kill any existing agent process and stop old systemd unit
+systemctl stop omi-agent 2>/dev/null
 pkill -x node 2>/dev/null || true
 sleep 1
 
-# Start agent as matthewdi user (not root — Claude Code needs user-owned HOME)
-sudo -u matthewdi bash -c '
-  export HOME=/home/matthewdi
-  cd /home/matthewdi/omi-agent
-  source .env-vm.sh
-  [ -f .env-shared.sh ] && source .env-shared.sh
-  nohup stdbuf -oL node agent.mjs --serve > agent-server.log 2>&1 &
-  disown
-'
+# Read env vars for systemd-run
+ANTHROPIC=$(grep ANTHROPIC_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+GEMINI=$(grep GEMINI_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+BACKEND=$(grep BACKEND_URL .env-shared.sh 2>/dev/null | cut -d\' -f2)
+
+# Start agent as matthewdi user via systemd (survives SSH disconnect, proper detachment)
+systemd-run --uid=matthewdi --gid=matthewdi \
+  --setenv=HOME=/home/matthewdi \
+  --setenv=AUTH_TOKEN='{auth_token}' \
+  --setenv=DB_PATH=data/omi.db \
+  --setenv=ANTHROPIC_API_KEY=$ANTHROPIC \
+  --setenv=GEMINI_API_KEY=$GEMINI \
+  --setenv=BACKEND_URL=${{BACKEND:-https://api.omi.me}} \
+  --working-directory=/home/matthewdi/omi-agent \
+  --unit=omi-agent \
+  stdbuf -oL node agent.mjs --serve
 "#,
         auth_token = auth_token
     );
