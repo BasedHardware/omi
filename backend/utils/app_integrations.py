@@ -331,8 +331,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         print(f"mentor_proactive empty_text uid={uid}")
         return None
 
-    if len(notification_text) > 300:
-        notification_text = notification_text[:300]
+    if len(notification_text) > 150:
+        notification_text = notification_text[:150]
 
     # 7. Send notification
     print(
