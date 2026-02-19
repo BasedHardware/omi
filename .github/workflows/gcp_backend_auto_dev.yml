@@ -74,8 +74,13 @@ jobs:
           sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
           gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Deploy backend-secrets to GKE
+        run: |
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets ./backend/charts/backend-secrets -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
+
       - name: Deploy ${{ env.SERVICE }}-listen to GKE
         run: |
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
           kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
