@@ -365,8 +365,11 @@ struct BrowserExtensionSetup: View {
             }
 
         case .connect:
-            // Save token
-            let token = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Save token — strip "PLAYWRIGHT_MCP_EXTENSION_TOKEN=" prefix if the user copied the full env var
+            var token = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let eqIndex = token.firstIndex(of: "="), token.hasPrefix("PLAYWRIGHT") {
+                token = String(token[token.index(after: eqIndex)...])
+            }
             UserDefaults.standard.set(token, forKey: "playwrightExtensionToken")
             log("BrowserExtensionSetup: Token saved (\(token.prefix(8))...)")
 
