@@ -7,38 +7,50 @@ struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
     var chatProvider: ChatProvider? = nil
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Section header
-                HStack {
-                    Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                         ? selectedAdvancedSubsection!.rawValue
-                         : selectedSection.rawValue)
-                        .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .id(selectedSection)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.15), value: selectedSection)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Section header
+                    HStack {
+                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
+                             ? selectedAdvancedSubsection!.rawValue
+                             : selectedSection.rawValue)
+                            .scaledFont(size: 28, weight: .bold)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .id(selectedSection)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.15), value: selectedSection)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 32)
+                    .padding(.bottom, 24)
+
+                    // Settings content - embedded SettingsView with dark theme override
+                    SettingsContentView(
+                        appState: appState,
+                        selectedSection: $selectedSection,
+                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        highlightedSettingId: $highlightedSettingId,
+                        chatProvider: chatProvider
+                    )
+                    .padding(.horizontal, 32)
 
                     Spacer()
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
-
-                // Settings content - embedded SettingsView with dark theme override
-                SettingsContentView(
-                    appState: appState,
-                    selectedSection: $selectedSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
-                    chatProvider: chatProvider
-                )
-                .padding(.horizontal, 32)
-
-                Spacer()
+            }
+            .onChange(of: highlightedSettingId) { _, newId in
+                guard let newId = newId else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(newId, anchor: .center)
+                    }
+                }
             }
         }
         .background(OmiColors.backgroundSecondary.opacity(0.3))
@@ -137,6 +149,7 @@ struct SettingsContentView: View {
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
     @Binding var selectedAdvancedSubsection: AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
     @State private var dailySummaryEnabled: Bool = true
@@ -257,11 +270,13 @@ struct SettingsContentView: View {
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
         selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
+        highlightedSettingId: Binding<String?> = .constant(nil),
         chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
         self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self._highlightedSettingId = highlightedSettingId
         self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
@@ -370,7 +385,7 @@ struct SettingsContentView: View {
     private var generalSection: some View {
         VStack(spacing: 20) {
             // Rewind toggle (controls both screen + audio)
-            settingsCard {
+            settingsCard(settingId: "general.rewind") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
@@ -409,7 +424,7 @@ struct SettingsContentView: View {
             }
 
             // Notifications toggle
-            settingsCard {
+            settingsCard(settingId: "general.notifications") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Circle()
@@ -496,7 +511,7 @@ struct SettingsContentView: View {
             }
 
             // Ask Omi floating bar toggle
-            settingsCard {
+            settingsCard(settingId: "general.askomi") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
@@ -529,7 +544,7 @@ struct SettingsContentView: View {
             }
 
             // Font Size
-            settingsCard {
+            settingsCard(settingId: "general.fontsize") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Image(systemName: "textformat.size")
@@ -3544,8 +3559,8 @@ struct SettingsContentView: View {
         }
     }
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+    private func settingsCard<Content: View>(settingId: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        let card = content()
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -3555,10 +3570,17 @@ struct SettingsContentView: View {
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
                     )
             )
+        return Group {
+            if let settingId = settingId {
+                card.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                card
+            }
+        }
     }
 
-    private func settingRow<Content: View>(title: String, subtitle: String, @ViewBuilder control: () -> Content) -> some View {
-        HStack {
+    private func settingRow<Content: View>(title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content) -> some View {
+        let row = HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .scaledFont(size: 14)
@@ -3571,6 +3593,13 @@ struct SettingsContentView: View {
             Spacer()
 
             control()
+        }
+        return Group {
+            if let settingId = settingId {
+                row.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                row
+            }
         }
     }
 
