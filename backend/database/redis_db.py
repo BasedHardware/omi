@@ -507,6 +507,29 @@ def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
 
 
+@try_catch_decorator
+def incr_daily_notification_count(uid: str) -> int:
+    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    count = r.incr(key)
+    r.expire(key, 90000)  # 25 hours TTL
+    return count
+
+
+@try_catch_decorator
+def get_daily_notification_count(uid: str) -> int:
+    """Get the current daily mentor notification count for a user."""
+    from datetime import datetime, timezone
+
+    key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
+    val = r.get(key)
+    if not val:
+        return 0
+    return int(val)
+
+
 def set_user_preferred_app(uid: str, app_id: str):
     """Stores the user's preferred app ID."""
     key = f'user:{uid}:preferred_app'
