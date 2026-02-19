@@ -154,7 +154,7 @@ struct DesktopHomeView: View {
                                     showFileIndexingSheet = false
                                 }
                             )
-                            .frame(width: 600, height: 650)
+                            .frame(width: 700, height: 700)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
