@@ -12,6 +12,7 @@ class GraphNode3D {
     var velocity: SIMD3<Float> = .zero
     var force: SIMD3<Float> = .zero
     var isFixed: Bool = false
+    var connectionCount: Int = 0
 
     init(id: String, label: String, nodeType: KnowledgeGraphNodeType) {
         self.id = id
@@ -45,13 +46,13 @@ class ForceDirectedSimulation {
     var edges: [GraphEdge3D] = []
     var nodeMap: [String: GraphNode3D] = [:]
 
-    // Physics parameters
-    let repulsion: Float = 80_000
-    let attraction: Float = 0.003
-    let centerGravity: Float = 0.0008
+    // Physics parameters (adjusted dynamically in populate() based on graph size)
+    var repulsion: Float = 80_000
+    var attraction: Float = 0.003
+    var centerGravity: Float = 0.0008
     let damping: Float = 0.9
     let dt: Float = 0.016
-    let restLength: Float = 600
+    var restLength: Float = 600
     let maxSpeed: Float = 40
 
     private var tickCount = 0
@@ -67,6 +68,13 @@ class ForceDirectedSimulation {
         edges.removeAll()
         nodeMap.removeAll()
 
+        // Pre-compute connection counts from API edges
+        var connectionCounts: [String: Int] = [:]
+        for edge in graphResponse.edges {
+            connectionCounts[edge.sourceId, default: 0] += 1
+            connectionCounts[edge.targetId, default: 0] += 1
+        }
+
         // Create 3D nodes
         var foundUserNode = false
         for node in graphResponse.nodes {
@@ -75,6 +83,7 @@ class ForceDirectedSimulation {
                 label: node.label,
                 nodeType: node.nodeType
             )
+            node3D.connectionCount = connectionCounts[node.id] ?? 0
 
             // Fix the user node at center
             if let userName = userNodeLabel,
@@ -101,11 +110,6 @@ class ForceDirectedSimulation {
             nodeMap[meNode.id] = meNode
 
             // Connect "me" to the most-connected nodes
-            var connectionCounts: [String: Int] = [:]
-            for edge in graphResponse.edges {
-                connectionCounts[edge.sourceId, default: 0] += 1
-                connectionCounts[edge.targetId, default: 0] += 1
-            }
             let topNodes = connectionCounts.sorted { $0.value > $1.value }.prefix(min(8, graphResponse.nodes.count / 3 + 1))
             for (nodeId, _) in topNodes {
                 edges.append(GraphEdge3D(
@@ -114,7 +118,10 @@ class ForceDirectedSimulation {
                     targetId: nodeId,
                     label: ""
                 ))
+                // Update connection counts for the user edges
+                nodeMap[nodeId]?.connectionCount += 1
             }
+            meNode.connectionCount = topNodes.count
         }
 
         // Create edges
@@ -125,6 +132,28 @@ class ForceDirectedSimulation {
                 targetId: edge.targetId,
                 label: edge.label
             ))
+        }
+
+        // Adapt physics parameters to graph size
+        let nodeCount = nodes.count
+        if nodeCount <= 15 {
+            // Small graph: tighter layout so it doesn't look sparse
+            restLength = 300
+            repulsion = 50_000
+            centerGravity = 0.002
+            attraction = 0.005
+        } else if nodeCount <= 40 {
+            // Medium graph
+            restLength = 450
+            repulsion = 65_000
+            centerGravity = 0.001
+            attraction = 0.004
+        } else {
+            // Large graph: spread out
+            restLength = 600
+            repulsion = 80_000
+            centerGravity = 0.0008
+            attraction = 0.003
         }
 
         // Reset simulation state
