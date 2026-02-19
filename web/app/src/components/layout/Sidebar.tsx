@@ -223,7 +223,7 @@ export function Sidebar({
           transform: !isDesktop ? `translateX(${isOpen ? 0 : -280}px)` : undefined,
           // Desktop: set width directly
           width: isDesktop ? sidebarWidth : 280,
-          willChange: !isDesktop ? 'transform' : 'undefined',
+          willChange: !isDesktop ? 'transform' : undefined,
         }}
         className={cn(
           'bg-bg-secondary border-r border-white/[0.04]',
@@ -363,12 +363,12 @@ export function Sidebar({
                   }}
                   title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                   className={cn(
-                    'flex items-center rounded-xl',
-                    'transition-all duration-150',
+                    'flex items-center rounded-xl border-l-[3px]',
+                    'transition-colors duration-150',
                     showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                     isActive
-                      ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                      ? 'bg-purple-primary/10 text-purple-primary border-purple-primary'
+                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary border-transparent',
                     showComingSoon && 'opacity-60'
                   )}
                 >
