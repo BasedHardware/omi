@@ -439,6 +439,7 @@ async fn create_gce_vm(
     // Uses stdbuf for line-buffered output, writes env to file so restarts work
     let startup_script = format!(
         r#"#!/bin/bash
+export HOME=/home/matthewdi
 cd /home/matthewdi/omi-agent
 
 # Write per-VM env vars (unique to this VM, set at creation time)
