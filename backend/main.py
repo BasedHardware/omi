@@ -43,6 +43,7 @@ from routers import (
     agent_tools,
 )
 
+from utils.firebase_auth import init_prod_firebase_auth
 from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 
@@ -55,6 +56,8 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
     firebase_admin.initialize_app(credentials)
 else:
     firebase_admin.initialize_app()
+
+init_prod_firebase_auth()
 
 app = FastAPI()
 
