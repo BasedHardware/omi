@@ -194,7 +194,7 @@ actor AIUserProfileService {
         log("AIUserProfileService: Stage 1 complete (\(stageOneText.count) chars)")
 
         // 5. Stage 2 — Consolidate with past profiles for holistic view
-        let pastProfiles = await getAllProfiles(limit: 50)
+        let pastProfiles = await getAllProfiles(limit: 5)
         let finalText: String
         if pastProfiles.isEmpty {
             finalText = stageOneText
@@ -431,7 +431,7 @@ actor AIUserProfileService {
         === NEW PROFILE (generated today from latest data) ===
         \(newProfile)
 
-        === PAST PROFILES (oldest to newest, up to 50) ===
+        === PAST PROFILES (oldest to newest, up to 5) ===
         \(pastSection)
         """
     }
