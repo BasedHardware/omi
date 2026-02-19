@@ -7,6 +7,8 @@ from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 
+from utils.firebase_auth import verify_firebase_token
+
 
 def get_user(uid: str):
     user = auth.get_user(uid)
@@ -33,7 +35,7 @@ def verify_token(token: str) -> str:
 
     # Verify Firebase token
     try:
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = verify_firebase_token(token)
         return decoded_token['uid']
     except InvalidIdTokenError:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true':
