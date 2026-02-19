@@ -8,8 +8,9 @@ import requests
 
 from database.apps import get_app_by_id_db
 from database.redis_db import enable_app, increase_app_installs_count
-from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
+from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
+from utils.firebase_auth import verify_firebase_token
 
 router = APIRouter(
     tags=["oauth"],
@@ -112,7 +113,7 @@ async def oauth_authorize(
 @router.post("/v1/oauth/token")
 async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
     try:
-        decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
+        decoded_token = verify_firebase_token(firebase_id_token)
         uid = decoded_token['uid']
     except firebase_admin.auth.InvalidIdTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
