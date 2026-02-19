@@ -119,6 +119,11 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(pttTranscriptionMode.rawValue, forKey: "shortcut_pttTranscriptionMode") }
     }
 
+    /// When true, the floating bar can be repositioned by dragging. Off by default.
+    @Published var draggableBarEnabled: Bool {
+        didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttKey"),
            let key = PTTKey(rawValue: saved) {
@@ -142,5 +147,6 @@ class ShortcutSettings: ObservableObject {
         } else {
             self.pttTranscriptionMode = .batch
         }
+        self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
     }
 }

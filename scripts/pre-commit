@@ -14,11 +14,15 @@ STAGED_PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM "backend/*
 
 if [ -n "$STAGED_PYTHON_FILES" ]; then
   echo "Formatting staged Python files in backend/..."
-  if ! command -v black >/dev/null 2>&1; then
+  if command -v black >/dev/null 2>&1; then
+    BLACK_CMD="black"
+  elif python3 -m black --version >/dev/null 2>&1; then
+    BLACK_CMD="python3 -m black"
+  else
     echo "black is not installed. Please run 'pip install black'" >&2
     exit 1
   fi
-  echo "$STAGED_PYTHON_FILES" | xargs black --line-length 120 --skip-string-normalization
+  echo "$STAGED_PYTHON_FILES" | xargs $BLACK_CMD --line-length 120 --skip-string-normalization
   echo "$STAGED_PYTHON_FILES" | xargs git add
 fi
 

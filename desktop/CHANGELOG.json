@@ -1,6 +1,62 @@
 {
   "releases": [
     {
+      "version": "0.9.2",
+      "date": "2026-02-18",
+      "changes": [
+        "File indexing onboarding: Omi scans your folders to understand what you work on, then opens an AI chat to explore your files",
+        "Transcription auto-restart: audio monitoring resumes automatically after your Mac wakes from sleep",
+        "Notification self-repair: detects and fixes silently revoked notification permissions on macOS 26+",
+        "Reliable task sync: deleted tasks now properly disappear, reconciliation runs when switching to Tasks tab",
+        "Task sort order matches mobile: consistent due_at/created_at ordering across platforms",
+        "Old tasks hidden: incomplete tasks older than 7 days are excluded from the task list",
+        "Goals widget improvements: tooltips on buttons, drag clamping fix, manual goals never auto-removed, AI generation opt-in",
+        "Chat input rewritten: fixed cursor misalignment with native NSTextView, typing indicator works during tool calls",
+        "Refreshed sidebar icons and fixed Rewind toggle to control both screen and audio together",
+        "User names loaded from backend profile, fixing blank names for Apple Sign-In users",
+        "Rewind arrow key navigation corrected: left=newer, right=older",
+        "Floating control bar hover flicker fix",
+        "Compact view is now the default for Conversations",
+        "Reduced Crisp support chat polling from 30s to 2min with session caching",
+        "AI profile generation uses fewer tokens (5 recent profiles instead of 50)",
+        "Proactive assistant backpressure: drops frames during slow analysis instead of queuing"
+      ]
+    },
+    {
+      "version": "0.9.1",
+      "date": "2026-02-17",
+      "changes": [
+        "Redesigned Memories page: compact horizontal layout with hover info popovers for details",
+        "Unified Rewind toggle: single switch controls both screen capture and audio recording",
+        "Smarter AI chat: proactively searches your local database before saying 'I don't know'",
+        "Floating bar visual refresh: new OMI text logo, better contrast, smoother hover animations",
+        "Draggable floating bar is now opt-in via Settings > Shortcuts",
+        "Fixed crash when backend is unreachable: sync now uses exponential backoff instead of hammering every 3 seconds",
+        "Fixed potential crash from unsafe URL construction in sync service",
+        "Fixed click-through handler that could permanently block clicks if deallocated mid-operation",
+        "Chrome extension auto-installs when browser mode is enabled",
+        "Simplified dashboard: weekly score view, full-width tasks widget",
+        "Rewind storage stats now shown in Settings",
+        "Settings search supports multi-word queries"
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "date": "2026-02-17",
+      "changes": [
+        "Browser extension support: AI agent can use your logged-in Chrome sessions instead of an isolated browser",
+        "Cloud agent VMs auto-stop after 30 min idle and auto-restart when needed, saving resources",
+        "Fixed 2+ second hangs when opening large conversations with lazy-loading transcript segments",
+        "Hardware-accelerated screen recording (hevc_videotoolbox) for lower CPU usage",
+        "Auto-detects video calls (Zoom, Teams, Meet) and reduces capture frequency to avoid slowdowns",
+        "Floating bar shows OMI logo and no longer drifts across the screen or off-screen on monitor disconnect",
+        "AI agent turn limit removed — tasks can run as many steps as needed",
+        "Capped in-memory embeddings to 5,000 entries to prevent unbounded memory growth",
+        "Fixed database crashes from concurrent sync operations during memory and action item writes",
+        "Reduced error noise: cleaner Sentry logs, quieter Crisp polling, slower recovery retries"
+      ]
+    },
+    {
       "version": "0.8.9",
       "date": "2026-02-16",
       "changes": [

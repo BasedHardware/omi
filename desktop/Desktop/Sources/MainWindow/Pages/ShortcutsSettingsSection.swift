@@ -3,11 +3,17 @@ import SwiftUI
 /// Settings section for keyboard shortcuts and push-to-talk configuration.
 struct ShortcutsSettingsSection: View {
     @ObservedObject private var settings = ShortcutSettings.shared
+    @Binding var highlightedSettingId: String?
+
+    init(highlightedSettingId: Binding<String?> = .constant(nil)) {
+        self._highlightedSettingId = highlightedSettingId
+    }
 
     var body: some View {
         VStack(spacing: 20) {
             aiModelCard
             backgroundStyleCard
+            draggableBarCard
             askOmiKeyCard
             pttKeyCard
             pttTranscriptionModeCard
@@ -40,6 +46,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.model", highlightedSettingId: $highlightedSettingId))
     }
 
     private func aiModelButton(_ model: (id: String, label: String)) -> some View {
@@ -88,6 +95,30 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.background", highlightedSettingId: $highlightedSettingId))
+    }
+
+    private var draggableBarCard: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Draggable Floating Bar")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text("Allow repositioning the floating bar by dragging it.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+            Spacer()
+            Toggle("", isOn: $settings.draggableBarEnabled)
+                .toggleStyle(.switch)
+                .tint(OmiColors.purplePrimary)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.draggable", highlightedSettingId: $highlightedSettingId))
     }
 
     private var askOmiKeyCard: some View {
@@ -113,6 +144,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.shortcut", highlightedSettingId: $highlightedSettingId))
     }
 
     private func askOmiKeyButton(_ key: ShortcutSettings.AskOmiKey) -> some View {
@@ -162,6 +194,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.ptt", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttKeyButton(_ key: ShortcutSettings.PTTKey) -> some View {
@@ -215,6 +248,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.transcriptionmode", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttTranscriptionModeButton(_ mode: ShortcutSettings.PTTTranscriptionMode) -> some View {
@@ -261,6 +295,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.doubletap", highlightedSettingId: $highlightedSettingId))
     }
 
     private var pttSoundsCard: some View {
@@ -283,6 +318,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.pttsounds", highlightedSettingId: $highlightedSettingId))
     }
 
     private var referenceCard: some View {

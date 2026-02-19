@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import GRDB
 
 /// Dedicated monitor for live notes generation during recording sessions.
 /// Accumulates transcript words and triggers AI note generation at word thresholds.
@@ -298,6 +299,10 @@ class LiveNotesMonitor: ObservableObject {
                 } else {
                     await MainActor.run { self.isGenerating = false }
                 }
+            } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                // Session was deleted during async AI generation — not an error
+                log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
+                await MainActor.run { self.isGenerating = false }
             } catch {
                 logError("LiveNotesMonitor: Failed to generate note", error: error)
                 await MainActor.run { self.isGenerating = false }

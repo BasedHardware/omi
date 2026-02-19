@@ -87,13 +87,21 @@ If no version specified, it auto-increments the patch version.
 
 ### Step 6: Verify the release
 
-After release completes successfully:
-1. Download the DMG from GitHub
-2. Install and launch to verify it works
-3. Check the appcast shows correct changelog:
-   ```bash
-   curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml | head -30
-   ```
+**MANDATORY** — Run verification immediately after release completes:
+
+```bash
+./verify-release.sh [version]
+```
+
+This script automatically:
+1. Checks the appcast serves the correct version
+2. Downloads the Sparkle ZIP (what auto-update users get)
+3. Verifies Gatekeeper acceptance and code signature
+4. Checks entitlements don't require a provisioning profile
+5. Launches the app and confirms it starts
+6. Checks the DMG download endpoint
+
+If verification fails, **immediately roll back** using the rollback skill (`.claude/skills/rollback/SKILL.md`).
 
 ## What release.sh Does (12 Steps)
 
@@ -146,7 +154,21 @@ The release requires these in `.env`:
 - `APPLE_PRIVATE_KEY` - For Apple Sign-In config
 - Various Firebase/Google/Apple OAuth keys
 
+## Rollback
+
+If verification fails or a broken release is discovered post-release, use the **rollback skill** (`.claude/skills/rollback/SKILL.md`). The key steps are:
+
+1. Set `is_live=False` in Firestore `desktop_releases` collection (stops appcast from serving broken version)
+2. Delete the GitHub release
+3. Delete the local git tag
+4. Fix the issue, then re-run `./release.sh [same-version]`
+
+**Why speed matters:** Users who auto-updated to a broken build are stuck — the app can't launch, so Sparkle can't check for fixes. They must manually re-download the DMG.
+
 ## Key Files
 
 - **Release script**: `/Users/matthewdi/omi-desktop/release.sh`
+- **Verification script**: `/Users/matthewdi/omi-desktop/verify-release.sh` - Post-release download + launch test
+- **Rollback skill**: `/Users/matthewdi/omi-desktop/.claude/skills/rollback/SKILL.md`
 - **Changelog**: `/Users/matthewdi/omi-desktop/CHANGELOG.json` - Version history with all release notes
+- **Entitlements**: `/Users/matthewdi/omi-desktop/Desktop/Omi-Release.entitlements` - Must NOT have provisioning-profile-dependent keys

@@ -1,3 +1,4 @@
+import Cocoa
 import SwiftUI
 
 /// Reusable chat input field with send button, extracted from ChatPage.
@@ -18,63 +19,60 @@ struct ChatInputView: View {
     var pendingText: Binding<String>?
 
     @AppStorage("askModeEnabled") private var askModeEnabled = false
+    @Environment(\.fontScale) private var fontScale
     @State private var inputText = ""
-    @FocusState private var isInputFocused: Bool
 
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Padding used for both the NSTextView (via textContainerInset) and the
+    /// placeholder overlay — guaranteeing the cursor and placeholder align.
+    private let inputPaddingH: CGFloat = 12
+    private let inputPaddingV: CGFloat = 12
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             // Input field with floating toggle
             ZStack(alignment: .topTrailing) {
-                // Input field — TextEditor with auto-grow height
+                // Input field — NSTextView with auto-grow height
                 ZStack(alignment: .topLeading) {
                     // Hidden text to calculate content height (drives ZStack size)
                     Text(inputText.isEmpty ? " " : inputText + " ")
                         .scaledFont(size: 14)
-                        .padding(.horizontal, 17)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, inputPaddingH)
+                        .padding(.vertical, inputPaddingV)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .opacity(0)
+                        .allowsHitTesting(false)
                         .accessibilityHidden(true)
 
-                    // Placeholder text
+                    // Placeholder text — padding matches textContainerInset exactly
                     if inputText.isEmpty {
                         Text(placeholder)
                             .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
+                            .padding(.horizontal, inputPaddingH)
+                            .padding(.vertical, inputPaddingV)
                             .allowsHitTesting(false)
                     }
 
-                    TextEditor(text: $inputText)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .focused($isInputFocused)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 0, maxHeight: .infinity)
-                        .onKeyPress(keys: [.return], phases: .down) { keyPress in
-                            if keyPress.modifiers.contains(.shift) {
-                                return .ignored // Shift+Enter: newline
-                            }
-                            handleSubmit()
-                            return .handled // Enter: send
-                        }
+                    // NSTextView with lineFragmentPadding=0 and explicit textContainerInset
+                    // so cursor position is deterministic and matches placeholder exactly
+                    ChatTextEditor(
+                        text: $inputText,
+                        fontSize: round(14 * fontScale),
+                        horizontalInset: inputPaddingH,
+                        verticalInset: inputPaddingV,
+                        onSubmit: handleSubmit
+                    )
+                    .frame(minHeight: 0, maxHeight: .infinity)
                 }
                 .frame(maxHeight: 200)
                 .fixedSize(horizontal: false, vertical: true)
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(12)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isInputFocused = true
-                }
 
                 // Floating Ask/Act toggle (top-right, inside the input area)
                 if askModeEnabled {
@@ -103,7 +101,6 @@ struct ChatInputView: View {
             }
         }
         .onAppear {
-            isInputFocused = true
             // When ask mode is disabled, ensure we're always in act mode
             if !askModeEnabled {
                 mode = .act
@@ -134,6 +131,106 @@ struct ChatInputView: View {
             onFollowUp?(text)
         } else {
             onSend(text)
+        }
+    }
+}
+
+// MARK: - NSTextView wrapper with deterministic padding
+
+/// NSTextView-based text editor with explicit control over internal padding,
+/// ensuring the cursor position is deterministic and matches the placeholder overlay.
+/// Uses `lineFragmentPadding = 0` and `textContainerInset` for all spacing.
+private struct ChatTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    let fontSize: CGFloat
+    let horizontalInset: CGFloat
+    let verticalInset: CGFloat
+    var onSubmit: (() -> Void)?
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView()
+        textView.font = .systemFont(ofSize: fontSize)
+        textView.textColor = NSColor(OmiColors.textPrimary)
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
+        textView.delegate = context.coordinator
+
+        // Zero lineFragmentPadding — text/cursor starts exactly at textContainerInset
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainerInset = NSSize(width: horizontalInset, height: verticalInset)
+        textView.textContainer?.widthTracksTextView = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        // Auto-focus the text view
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            context.coordinator.isUpdating = true
+            textView.string = text
+            context.coordinator.isUpdating = false
+        }
+        let newFont = NSFont.systemFont(ofSize: fontSize)
+        if textView.font != newFont {
+            textView.font = newFont
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onSubmit: onSubmit)
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding var text: String
+        let onSubmit: (() -> Void)?
+        var isUpdating = false
+
+        init(text: Binding<String>, onSubmit: (() -> Void)?) {
+            self._text = text
+            self.onSubmit = onSubmit
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard !isUpdating, let textView = notification.object as? NSTextView else { return }
+            self.text = textView.string
+        }
+
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            // Enter without shift submits; Shift+Enter inserts newline
+            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                let flags = NSApp.currentEvent?.modifierFlags ?? []
+                if !flags.contains(.shift) {
+                    onSubmit?()
+                    return true
+                }
+            }
+            return false
         }
     }
 }

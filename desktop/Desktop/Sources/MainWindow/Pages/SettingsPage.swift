@@ -7,36 +7,50 @@ struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
+    var chatProvider: ChatProvider? = nil
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Section header
-                HStack {
-                    Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                         ? selectedAdvancedSubsection!.rawValue
-                         : selectedSection.rawValue)
-                        .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .id(selectedSection)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.15), value: selectedSection)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Section header
+                    HStack {
+                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
+                             ? selectedAdvancedSubsection!.rawValue
+                             : selectedSection.rawValue)
+                            .scaledFont(size: 28, weight: .bold)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .id(selectedSection)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.15), value: selectedSection)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.top, 32)
+                    .padding(.bottom, 24)
+
+                    // Settings content - embedded SettingsView with dark theme override
+                    SettingsContentView(
+                        appState: appState,
+                        selectedSection: $selectedSection,
+                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        highlightedSettingId: $highlightedSettingId,
+                        chatProvider: chatProvider
+                    )
+                    .padding(.horizontal, 32)
 
                     Spacer()
                 }
-                .padding(.horizontal, 32)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
-
-                // Settings content - embedded SettingsView with dark theme override
-                SettingsContentView(
-                    appState: appState,
-                    selectedSection: $selectedSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection
-                )
-                .padding(.horizontal, 32)
-
-                Spacer()
+            }
+            .onChange(of: highlightedSettingId) { _, newId in
+                guard let newId = newId else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(newId, anchor: .center)
+                    }
+                }
             }
         }
         .background(OmiColors.backgroundSecondary.opacity(0.3))
@@ -55,6 +69,9 @@ struct SettingsPage: View {
 struct SettingsContentView: View {
     // AppState for transcription control
     @ObservedObject var appState: AppState
+
+    // ChatProvider for browser extension setup
+    var chatProvider: ChatProvider? = nil
 
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
@@ -105,6 +122,9 @@ struct SettingsContentView: View {
     @State private var memoryNotificationsEnabled: Bool
     @State private var memoryExcludedApps: Set<String>
 
+    // Goals states
+    @State private var goalsAutoGenerateEnabled: Bool = GoalGenerationService.shared.isAutoGenerationEnabled
+
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
 
@@ -129,6 +149,7 @@ struct SettingsContentView: View {
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
     @Binding var selectedAdvancedSubsection: AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
     @State private var dailySummaryEnabled: Bool = true
@@ -189,6 +210,11 @@ struct SettingsContentView: View {
     @State private var fileViewerTitle = ""
     @State private var skillSearchQuery = ""
 
+    // Browser Extension settings
+    @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
+    @State private var playwrightExtensionToken: String = ""
+    @State private var showBrowserSetup = false
+
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
@@ -215,6 +241,7 @@ struct SettingsContentView: View {
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
+        case goals = "Goals"
         case askOmiFloatingBar = "Ask Omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
@@ -229,6 +256,7 @@ struct SettingsContentView: View {
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
             case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .goals: return "target"
             case .askOmiFloatingBar: return "sparkles"
             case .preferences: return "slider.horizontal.3"
             case .troubleshooting: return "wrench.and.screwdriver"
@@ -241,11 +269,15 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>
+        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
+        highlightedSettingId: Binding<String?> = .constant(nil),
+        chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
         self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self._highlightedSettingId = highlightedSettingId
+        self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
         _isTranscribing = State(initialValue: appState.isTranscribing)
@@ -352,76 +384,47 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Screen Analysis toggle
-            settingsCard {
+            // Rewind toggle (controls both screen + audio)
+            settingsCard(settingId: "general.rewind") {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Analysis")
+                        Text("Rewind")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? (isMonitoring ? "Analyzing your screen" : "Screen analysis is paused"))
+                        Text(permissionError ?? transcriptionError ?? ((isMonitoring || isTranscribing) ? "Screen capture and audio are active" : "Screen capture and audio are paused"))
                             .scaledFont(size: 13)
-                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isToggling {
+                    if isToggling || isTogglingTranscription {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Toggle("", isOn: $isMonitoring)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isMonitoring) { _, newValue in
+                        Toggle("", isOn: Binding(
+                            get: { isMonitoring || isTranscribing },
+                            set: { newValue in
+                                isMonitoring = newValue
+                                isTranscribing = newValue
                                 toggleMonitoring(enabled: newValue)
-                            }
-                    }
-                }
-            }
-
-            // Transcription toggle
-            settingsCard {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Transcription")
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Transcription is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isTogglingTranscription {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: $isTranscribing)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isTranscribing) { _, newValue in
                                 toggleTranscription(enabled: newValue)
                             }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                     }
                 }
             }
 
             // Notifications toggle
-            settingsCard {
+            settingsCard(settingId: "general.notifications") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Circle()
@@ -458,7 +461,18 @@ struct SettingsContentView: View {
                         } else {
                             // Show button to enable or fix
                             Button(action: {
-                                appState.openNotificationPreferences()
+                                if appState.isNotificationBannerDisabled {
+                                    // Banners off — user needs to change style in System Settings
+                                    appState.openNotificationPreferences()
+                                } else {
+                                    // Auth not granted — try lsregister repair first
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "settings_fix_button",
+                                        previousStatus: "not_authorized",
+                                        currentStatus: "not_authorized"
+                                    )
+                                    appState.repairNotificationAndFallback()
+                                }
                             }) {
                                 Text(appState.isNotificationBannerDisabled ? "Fix" : "Enable")
                                     .scaledFont(size: 12, weight: .semibold)
@@ -497,7 +511,7 @@ struct SettingsContentView: View {
             }
 
             // Ask Omi floating bar toggle
-            settingsCard {
+            settingsCard(settingId: "general.askomi") {
                 HStack(spacing: 16) {
                     Circle()
                         .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
@@ -530,7 +544,7 @@ struct SettingsContentView: View {
             }
 
             // Font Size
-            settingsCard {
+            settingsCard(settingId: "general.fontsize") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Image(systemName: "textformat.size")
@@ -619,10 +633,44 @@ struct SettingsContentView: View {
     @ObservedObject private var fontScaleSettings = FontScaleSettings.shared
     @ObservedObject private var rewindSettings = RewindSettings.shared
 
+    @State private var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
+
     private var rewindSection: some View {
         VStack(spacing: 20) {
+            // Storage Stats
+            settingsCard(settingId: "rewind.storage") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "internaldrive.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Storage")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if let stats = rewindStats {
+                                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            } else {
+                                Text("Loading...")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+            .task {
+                rewindStats = await RewindIndexer.shared.getStats()
+            }
+
             // Excluded Apps
-            settingsCard {
+            settingsCard(settingId: "rewind.excludedapps") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.slash.fill")
@@ -693,7 +741,7 @@ struct SettingsContentView: View {
             }
 
             // Battery Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.battery") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "battery.75percent")
@@ -720,7 +768,7 @@ struct SettingsContentView: View {
             }
 
             // Retention Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.retention") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "clock.fill")
@@ -758,7 +806,7 @@ struct SettingsContentView: View {
     private var transcriptionSection: some View {
         VStack(spacing: 20) {
             // Language Mode
-            settingsCard {
+            settingsCard(settingId: "transcription.languagemode") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "globe")
@@ -887,7 +935,7 @@ struct SettingsContentView: View {
             }
 
             // Custom Vocabulary
-            settingsCard {
+            settingsCard(settingId: "transcription.vocabulary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.book.closed")
@@ -1020,7 +1068,7 @@ struct SettingsContentView: View {
     private var notificationsSection: some View {
         VStack(spacing: 20) {
             // Notifications
-            settingsCard {
+            settingsCard(settingId: "notifications.settings") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "bell.badge.fill")
@@ -1049,7 +1097,7 @@ struct SettingsContentView: View {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Frequency", subtitle: "How often to receive notifications") {
+                        settingRow(title: "Frequency", subtitle: "How often to receive notifications", settingId: "notifications.frequency") {
                             Picker("", selection: $notificationFrequency) {
                                 ForEach(frequencyOptions, id: \.0) { option in
                                     Text(option.1).tag(option.0)
@@ -1062,7 +1110,7 @@ struct SettingsContentView: View {
                             }
                         }
 
-                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes") {
+                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes", settingId: "notifications.focus") {
                             Toggle("", isOn: $focusNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1072,7 +1120,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted") {
+                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted", settingId: "notifications.task") {
                             Toggle("", isOn: $taskNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1082,7 +1130,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated") {
+                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated", settingId: "notifications.advice") {
                             Toggle("", isOn: $adviceNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1092,7 +1140,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted") {
+                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted", settingId: "notifications.memory") {
                             Toggle("", isOn: $memoryNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -1106,7 +1154,7 @@ struct SettingsContentView: View {
             }
 
             // Daily Summary
-            settingsCard {
+            settingsCard(settingId: "notifications.dailysummary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.badge.checkmark")
@@ -1135,7 +1183,7 @@ struct SettingsContentView: View {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary") {
+                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary", settingId: "notifications.summarytime") {
                             Picker("", selection: $dailySummaryHour) {
                                 ForEach(hourOptions, id: \.self) { hour in
                                     Text(formatHour(hour)).tag(hour)
@@ -1159,7 +1207,7 @@ struct SettingsContentView: View {
     private var privacySection: some View {
         VStack(spacing: 16) {
             // Data Controls
-            settingsCard {
+            settingsCard(settingId: "privacy.storerecordings") {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Image(systemName: "mic.fill")
@@ -1221,7 +1269,7 @@ struct SettingsContentView: View {
             }
 
             // Encryption
-            settingsCard {
+            settingsCard(settingId: "privacy.encryption") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 10) {
                         Image(systemName: "shield.lefthalf.filled")
@@ -1282,7 +1330,7 @@ struct SettingsContentView: View {
             }
 
             // What We Track
-            settingsCard {
+            settingsCard(settingId: "privacy.tracking") {
                 VStack(alignment: .leading, spacing: 0) {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1331,7 +1379,7 @@ struct SettingsContentView: View {
             }
 
             // Privacy Guarantees
-            settingsCard {
+            settingsCard(settingId: "privacy.privacy") {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.raised.fill")
@@ -1360,7 +1408,7 @@ struct SettingsContentView: View {
 
     private var accountSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "account.account") {
                 HStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
                         .scaledFont(size: 40)
@@ -1423,7 +1471,7 @@ struct SettingsContentView: View {
     private var aiChatSection: some View {
         VStack(spacing: 20) {
             // Ask Mode card
-            settingsCard {
+            settingsCard(settingId: "aichat.askmode") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -1449,7 +1497,7 @@ struct SettingsContentView: View {
             }
 
             // CLAUDE.md card
-            settingsCard {
+            settingsCard(settingId: "aichat.claudemd") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "doc.text")
@@ -1498,7 +1546,7 @@ struct SettingsContentView: View {
             }
 
             // Skills card
-            settingsCard {
+            settingsCard(settingId: "aichat.skills") {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "sparkles")
@@ -1617,12 +1665,130 @@ struct SettingsContentView: View {
                     }
                 }
             }
+
+            // Browser Extension card
+            settingsCard(settingId: "aichat.browserextension") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "globe")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Browser Extension")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        if !playwrightExtensionToken.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Connected")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Toggle("", isOn: $playwrightUseExtension)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: playwrightUseExtension) { _, enabled in
+                                if enabled {
+                                    ClaudeAgentBridge.ensureChromeExtensionInstalled()
+                                } else {
+                                    ClaudeAgentBridge.removeChromeExtensionPolicy()
+                                }
+                            }
+                    }
+
+                    Text("Lets the AI use your Chrome browser with all your logged-in sessions. The extension is auto-installed when Chrome restarts.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if playwrightUseExtension {
+                        if playwrightExtensionToken.isEmpty {
+                            // No token — show "Set Up" button
+                            Button(action: {
+                                showBrowserSetup = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .scaledFont(size: 12)
+                                    Text("Set Up")
+                                        .scaledFont(size: 13, weight: .medium)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        } else {
+                            // Token is set — show compact view
+                            HStack(spacing: 8) {
+                                Text("Token")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+
+                                Text(String(playwrightExtensionToken.prefix(8)) + "...")
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Spacer()
+
+                                Button(action: {
+                                    showBrowserSetup = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reconfigure")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button(action: {
+                                    playwrightExtensionToken = ""
+                                    UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "xmark")
+                                            .scaledFont(size: 11)
+                                        Text("Reset")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onAppear {
             refreshAIChatConfig()
+            playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
         }
         .sheet(isPresented: $showFileViewer) {
             fileViewerSheet
+        }
+        .sheet(isPresented: $showBrowserSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                onDismiss: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                chatProvider: chatProvider
+            )
+            .frame(width: 480, height: 460)
         }
     }
 
@@ -1769,6 +1935,8 @@ struct SettingsContentView: View {
                 memoryAssistantSubsection
             case .analysisThrottle:
                 analysisThrottleSubsection
+            case .goals:
+                goalsSubsection
             case .askOmiFloatingBar:
                 askOmiFloatingBarSubsection
             case .preferences:
@@ -1783,7 +1951,7 @@ struct SettingsContentView: View {
 
     private var aiUserProfileSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.aiuserprofile") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "brain")
@@ -1939,7 +2107,7 @@ struct SettingsContentView: View {
 
     private var statsSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.stats") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "chart.bar")
@@ -2007,7 +2175,7 @@ struct SettingsContentView: View {
 
     private var featureTiersSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.featuretiers") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "lock.shield")
@@ -2097,7 +2265,7 @@ struct SettingsContentView: View {
 
     private var focusAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.focusassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.fill")
@@ -2127,7 +2295,7 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes") {
+                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes", settingId: "advanced.focusassistant.glow") {
                         Toggle("", isOn: $glowOverlayEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
@@ -2141,7 +2309,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts") {
+                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", settingId: "advanced.focusassistant.cooldown") {
                         Picker("", selection: $cooldownInterval) {
                             ForEach(cooldownOptions, id: \.self) { minutes in
                                 Text(formatMinutes(minutes)).tag(minutes)
@@ -2155,7 +2323,7 @@ struct SettingsContentView: View {
                         }
                     }
 
-                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis") {
+                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
                         Button(action: {
                             PromptEditorWindow.show()
                         }) {
@@ -2238,7 +2406,7 @@ struct SettingsContentView: View {
 
     private var taskAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.taskassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "checklist")
@@ -2327,7 +2495,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction") {
+                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction", settingId: "advanced.taskassistant.prompt") {
                         HStack(spacing: 8) {
                             Button(action: {
                                 TaskTestRunnerWindow.show()
@@ -2449,7 +2617,7 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     // Task Prioritization Re-score
-                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals") {
+                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals", settingId: "advanced.taskassistant.prioritization") {
                         if isRescoringTasks {
                             ProgressView()
                                 .controlSize(.small)
@@ -2478,7 +2646,7 @@ struct SettingsContentView: View {
 
 
             // Task Agent Settings (merged into Task Assistant subsection)
-            settingsCard {
+            settingsCard(settingId: "advanced.taskassistant.agent") {
                 TaskAgentSettingsView()
             }
         }
@@ -2486,7 +2654,7 @@ struct SettingsContentView: View {
 
     private var adviceAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.adviceassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "lightbulb.fill")
@@ -2575,7 +2743,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice") {
+                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
                         Button(action: {
                             AdvicePromptEditorWindow.show()
                         }) {
@@ -2658,7 +2826,7 @@ struct SettingsContentView: View {
 
     private var memoryAssistantSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.memoryassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "brain.head.profile")
@@ -2747,7 +2915,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction") {
+                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction", settingId: "advanced.memoryassistant.prompt") {
                         Button(action: {
                             MemoryPromptEditorWindow.show()
                         }) {
@@ -2830,7 +2998,7 @@ struct SettingsContentView: View {
 
     private var analysisThrottleSubsection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "advanced.analysisthrottle") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -2864,16 +3032,52 @@ struct SettingsContentView: View {
         }
     }
 
+    private var goalsSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.goals") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "target")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        Text("Goals")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+                    }
+
+                    Text("Track personal goals with AI-powered progress detection from your conversations")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks", settingId: "advanced.goals.autogenerate") {
+                        Toggle("", isOn: $goalsAutoGenerateEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: goalsAutoGenerateEnabled) { _, newValue in
+                                GoalGenerationService.shared.isAutoGenerationEnabled = newValue
+                            }
+                    }
+                }
+            }
+        }
+    }
+
     private var askOmiFloatingBarSubsection: some View {
         VStack(spacing: 20) {
-            ShortcutsSettingsSection()
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
         }
     }
 
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.multichat") {
                 HStack(spacing: 16) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .scaledFont(size: 16)
@@ -2901,7 +3105,7 @@ struct SettingsContentView: View {
             }
 
             // Conversation View toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.compact") {
                 HStack(spacing: 16) {
                     Image(systemName: conversationsCompactView ? "list.bullet" : "list.bullet.rectangle")
                         .scaledFont(size: 16)
@@ -2929,7 +3133,7 @@ struct SettingsContentView: View {
             }
 
             // Launch at Login toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.launchatlogin") {
                 HStack(spacing: 16) {
                     Image(systemName: "power")
                         .scaledFont(size: 16)
@@ -2966,7 +3170,7 @@ struct SettingsContentView: View {
     private var troubleshootingSubsection: some View {
         VStack(spacing: 20) {
             // Report Issue
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble")
                         .scaledFont(size: 16)
@@ -3003,7 +3207,7 @@ struct SettingsContentView: View {
             }
 
             // Reset Onboarding
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
                         .scaledFont(size: 16)
@@ -3214,7 +3418,7 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "about.version") {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
@@ -3265,7 +3469,7 @@ struct SettingsContentView: View {
             }
 
             // Software Updates
-            settingsCard {
+            settingsCard(settingId: "about.updates") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -3294,14 +3498,14 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background") {
+                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background", settingId: "about.autoupdates") {
                         Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
                             .toggleStyle(.switch)
                             .labelsHidden()
                     }
 
                     if updaterViewModel.automaticallyChecksForUpdates {
-                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available") {
+                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available", settingId: "about.autoinstall") {
                             Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -3310,7 +3514,7 @@ struct SettingsContentView: View {
                 }
             }
 
-            settingsCard {
+            settingsCard(settingId: "about.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble.fill")
                         .scaledFont(size: 16)
@@ -3355,8 +3559,8 @@ struct SettingsContentView: View {
         }
     }
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+    private func settingsCard<Content: View>(settingId: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        let card = content()
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -3366,10 +3570,17 @@ struct SettingsContentView: View {
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
                     )
             )
+        return Group {
+            if let settingId = settingId {
+                card.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                card
+            }
+        }
     }
 
-    private func settingRow<Content: View>(title: String, subtitle: String, @ViewBuilder control: () -> Content) -> some View {
-        HStack {
+    private func settingRow<Content: View>(title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content) -> some View {
+        let row = HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .scaledFont(size: 14)
@@ -3382,6 +3593,13 @@ struct SettingsContentView: View {
             Spacer()
 
             control()
+        }
+        return Group {
+            if let settingId = settingId {
+                row.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                row
+            }
         }
     }
 
@@ -4133,6 +4351,7 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile)
+        selectedAdvancedSubsection: .constant(.aiUserProfile),
+        highlightedSettingId: .constant(nil)
     )
 }

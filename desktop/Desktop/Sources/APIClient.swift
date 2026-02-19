@@ -1931,7 +1931,8 @@ extension APIClient {
         currentValue: Double = 0.0,
         minValue: Double = 0.0,
         maxValue: Double = 100.0,
-        unit: String? = nil
+        unit: String? = nil,
+        source: String? = nil
     ) async throws -> Goal {
         struct CreateGoalRequest: Encodable {
             let title: String
@@ -1942,9 +1943,10 @@ extension APIClient {
             let minValue: Double
             let maxValue: Double
             let unit: String?
+            let source: String?
 
             enum CodingKeys: String, CodingKey {
-                case title, description, unit
+                case title, description, unit, source
                 case goalType = "goal_type"
                 case targetValue = "target_value"
                 case currentValue = "current_value"
@@ -1961,7 +1963,8 @@ extension APIClient {
             currentValue: currentValue,
             minValue: minValue,
             maxValue: maxValue,
-            unit: unit
+            unit: unit,
+            source: source
         )
 
         let goal: Goal = try await post("v1/goals", body: request)
@@ -2507,9 +2510,10 @@ struct Goal: Codable, Identifiable {
     let createdAt: Date
     let updatedAt: Date
     let completedAt: Date?
+    let source: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, unit
+        case id, title, description, unit, source
         case goalType = "goal_type"
         case targetValue = "target_value"
         case currentValue = "current_value"
@@ -2536,6 +2540,7 @@ struct Goal: Codable, Identifiable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -2553,12 +2558,13 @@ struct Goal: Codable, Identifiable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(source, forKey: .source)
     }
 
-    /// Progress as a percentage (0-100)
+    /// Progress as a percentage (0-100), based on targetValue
     var progress: Double {
-        guard maxValue != minValue else { return 0 }
-        return ((currentValue - minValue) / (maxValue - minValue)) * 100.0
+        guard targetValue != minValue else { return 0 }
+        return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
     }
 
     /// Whether the goal is completed
@@ -3362,19 +3368,22 @@ extension APIClient {
 
     // MARK: - Knowledge Graph API
 
+    // Knowledge graph uses the main omi API (not the desktop backend)
+    private var knowledgeGraphBaseURL: String { "https://api.omi.me/" }
+
     /// Get the full knowledge graph (nodes and edges)
     func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-        return try await get("v1/knowledge-graph")
+        return try await get("v1/knowledge-graph", customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Rebuild the knowledge graph from memories
     func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
+        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody(), customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Delete the knowledge graph
     func deleteKnowledgeGraph() async throws {
-        let url = URL(string: baseURL + "v1/knowledge-graph")!
+        let url = URL(string: knowledgeGraphBaseURL + "v1/knowledge-graph")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -3420,7 +3429,11 @@ struct KnowledgeGraphNode: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         label = try container.decode(String.self, forKey: .label)
-        nodeType = try container.decodeIfPresent(KnowledgeGraphNodeType.self, forKey: .nodeType) ?? .concept
+        if let rawType = try container.decodeIfPresent(String.self, forKey: .nodeType) {
+            nodeType = KnowledgeGraphNodeType(rawValue: rawType) ?? .concept
+        } else {
+            nodeType = .concept
+        }
         aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
         memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
@@ -3465,7 +3478,14 @@ struct KnowledgeGraphResponse: Codable {
 /// Response for rebuild operation
 struct RebuildGraphResponse: Codable {
     let status: String
-    let message: String
+    let nodesCount: Int?
+    let edgesCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case nodesCount = "nodes_count"
+        case edgesCount = "edges_count"
+    }
 }
 
 // MARK: - User Settings Models
@@ -3849,15 +3869,17 @@ extension APIClient {
         text: String,
         sender: String,
         appId: String? = nil,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        metadata: String? = nil
     ) async throws -> SaveMessageResponse {
         struct SaveRequest: Encodable {
             let text: String
             let sender: String
             let app_id: String?
             let session_id: String?
+            let metadata: String?
         }
-        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId)
+        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
         return try await post("v2/messages", body: body)
     }
 
@@ -4122,152 +4144,6 @@ struct MessageDeleteResponse: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "ok"
         deletedCount = try container.decodeIfPresent(Int.self, forKey: .deletedCount)
-    }
-}
-
-// MARK: - Chat Context API (RAG)
-
-extension APIClient {
-
-    /// Fetch context for building chat prompts (conversations + memories)
-    /// Uses LLM to determine if context is needed and extract date ranges
-    func getChatContext(
-        question: String,
-        timezone: String = TimeZone.current.identifier,
-        appId: String? = nil,
-        previousMessages: [(text: String, sender: String)] = []
-    ) async throws -> ChatContextResponse {
-        struct ContextRequest: Encodable {
-            let question: String
-            let timezone: String
-            let app_id: String?
-            let messages: [MessageInput]
-
-            struct MessageInput: Encodable {
-                let text: String
-                let sender: String
-            }
-        }
-
-        let body = ContextRequest(
-            question: question,
-            timezone: timezone,
-            app_id: appId,
-            messages: previousMessages.map { ContextRequest.MessageInput(text: $0.text, sender: $0.sender) }
-        )
-
-        return try await post("v2/chat-context", body: body)
-    }
-}
-
-// MARK: - Chat Context Models
-
-/// Response from chat context endpoint
-struct ChatContextResponse: Codable {
-    /// Whether the question requires context to answer
-    let requiresContext: Bool
-    /// Extracted date range from the question (if any)
-    let dateRange: ChatDateRange?
-    /// Relevant conversation summaries
-    let conversations: [ChatConversationSummary]
-    /// User memories/facts
-    let memories: [ChatMemorySummary]
-    /// Pre-formatted context string ready for prompt injection
-    let contextString: String
-    /// Citation sources for tracking which conversations/memories are cited
-    let citationSources: [CitationSource]
-
-    enum CodingKeys: String, CodingKey {
-        case requiresContext = "requires_context"
-        case dateRange = "date_range"
-        case conversations
-        case memories
-        case contextString = "context_string"
-        case citationSources = "citation_sources"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        requiresContext = try container.decodeIfPresent(Bool.self, forKey: .requiresContext) ?? false
-        dateRange = try container.decodeIfPresent(ChatDateRange.self, forKey: .dateRange)
-        conversations = try container.decodeIfPresent([ChatConversationSummary].self, forKey: .conversations) ?? []
-        memories = try container.decodeIfPresent([ChatMemorySummary].self, forKey: .memories) ?? []
-        contextString = try container.decodeIfPresent(String.self, forKey: .contextString) ?? ""
-        citationSources = try container.decodeIfPresent([CitationSource].self, forKey: .citationSources) ?? []
-    }
-}
-
-/// Date range extracted from question
-struct ChatDateRange: Codable {
-    let start: Date
-    let end: Date
-}
-
-/// Conversation summary for context
-struct ChatConversationSummary: Codable, Identifiable {
-    let id: String
-    let title: String
-    let overview: String
-    let emoji: String
-    let category: String
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, overview, emoji, category
-        case createdAt = "created_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        overview = try container.decodeIfPresent(String.self, forKey: .overview) ?? ""
-        emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? ""
-        category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    }
-}
-
-/// Memory summary for context
-struct ChatMemorySummary: Codable, Identifiable {
-    let id: String
-    let content: String
-    let category: String
-}
-
-/// Citation source for tracking which conversations/memories are cited
-struct CitationSource: Codable, Identifiable {
-    /// 1-based index matching [1], [2] in context string
-    let index: Int
-    /// Type of source: "conversation" or "memory"
-    let sourceType: String
-    /// ID of the source document
-    let id: String
-    /// Title or summary of the source
-    let title: String
-    /// Preview text of the source
-    let preview: String
-    /// Emoji (for conversations)
-    let emoji: String?
-    /// When the source was created
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case index
-        case sourceType = "source_type"
-        case id, title, preview, emoji
-        case createdAt = "created_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        index = try container.decode(Int.self, forKey: .index)
-        sourceType = try container.decode(String.self, forKey: .sourceType)
-        id = try container.decode(String.self, forKey: .id)
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        preview = try container.decodeIfPresent(String.self, forKey: .preview) ?? ""
-        emoji = try container.decodeIfPresent(String.self, forKey: .emoji)
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 }
 

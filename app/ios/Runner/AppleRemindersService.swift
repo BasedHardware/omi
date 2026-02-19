@@ -8,7 +8,7 @@ class AppleRemindersService {
     private func hasRemindersAccess() -> Bool {
         let status = EKEventStore.authorizationStatus(for: .reminder)
         if #available(iOS 17.0, *) {
-            return status == .fullAccess || status == .writeOnly
+            return status == .fullAccess || status == .writeOnly || status == .authorized
         } else {
             return status == .authorized
         }
@@ -30,13 +30,12 @@ class AppleRemindersService {
             result(FlutterMethodNotImplemented)
         }
     }
-    
+
     private func hasRemindersPermission(result: @escaping FlutterResult) {
         result(hasRemindersAccess())
     }
 
     private func requestRemindersPermission(result: @escaping FlutterResult) {
-        // Check if already authorized
         if hasRemindersAccess() {
             result(true)
             return
@@ -48,43 +47,32 @@ class AppleRemindersService {
             return
         }
 
-        // Request permission
-        if #available(iOS 17.0, *) {
-            eventStore.requestFullAccessToReminders { granted, error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("Error requesting reminders permission: \(error.localizedDescription)")
-                        result(false)
-                        return
-                    }
-                    result(granted)
+        Task {
+            do {
+                var granted: Bool
+                if #available(iOS 17.0, *) {
+                    granted = try await eventStore.requestFullAccessToReminders()
+                } else {
+                    granted = try await eventStore.requestAccess(to: .reminder)
                 }
-            }
-        } else {
-            eventStore.requestAccess(to: .reminder) { granted, error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("Error requesting reminders permission: \(error.localizedDescription)")
-                        result(false)
-                        return
-                    }
-                    result(granted)
-                }
+                DispatchQueue.main.async { result(granted) }
+            } catch {
+                DispatchQueue.main.async { result(false) }
             }
         }
     }
-    
+
     private func addReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
             return
         }
-        
+
         guard let title = args["title"] as? String else {
             result(FlutterError(code: "MISSING_TITLE", message: "Title is required", details: nil))
             return
         }
-        
+
         let notes = args["notes"] as? String
         let listName = args["listName"] as? String ?? "Reminders"
         let dueDate: Date? = {
@@ -93,7 +81,7 @@ class AppleRemindersService {
             }
             return nil
         }()
-        
+
         // Check permission
         guard hasRemindersAccess() else {
             result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
@@ -102,83 +90,80 @@ class AppleRemindersService {
 
         // Find or create the calendar
         var targetCalendar: EKCalendar?
-        
+
         // Look for existing calendar with the specified name
         let calendars = eventStore.calendars(for: .reminder)
         targetCalendar = calendars.first { $0.title == listName }
-        
+
         // If not found, create a new calendar
         if targetCalendar == nil {
             targetCalendar = EKCalendar(for: .reminder, eventStore: eventStore)
             targetCalendar?.title = listName
             targetCalendar?.cgColor = UIColor.systemBlue.cgColor
-            
+
             // Set the source (usually the local source)
             if let localSource = eventStore.sources.first(where: { $0.sourceType == .local }) {
                 targetCalendar?.source = localSource
             } else if let defaultSource = eventStore.defaultCalendarForNewReminders()?.source {
                 targetCalendar?.source = defaultSource
             }
-            
+
             do {
                 try eventStore.saveCalendar(targetCalendar!, commit: true)
             } catch {
-                print("Error creating calendar: \(error.localizedDescription)")
                 // Fall back to default calendar
                 targetCalendar = eventStore.defaultCalendarForNewReminders()
             }
         }
-        
+
         guard let calendar = targetCalendar else {
             result(FlutterError(code: "NO_CALENDAR", message: "Could not find or create calendar", details: nil))
             return
         }
-        
+
         // Create the reminder
         let reminder = EKReminder(eventStore: eventStore)
         reminder.title = title
         reminder.notes = notes
         reminder.calendar = calendar
-        
+
         if let dueDate = dueDate {
             let dueDateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: dueDate)
             reminder.dueDateComponents = dueDateComponents
         }
-        
+
         // Save the reminder
         do {
             try eventStore.save(reminder, commit: true)
             result(true)
         } catch {
-            print("Error saving reminder: \(error.localizedDescription)")
             result(FlutterError(code: "SAVE_FAILED", message: "Failed to save reminder: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     private func getReminders(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
             return
         }
-        
+
         let listName = args["listName"] as? String ?? "Reminders"
 
         // Check permission
         guard hasRemindersAccess() else {
-            result([]) // Return empty array if no permission
+            result([])
             return
         }
 
         // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
-            result([]) // Return empty array if calendar not found
+            result([])
             return
         }
-        
-        // Create predicate to fetch reminders from this calendar
+
         let predicate = eventStore.predicateForReminders(in: [targetCalendar])
-        
+
         eventStore.fetchReminders(matching: predicate) { reminders in
             DispatchQueue.main.async {
                 let reminderTitles = reminders?.compactMap { $0.title } ?? []
@@ -186,54 +171,51 @@ class AppleRemindersService {
             }
         }
     }
-    
+
     private func completeReminder(call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [String: Any] else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments", details: nil))
             return
         }
-        
+
         guard let title = args["title"] as? String else {
             result(FlutterError(code: "MISSING_TITLE", message: "Title is required", details: nil))
             return
         }
-        
+
         let listName = args["listName"] as? String ?? "Reminders"
 
         // Check permission
         guard hasRemindersAccess() else {
-            result(false) // Return false if no permission
+            result(false)
             return
         }
 
         // Find the calendar
         let calendars = eventStore.calendars(for: .reminder)
         guard let targetCalendar = calendars.first(where: { $0.title == listName }) else {
-            result(false) // Return false if calendar not found
+            result(false)
             return
         }
-        
-        // Create predicate to fetch reminders from this calendar
+
         let predicate = eventStore.predicateForReminders(in: [targetCalendar])
-        
+
         eventStore.fetchReminders(matching: predicate) { reminders in
             DispatchQueue.main.async {
                 guard let targetReminder = reminders?.first(where: { $0.title == title && !$0.isCompleted }) else {
-                    result(false) // Reminder not found or already completed
+                    result(false)
                     return
                 }
-                
-                // Mark the reminder as completed
+
                 targetReminder.isCompleted = true
-                
+
                 do {
                     try self.eventStore.save(targetReminder, commit: true)
                     result(true)
                 } catch {
-                    print("Error completing reminder: \(error.localizedDescription)")
                     result(false)
                 }
             }
         }
     }
-} 
+}

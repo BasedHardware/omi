@@ -359,10 +359,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Delete task with swipe
-  Future<void> _deleteTask(ActionItemWithMetadata item) async {
+  void _deleteTask(ActionItemWithMetadata item) {
     HapticFeedback.mediumImpact();
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    await provider.deleteActionItem(item);
+    provider.deleteActionItem(item);
   }
 
   @override
@@ -1031,65 +1031,61 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       onTap: () => _showEditSheet(item),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
-        child: Dismissible(
-          key: Key('${item.id}_dismiss'),
-          direction: DismissDirection.none, // Disable dismiss, use swipe for indent
-          child: Padding(
-            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Indent line
-                if (indentLevel > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Container(
-                      width: 1.5,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(1),
-                      ),
+        child: Padding(
+          padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Indent line
+              if (indentLevel > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Container(
+                    width: 1.5,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(1),
                     ),
                   ),
-                // Checkbox
-                GestureDetector(
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  },
-                  child: _buildCheckbox(item.completed),
                 ),
-                const SizedBox(width: 12),
-                // Task text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              // Checkbox
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  await provider.updateActionItemState(item, !item.completed);
+                  if (!item.completed) _onActionItemCompleted();
+                },
+                child: _buildCheckbox(item.completed),
+              ),
+              const SizedBox(width: 12),
+              // Task text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.description,
+                      style: TextStyle(
+                        color: item.completed ? Colors.grey[600] : Colors.white,
+                        fontSize: 15,
+                        decoration: item.completed ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    if (goalTitle != null) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        item.description,
+                        goalTitle,
                         style: TextStyle(
-                          color: item.completed ? Colors.grey[600] : Colors.white,
-                          fontSize: 15,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          color: Colors.grey[600],
+                          fontSize: 12,
                         ),
                       ),
-                      if (goalTitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          goalTitle,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -1931,21 +1931,17 @@ impl FirestoreService {
         // Enrich action items that have conversation_id but no source
         self.enrich_action_items_with_source(uid, &mut action_items).await;
 
-        // Post-query sort to match Python backend behavior:
+        // Post-query sort matching Python backend behavior (used by iOS/Flutter app):
         // 1. Items WITH due_at come first (sorted by due_at ascending)
         // 2. Items WITHOUT due_at come last
         // 3. Tie-breaker: created_at descending (newest first)
         action_items.sort_by(|a, b| {
             match (&a.due_at, &b.due_at) {
-                // Both have due_at: sort by due_at ascending, then created_at descending
                 (Some(due_a), Some(due_b)) => {
                     due_a.cmp(due_b).then_with(|| b.created_at.cmp(&a.created_at))
                 }
-                // a has due_at, b doesn't: a comes first
                 (Some(_), None) => std::cmp::Ordering::Less,
-                // a doesn't have due_at, b does: b comes first
                 (None, Some(_)) => std::cmp::Ordering::Greater,
-                // Neither has due_at: sort by created_at descending
                 (None, None) => b.created_at.cmp(&a.created_at),
             }
         });
@@ -6420,6 +6416,7 @@ impl FirestoreService {
         sender: &str,
         app_id: Option<&str>,
         session_id: Option<&str>,
+        metadata: Option<&str>,
     ) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
         let message_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -6465,6 +6462,10 @@ impl FirestoreService {
             fields["chat_session_id"] = json!({"stringValue": session});
         }
 
+        if let Some(meta) = metadata {
+            fields["metadata"] = json!({"stringValue": meta});
+        }
+
         let doc = json!({"fields": fields});
 
         let response = self
@@ -6488,6 +6489,7 @@ impl FirestoreService {
             session_id: session_id.map(|s| s.to_string()),
             rating: None,
             reported: false,
+            metadata: metadata.map(|s| s.to_string()),
         };
 
         tracing::info!(
@@ -6800,6 +6802,12 @@ impl FirestoreService {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let metadata = fields
+            .get("metadata")
+            .and_then(|v| v.get("stringValue"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(MessageDB {
             id,
             text,
@@ -6809,6 +6817,7 @@ impl FirestoreService {
             session_id,
             rating,
             reported,
+            metadata,
         })
     }
 
@@ -7181,6 +7190,7 @@ impl FirestoreService {
         min_value: f64,
         max_value: f64,
         unit: Option<&str>,
+        source: Option<&str>,
     ) -> Result<GoalDB, Box<dyn std::error::Error + Send + Sync>> {
         // Check existing active goals
         let existing_goals = self.get_user_goals(uid, 10).await?;
@@ -7236,6 +7246,13 @@ impl FirestoreService {
             );
         }
 
+        if let Some(s) = source {
+            fields.as_object_mut().unwrap().insert(
+                "source".to_string(),
+                json!({"stringValue": s}),
+            );
+        }
+
         let doc = json!({"fields": fields});
 
         let response = self
@@ -7264,6 +7281,7 @@ impl FirestoreService {
             created_at: now,
             updated_at: now,
             completed_at: None,
+            source: source.map(|s| s.to_string()),
         };
 
         tracing::info!("Created goal {} for user {}", goal.id, uid);
@@ -7884,6 +7902,7 @@ impl FirestoreService {
                     None
                 }
             },
+            source: self.parse_string(fields, "source"),
         })
     }
 

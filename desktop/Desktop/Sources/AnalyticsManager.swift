@@ -183,6 +183,12 @@ class AnalyticsManager {
         PostHogManager.shared.screenCaptureResetCompleted(success: success)
     }
 
+    /// Track when notification repair is triggered (auto-repair or error-triggered)
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        MixpanelManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+        PostHogManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+    }
+
     /// Track notification settings status (auth, alertStyle, sound, badge)
     func notificationSettingsChecked(
         authStatus: String,
@@ -583,6 +589,11 @@ class AnalyticsManager {
     func taskExtracted(taskCount: Int) {
         MixpanelManager.shared.taskExtracted(taskCount: taskCount)
         PostHogManager.shared.taskExtracted(taskCount: taskCount)
+    }
+
+    func taskPromoted(taskCount: Int) {
+        MixpanelManager.shared.taskPromoted(taskCount: taskCount)
+        PostHogManager.shared.taskPromoted(taskCount: taskCount)
     }
 
     func memoryExtracted(memoryCount: Int) {

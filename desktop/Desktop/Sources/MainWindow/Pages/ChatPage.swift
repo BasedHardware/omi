@@ -316,19 +316,25 @@ struct ChatPage: View {
             }
 
             // Clear chat button
-            if !chatProvider.messages.isEmpty {
+            if !chatProvider.messages.isEmpty || chatProvider.isClearing {
                 Button(action: {
                     Task {
                         await chatProvider.clearChat()
                     }
                 }) {
-                    Image(systemName: "trash")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                    if chatProvider.isClearing {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "trash")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("Clear chat history")
-                .disabled(chatProvider.isLoading)
+                .disabled(chatProvider.isLoading || chatProvider.isClearing)
             }
 
             // History button (only in multi-chat mode)
@@ -369,7 +375,7 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             hasMoreMessages: chatProvider.hasMoreMessages,
             isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-            isLoadingInitial: chatProvider.isLoading || chatProvider.isLoadingSessions,
+            isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions) && !chatProvider.isClearing,
             app: selectedApp,
             onLoadMore: { await chatProvider.loadMoreMessages() },
             onRate: { messageId, rating in
@@ -586,10 +592,11 @@ struct ChatBubble: View {
                         }
                     }
                     // Show typing indicator at end if still streaming
+                    // (skip only when last block is a running tool — it already has a spinner)
                     if message.isStreaming {
                         if case .toolCall(_, _, .running, _, _, _) = message.contentBlocks.last {
-                            // Tool is running — indicator already shows spinner
-                        } else if case .text(_, let lastText) = message.contentBlocks.last, lastText.isEmpty {
+                            // Tool is running — its card already shows a spinner
+                        } else {
                             TypingIndicator()
                         }
                     }
@@ -1167,6 +1174,7 @@ struct ChatHistoryPopover: View {
                                 HistorySessionRow(
                                     session: session,
                                     isSelected: chatProvider.currentSession?.id == session.id,
+                                    isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                                     onSelect: {
                                         Task {
                                             await chatProvider.selectSession(session)
@@ -1237,6 +1245,7 @@ struct ChatHistoryPopover: View {
 struct HistorySessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -1295,8 +1304,14 @@ struct HistorySessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Action buttons on hover
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 6) {
                         // Rename button
                         Button(action: startEditing) {

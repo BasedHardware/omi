@@ -185,9 +185,6 @@ class MemoriesViewModel: ObservableObject {
     /// Cached tag counts - only recomputed when memories change
     @Published private(set) var tagCounts: [MemoryTag: Int] = [:]
 
-    /// Cached unread tips count - queried from SQLite for true totals
-    @Published private(set) var unreadTipsCount: Int = 0
-
     /// Total memory count from SQLite (not just loaded items)
     @Published private(set) var totalMemoriesCount: Int = 0
 
@@ -270,9 +267,6 @@ class MemoriesViewModel: ObservableObject {
             // Get total count (no filters) and store for "All" badge
             let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount()
             totalMemoriesCount = totalCount
-
-            // Get unread tips count from SQLite
-            unreadTipsCount = try await MemoryStorage.shared.getUnreadTipsCount()
 
             // Focus tags
             counts[.focus] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["focus"])
@@ -799,22 +793,6 @@ class MemoriesViewModel: ObservableObject {
         isTogglingVisibility = false
     }
 
-    func markAsRead(_ memory: ServerMemory) async {
-        do {
-            let updated = try await APIClient.shared.updateMemoryReadStatus(id: memory.id, isRead: true, isDismissed: nil)
-
-            // Sync to local SQLite cache so auto-refresh doesn't revert the change
-            try await MemoryStorage.shared.syncServerMemories([updated])
-
-            // Update in place instead of reloading everything
-            if let index = memories.firstIndex(where: { $0.id == memory.id }) {
-                memories[index] = updated
-            }
-        } catch {
-            logError("Failed to mark memory as read", error: error)
-        }
-    }
-
     // MARK: - Bulk Operations
 
     func makeAllMemoriesPrivate() async {
@@ -918,11 +896,8 @@ struct MemoriesPage: View {
 
     private var mainMemoriesView: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header (includes search, filters, and action buttons)
             header
-
-            // Filter bar
-            filterBar
 
             // Content
             if viewModel.isLoading && viewModel.memories.isEmpty {
@@ -1039,108 +1014,116 @@ struct MemoriesPage: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Memories")
-                    .scaledFont(size: 24, weight: .semibold)
+        HStack(spacing: 8) {
+            // Search field
+            HStack(spacing: 10) {
+                if viewModel.isSearching || viewModel.isLoadingFiltered {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                TextField("Search memories...", text: $viewModel.searchText)
+                    .textFieldStyle(.plain)
                     .foregroundColor(OmiColors.textPrimary)
 
-                HStack(spacing: 8) {
-                    if !viewModel.searchText.isEmpty {
-                        Text("\(viewModel.filteredMemories.count) results")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                        Text("\(viewModel.totalMemoriesCount) memories")
-                            .scaledFont(size: 13)
+                if !viewModel.searchText.isEmpty {
+                    Button {
+                        viewModel.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
                             .foregroundColor(OmiColors.textTertiary)
                     }
-
-                    if viewModel.unreadTipsCount > 0 && viewModel.searchText.isEmpty {
-                        Text("\(viewModel.unreadTipsCount) new tips")
-                            .scaledFont(size: 12, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(OmiColors.backgroundTertiary)
-                            .cornerRadius(4)
-                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(OmiColors.backgroundTertiary)
+            .cornerRadius(8)
 
-            Spacer()
-
-            HStack(spacing: 8) {
-                // Memory Graph button
-                Button {
-                    showingMemoryGraph = true
-                } label: {
-                    Image(systemName: "brain")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
-                        .cornerRadius(8)
+            // Category filter dropdown
+            Button {
+                pendingSelectedTags = viewModel.selectedTags
+                categorySearchText = ""
+                showCategoryFilter = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                        .scaledFont(size: 12)
+                    Text(categoryFilterLabel)
+                        .scaledFont(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
+                    Image(systemName: "chevron.down")
+                        .scaledFont(size: 10)
                 }
-                .buttonStyle(.plain)
-                .help("View Memory Graph")
+                .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundTertiary)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
+                categoryFilterPopover
+            }
 
-                Button {
-                    viewModel.showingAddMemory = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                        Text("Add Memory")
-                    }
-                    .scaledFont(size: 13, weight: .medium)
+            // Memory Graph button
+            Button {
+                showingMemoryGraph = true
+            } label: {
+                Image(systemName: "brain")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(OmiColors.backgroundTertiary)
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .help("View Memory Graph")
+
+            // Add Memory button (icon only)
+            Button {
+                viewModel.showingAddMemory = true
+            } label: {
+                Image(systemName: "plus")
+                    .scaledFont(size: 14)
                     .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .frame(width: 32, height: 32)
                     .background(Color.white)
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
                             .stroke(OmiColors.border, lineWidth: 1)
                     )
-                }
-                .buttonStyle(.plain)
+            }
+            .buttonStyle(.plain)
+            .help("Add Memory")
 
-                // Refresh button
-                Button {
-                    Task { await viewModel.loadMemories() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textSecondary)
-                        .frame(width: 32, height: 32)
-                        .background(OmiColors.backgroundTertiary)
-                        .cornerRadius(8)
-                        .rotationEffect(.degrees(viewModel.isLoading ? 360 : 0))
-                        .animation(viewModel.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: viewModel.isLoading)
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isLoading)
-                .help("Refresh memories")
-
-                // Management menu
-                Button {
-                    showManagementMenu = true
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(.black)
-                        .frame(width: 32, height: 32)
-                        .background(Color.white)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(OmiColors.border, lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
-                    managementMenuPopover
-                }
+            // Management menu
+            Button {
+                showManagementMenu = true
+            } label: {
+                Image(systemName: "chevron.down")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(.black)
+                    .frame(width: 32, height: 32)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(OmiColors.border, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
+                managementMenuPopover
             }
         }
         .padding(.horizontal, 24)
@@ -1179,71 +1162,6 @@ struct MemoriesPage: View {
         }
         // Sort by count (highest first)
         return categories.sorted { viewModel.tagCount($0) > viewModel.tagCount($1) }
-    }
-
-    private var filterBar: some View {
-        HStack(spacing: 10) {
-            // Search field
-            HStack(spacing: 10) {
-                if viewModel.isSearching || viewModel.isLoadingFiltered {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                TextField("Search memories...", text: $viewModel.searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if !viewModel.searchText.isEmpty {
-                    Button {
-                        viewModel.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
-
-            // Category filter dropdown
-            Button {
-                pendingSelectedTags = viewModel.selectedTags
-                categorySearchText = ""
-                showCategoryFilter = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "line.3.horizontal.decrease")
-                        .scaledFont(size: 12)
-                    Text(categoryFilterLabel)
-                        .scaledFont(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
-                    Image(systemName: "chevron.down")
-                        .scaledFont(size: 10)
-                }
-                .foregroundColor(viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(viewModel.selectedTags.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
-                categoryFilterPopover
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.bottom, 16)
     }
 
     private var categoryFilterPopover: some View {
@@ -1500,10 +1418,6 @@ struct MemoriesPage: View {
                         memory: memory,
                         onTap: {
                             viewModel.selectedMemory = memory
-                            // Auto-mark tips as read when opened
-                            if memory.isTip && !memory.isRead {
-                                Task { await viewModel.markAsRead(memory) }
-                            }
                         },
                         categoryIcon: categoryIcon,
                         categoryColor: categoryColor,
@@ -1759,124 +1673,49 @@ private struct MemoryCardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
             // Content
             Text(memory.content)
                 .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
-                .lineLimit(3)
+                .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // New badge
+            if isNewlyCreated {
+                NewBadge()
+            }
 
-            // Footer - metadata
-            HStack(spacing: 6) {
-                // New badge
-                if isNewlyCreated {
-                    NewBadge()
-                }
+            Spacer(minLength: 4)
 
-                // Unread indicator
-                if memory.isTip && !memory.isRead {
-                    Circle()
-                        .fill(OmiColors.textPrimary)
-                        .frame(width: 6, height: 6)
-                }
+            // Date
+            Text(formatDate(memory.createdAt))
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textSecondary)
+                .fixedSize()
 
-                // Category/Tags
-                if memory.isTip {
-                    HStack(spacing: 4) {
-                        Image(systemName: "lightbulb.fill")
-                            .scaledFont(size: 10)
-                        Text("Tips")
-                            .scaledFont(size: 11, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
+            // Info icon with hover popover for details
+            MemoryDetailButton(
+                memory: memory,
+                categoryIcon: categoryIcon,
+                categoryColor: categoryColor,
+                tagColorFor: tagColorFor
+            )
 
-                    if let tipCat = memory.tipCategory {
-                        HStack(spacing: 4) {
-                            Image(systemName: memory.tipCategoryIcon)
-                                .scaledFont(size: 10)
-                            Text(tipCat.capitalized)
-                                .scaledFont(size: 11, weight: .medium)
-                        }
-                        .foregroundColor(OmiColors.textSecondary)
-                    }
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: categoryIcon(memory.category))
-                            .scaledFont(size: 10)
-                        Text(memory.category.displayName)
-                            .scaledFont(size: 11, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-
-                // Tags (filter out redundant ones already shown as category/tip badges)
-                let displayTags = memory.tags.filter { tag in
-                    let lower = tag.lowercased()
-                    // Skip tags already represented by category badge or tip badges
-                    if lower == memory.category.rawValue { return false }
-                    if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
-                    if lower == "has-message" { return false }
-                    return true
-                }
-                if !displayTags.isEmpty {
-                    ForEach(Array(displayTags.prefix(3)), id: \.self) { tag in
-                        Text(tag)
-                            .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(tagColorFor(tag))
-                    }
-                    if displayTags.count > 3 {
-                        Text("+\(displayTags.count - 3)")
-                            .scaledFont(size: 11)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                    }
-                }
-
-                // Source app or device
-                if let sourceApp = memory.sourceApp {
-                    HStack(spacing: 4) {
-                        Image(systemName: memory.sourceIcon)
-                            .scaledFont(size: 10)
-                        Text(sourceApp)
-                            .scaledFont(size: 11)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                    .help(memory.windowTitle ?? sourceApp)
-                } else if let sourceName = memory.sourceName {
-                    HStack(spacing: 4) {
-                        Image(systemName: memory.sourceIcon)
-                            .scaledFont(size: 10)
-                        Text(sourceName)
-                            .scaledFont(size: 11)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-
-                Spacer()
-
-                // Date
-                Text(formatDate(memory.createdAt))
-                    .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textSecondary)
-
-                // Click hint on hover
-                if isHovered {
-                    Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
+            // Click hint on hover
+            if isHovered {
+                Image(systemName: "arrow.up.right")
+                    .scaledFont(size: 10, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .background(isHovered ? OmiColors.backgroundSecondary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary))
         .cornerRadius(8)
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(memory.isTip && !memory.isRead ? OmiColors.textPrimary.opacity(0.3) : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : Color.clear), lineWidth: 1)
+                .stroke(isNewlyCreated ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.border, lineWidth: 1)
         )
         .contentShape(Rectangle())
         .onHover { hovering in
@@ -1891,6 +1730,160 @@ private struct MemoryCardView: View {
         }
         .onTapGesture {
             onTap()
+        }
+    }
+}
+
+// MARK: - Memory Detail Button (info icon with hover popover)
+
+/// Small inline info button with hover preview showing memory metadata.
+/// Follows the same pattern as TaskDetailButton in TaskDetailViews.swift.
+private struct MemoryDetailButton: View {
+    let memory: ServerMemory
+    let categoryIcon: (MemoryCategory) -> String
+    let categoryColor: (MemoryCategory) -> Color
+    let tagColorFor: (String) -> Color
+
+    @State private var showTooltip = false
+    @State private var isButtonHovered = false
+    @State private var isPopoverHovered = false
+    @State private var dismissWork: DispatchWorkItem?
+
+    var body: some View {
+        Image(systemName: "info.circle")
+            .scaledFont(size: 10)
+            .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isButtonHovered = hovering
+                scheduleHoverUpdate()
+            }
+            .popover(isPresented: $showTooltip, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+                MemoryDetailTooltip(
+                    memory: memory,
+                    categoryIcon: categoryIcon,
+                    categoryColor: categoryColor,
+                    tagColorFor: tagColorFor
+                )
+                .onHover { hovering in
+                    isPopoverHovered = hovering
+                    scheduleHoverUpdate()
+                }
+            }
+    }
+
+    private func scheduleHoverUpdate() {
+        dismissWork?.cancel()
+        if isButtonHovered || isPopoverHovered {
+            showTooltip = true
+        } else {
+            let work = DispatchWorkItem { showTooltip = false }
+            dismissWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        }
+    }
+}
+
+// MARK: - Memory Detail Tooltip
+
+/// Compact hover preview showing memory metadata (category, tags, source, etc.)
+private struct MemoryDetailTooltip: View {
+    let memory: ServerMemory
+    let categoryIcon: (MemoryCategory) -> String
+    let categoryColor: (MemoryCategory) -> Color
+    let tagColorFor: (String) -> Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Category
+            if memory.isTip {
+                tooltipRow("Category", "Tips")
+                if let tipCat = memory.tipCategory {
+                    tooltipRow("Subcategory", tipCat.capitalized)
+                }
+            } else {
+                tooltipRow("Category", memory.category.displayName)
+            }
+
+            // Tags
+            let displayTags = memory.tags.filter { tag in
+                let lower = tag.lowercased()
+                if lower == memory.category.rawValue { return false }
+                if lower == "tips" || lower == (memory.tipCategory ?? "") { return false }
+                if lower == "has-message" { return false }
+                return true
+            }
+            if !displayTags.isEmpty {
+                tooltipRow("Tags", displayTags.joined(separator: ", "))
+            }
+
+            // Source
+            if let sourceApp = memory.sourceApp {
+                tooltipRow("App", sourceApp)
+            }
+            if let sourceName = memory.sourceName {
+                tooltipRow("Source", sourceName)
+            }
+            if let window = memory.windowTitle {
+                tooltipRow("Window", window)
+            }
+
+            // Context
+            if let ctx = memory.contextSummary, !ctx.isEmpty {
+                tooltipBlock("Context", ctx)
+            }
+            if let activity = memory.currentActivity, !activity.isEmpty {
+                tooltipBlock("Activity", activity)
+            }
+
+            // Confidence
+            if let conf = memory.confidenceString {
+                tooltipRow("Confidence", conf)
+            }
+
+            // Reasoning
+            if let reasoning = memory.reasoning, !reasoning.isEmpty {
+                tooltipBlock("Reasoning", reasoning)
+            }
+
+            // Created date
+            tooltipRow("Created", {
+                let f = DateFormatter()
+                f.dateStyle = .medium
+                f.timeStyle = .short
+                return f.string(from: memory.createdAt)
+            }())
+        }
+        .padding(10)
+        .frame(maxWidth: 350, maxHeight: 400)
+    }
+
+    private func tooltipRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(label)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textTertiary)
+                .frame(width: 70, alignment: .trailing)
+
+            Text(value)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textPrimary)
+        }
+    }
+
+    private func tooltipBlock(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(OmiColors.textTertiary)
+                .padding(.leading, 76)
+
+            Text(value)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.leading, 76)
+                .lineLimit(3)
         }
     }
 }
@@ -2155,24 +2148,6 @@ struct MemoryDetailSheet: View {
 
                 // Action Buttons
                 VStack(spacing: 10) {
-                    // Mark as read (for unread tips)
-                    if memory.isTip && !memory.isRead {
-                        MemoryActionRow(
-                            icon: "checkmark.circle",
-                            title: "Mark as Read",
-                            iconColor: OmiColors.textPrimary,
-                            textColor: OmiColors.textPrimary,
-                            backgroundColor: OmiColors.backgroundTertiary
-                        ) {
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 100_000_000)
-                                dismissSheet()
-                                await viewModel.markAsRead(memory)
-                            }
-                        }
-                    }
-
                     // View conversation (if linked)
                     if let conversationId = memory.conversationId {
                         MemoryActionRow(

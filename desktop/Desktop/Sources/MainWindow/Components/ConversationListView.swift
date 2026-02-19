@@ -21,13 +21,21 @@ struct ConversationListView: View {
 
     var appState: AppState
 
+    private static let groupDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
     /// Group conversations by date
     private var groupedConversations: [(String, [ServerConversation])] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let formatter = Self.groupDateFormatter
 
         var groups: [String: [ServerConversation]] = [:]
+        var groupDates: [String: Date] = ["Today": today, "Yesterday": yesterday]
 
         for conversation in conversations {
             let conversationDate = calendar.startOfDay(for: conversation.createdAt)
@@ -38,35 +46,24 @@ struct ConversationListView: View {
             } else if conversationDate == yesterday {
                 groupKey = "Yesterday"
             } else {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM d, yyyy"
                 groupKey = formatter.string(from: conversation.createdAt)
+                groupDates[groupKey] = conversationDate
             }
 
-            if groups[groupKey] == nil {
-                groups[groupKey] = []
-            }
-            groups[groupKey]?.append(conversation)
+            groups[groupKey, default: []].append(conversation)
         }
 
         // Sort groups: Today first, then Yesterday, then by date descending
-        let sortedKeys = groups.keys.sorted { key1, key2 in
+        return groups.keys.sorted { key1, key2 in
             if key1 == "Today" { return true }
             if key2 == "Today" { return false }
             if key1 == "Yesterday" { return true }
             if key2 == "Yesterday" { return false }
-
-            // Parse dates for comparison
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d, yyyy"
-            let date1 = formatter.date(from: key1) ?? Date.distantPast
-            let date2 = formatter.date(from: key2) ?? Date.distantPast
+            let date1 = groupDates[key1] ?? .distantPast
+            let date2 = groupDates[key2] ?? .distantPast
             return date1 > date2
-        }
-
-        return sortedKeys.compactMap { key in
-            guard let convos = groups[key] else { return nil }
-            return (key, convos)
+        }.compactMap { key in
+            groups[key].map { (key, $0) }
         }
     }
 

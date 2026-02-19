@@ -174,6 +174,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.debug = false
             options.enableAutoSessionTracking = true
             options.environment = isDev ? "development" : "production"
+            // Disable automatic HTTP client error capture — the SDK creates noisy events
+            // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
+            // App code already handles HTTP errors and reports meaningful ones explicitly.
+            options.enableCaptureFailedRequests = false
+            options.maxBreadcrumbs = 100
             options.beforeSend = { event in
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
@@ -247,6 +252,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             // Report comprehensive settings state (at most once per day)
             AnalyticsManager.shared.reportAllSettingsIfNeeded()
+
+            // File indexing now runs through FileIndexingView UI (user consent required)
+            // No background scan — prevents race condition where scan finishes before UI listens
         }
 
         // One-time migration: Enable launch at login for existing users who haven't set it

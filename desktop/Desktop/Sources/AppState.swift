@@ -146,6 +146,9 @@ class AppState: ObservableObject {
     private var maxRecordingTimer: Timer?
     private let maxRecordingDuration: TimeInterval = 4 * 60 * 60  // 4 hours
 
+    // Periodic notification health check timer
+    private var notificationHealthTimer: Timer?
+
     // Crash-safe transcription storage
     private var currentSessionId: Int64?
 
@@ -157,6 +160,9 @@ class AppState: ObservableObject {
     private var screenUnlockedObserver: NSObjectProtocol?
     private var screenCapturePermissionLostObserver: NSObjectProtocol?
     private var screenCaptureKitBrokenObserver: NSObjectProtocol?
+
+    // Track transcription state across sleep/wake cycles
+    private var wasTranscribingBeforeSleep = false
 
     // Debounce timestamps to prevent duplicate system notifications
     private var lastScreenLockTime: Date?
@@ -209,6 +215,14 @@ class AppState: ObservableObject {
 
         // Note: Bluetooth subscription is initialized lazily via initializeBluetoothIfNeeded()
         // to avoid triggering the permission dialog before the user reaches the Bluetooth step
+
+        // Start periodic notification health check (every 30 min)
+        // Detects when macOS silently revokes notification authorization and auto-repairs
+        notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.checkNotificationPermission()
+            }
+        }
     }
 
     /// Initialize Bluetooth manager and subscribe to state changes
@@ -265,8 +279,9 @@ class AppState: ObservableObject {
         ) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
+                self.wasTranscribingBeforeSleep = self.isTranscribing
                 if self.isTranscribing {
-                    log("Computer sleeping - finalizing conversation")
+                    log("Computer sleeping - finalizing conversation (will restart on wake)")
                     _ = await self.finalizeConversation()
                     self.stopAudioCapture()
                     self.clearTranscriptionState()
@@ -281,9 +296,23 @@ class AppState: ObservableObject {
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             log("System woke from sleep")
             NotificationCenter.default.post(name: .systemDidWake, object: nil)
+
+            // Restart transcription if it was active before sleep
+            Task { @MainActor in
+                guard let self = self else { return }
+                if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+                    log("System wake: Restarting transcription (was active before sleep)")
+                    // Brief delay to let audio subsystem settle after wake
+                    try? await Task.sleep(for: .seconds(2))
+                    if !self.isTranscribing {
+                        self.startTranscription()
+                    }
+                }
+                self.wasTranscribingBeforeSleep = false
+            }
         }
 
         // Screen locked (debounced - macOS sometimes fires multiple times)
@@ -417,6 +446,11 @@ class AppState: ObservableObject {
                             // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
                             if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
                                 DispatchQueue.main.async {
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "launch_disabled_error",
+                                        previousStatus: "notDetermined",
+                                        currentStatus: "error_code_1"
+                                    )
                                     self?.repairNotificationRegistrationAndRetry()
                                 }
                                 return
@@ -450,6 +484,30 @@ class AppState: ObservableObject {
                     self?.hasNotificationPermission = isNowGranted
                     if !isNowGranted {
                         log("Notification permission still not granted after repair. Opening System Settings.")
+                        self?.openNotificationPreferences()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Repair notification registration via lsregister, then fall back to System Settings if still broken.
+    /// Called from sidebar and settings "Fix" buttons when auth is not authorized.
+    func repairNotificationAndFallback() {
+        log("Fix button tapped — running lsregister repair for notifications")
+        ProactiveAssistantsPlugin.repairNotificationRegistration()
+
+        // Wait for repair + re-authorization, then check if it worked
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                DispatchQueue.main.async {
+                    let isNowGranted = settings.authorizationStatus == .authorized
+                    self?.hasNotificationPermission = isNowGranted
+                    self?.notificationAlertStyle = settings.alertStyle
+                    if isNowGranted {
+                        log("Notification repair succeeded — auth is now authorized")
+                    } else {
+                        log("Notification repair didn't restore auth (status=\(settings.authorizationStatus.rawValue)) — opening System Settings")
                         self?.openNotificationPreferences()
                     }
                 }
@@ -528,6 +586,10 @@ class AppState: ObservableObject {
         checkMicrophonePermission()
         checkSystemAudioPermission()
         checkAccessibilityPermission()
+        // One-time startup diagnostic for accessibility
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+        log("ACCESSIBILITY_STARTUP: bundleId=\(bundleId), macOS=\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion), TCC=\(hasAccessibilityPermission), broken=\(isAccessibilityBroken), onboarded=\(hasCompletedOnboarding)")
         // Only check Bluetooth if already initialized (to avoid triggering permission prompt early)
         if bluetoothStateCancellable != nil {
             checkBluetoothPermission()
@@ -646,6 +708,18 @@ class AppState: ObservableObject {
                         bannersDisabled: settings.alertStyle == .none
                     )
 
+                    // Detect regression: was authorized, now reverted to notDetermined
+                    // This happens on macOS 26+ where the OS silently revokes notification permission
+                    if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+                        log("Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair")
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "auth_regression",
+                            previousStatus: "authorized",
+                            currentStatus: "notDetermined"
+                        )
+                        self.repairNotificationRegistrationAndRetry()
+                    }
+
                     // Update last known state
                     self.lastNotificationAuthStatus = authStatus
                     self.lastNotificationAlertStyle = alertStyleName
@@ -736,7 +810,14 @@ class AppState: ObservableObject {
     /// so we also do a functional AX test to detect the "broken" state.
     func checkAccessibilityPermission() {
         let tccGranted = AXIsProcessTrusted()
+        let previouslyGranted = hasAccessibilityPermission
         hasAccessibilityPermission = tccGranted
+
+        // Log transitions
+        if tccGranted != previouslyGranted {
+            let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+            log("ACCESSIBILITY_CHECK: TCC state changed \(previouslyGranted) → \(tccGranted) (bundleId=\(bundleId))")
+        }
 
         if tccGranted {
             // TCC says yes — verify with an actual AX call
@@ -773,13 +854,13 @@ class AppState: ObservableObject {
         case .success, .noValue, .notImplemented, .attributeUnsupported:
             return true
         case .apiDisabled:
-            log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck")
+            log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
             return false
         case .cannotComplete:
-            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck")
+            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
             return false
         default:
-            // Other errors (parameterizedAttributeUnsupported, etc.) aren't permission-related
+            log("ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(frontApp.localizedName ?? "unknown") — not permission-related, treating as OK")
             return true
         }
     }
@@ -791,14 +872,20 @@ class AppState: ObservableObject {
 
     /// Trigger accessibility permission prompt
     func triggerAccessibilityPermission() {
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+        log("ACCESSIBILITY_TRIGGER: User clicked Grant Access — bundleId=\(bundleId), macOS \(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)")
+
         // This will prompt the user if not already trusted
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         hasAccessibilityPermission = trusted
+        log("ACCESSIBILITY_TRIGGER: AXIsProcessTrustedWithOptions returned \(trusted)")
 
         // On macOS Sequoia+, AXIsProcessTrustedWithOptions no longer shows a visible dialog,
         // so explicitly open System Settings to the Accessibility pane
         if !trusted {
+            log("ACCESSIBILITY_TRIGGER: Not trusted, opening System Settings Accessibility pane")
             openAccessibilityPreferences()
         }
     }
@@ -1947,6 +2034,7 @@ class AppState: ObservableObject {
                         )
                     } catch {
                         logError("Transcription: Failed to persist segment to DB", error: error)
+                        await RewindDatabase.shared.reportQueryError(error)
                         // Non-fatal - continue recording
                     }
                 }
@@ -2426,4 +2514,9 @@ extension Notification.Name {
     static let goalAutoCreated = Notification.Name("goalAutoCreated")
     /// Posted when a goal is completed (current_value >= target_value)
     static let goalCompleted = Notification.Name("goalCompleted")
+    /// Posted to navigate to AI Chat page
+    static let navigateToChat = Notification.Name("navigateToChat")
+    static let navigateToTasks = Notification.Name("navigateToTasks")
+    /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
+    static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
 }

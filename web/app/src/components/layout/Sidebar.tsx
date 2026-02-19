@@ -325,64 +325,109 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className={cn(
-          'py-2 space-y-1',
-          showText ? 'px-3' : 'px-2'
-        )}>
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href === '/conversations' &&
-                pathname?.startsWith('/conversations'));
-            const showRecordingBadge = item.href === '/record' && isRecording;
-            const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
+        {/* Scrollable middle section */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <nav className={cn(
+            'py-2 space-y-1',
+            showText ? 'px-3' : 'px-2'
+          )}>
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href === '/conversations' &&
+                  pathname?.startsWith('/conversations'));
+              const showRecordingBadge = item.href === '/record' && isRecording;
+              const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => {
-                  if (!isDesktop) onClose();
-                }}
-                title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
-                className={cn(
-                  'flex items-center rounded-xl',
-                  'transition-all duration-150',
-                  showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
-                  isActive
-                    ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                  showComingSoon && 'opacity-60'
-                )}
-              >
-                <span className="flex-shrink-0 relative">
-                  {item.icon}
-                  {/* Recording badge - pulsing red dot */}
-                  {showRecordingBadge && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                    </span>
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    if (!isDesktop) onClose();
+                  }}
+                  title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
+                  className={cn(
+                    'flex items-center rounded-xl',
+                    'transition-all duration-150',
+                    showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                    isActive
+                      ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
+                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                    showComingSoon && 'opacity-60'
                   )}
-                </span>
-                {showText && (
-                  <span className="font-medium flex items-center gap-2">
-                    {item.label}
-                    {showComingSoon && (
-                      <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
-                        Soon
+                >
+                  <span className="flex-shrink-0 relative">
+                    {item.icon}
+                    {/* Recording badge - pulsing red dot */}
+                    {showRecordingBadge && (
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
                       </span>
                     )}
                   </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+                  {showText && (
+                    <span className="font-medium flex items-center gap-2">
+                      {item.label}
+                      {showComingSoon && (
+                        <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                          Soon
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
-        {/* Spacer to push footer to bottom */}
-        <div className="flex-1" />
+        {/* Platform-aware app download banner */}
+        {!mobileAppDismissed && (() => {
+
+          const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+          const bannerHref = isMac ? 'https://macos.omi.me/' : 'https://onelink.to/rbsrxc';
+          const bannerTitle = isMac ? 'Omi is 10X better on macOS' : 'Take Omi with you';
+          const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
+          return (
+            <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
+              <a
+                href={bannerHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
+                  showText ? 'p-3 pr-9' : 'justify-center p-3'
+                )}
+              >
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+                  {isMac ? <AppleLogo className="w-4 h-4 text-text-tertiary" /> : <Smartphone className="w-4 h-4 text-text-tertiary" />}
+                </div>
+                {showText && (
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-text-primary">{bannerTitle}</p>
+                    <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                  </div>
+                )}
+                {showText && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMobileAppDismissed(true);
+                      localStorage.setItem('mobile-app-banner-dismissed', 'true');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </a>
+            </div>
+          );
+        })()}
 
         {/* Feedback & Discord links */}
         <div className={cn('pb-2', showText ? 'px-3' : 'px-2')}>

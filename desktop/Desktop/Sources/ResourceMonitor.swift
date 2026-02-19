@@ -204,6 +204,9 @@ class ResourceMonitor {
                     await logComponentDiagnostics(snapshot: snapshot)
                 }
 
+                // Attempt to free memory by flushing heavy components
+                triggerMemoryRemediation()
+
                 // Send Sentry event (skip in dev builds)
                 if !isDevBuild {
                     let threshold = self.memoryCriticalThreshold
@@ -268,6 +271,32 @@ class ResourceMonitor {
                 ]
                 SentrySDK.addBreadcrumb(breadcrumb)
             }
+        }
+    }
+
+    // MARK: - Memory Remediation
+
+    /// Attempt to free memory by flushing heavy components.
+    /// Called at most once per warningCooldown (5 min) when critical threshold is exceeded.
+    private func triggerMemoryRemediation() {
+        log("ResourceMonitor: Triggering memory remediation — flushing video encoder and clearing assistant pending work")
+
+        // Flush VideoChunkEncoder to release ffmpeg process + H.265 hardware encoder context
+        Task {
+            _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
+        }
+
+        // Clear queued frames in assistant coordinator
+        AssistantCoordinator.shared.clearAllPendingWork()
+
+        if !isDevBuild {
+            let breadcrumb = Breadcrumb(level: .warning, category: "memory_remediation")
+            breadcrumb.message = "Memory remediation triggered at critical threshold"
+            breadcrumb.data = [
+                "memory_footprint_mb": getMemoryFootprintMB(),
+                "threshold_mb": memoryCriticalThreshold
+            ]
+            SentrySDK.addBreadcrumb(breadcrumb)
         }
     }
 

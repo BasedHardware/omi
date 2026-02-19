@@ -683,6 +683,10 @@ class TasksViewModel: ObservableObject {
     /// Throttle flag for loadMoreIfNeeded to prevent task storms during fast scroll
     private var isLoadingMoreGuard = false
 
+    /// Minimum interval between pagination triggers (seconds)
+    private var lastLoadMoreTime: Date = .distantPast
+    private let loadMoreThrottleInterval: TimeInterval = 0.5
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -767,48 +771,42 @@ class TasksViewModel: ObservableObject {
 
     // MARK: - Drag-and-Drop Methods
 
-    /// Get ordered tasks for a category, respecting sortOrder then legacy categoryOrder
+    /// Get ordered tasks for a category, matching Python backend sort: due_at ASC, created_at DESC
     func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
         guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
             return []
         }
 
-        // Check if any tasks have sortOrder set (backend-synced ordering)
-        let hasSortOrder = tasks.contains { ($0.sortOrder ?? 0) > 0 }
+        // Fall back to legacy UserDefaults categoryOrder if present (local drag-and-drop)
+        if let order = categoryOrder[category], !order.isEmpty {
+            var orderedTasks: [TaskActionItem] = []
+            var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
 
-        if hasSortOrder {
-            // Sort by sortOrder ascending; tasks without sortOrder go at the end sorted by createdAt
-            return tasks.sorted { a, b in
-                let aOrder = a.sortOrder ?? Int.max
-                let bOrder = b.sortOrder ?? Int.max
-                if aOrder != bOrder {
-                    return aOrder < bOrder
+            for id in order {
+                if let task = taskMap[id] {
+                    orderedTasks.append(task)
+                    taskMap.removeValue(forKey: id)
                 }
+            }
+
+            // Remaining tasks not in custom order
+            let remaining = taskMap.values.sorted { a, b in
+                let aDue = a.dueAt ?? .distantFuture
+                let bDue = b.dueAt ?? .distantFuture
+                if aDue != bDue { return aDue < bDue }
                 return a.createdAt > b.createdAt
             }
+            orderedTasks.append(contentsOf: remaining)
+            return orderedTasks
         }
 
-        // Fall back to legacy UserDefaults categoryOrder
-        guard let order = categoryOrder[category], !order.isEmpty else {
-            return tasks // No custom order, return as-is
+        // Default sort: due_at ascending (nulls last), created_at descending (newest first)
+        return tasks.sorted { a, b in
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue { return aDue < bDue }
+            return a.createdAt > b.createdAt
         }
-
-        // Sort tasks by custom order, new items go at the end
-        var orderedTasks: [TaskActionItem] = []
-        var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
-
-        // Add tasks in custom order
-        for id in order {
-            if let task = taskMap[id] {
-                orderedTasks.append(task)
-                taskMap.removeValue(forKey: id)
-            }
-        }
-
-        // Add remaining tasks (new ones not in custom order)
-        orderedTasks.append(contentsOf: taskMap.values)
-
-        return orderedTasks
     }
 
     /// Move a task within a category
@@ -1168,14 +1166,18 @@ class TasksViewModel: ObservableObject {
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
         if hasNonStatusFilters {
-            Task { await loadFilteredTasksFromDatabase() }
+            Task { [weak self] in
+                guard let self, self.recomputeVersion == version else { return }
+                await self.loadFilteredTasksFromDatabase()
+            }
         } else {
             recomputeDisplayCaches()
         }
 
         // Load true counts from SQLite asynchronously
-        Task {
-            await loadTagCountsFromDatabase()
+        Task { [weak self] in
+            guard let self, self.recomputeVersion == version else { return }
+            await self.loadTagCountsFromDatabase()
         }
     }
 
@@ -1542,7 +1544,17 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
@@ -1568,7 +1580,17 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
@@ -1638,22 +1660,15 @@ class TasksViewModel: ObservableObject {
     }
 
     private func sortTasks(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        // Matches Python backend sort: due_at ASC (nulls last), created_at DESC (newest first)
         tasks.sorted { a, b in
-            // Tasks with due dates first, then by due date ascending
-            // Tie-breaker: created_at descending (newest first) - matches backend
-            switch (a.dueAt, b.dueAt) {
-            case (nil, nil):
-                return a.createdAt > b.createdAt
-            case (nil, _):
-                return false
-            case (_, nil):
-                return true
-            case (let aDate?, let bDate?):
-                if aDate == bDate {
-                    return a.createdAt > b.createdAt
-                }
-                return aDate < bDate
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue {
+                return aDue < bDue
             }
+            // Tie-breaker: created_at descending (newest first)
+            return a.createdAt > b.createdAt
         }
     }
 
@@ -1663,8 +1678,18 @@ class TasksViewModel: ObservableObject {
         await store.loadTasks()
     }
 
+    /// Throttled wrapper called from .onAppear — skips if called too recently
+    func throttledLoadMoreIfNeeded(currentTask: TaskActionItem) async {
+        let now = Date()
+        guard now.timeIntervalSince(lastLoadMoreTime) >= loadMoreThrottleInterval else { return }
+        lastLoadMoreTime = now
+        await loadMoreIfNeeded(currentTask: currentTask)
+    }
+
     func loadMoreIfNeeded(currentTask: TaskActionItem) async {
         guard !isLoadingMoreGuard else { return }
+        isLoadingMoreGuard = true
+        defer { isLoadingMoreGuard = false }
 
         if isInFilteredMode {
             // In filtered mode, check if we need to show more from already-queried results
@@ -1676,13 +1701,9 @@ class TasksViewModel: ObservableObject {
                   taskIndex >= thresholdIndex else {
                 return
             }
-            isLoadingMoreGuard = true
             loadMoreFiltered()
-            isLoadingMoreGuard = false
         } else {
-            isLoadingMoreGuard = true
             await store.loadMoreIfNeeded(currentTask: currentTask)
-            isLoadingMoreGuard = false
         }
     }
 
@@ -2257,7 +2278,7 @@ struct TasksPage: View {
                 cancelMultiSelectButton
             } else {
                 addTaskButton
-                if chatProvider != nil {
+                if chatProvider != nil && TaskAgentSettings.shared.isEnabled {
                     chatToggleButton
                 }
                 taskSettingsButton
@@ -2887,7 +2908,7 @@ struct TasksPage: View {
                             }
                             .onAppear {
                                 Task {
-                                    await viewModel.loadMoreIfNeeded(currentTask: task)
+                                    await viewModel.throttledLoadMoreIfNeeded(currentTask: task)
                                 }
                             }
                         }
@@ -3207,9 +3228,6 @@ struct TaskRow: View {
     // Inline due date popover
     @State private var showDatePicker = false
     @State private var editDueDate: Date = Date()
-
-    // Inline priority popover
-    @State private var showPriorityPicker = false
 
     // Swipe gesture state
     @State private var swipeOffset: CGFloat = 0
@@ -3561,13 +3579,6 @@ struct TaskRow: View {
                         NewBadge()
                     }
 
-
-
-                    // Tag badges (show up to 3)
-                    ForEach(task.tags.prefix(3), id: \.self) { tag in
-                        TaskClassificationBadge(category: tag)
-                    }
-
                     // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
                     if TaskAgentSettings.shared.isEnabled {
                         AgentStatusIndicator(task: task)
@@ -3580,34 +3591,6 @@ struct TaskRow: View {
 
                     // Task detail button (hover for preview, click for full detail)
                     TaskDetailButton(task: task, showDetail: $showTaskDetail)
-
-                    // Due date badge - clickable
-                    if let dueAt = task.dueAt {
-                        DueDateBadgeInteractive(
-                            dueAt: dueAt,
-                            isCompleted: task.completed,
-                            showDatePicker: $showDatePicker,
-                            editDueDate: $editDueDate
-                        )
-                    }
-
-                    // Source badge (read-only)
-                    if let source = task.source {
-                        SourceBadgeCompact(source: source, sourceLabel: task.sourceAppLabel, sourceIcon: task.sourceIcon, windowTitle: task.windowTitle)
-                    }
-
-                    // Priority badge - clickable
-                    PriorityBadgeInteractive(
-                        priority: task.priority,
-                        isCompleted: task.completed,
-                        isHovering: isHovering,
-                        showPriorityPicker: $showPriorityPicker,
-                        onPriorityChange: { newPriority in
-                            Task {
-                                await onUpdateDetails?(task, nil, nil, newPriority)
-                            }
-                        }
-                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -3717,7 +3700,7 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundPrimary)))
+                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)

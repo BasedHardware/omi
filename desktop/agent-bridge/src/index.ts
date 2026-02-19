@@ -90,11 +90,16 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
 
     // Always include both MCP servers
+    const playwrightArgs = [playwrightCli];
+    if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+      playwrightArgs.push("--extension");
+    }
+
     const mcpServers: Record<string, unknown> = {
       "omi-tools": omiServer,
       "playwright": {
         command: process.execPath,
-        args: [playwrightCli],
+        args: playwrightArgs,
       },
     };
 
@@ -105,7 +110,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       allowedTools,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
-      maxTurns: 15,
+      maxTurns: undefined,
       cwd: msg.cwd || process.env.HOME || "/",
       mcpServers,
       includePartialMessages: true,
@@ -148,6 +153,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
               blockTools.set(blockIndex, { id: toolUseId, name, inputChunks: [] });
             }
             send({ type: "tool_activity", name, status: "started", toolUseId });
+            logErr(`Tool started: ${name} (id=${toolUseId ?? "?"})`);
           }
 
           // Accumulate input_json_delta for tool blocks
@@ -181,6 +187,12 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
                     toolUseId: block.id,
                     input,
                   });
+                  // Log tool input summary for debugging
+                  const inputSummary = Object.entries(input).map(([k, v]) => {
+                    const val = typeof v === "string" ? (v.length > 100 ? v.slice(0, 100) + "…" : v) : JSON.stringify(v);
+                    return `${k}=${val}`;
+                  }).join(", ");
+                  logErr(`Tool input: ${block.name} (id=${block.id}) ${inputSummary}`);
                 } catch {
                   // Failed to parse accumulated input — skip
                 }
@@ -280,6 +292,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
                 }
                 // Mark tool as completed
                 send({ type: "tool_activity", name, status: "completed", toolUseId });
+                logErr(`Tool completed: ${name} (id=${toolUseId}) output=${output ? output.length + " chars" : "none"}`);
               }
             }
           }

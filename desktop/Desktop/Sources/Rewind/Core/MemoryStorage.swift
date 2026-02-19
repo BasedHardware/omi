@@ -320,12 +320,22 @@ actor MemoryStorage {
                 }
                 return recordId
             } else {
-                // Insert new record
-                let newRecord = try MemoryRecord.from(memory).inserted(database)
-                guard let recordId = newRecord.id else {
-                    throw MemoryStorageError.syncFailed("Record ID is nil after insert")
+                // Insert new record, catching UNIQUE constraint from concurrent syncs
+                do {
+                    let newRecord = try MemoryRecord.from(memory).inserted(database)
+                    guard let recordId = newRecord.id else {
+                        throw MemoryStorageError.syncFailed("Record ID is nil after insert")
+                    }
+                    return recordId
+                } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                    // Race: another sync path already inserted this backendId — update instead
+                    if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
+                        record.updateFrom(memory)
+                        try record.update(database)
+                        return record.id ?? 0
+                    }
+                    throw dbError
                 }
-                return recordId
             }
         }
     }
@@ -364,7 +374,15 @@ actor MemoryStorage {
                     try orphan.update(database)
                     adopted += 1
                 } else {
-                    _ = try MemoryRecord.from(memory).inserted(database)
+                    do {
+                        _ = try MemoryRecord.from(memory).inserted(database)
+                    } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                        // Race: record already exists — update instead
+                        if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
+                            record.updateFrom(memory)
+                            try record.update(database)
+                        }
+                    }
                 }
             }
             return (skipped, adopted)

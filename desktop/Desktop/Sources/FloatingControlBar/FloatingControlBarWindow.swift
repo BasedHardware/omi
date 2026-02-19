@@ -6,8 +6,8 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 28, height: 28)
-    private static let minBarSize = NSSize(width: 28, height: 28)
+    private static let defaultSize = NSSize(width: 40, height: 10)
+    private static let minBarSize = NSSize(width: 40, height: 10)
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
@@ -15,6 +15,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
+    private var isUserDragging = false
+    /// Suppresses hover resizes during close animation to prevent position drift.
+    private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
@@ -51,7 +54,8 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         setupViews()
 
-        if let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
+        if ShortcutSettings.shared.draggableBarEnabled,
+           let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
             // Verify saved position is on a visible screen
             let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14)) }
@@ -69,12 +73,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     override var canBecomeMain: Bool { true }
 
     override func keyDown(with event: NSEvent) {
-        // Esc closes the AI conversation, or hides the bar if collapsed
+        // Esc closes the AI conversation only — never hides the entire bar
         if event.keyCode == 53 { // Escape
             if state.showingAIConversation {
                 closeAIConversation()
-            } else {
-                hideBar()
             }
             return
         }
@@ -128,6 +130,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             forName: .floatingBarDragDidStart, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.isUserDragging = true
                 self?.state.isDragging = true
             }
         }
@@ -136,7 +139,17 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             forName: .floatingBarDragDidEnd, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.isUserDragging = false
                 self?.state.isDragging = false
+            }
+        }
+
+        // Re-validate position when monitors are connected/disconnected
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.validatePositionOnScreenChange()
             }
         }
     }
@@ -223,6 +236,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
         }
+        // Suppress hover resizes while the close animation plays, otherwise onHover
+        // fires mid-animation, reads an intermediate frame, and causes position drift.
+        suppressHoverResize = true
+
         // Restore to saved center so hover expand/collapse stays consistent (no drift).
         if let center = preChatCenter {
             let size = FloatingControlBarWindow.minBarSize
@@ -237,10 +254,24 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
             NSAnimationContext.endGrouping()
-            self.isResizingProgrammatically = false
+            // Keep isResizingProgrammatically true until animation finishes to prevent
+            // intermediate frames from triggering unwanted side effects.
+            let targetFrame = NSRect(origin: restoreOrigin, size: size)
             preChatCenter = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.isResizingProgrammatically = false
+                // Safety net: if the frame drifted during animation, snap to the correct position.
+                if let self = self, self.frame != targetFrame {
+                    self.setFrame(targetFrame, display: true, animate: false)
+                }
+            }
         } else {
             resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
+        }
+
+        // Allow hover resizes again after the animation settles.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.suppressHoverResize = false
         }
     }
 
@@ -421,27 +452,38 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
         let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
-        let newOrigin = NSPoint(
-            x: frame.midX - targetSize.width / 2,
-            y: frame.midY - targetSize.height / 2
-        )
 
-        styleMask.remove(.resizable)
-        isResizingProgrammatically = true
+        let doResize: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            let newOrigin = NSPoint(
+                x: self.frame.midX - targetSize.width / 2,
+                y: self.frame.midY - targetSize.height / 2
+            )
+            self.styleMask.remove(.resizable)
+            self.isResizingProgrammatically = true
+            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            self.isResizingProgrammatically = false
+        }
 
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.2
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: true)
-        NSAnimationContext.endGrouping()
-
-        self.isResizingProgrammatically = false
+        if expanded {
+            // Expand synchronously so the window is already large enough when
+            // SwiftUI re-evaluates body with isHovering=true. If this were async,
+            // the 50px expanded content renders in the still-22px window, causing
+            // the tracking area to invalidate and trigger immediate unhover — producing
+            // a flicker loop when hovering from the top or bottom edge.
+            doResize()
+        } else {
+            // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
+            // Cancellable via resizeWorkItem so rapid hover in/out doesn't queue stale
+            // resizes. (OMI-COMPUTER-1PT)
+            resizeWorkItem = DispatchWorkItem(block: doResize)
+            DispatchQueue.main.async(execute: resizeWorkItem!)
+        }
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
@@ -486,9 +528,27 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         centerOnMainScreen()
     }
 
+    /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
+    /// fully visible on any screen.
+    private func validatePositionOnScreenChange() {
+        let barFrame = self.frame
+        // Check if the bar's center point is on any visible screen
+        let center = NSPoint(x: barFrame.midX, y: barFrame.midY)
+        let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(center) }
+        if !onScreen {
+            log("FloatingControlBarWindow: bar center \(center) is off-screen after monitor change, re-centering")
+            UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
+            centerOnMainScreen()
+        }
+    }
+
     // MARK: - NSWindowDelegate
 
     @objc func windowDidMove(_ notification: Notification) {
+        // Only persist position when the user is physically dragging the bar.
+        // Programmatic moves (resize animations, chat open/close) should not
+        // overwrite the saved position — that causes silent drift.
+        guard isUserDragging else { return }
         UserDefaults.standard.set(
             NSStringFromPoint(self.frame.origin), forKey: FloatingControlBarWindow.positionKey
         )
@@ -712,6 +772,11 @@ class FloatingControlBarManager {
             show()
         }
 
+        // Save pre-chat center so closeAIConversation can restore the original position.
+        // Without this, Escape after a PTT query places the bar at the response window's
+        // center instead of where it was before the chat opened.
+        window.savePreChatCenterIfNeeded()
+
         // Set up state — go straight to response view (skip input view to avoid resize flicker)
         window.state.showingAIConversation = true
         window.state.showingAIResponse = true
@@ -825,5 +890,12 @@ class FloatingControlBarManager {
 extension FloatingControlBarWindow {
     func resizeToResponseHeightPublic(animated: Bool = false) {
         resizeToResponseHeight(animated: animated)
+    }
+
+    /// Save the current center point so closeAIConversation can restore position.
+    /// Only saves if preChatCenter is not already set (avoids overwriting during follow-ups).
+    func savePreChatCenterIfNeeded() {
+        guard preChatCenter == nil else { return }
+        preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
     }
 }

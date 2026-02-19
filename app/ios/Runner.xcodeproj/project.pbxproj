@@ -63,7 +63,6 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -312,7 +311,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
