@@ -439,7 +439,6 @@ async fn create_gce_vm(
     // Uses stdbuf for line-buffered output, writes env to file so restarts work
     let startup_script = format!(
         r#"#!/bin/bash
-export HOME=/home/matthewdi
 cd /home/matthewdi/omi-agent
 
 # Write per-VM env vars (unique to this VM, set at creation time)
@@ -454,16 +453,21 @@ curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/e
 # Pull latest agent.mjs from GCS
 curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed, using existing agent.mjs'
 
-# Source both env files
-source .env-vm.sh
-[ -f .env-shared.sh ] && source .env-shared.sh
+chown matthewdi:matthewdi .env-vm.sh .env-shared.sh agent.mjs 2>/dev/null
 
 # Kill any existing agent process
 pkill -x node 2>/dev/null || true
 sleep 1
 
-# Start agent with line-buffered output
-nohup stdbuf -oL node agent.mjs --serve > /home/matthewdi/omi-agent/agent-server.log 2>&1 &
+# Start agent as matthewdi user (not root — Claude Code needs user-owned HOME)
+sudo -u matthewdi bash -c '
+  export HOME=/home/matthewdi
+  cd /home/matthewdi/omi-agent
+  source .env-vm.sh
+  [ -f .env-shared.sh ] && source .env-shared.sh
+  nohup stdbuf -oL node agent.mjs --serve > agent-server.log 2>&1 &
+  disown
+'
 "#,
         auth_token = auth_token
     );
