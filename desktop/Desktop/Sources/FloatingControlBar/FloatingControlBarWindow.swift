@@ -6,8 +6,8 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 52, height: 22)
-    private static let minBarSize = NSSize(width: 52, height: 22)
+    private static let defaultSize = NSSize(width: 40, height: 10)
+    private static let minBarSize = NSSize(width: 40, height: 10)
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
