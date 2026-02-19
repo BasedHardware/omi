@@ -571,11 +571,11 @@ def test_frequency_thresholds():
     from utils.llm.proactive_notification import FREQUENCY_TO_BASE_THRESHOLD
 
     assert FREQUENCY_TO_BASE_THRESHOLD[0] is None
-    assert FREQUENCY_TO_BASE_THRESHOLD[1] == 0.90
-    assert FREQUENCY_TO_BASE_THRESHOLD[2] == 0.75
-    assert FREQUENCY_TO_BASE_THRESHOLD[3] == 0.60
-    assert FREQUENCY_TO_BASE_THRESHOLD[4] == 0.40
-    assert FREQUENCY_TO_BASE_THRESHOLD[5] == 0.25
+    assert FREQUENCY_TO_BASE_THRESHOLD[1] == 0.92
+    assert FREQUENCY_TO_BASE_THRESHOLD[2] == 0.85
+    assert FREQUENCY_TO_BASE_THRESHOLD[3] == 0.78
+    assert FREQUENCY_TO_BASE_THRESHOLD[4] == 0.70
+    assert FREQUENCY_TO_BASE_THRESHOLD[5] == 0.60
 
 
 def test_max_daily_notifications():
