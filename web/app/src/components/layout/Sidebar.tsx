@@ -223,13 +223,14 @@ export function Sidebar({
           transform: !isDesktop ? `translateX(${isOpen ? 0 : -280}px)` : undefined,
           // Desktop: set width directly
           width: isDesktop ? sidebarWidth : 280,
+          willChange: !isDesktop ? 'transform' : 'undefined',
         }}
         className={cn(
           'bg-bg-secondary border-r border-white/[0.04]',
           'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
-          'transition-[transform,width] duration-150 ease-out',
+          'transitio-transform duration-150 ease-out lg:transition-none',
           // Desktop: relative in flow
           'lg:relative lg:z-auto'
         )}
