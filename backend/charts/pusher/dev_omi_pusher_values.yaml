@@ -161,13 +161,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ENCRYPTION_SECRET
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
-  - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
   - name: BUCKET_PLUGINS_LOGOS
