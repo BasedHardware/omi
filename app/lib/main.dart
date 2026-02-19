@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -68,6 +69,7 @@ import 'package:omi/services/notifications/important_conversation_notification_h
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
+import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/enums.dart';
@@ -132,6 +134,12 @@ Future _init() async {
     } else {
       Env.init(DevEnv());
     }
+  }
+
+  // Override API URL for TestFlight builds (prod flavor running in sandbox)
+  if (F.env == Environment.prod && kReleaseMode && await EnvironmentDetector.isTestFlight()) {
+    Env.overrideApiBaseUrl('https://api.omiapi.com/');
+    debugPrint('TestFlight detected: using staging backend (api.omiapi.com)');
   }
 
   FlutterForegroundTask.initCommunicationPort();
