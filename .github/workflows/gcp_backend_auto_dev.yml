@@ -62,6 +62,7 @@ jobs:
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -74,6 +75,7 @@ jobs:
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Connect to GKE cluster
         run: |
@@ -103,6 +105,7 @@ jobs:
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Show Output
         run: echo "Backend deployed to development environment"
