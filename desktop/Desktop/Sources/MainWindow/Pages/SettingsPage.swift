@@ -4351,6 +4351,7 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile)
+        selectedAdvancedSubsection: .constant(.aiUserProfile),
+        highlightedSettingId: .constant(nil)
     )
 }
