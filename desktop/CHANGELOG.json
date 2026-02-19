@@ -1,6 +1,28 @@
 {
   "releases": [
     {
+      "version": "0.9.2",
+      "date": "2026-02-18",
+      "changes": [
+        "File indexing onboarding: Omi scans your folders to understand what you work on, then opens an AI chat to explore your files",
+        "Transcription auto-restart: audio monitoring resumes automatically after your Mac wakes from sleep",
+        "Notification self-repair: detects and fixes silently revoked notification permissions on macOS 26+",
+        "Reliable task sync: deleted tasks now properly disappear, reconciliation runs when switching to Tasks tab",
+        "Task sort order matches mobile: consistent due_at/created_at ordering across platforms",
+        "Old tasks hidden: incomplete tasks older than 7 days are excluded from the task list",
+        "Goals widget improvements: tooltips on buttons, drag clamping fix, manual goals never auto-removed, AI generation opt-in",
+        "Chat input rewritten: fixed cursor misalignment with native NSTextView, typing indicator works during tool calls",
+        "Refreshed sidebar icons and fixed Rewind toggle to control both screen and audio together",
+        "User names loaded from backend profile, fixing blank names for Apple Sign-In users",
+        "Rewind arrow key navigation corrected: left=newer, right=older",
+        "Floating control bar hover flicker fix",
+        "Compact view is now the default for Conversations",
+        "Reduced Crisp support chat polling from 30s to 2min with session caching",
+        "AI profile generation uses fewer tokens (5 recent profiles instead of 50)",
+        "Proactive assistant backpressure: drops frames during slow analysis instead of queuing"
+      ]
+    },
+    {
       "version": "0.9.1",
       "date": "2026-02-17",
       "changes": [
