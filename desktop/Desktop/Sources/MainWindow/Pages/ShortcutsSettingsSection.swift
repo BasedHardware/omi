@@ -3,6 +3,11 @@ import SwiftUI
 /// Settings section for keyboard shortcuts and push-to-talk configuration.
 struct ShortcutsSettingsSection: View {
     @ObservedObject private var settings = ShortcutSettings.shared
+    @Binding var highlightedSettingId: String?
+
+    init(highlightedSettingId: Binding<String?> = .constant(nil)) {
+        self._highlightedSettingId = highlightedSettingId
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -41,6 +46,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.model", highlightedSettingId: $highlightedSettingId))
     }
 
     private func aiModelButton(_ model: (id: String, label: String)) -> some View {
@@ -89,6 +95,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.background", highlightedSettingId: $highlightedSettingId))
     }
 
     private var draggableBarCard: some View {
@@ -111,6 +118,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.draggable", highlightedSettingId: $highlightedSettingId))
     }
 
     private var askOmiKeyCard: some View {
@@ -136,6 +144,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.shortcut", highlightedSettingId: $highlightedSettingId))
     }
 
     private func askOmiKeyButton(_ key: ShortcutSettings.AskOmiKey) -> some View {
@@ -185,6 +194,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.ptt", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttKeyButton(_ key: ShortcutSettings.PTTKey) -> some View {
@@ -238,6 +248,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.transcriptionmode", highlightedSettingId: $highlightedSettingId))
     }
 
     private func pttTranscriptionModeButton(_ mode: ShortcutSettings.PTTTranscriptionMode) -> some View {
@@ -284,6 +295,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.doubletap", highlightedSettingId: $highlightedSettingId))
     }
 
     private var pttSoundsCard: some View {
@@ -306,6 +318,7 @@ struct ShortcutsSettingsSection: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
         )
+        .modifier(SettingHighlightModifier(settingId: "advanced.askomi.pttsounds", highlightedSettingId: $highlightedSettingId))
     }
 
     private var referenceCard: some View {

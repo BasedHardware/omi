@@ -1408,7 +1408,7 @@ struct SettingsContentView: View {
 
     private var accountSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "account.account") {
                 HStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
                         .scaledFont(size: 40)
@@ -2295,7 +2295,7 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes") {
+                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes", settingId: "advanced.focusassistant.glow") {
                         Toggle("", isOn: $glowOverlayEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
@@ -2309,7 +2309,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts") {
+                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", settingId: "advanced.focusassistant.cooldown") {
                         Picker("", selection: $cooldownInterval) {
                             ForEach(cooldownOptions, id: \.self) { minutes in
                                 Text(formatMinutes(minutes)).tag(minutes)
@@ -2323,7 +2323,7 @@ struct SettingsContentView: View {
                         }
                     }
 
-                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis") {
+                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
                         Button(action: {
                             PromptEditorWindow.show()
                         }) {
@@ -2495,7 +2495,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction") {
+                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction", settingId: "advanced.taskassistant.prompt") {
                         HStack(spacing: 8) {
                             Button(action: {
                                 TaskTestRunnerWindow.show()
@@ -2617,7 +2617,7 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     // Task Prioritization Re-score
-                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals") {
+                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals", settingId: "advanced.taskassistant.prioritization") {
                         if isRescoringTasks {
                             ProgressView()
                                 .controlSize(.small)
@@ -2646,7 +2646,7 @@ struct SettingsContentView: View {
 
 
             // Task Agent Settings (merged into Task Assistant subsection)
-            settingsCard {
+            settingsCard(settingId: "advanced.taskassistant.agent") {
                 TaskAgentSettingsView()
             }
         }
@@ -2743,7 +2743,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice") {
+                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
                         Button(action: {
                             AdvicePromptEditorWindow.show()
                         }) {
@@ -2915,7 +2915,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction") {
+                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction", settingId: "advanced.memoryassistant.prompt") {
                         Button(action: {
                             MemoryPromptEditorWindow.show()
                         }) {
@@ -3055,7 +3055,7 @@ struct SettingsContentView: View {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks") {
+                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks", settingId: "advanced.goals.autogenerate") {
                         Toggle("", isOn: $goalsAutoGenerateEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
@@ -3070,14 +3070,14 @@ struct SettingsContentView: View {
 
     private var askOmiFloatingBarSubsection: some View {
         VStack(spacing: 20) {
-            ShortcutsSettingsSection()
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
         }
     }
 
     private var preferencesSubsection: some View {
         VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.multichat") {
                 HStack(spacing: 16) {
                     Image(systemName: "bubble.left.and.bubble.right")
                         .scaledFont(size: 16)
@@ -3105,7 +3105,7 @@ struct SettingsContentView: View {
             }
 
             // Conversation View toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.compact") {
                 HStack(spacing: 16) {
                     Image(systemName: conversationsCompactView ? "list.bullet" : "list.bullet.rectangle")
                         .scaledFont(size: 16)
@@ -3133,7 +3133,7 @@ struct SettingsContentView: View {
             }
 
             // Launch at Login toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.launchatlogin") {
                 HStack(spacing: 16) {
                     Image(systemName: "power")
                         .scaledFont(size: 16)
@@ -3170,7 +3170,7 @@ struct SettingsContentView: View {
     private var troubleshootingSubsection: some View {
         VStack(spacing: 20) {
             // Report Issue
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble")
                         .scaledFont(size: 16)
@@ -3207,7 +3207,7 @@ struct SettingsContentView: View {
             }
 
             // Reset Onboarding
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
                         .scaledFont(size: 16)
@@ -3418,7 +3418,7 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "about.version") {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
@@ -3514,7 +3514,7 @@ struct SettingsContentView: View {
                 }
             }
 
-            settingsCard {
+            settingsCard(settingId: "about.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble.fill")
                         .scaledFont(size: 16)
