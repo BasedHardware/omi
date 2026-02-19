@@ -220,7 +220,10 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
-    value: "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ENCRYPTION_SECRET
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
     value: "1000000"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
