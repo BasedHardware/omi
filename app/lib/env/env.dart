@@ -2,14 +2,9 @@ import 'package:omi/env/dev_env.dart';
 
 abstract class Env {
   static late final EnvFields _instance;
-  static String? _apiBaseUrlOverride;
 
   static void init([EnvFields? instance]) {
     _instance = instance ?? DevEnv() as EnvFields;
-  }
-
-  static void overrideApiBaseUrl(String url) {
-    _apiBaseUrlOverride = url;
   }
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
@@ -17,7 +12,7 @@ abstract class Env {
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
-  static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
+  static String? get apiBaseUrl => _instance.apiBaseUrl;
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 

@@ -59,17 +59,6 @@ extension FlutterError: Error {}
       self?.handleMethodCall(call, result: result)
     }
     
-    // Create environment detection method channel (TestFlight detection)
-    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
-    envChannel.setMethodCallHandler { (call, result) in
-      if call.method == "isTestFlight" {
-        let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
-        result(isTestFlight)
-      } else {
-        result(FlutterMethodNotImplemented)
-      }
-    }
-
     // Create Apple Reminders method channel
     appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
