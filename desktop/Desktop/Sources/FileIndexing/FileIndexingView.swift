@@ -1,24 +1,28 @@
 import SwiftUI
 import SceneKit
 
-/// Standalone file indexing view: consent → loading → brainMap.
+/// Standalone file indexing view: loading → brainMap.
 /// Works in two contexts:
 /// 1. Embedded in OnboardingView step 4 (new users)
 /// 2. Shown as a dismissable overlay on app launch in DesktopHomeView (existing users)
 struct FileIndexingView: View {
-    enum Phase { case consent, loading, brainMap }
+    enum Phase { case loading, brainMap }
 
-    @State private var phase: Phase = .consent
+    @State private var phase: Phase = .loading
     @State private var scanningFolder: String = ""
     @State private var totalFilesScanned: Int = 0
     @State private var progress: Double = 0.0
     @State private var statusText: String = "Scanning your files..."
     @State private var showInfoPopover: Bool = false
     @State private var chatMessages: [String] = []
+    @State private var pipelineStarted = false
 
     @StateObject private var graphViewModel = MemoryGraphViewModel()
 
     @ObservedObject var chatProvider: ChatProvider
+
+    /// Tells the parent when brainMap phase is active (for full-bleed layout)
+    var isBrainMapPhase: Binding<Bool>? = nil
 
     /// Called when user completes (with file count) or skips (with 0)
     var onComplete: (Int) -> Void
@@ -26,117 +30,42 @@ struct FileIndexingView: View {
     var body: some View {
         VStack(spacing: 0) {
             switch phase {
-            case .consent:
-                consentView
             case .loading:
                 loadingView
             case .brainMap:
                 brainMapView
             }
         }
-    }
-
-    // MARK: - Consent
-
-    private var consentView: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
-            Image(systemName: "folder.badge.gearshape")
-                .scaledFont(size: 48)
-                .foregroundColor(OmiColors.purplePrimary)
-
-            Text("Get to Know You")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Let Omi look at your files to understand what you work on, your projects, and interests.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-                .fixedSize(horizontal: false, vertical: true)
-
-            VStack(spacing: 4) {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.shield")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                    Text("Scans common folders for file names only")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "eye.slash")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                    Text("File contents are never uploaded")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                }
+        .onAppear {
+            if !pipelineStarted {
+                pipelineStarted = true
+                startLoadingPipeline()
             }
-            .padding(.top, 4)
-
-            Spacer()
-
-            VStack(spacing: 8) {
-                Button(action: startLoadingPipeline) {
-                    Text("Get Started")
-                        .frame(maxWidth: 200)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                Button(action: skip) {
-                    Text("Skip")
-                        .scaledFont(size: 13)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.bottom, 20)
         }
-        .padding(24)
     }
 
     // MARK: - Loading Phase
 
     private var loadingView: some View {
         VStack(spacing: 0) {
-            // Info button top-right
-            HStack {
-                Spacer()
-                Button(action: { showInfoPopover.toggle() }) {
-                    Image(systemName: "info.circle")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                    infoPopoverContent
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-
             Spacer()
 
             // Animation
             OnboardingLoadingAnimation(progress: progress)
-                .padding(.bottom, 16)
+                .padding(.bottom, 20)
 
-            // Status text
-            Text(statusText)
+            // Title
+            Text("Let me access files to learn about you")
                 .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
-                .padding(.bottom, 4)
+                .multilineTextAlignment(.center)
+                .padding(.bottom, 6)
 
             // Subtitle
-            Text("Learning about you")
-                .scaledFont(size: 14)
+            Text("All data is secure and belongs to you. Open-source verified.")
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textTertiary)
+                .multilineTextAlignment(.center)
 
             // Progress bar
             VStack(spacing: 6) {
@@ -165,8 +94,17 @@ struct FileIndexingView: View {
                     .foregroundColor(OmiColors.textTertiary)
                     .monospacedDigit()
             }
-            .padding(.horizontal, 60)
+            .padding(.horizontal, 40)
             .padding(.top, 20)
+
+            // Skip
+            Button(action: skip) {
+                Text("Skip")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 16)
 
             Spacer()
         }
@@ -247,23 +185,26 @@ struct FileIndexingView: View {
             // Floating title + continue button
             VStack {
                 Text("Here's what I know about you")
-                    .scaledFont(size: 18, weight: .semibold)
-                    .foregroundColor(.white.opacity(0.9))
-                    .padding(.top, 24)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.7), radius: 12, x: 0, y: 2)
+                    .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 4)
+                    .padding(.top, 40)
 
                 Spacer()
 
                 Button(action: { onComplete(totalFilesScanned) }) {
                     Text("Continue")
-                        .scaledFont(size: 14, weight: .medium)
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
-                        .frame(maxWidth: 200)
-                        .padding(.vertical, 10)
+                        .frame(maxWidth: 220)
+                        .padding(.vertical, 12)
                         .background(OmiColors.purplePrimary)
-                        .cornerRadius(10)
+                        .cornerRadius(12)
+                        .shadow(color: OmiColors.purplePrimary.opacity(0.4), radius: 16, x: 0, y: 4)
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 24)
+                .padding(.bottom, 40)
             }
         }
     }
@@ -271,9 +212,12 @@ struct FileIndexingView: View {
     // MARK: - Pipeline
 
     private func startLoadingPipeline() {
-        phase = .loading
         totalFilesScanned = 0
         progress = 0.0
+
+        // Set flag immediately so DesktopHomeView won't spawn a duplicate sheet
+        // when onboarding completes mid-pipeline
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
         Task {
             // Stage 1: File Scanning (0% → 60%)
@@ -287,7 +231,10 @@ struct FileIndexingView: View {
 
             // Transition to brain map
             await MainActor.run {
-                phase = .brainMap
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    phase = .brainMap
+                    isBrainMapPhase?.wrappedValue = true
+                }
             }
         }
     }
@@ -334,7 +281,6 @@ struct FileIndexingView: View {
             totalFilesScanned += appCount
             progress = 0.6
             scanningFolder = ""
-            UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
         }
     }
 

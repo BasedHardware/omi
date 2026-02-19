@@ -150,7 +150,7 @@ class MemoryGraphViewModel: ObservableObject {
         camera.zFar = 20000
         camera.fieldOfView = 60
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0, 2000)
+        cameraNode.position = SCNVector3(0, 0, 2000) // Initial default, auto-adjusted after layout
         scene.rootNode.addChildNode(cameraNode)
     }
 
@@ -234,22 +234,12 @@ class MemoryGraphViewModel: ObservableObject {
 
     // MARK: - Scene Nodes
 
-    // Pre-built shared geometries for each node type (avoids per-node geometry allocation)
-    private var sharedSphereGeometries: [KnowledgeGraphNodeType: SCNSphere] = [:]
-
-    private func getSharedSphere(for nodeType: KnowledgeGraphNodeType) -> SCNSphere {
-        if let existing = sharedSphereGeometries[nodeType] {
-            return existing
-        }
-        let sphere = SCNSphere(radius: 18)
-        sphere.segmentCount = 12
-        let material = SCNMaterial()
-        material.diffuse.contents = nodeType.nsColor
-        material.emission.contents = nodeType.nsColor.withAlphaComponent(0.4)
-        material.lightingModel = .constant // Skip lighting calculations
-        sphere.materials = [material]
-        sharedSphereGeometries[nodeType] = sphere
-        return sphere
+    /// Compute node radius based on connection count (more connections = bigger)
+    private func nodeRadius(for node: GraphNode3D) -> CGFloat {
+        if node.isFixed { return 35 } // User node is largest
+        let base: CGFloat = 14
+        let connectionBonus = CGFloat(min(node.connectionCount, 10)) * 2.5
+        return base + connectionBonus
     }
 
     private func createSceneNodes() {
@@ -258,17 +248,21 @@ class MemoryGraphViewModel: ObservableObject {
         for (_, node) in edgeSceneNodes { node.removeFromParentNode() }
         nodeSceneNodes.removeAll()
         edgeSceneNodes.removeAll()
-        sharedSphereGeometries.removeAll()
 
-        // Shared edge material
-        let edgeMaterial = SCNMaterial()
-        edgeMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.15)
-        edgeMaterial.lightingModel = .constant
+        // Billboard constraint for labels (always face camera)
+        let billboardConstraint = SCNBillboardConstraint()
+        billboardConstraint.freeAxes = [.X, .Y]
 
         // Create edges first (behind nodes)
         for edge in simulation.edges {
             guard let source = simulation.nodeMap[edge.sourceId],
                   let target = simulation.nodeMap[edge.targetId] else { continue }
+
+            let edgeColor = blendColors(source.nodeType.nsColor, target.nodeType.nsColor, alpha: 0.25)
+            let edgeMaterial = SCNMaterial()
+            edgeMaterial.diffuse.contents = edgeColor
+            edgeMaterial.emission.contents = edgeColor.withAlphaComponent(0.15)
+            edgeMaterial.lightingModel = .constant
 
             let edgeNode = createEdgeNode(from: source.position, to: target.position, material: edgeMaterial)
             edgeNode.name = edge.id
@@ -276,29 +270,120 @@ class MemoryGraphViewModel: ObservableObject {
             edgeSceneNodes[edge.id] = edgeNode
         }
 
-        // Create node spheres (shared geometry per type, larger for fixed/user node)
+        // Create node spheres with labels and glow halos
         for node in simulation.nodes {
-            let scnNode: SCNNode
-            if node.isFixed {
-                // User node — larger and white
-                let userSphere = SCNSphere(radius: 30)
-                userSphere.segmentCount = 16
-                let mat = SCNMaterial()
-                mat.diffuse.contents = NSColor.white
-                mat.emission.contents = NSColor.white.withAlphaComponent(0.6)
-                mat.lightingModel = .constant
-                userSphere.materials = [mat]
-                scnNode = SCNNode(geometry: userSphere)
-            } else {
-                let sphere = getSharedSphere(for: node.nodeType)
-                scnNode = SCNNode(geometry: sphere)
-            }
-            scnNode.position = SCNVector3(node.position)
-            scnNode.name = node.id
+            let radius = nodeRadius(for: node)
+            let containerNode = SCNNode()
+            containerNode.position = SCNVector3(node.position)
+            containerNode.name = node.id
 
-            scene.rootNode.addChildNode(scnNode)
-            nodeSceneNodes[node.id] = scnNode
+            // Core sphere
+            let sphere = SCNSphere(radius: radius)
+            sphere.segmentCount = node.isFixed ? 24 : 16
+            let mat = SCNMaterial()
+            if node.isFixed {
+                mat.diffuse.contents = NSColor.white
+                mat.emission.contents = NSColor.white.withAlphaComponent(0.8)
+            } else {
+                mat.diffuse.contents = node.nodeType.nsColor
+                mat.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.5)
+            }
+            mat.lightingModel = .constant
+            sphere.materials = [mat]
+            let sphereNode = SCNNode(geometry: sphere)
+            containerNode.addChildNode(sphereNode)
+
+            // Glow halo (larger semi-transparent sphere around node)
+            let glowRadius = radius * 2.5
+            let glowSphere = SCNSphere(radius: glowRadius)
+            glowSphere.segmentCount = 48
+            let glowMat = SCNMaterial()
+            let glowColor = node.isFixed ? NSColor.white : node.nodeType.nsColor
+            glowMat.diffuse.contents = glowColor.withAlphaComponent(0.03)
+            glowMat.emission.contents = glowColor.withAlphaComponent(0.025)
+            glowMat.lightingModel = .constant
+            glowMat.isDoubleSided = true
+            glowMat.blendMode = .add
+            glowSphere.materials = [glowMat]
+            let glowNode = SCNNode(geometry: glowSphere)
+            containerNode.addChildNode(glowNode)
+
+            // Text label (billboard — always faces camera)
+            let labelNode = createLabelNode(text: node.label, nodeRadius: radius, isFixed: node.isFixed)
+            labelNode.constraints = [billboardConstraint]
+            containerNode.addChildNode(labelNode)
+
+            scene.rootNode.addChildNode(containerNode)
+            nodeSceneNodes[node.id] = containerNode
         }
+
+        // Auto-fit camera to graph bounds
+        autoFitCamera()
+    }
+
+    /// Create a text label below a node
+    private func createLabelNode(text: String, nodeRadius: CGFloat, isFixed: Bool) -> SCNNode {
+        let truncated = text.count > 18 ? String(text.prefix(16)) + "..." : text
+        let fontSize: CGFloat = isFixed ? 22 : 16
+        let scnText = SCNText(string: truncated, extrusionDepth: 0.5)
+        scnText.font = NSFont.systemFont(ofSize: fontSize, weight: isFixed ? .bold : .medium)
+        scnText.flatness = 0.3
+        scnText.alignmentMode = CATextLayerAlignmentMode.center.rawValue
+
+        let textMat = SCNMaterial()
+        textMat.diffuse.contents = NSColor.white
+        textMat.emission.contents = NSColor.white.withAlphaComponent(0.9)
+        textMat.lightingModel = .constant
+        scnText.materials = [textMat]
+
+        let textNode = SCNNode(geometry: scnText)
+
+        // Center the text horizontally
+        let (min, max) = scnText.boundingBox
+        let textWidth = CGFloat(max.x - min.x)
+        let textHeight = CGFloat(max.y - min.y)
+        textNode.position = SCNVector3(
+            -textWidth / 2,
+            -(nodeRadius + textHeight + 12),
+            0
+        )
+
+        // Scale text down to world-appropriate size
+        let scale: Float = isFixed ? 1.2 : 0.9
+        textNode.scale = SCNVector3(scale, scale, scale)
+
+        return textNode
+    }
+
+    /// Blend two NSColors
+    private func blendColors(_ a: NSColor, _ b: NSColor, alpha: CGFloat) -> NSColor {
+        let aRGB = a.usingColorSpace(.sRGB) ?? a
+        let bRGB = b.usingColorSpace(.sRGB) ?? b
+        return NSColor(
+            red: (aRGB.redComponent + bRGB.redComponent) / 2,
+            green: (aRGB.greenComponent + bRGB.greenComponent) / 2,
+            blue: (aRGB.blueComponent + bRGB.blueComponent) / 2,
+            alpha: alpha
+        )
+    }
+
+    /// Auto-fit camera distance to contain all nodes
+    private func autoFitCamera() {
+        guard !simulation.nodes.isEmpty else { return }
+
+        var maxDist: Float = 0
+        for node in simulation.nodes {
+            let dist = simd_length(node.position)
+            if dist > maxDist { maxDist = dist }
+        }
+
+        // Camera needs to be far enough to see the outermost node
+        // Account for field of view (60°) — distance = maxDist / tan(fov/2) + padding
+        let fovRadians: Float = 60.0 * Float.pi / 180.0
+        let minDistance = maxDist / tan(fovRadians / 2) * 1.3 // 30% padding
+        let cameraZ = max(minDistance, 1200) // minimum distance for very small graphs
+
+        cameraNode.position = SCNVector3(0, 0, cameraZ)
     }
 
     private func createEdgeNode(from: SIMD3<Float>, to: SIMD3<Float>, material: SCNMaterial) -> SCNNode {
@@ -311,8 +396,8 @@ class MemoryGraphViewModel: ObservableObject {
             pow(toVec.z - fromVec.z, 2)
         )
 
-        let cylinder = SCNCylinder(radius: 0.5, height: CGFloat(distance))
-        cylinder.radialSegmentCount = 4
+        let cylinder = SCNCylinder(radius: 0.8, height: CGFloat(distance))
+        cylinder.radialSegmentCount = 6
         cylinder.materials = [material]
 
         let node = SCNNode(geometry: cylinder)
