@@ -78,6 +78,17 @@ extension FlutterError: Error {}
         speechHandler.handle(call, result: result)
     }
 
+    // TestFlight environment detection
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
+    envChannel.setMethodCallHandler { (call, result) in
+        if call.method == "isTestFlight" {
+            let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+            result(isTestFlight)
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
 
