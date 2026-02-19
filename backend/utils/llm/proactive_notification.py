@@ -6,122 +6,117 @@ from utils.llm.clients import llm_mini
 
 
 class ProactiveAdvice(BaseModel):
-    notification_text: str = Field(description="The push notification message (<300 chars, direct, personal)")
+    notification_text: str = Field(
+        description="The advice. Max 100 chars. Start with the actionable part. No filler words."
+    )
     reasoning: str = Field(
         description=(
-            "Why this notification is worth sending. MUST cite a specific fact, goal, "
-            "or past conversation from the user's history. If you cannot cite a concrete "
-            "connection, do not send the notification."
+            "Why this is worth interrupting. MUST name a specific fact, goal, "
+            "or past conversation. If you cannot, set has_advice=false."
         )
     )
     confidence: float = Field(
         ge=0.0,
         le=1.0,
         description=(
-            "0.90+ = preventing a mistake or critical connection to goals. "
-            "0.75-0.89 = non-obvious dot-connecting across conversations/history. "
-            "0.50-0.74 = useful but user might figure out themselves. "
-            "Below 0.50 = generic, don't send."
+            "0.90+: preventing a concrete mistake or critical non-obvious connection. "
+            "0.75-0.89: specific dot-connecting across conversations the user would miss. "
+            "0.60-0.74: useful but user might figure it out. "
+            "Below 0.60: do not send."
         ),
     )
-    category: str = Field(
-        description="One of: goal_connection, pattern_insight, mistake_prevention, commitment_reminder, dot_connecting"
-    )
+    category: str = Field(description="One of: productivity, mistake_prevention, goal_connection, dot_connecting")
 
 
 class ProactiveNotificationResult(BaseModel):
     has_advice: bool = Field(
         description=(
-            "True ONLY when the notification scores high on at least 3 of the 4 axes: "
-            "actionability, timeliness, non-obviousness, connection to history/goals."
+            "True ONLY when advice is SPECIFIC to the conversation AND the user likely "
+            "would NOT figure it out themselves. False in all other cases."
         )
     )
     advice: Optional[ProactiveAdvice] = Field(
         default=None, description="The notification to send. Required when has_advice is true."
     )
-    context_summary: str = Field(
-        description="Brief summary of the current conversation context (1-2 sentences). Always provided."
-    )
+    context_summary: str = Field(description="Brief summary of what user is discussing (1 sentence). Always provided.")
+    current_activity: str = Field(default="", description="What the user is doing or deciding right now.")
 
 
 FREQUENCY_TO_BASE_THRESHOLD = {
     0: None,
-    1: 0.90,
-    2: 0.75,
-    3: 0.60,
-    4: 0.40,
-    5: 0.25,
+    1: 0.92,
+    2: 0.85,
+    3: 0.78,
+    4: 0.70,
+    5: 0.60,
 }
 
 FREQUENCY_GUIDANCE = {
-    1: "Ultra selective. Only for preventing clear mistakes or truly critical insights. 1-3 per day max.",
-    2: "Very selective. Only non-obvious insights that connect to their goals or history. 3-5 per day.",
-    3: "Balanced. Interrupt when you have specific, actionable value tied to their goals/patterns. 5-10 per day.",
-    4: "Proactive. Share relevant insights connecting current conversation to goals/history. 8-12 per day.",
-    5: "Very proactive. Look for any opportunity to connect dots and add value. Up to 12 per day.",
+    1: "Ultra selective. Only prevent clear mistakes or truly critical insights. 1-3 per day max.",
+    2: "Very selective. Only non-obvious insights tied to specific goals or history. 3-5 per day.",
+    3: "Balanced. Only when you have a specific, actionable insight the user would miss. 5-8 per day.",
+    4: "Proactive. Share specific insights connecting this conversation to goals/history. 8-12 per day.",
+    5: "Very proactive. Share insights when you spot non-obvious connections. Up to 12 per day.",
 }
 
 MAX_DAILY_NOTIFICATIONS = 12
 
-PROACTIVE_PROMPT_TEMPLATE = """You are {user_name}'s sharp, observant friend who has been listening to their conversations and knows their history deeply. You are NOT a life coach, therapist, or wellness advisor. You are the friend who connects dots others miss.
+PROACTIVE_PROMPT_TEMPLATE = """You analyze {user_name}'s live conversations to find ONE specific, high-value insight they would NOT figure out on their own.
 
-Your job: Decide if the current conversation warrants a push notification. Most of the time, it does NOT.
+CORE QUESTION: Is {user_name} about to make a mistake, missing a non-obvious connection to their goals/history, or forgetting a commitment?
 
-== {user_name}'S FACTS & PERSONALITY ==
+SET has_advice=true ONLY when you can answer YES to BOTH:
+1. The advice is SPECIFIC to what's being discussed (not generic wisdom)
+2. {user_name} likely does NOT already know this (non-obvious)
+
+SET has_advice=false when:
+- You'd be stating something obvious ({user_name} can figure it out themselves)
+- The advice is generic and not tied to the specific conversation content
+- The advice is similar to something in RECENT NOTIFICATIONS (check below)
+- You're reaching — if you have to stretch to find advice, there isn't any
+
+WHAT QUALIFIES (high bar):
+- {user_name} is about to make a decision that contradicts a specific goal they set
+- {user_name} mentioned person X two weeks ago in context Y, and that's directly relevant now
+- {user_name} committed to doing X but is now doing the opposite
+- A specific fact from {user_name}'s history directly applies to the current conversation
+- {user_name} is repeating a pattern you've seen before that led to a bad outcome
+
+WHAT DOES NOT QUALIFY (instant has_advice=false):
+- "Take a break" / "Stay hydrated" / "Practice mindfulness" / "Pause and reflect" (wellness)
+- "Stay focused" / "You've got this" / "Believe in yourself" (motivational platitudes)
+- "It sounds like you're frustrated" / "Let's take a moment" (therapist-speak)
+- "You should think about..." / "Consider..." / "You might want to..." (vague suggestions)
+- Restating what {user_name} just said in different words
+- Generic productivity advice that applies to anyone
+- Anything about emotions, stress, frustration, or feelings
+- Advice that could be given without knowing {user_name}'s specific history/goals
+
+== {user_name}'S FACTS ==
 {user_facts}
 
-== {user_name}'S ACTIVE GOALS ==
+== {user_name}'S GOALS ==
 {goals_text}
 
 == RELEVANT PAST CONVERSATIONS ==
 {past_conversations}
 
-== CURRENT LIVE CONVERSATION ==
+== CURRENT CONVERSATION ==
 {current_conversation}
 
-== YOUR RECENT NOTIFICATIONS (last 20) ==
+== RECENT NOTIFICATIONS (do not repeat or send semantically similar) ==
 {recent_notifications}
 
-== NOTIFICATION FREQUENCY SETTING ==
+== FREQUENCY ==
 {frequency_guidance}
 
-== EVALUATION FRAMEWORK ==
-Before deciding to send a notification, evaluate on ALL FOUR axes:
+FORMAT: Keep notification_text under 100 characters. Start with the actionable part. No filler.
+- GOOD: "Call Mike about the deal — he mentioned a deadline Friday"
+- GOOD: "You said you'd stop taking on extra projects. This is that."
+- BAD: "Nikita, it sounds like frustration is high right now. When you feel overwhelmed..."
+- BAD: "Your messages show frustration and maybe anger. Let's take a moment."
 
-1. ACTIONABILITY: Can {user_name} DO something concrete right now based on this? ("You should think about..." = NOT actionable. "Call Mike back about the deal before 5pm" = actionable.)
-
-2. TIMELINESS: Does this matter RIGHT NOW vs later? Is there a window closing? A decision being made? If it can wait until tomorrow, don't send it now.
-
-3. NON-OBVIOUSNESS: Would {user_name} have figured this out themselves? This is the "holy shit" axis. Connecting their goal X with something they said 2 weeks ago with what they're about to do RIGHT NOW = non-obvious. Telling them to "stay focused" = painfully obvious.
-
-4. CONNECTION TO HISTORY/GOALS: Does this link the current conversation to their stated goals, past patterns, or previous commitments? The more specific the connection, the higher the value.
-
-has_advice should be true ONLY when the notification scores high on at least 3 of these 4 axes.
-
-== CONFIDENCE CALIBRATION ==
-- 0.90+ : Preventing a concrete mistake OR critical connection to a specific goal with time pressure
-- 0.75-0.89 : Non-obvious dot-connecting across different conversations or time periods
-- 0.50-0.74 : Useful insight but user might figure it out themselves
-- Below 0.50 : Generic observation — DO NOT SEND
-
-== ANTI-PATTERNS (instant has_advice=false) ==
-- Generic wellness advice ("take a break", "stay hydrated", "practice mindfulness")
-- Vague suggestions without specific references ("you might want to consider...")
-- Restating what the user just said back to them
-- Motivational platitudes ("you've got this!", "believe in yourself!")
-- Advice that doesn't reference a specific fact, goal, or past conversation
-- Hedging with "however" or "on the other hand" — take a clear stance or don't send
-
-== REASONING REQUIREMENT ==
-The reasoning field MUST cite a specific fact, goal, or past conversation. Example:
-- GOOD: "User's goal is 'save $50k for house' and they're about to spend $3k on a vacation they mentioned regretting last month"
-- BAD: "User seems stressed and could use some encouragement"
-If you cannot write a reasoning that cites a concrete connection, set has_advice=false.
-
-== OUTPUT ==
-Always provide context_summary (brief summary of current conversation).
-Set has_advice=true only when you have a genuinely valuable, non-obvious notification.
-When has_advice=true, provide the full advice object with notification_text (<300 chars), reasoning, confidence, and category."""
+REASONING must name a specific fact, goal, or past conversation. If you can't, set has_advice=false."""
 
 
 def _format_goals(goals: list) -> str:
