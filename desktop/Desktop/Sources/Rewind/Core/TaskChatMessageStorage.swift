@@ -210,7 +210,7 @@ actor TaskChatMessageStorage {
     func insert(_ record: TaskChatMessageRecord) async throws -> TaskChatMessageRecord {
         let db = try await ensureInitialized()
         let result = try await db.write { database -> TaskChatMessageRecord in
-            var record = record
+            let record = record
             try record.insert(database)
             return record
         }
@@ -223,7 +223,7 @@ actor TaskChatMessageStorage {
         let record = TaskChatMessageRecord.from(message, taskId: taskId, acpSessionId: acpSessionId)
         let db = try await ensureInitialized()
         let result = try await db.write { database -> TaskChatMessageRecord in
-            var record = record
+            let record = record
             try record.insert(database)
             return record
         }
