@@ -889,12 +889,29 @@ class FloatingControlBarManager {
 
         await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel)
 
-        // Handle errors: if sendMessage completed but no response was delivered to the bar,
-        // something went wrong (bridge error, session creation failed, etc.)
-        if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
-            barWindow.state.isAILoading = false
-            let errorText = provider.errorMessage ?? "Failed to get a response. Please try again."
-            barWindow.state.currentAIMessage = ChatMessage(text: errorText, sender: .ai)
+        // Handle errors after sendMessage completes
+        barWindow.state.isAILoading = false
+
+        if let errorText = provider.errorMessage {
+            // Provider reported an error (timeout, bridge crash, etc.)
+            // Show it even if there's partial content — append to existing or create new message
+            if barWindow.state.currentAIMessage != nil && !barWindow.state.aiResponseText.isEmpty {
+                barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
+            } else {
+                barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
+            }
+        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
+            // No error message and no response — something else went wrong
+            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        }
+
+        // Ensure the response view is visible and resized (handles the case where
+        // the sink never fired because no streaming data arrived before the error)
+        if !barWindow.state.showingAIResponse {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                barWindow.state.showingAIResponse = true
+            }
+            barWindow.resizeToResponseHeightPublic(animated: true)
         }
     }
 }
