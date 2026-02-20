@@ -85,7 +85,7 @@ struct OmiTextEditor: NSViewRepresentable {
 
         // Keep the coordinator's binding fresh so textDidChange writes to the
         // correct task's draftText when SwiftUI reuses this NSView across tasks.
-        context.coordinator._text = _text
+        context.coordinator.updateTextBinding($text)
 
         if textView.string != text {
             context.coordinator.isUpdating = true
@@ -135,6 +135,10 @@ struct OmiTextEditor: NSViewRepresentable {
         @Binding var text: String
         var onSubmit: (() -> Void)?
         var isUpdating = false
+
+        func updateTextBinding(_ binding: Binding<String>) {
+            _text = binding
+        }
 
         // Height tracking (only used when onHeightChange is provided)
         private let minHeight: CGFloat?
