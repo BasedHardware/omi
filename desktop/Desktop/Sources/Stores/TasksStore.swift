@@ -1084,8 +1084,9 @@ class TasksStore: ObservableObject {
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
 
             // Spawn next recurring instance when completing a recurring task
-            if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty, let dueAt = task.dueAt {
-                if let nextDue = nextFutureDueDate(from: dueAt, rule: rule) {
+            if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
+                let baseDueDate = task.dueAt ?? Date()
+                if let nextDue = nextFutureDueDate(from: baseDueDate, rule: rule) {
                     let parentId = task.recurrenceParentId ?? task.id
                     if let spawned = try? await APIClient.shared.createActionItem(
                         description: task.description,

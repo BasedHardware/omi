@@ -3313,6 +3313,7 @@ struct TaskRow: View {
     // Inline due date popover
     @State private var showDatePicker = false
     @State private var editDueDate: Date = Date()
+    @State private var showRepeatPicker = false
     @State private var editRecurrenceRule: String = ""
 
     // Swipe gesture state
@@ -3702,7 +3703,6 @@ struct TaskRow: View {
                     if task.dueAt == nil && !task.completed {
                         Button {
                             editDueDate = Date()
-                            editRecurrenceRule = task.recurrenceRule ?? ""
                             showDatePicker = true
                         } label: {
                             Image(systemName: "calendar.badge.plus")
@@ -3712,6 +3712,24 @@ struct TaskRow: View {
                         }
                         .buttonStyle(.plain)
                         .help("Add due date")
+                    }
+
+                    // Repeat button
+                    if !task.completed {
+                        Button {
+                            editRecurrenceRule = task.recurrenceRule ?? ""
+                            showRepeatPicker = true
+                        } label: {
+                            Image(systemName: "repeat")
+                                .scaledFont(size: 12)
+                                .foregroundColor(task.isRecurring ? OmiColors.textPrimary : OmiColors.textTertiary)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help(task.isRecurring ? "Edit repeat" : "Set repeat")
+                        .popover(isPresented: $showRepeatPicker) {
+                            repeatPopover
+                        }
                     }
 
                     // Outdent button (decrease indent)
@@ -3885,25 +3903,6 @@ struct TaskRow: View {
             .datePickerStyle(.graphical)
             .labelsHidden()
 
-            Divider()
-
-            HStack {
-                Text("Repeat")
-                    .scaledFont(size: 13)
-                    .foregroundColor(OmiColors.textSecondary)
-                Spacer()
-                Picker("", selection: $editRecurrenceRule) {
-                    Text("Never").tag("")
-                    Text("Daily").tag("daily")
-                    Text("Weekdays").tag("weekdays")
-                    Text("Weekly").tag("weekly")
-                    Text("Every 2 Weeks").tag("biweekly")
-                    Text("Monthly").tag("monthly")
-                }
-                .pickerStyle(.menu)
-                .frame(width: 140)
-            }
-
             HStack(spacing: 8) {
                 Button("Cancel") {
                     showDatePicker = false
@@ -3912,9 +3911,8 @@ struct TaskRow: View {
 
                 Button("Save") {
                     showDatePicker = false
-                    let ruleToSave = editRecurrenceRule.isEmpty ? "" : editRecurrenceRule
                     Task {
-                        await onUpdateDetails?(task, nil, editDueDate, nil, ruleToSave)
+                        await onUpdateDetails?(task, nil, editDueDate, nil, nil)
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -3923,6 +3921,46 @@ struct TaskRow: View {
         }
         .padding(16)
         .frame(width: 300)
+    }
+
+    private var repeatPopover: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Repeat")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+                Spacer()
+            }
+
+            Picker("", selection: $editRecurrenceRule) {
+                Text("Never").tag("")
+                Text("Daily").tag("daily")
+                Text("Weekdays").tag("weekdays")
+                Text("Weekly").tag("weekly")
+                Text("Every 2 Weeks").tag("biweekly")
+                Text("Monthly").tag("monthly")
+            }
+            .pickerStyle(.radioGroup)
+
+            HStack(spacing: 8) {
+                Button("Cancel") {
+                    showRepeatPicker = false
+                }
+                .buttonStyle(.bordered)
+
+                Button("Save") {
+                    showRepeatPicker = false
+                    let ruleToSave = editRecurrenceRule.isEmpty ? "" : editRecurrenceRule
+                    Task {
+                        await onUpdateDetails?(task, nil, nil, nil, ruleToSave)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(OmiColors.textPrimary)
+            }
+        }
+        .padding(16)
+        .frame(width: 200)
     }
 
     private func handleToggle() {
@@ -3975,8 +4013,6 @@ struct DueDateBadgeInteractive: View {
     let isRecurring: Bool
     @Binding var showDatePicker: Bool
     @Binding var editDueDate: Date
-    @Binding var editRecurrenceRule: String
-    let recurrenceRule: String?
 
     @State private var isHovering = false
 
@@ -4010,7 +4046,6 @@ struct DueDateBadgeInteractive: View {
     var body: some View {
         Button {
             editDueDate = dueAt
-            editRecurrenceRule = recurrenceRule ?? ""
             showDatePicker = true
         } label: {
             HStack(spacing: 3) {
