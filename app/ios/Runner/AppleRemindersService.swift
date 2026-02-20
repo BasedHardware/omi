@@ -33,34 +33,21 @@ class AppleRemindersService {
         }
     }
 
-    private static let syncedItemsKey = "omi_synced_action_items"
-    private static let iso8601DateFormatter = ISO8601DateFormatter()
+    static let syncedItemsKey = "omi_synced_action_items"
+    static let iso8601DateFormatter = ISO8601DateFormatter()
 
-    /// Handle sync triggered from Flutter foreground FCM handler.
-    /// Parses the same batch payload that the silent push handler uses.
-    private func syncFromFCM(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        guard let args = call.arguments as? [String: Any],
-              let itemsJson = args["items"] as? String,
-              let data = itemsJson.data(using: .utf8),
-              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing or invalid items payload", details: nil))
-            return
+    /// Core batch sync logic shared by both the foreground MethodChannel path
+    /// and the background silent-push path (called from AppDelegate).
+    /// Returns the list of action item IDs that were successfully created as reminders.
+    func syncBatchFromJSON(_ itemsJson: String) -> [String] {
+        guard let data = itemsJson.data(using: .utf8),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              !items.isEmpty else {
+            return []
         }
 
-        guard !items.isEmpty else {
-            result([String]())
-            return
-        }
-
-        guard hasRemindersAccess() else {
-            result(FlutterError(code: "PERMISSION_DENIED", message: "Reminders permission not granted", details: nil))
-            return
-        }
-
-        guard let calendar = eventStore.defaultCalendarForNewReminders() else {
-            result(FlutterError(code: "NO_CALENDAR", message: "No default reminders calendar", details: nil))
-            return
-        }
+        guard hasRemindersAccess() else { return [] }
+        guard let calendar = eventStore.defaultCalendarForNewReminders() else { return [] }
 
         var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppleRemindersService.syncedItemsKey) ?? [])
         var exportedIds: [String] = []
@@ -71,9 +58,7 @@ class AppleRemindersService {
                 continue
             }
 
-            if syncedIds.contains(actionItemId) {
-                continue
-            }
+            if syncedIds.contains(actionItemId) { continue }
 
             let dueDate: Date? = {
                 if let dueDateStr = item["due_at"] as? String, !dueDateStr.isEmpty {
@@ -109,7 +94,17 @@ class AppleRemindersService {
         }
         UserDefaults.standard.set(syncedArray, forKey: AppleRemindersService.syncedItemsKey)
 
-        result(exportedIds)
+        return exportedIds
+    }
+
+    /// Handle sync triggered from Flutter foreground FCM handler via MethodChannel.
+    private func syncFromFCM(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let itemsJson = args["items"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing or invalid items payload", details: nil))
+            return
+        }
+        result(syncBatchFromJSON(itemsJson))
     }
 
     private func hasRemindersPermission(result: @escaping FlutterResult) {
