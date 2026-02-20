@@ -1105,11 +1105,12 @@ class ChatProvider: ObservableObject {
         }
 
         // Append enabled skills as available context (global + project)
+        // Exclude dev-mode from the regular skills list — it has its own dedicated section
         let enabledSkillNames = getEnabledSkillNames()
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
             let skillDescriptions = allSkills
-                .filter { enabledSkillNames.contains($0.name) }
+                .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
                 .map { "- \($0.name): \($0.description)" }
                 .joined(separator: "\n")
             if !skillDescriptions.isEmpty {
@@ -1117,7 +1118,7 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        // Append dev mode context if enabled
+        // Append dev mode context if enabled (full skill content, not just description)
         if devModeEnabled, let devMode = devModeContext {
             let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
             prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
@@ -1162,7 +1163,7 @@ class ChatProvider: ObservableObject {
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
             let skillDescriptions = allSkills
-                .filter { enabledSkillNames.contains($0.name) }
+                .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
                 .map { "- \($0.name): \($0.description)" }
                 .joined(separator: "\n")
             if !skillDescriptions.isEmpty {
@@ -1170,7 +1171,7 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        // Append dev mode context if enabled
+        // Append dev mode context if enabled (full skill content, not just description)
         if devModeEnabled, let devMode = devModeContext {
             let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
             prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
