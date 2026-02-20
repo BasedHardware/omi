@@ -1515,7 +1515,34 @@ struct SettingsContentView: View {
                          : "Using Omi's AI — free for all users.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
+
+                    if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+                        Divider()
+
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .scaledFont(size: 12)
+                            Text("Connected to Claude")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textSecondary)
+
+                            Spacer()
+
+                            Button("Disconnect") {
+                                Task {
+                                    await chatProvider?.disconnectClaude()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(.red)
+                        }
+                    }
                 }
+            }
+            .onAppear {
+                chatProvider?.checkClaudeConnectionStatus()
             }
 
             // Ask Mode card

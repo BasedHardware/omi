@@ -317,6 +317,8 @@ class ChatProvider: ObservableObject {
     @Published var isClaudeAuthRequired = false
     /// Auth methods returned by ACP bridge
     @Published var claudeAuthMethods: [[String: Any]] = []
+    /// Whether the user has a cached Claude OAuth token
+    @Published var isClaudeConnected = false
 
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
@@ -552,6 +554,11 @@ class ChatProvider: ObservableObject {
         // Switch mode
         bridgeMode = mode.rawValue
 
+        // Check Claude connection status when switching to claudeCode mode
+        if mode == .claudeCode {
+            checkClaudeConnectionStatus()
+        }
+
         // Warm up the new bridge
         _ = await ensureBridgeStarted()
     }
@@ -564,6 +571,47 @@ class ChatProvider: ObservableObject {
             let methodId = (claudeAuthMethods.first?["id"] as? String) ?? "auth-0"
             await acpBridge.authenticate(methodId: methodId)
         }
+    }
+
+    /// Check whether a cached Claude OAuth token exists
+    func checkClaudeConnectionStatus() {
+        let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: configPath),
+              let data = FileManager.default.contents(atPath: configPath),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            isClaudeConnected = false
+            return
+        }
+        if let tokenCache = json["oauth:tokenCache"] as? [String: Any], !tokenCache.isEmpty {
+            isClaudeConnected = true
+        } else {
+            isClaudeConnected = false
+        }
+    }
+
+    /// Disconnect from Claude: stop bridge, clear OAuth token, switch back to free mode
+    func disconnectClaude() async {
+        log("ChatProvider: Disconnecting Claude account")
+
+        // 1. Stop the ACP bridge
+        await acpBridge.stop()
+        acpBridgeStarted = false
+
+        // 2. Clear the OAuth token from config file
+        let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+        if let data = FileManager.default.contents(atPath: configPath),
+           var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            json.removeValue(forKey: "oauth:tokenCache")
+            if let updatedData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+                try? updatedData.write(to: URL(fileURLWithPath: configPath))
+            }
+        }
+
+        // 3. Update state
+        isClaudeConnected = false
+
+        // 4. Switch back to agentSDK mode
+        bridgeMode = BridgeMode.agentSDK.rawValue
     }
 
     // MARK: - Session Management
@@ -1765,6 +1813,7 @@ class ChatProvider: ObservableObject {
                     onAuthSuccess: { [weak self] in
                         Task { @MainActor [weak self] in
                             self?.isClaudeAuthRequired = false
+                            self?.checkClaudeConnectionStatus()
                         }
                     }
                 )
