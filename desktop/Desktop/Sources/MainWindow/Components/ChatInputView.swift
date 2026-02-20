@@ -70,8 +70,8 @@ struct ChatInputView: View {
                     )
                     .frame(minHeight: 0, maxHeight: .infinity)
                 }
-                .frame(maxHeight: 200)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxHeight: 200)
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(12)
 
