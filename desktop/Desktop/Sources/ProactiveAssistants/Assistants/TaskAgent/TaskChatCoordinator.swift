@@ -18,12 +18,12 @@ class TaskChatCoordinator: ObservableObject {
 
     // MARK: - Chat Status Tracking
 
-    /// Which task currently has an active AI stream
-    @Published var streamingTaskId: String?
+    /// Tasks that currently have an active AI stream (supports parallel agents)
+    @Published var streamingTaskIds: Set<String> = []
     /// Tasks with unseen AI responses (finished while user wasn't viewing)
     @Published var unreadTaskIds: Set<String> = []
-    /// Human-readable status text for the active stream
-    @Published var streamingStatus: String = ""
+    /// Per-task human-readable status text for active streams
+    @Published var streamingStatuses: [String: String] = [:]
 
     /// The currently active TaskChatState (drives the UI)
     @Published var activeTaskState: TaskChatState?
@@ -53,14 +53,15 @@ class TaskChatCoordinator: ObservableObject {
             .sink { [weak self] isSending in
                 guard let self else { return }
                 if isSending {
-                    self.streamingTaskId = taskId
-                } else if self.streamingTaskId == taskId {
-                    // Streaming finished — mark unread if panel not showing this task
+                    self.streamingTaskIds.insert(taskId)
+                } else {
+                    // Streaming finished — remove from active set
+                    self.streamingTaskIds.remove(taskId)
+                    self.streamingStatuses.removeValue(forKey: taskId)
+                    // Mark unread if panel not showing this task
                     if !self.isPanelOpen || self.activeTaskId != taskId {
                         self.unreadTaskIds.insert(taskId)
                     }
-                    self.streamingTaskId = nil
-                    self.streamingStatus = ""
                 }
             }
             .store(in: &subs)
@@ -70,8 +71,8 @@ class TaskChatCoordinator: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak state] messages in
                 guard let self, let state, state.isSending,
-                      self.streamingTaskId == taskId else { return }
-                self.streamingStatus = self.deriveStreamingStatus(from: messages)
+                      self.streamingTaskIds.contains(taskId) else { return }
+                self.streamingStatuses[taskId] = self.deriveStreamingStatus(from: messages)
             }
             .store(in: &subs)
 

@@ -3231,14 +3231,14 @@ struct ChatSessionStatusIndicator: View {
     var onOpenChat: ((TaskActionItem) -> Void)?
 
     var body: some View {
-        if coordinator.streamingTaskId == task.id {
+        if coordinator.streamingTaskIds.contains(task.id) {
             // Streaming: spinning indicator + status text
             HStack(spacing: 4) {
                 ProgressView()
                     .scaleEffect(0.5)
                     .frame(width: 10, height: 10)
 
-                Text(coordinator.streamingStatus.isEmpty ? "Responding..." : coordinator.streamingStatus)
+                Text(coordinator.streamingStatuses[task.id] ?? "Responding...")
                     .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
                     .lineLimit(1)
