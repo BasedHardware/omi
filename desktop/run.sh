@@ -64,9 +64,15 @@ touch $AUTH_DEBUG_LOG
 step "Killing existing instances..."
 auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
+# Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 pkill -f "cloudflared.*omi-computer-dev" 2>/dev/null || true
-lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+# Kill only the Rust backend on port 8080 (not other apps that might use it)
+lsof -ti:8080 -sTCP:LISTEN 2>/dev/null | while read pid; do
+    if ps -p "$pid" -o command= 2>/dev/null | grep -q "omi-backend\|Backend-Rust\|target/"; then
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+done
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
