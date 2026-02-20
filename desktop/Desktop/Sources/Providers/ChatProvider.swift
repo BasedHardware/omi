@@ -573,20 +573,27 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Check whether a cached Claude OAuth token exists
+    /// Check whether a cached Claude OAuth token exists (config file or Keychain)
     func checkClaudeConnectionStatus() {
+        // Check config file
         let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
-        guard FileManager.default.fileExists(atPath: configPath),
-              let data = FileManager.default.contents(atPath: configPath),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            isClaudeConnected = false
+        if FileManager.default.fileExists(atPath: configPath),
+           let data = FileManager.default.contents(atPath: configPath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let tokenCache = json["oauth:tokenCache"] as? String, !tokenCache.isEmpty {
+            isClaudeConnected = true
             return
         }
-        if let tokenCache = json["oauth:tokenCache"] as? String, !tokenCache.isEmpty {
-            isClaudeConnected = true
-        } else {
-            isClaudeConnected = false
-        }
+
+        // Check Keychain
+        let keychainQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Claude Code-credentials",
+            kSecReturnData as String: false,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        let status = SecItemCopyMatching(keychainQuery as CFDictionary, nil)
+        isClaudeConnected = (status == errSecSuccess)
     }
 
     /// Disconnect from Claude: stop bridge, clear OAuth token, switch back to free mode
@@ -607,10 +614,24 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        // 3. Update state
+        // 3. Clear OAuth credentials from macOS Keychain
+        let keychainQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "Claude Code-credentials"
+        ]
+        let status = SecItemDelete(keychainQuery as CFDictionary)
+        if status == errSecSuccess {
+            log("ChatProvider: Cleared Claude Code credentials from Keychain")
+        } else if status == errSecItemNotFound {
+            log("ChatProvider: No Claude Code credentials found in Keychain")
+        } else {
+            log("ChatProvider: Failed to clear Keychain credentials (status=\(status))")
+        }
+
+        // 4. Update state
         isClaudeConnected = false
 
-        // 4. Switch back to agentSDK mode
+        // 5. Switch back to agentSDK mode
         bridgeMode = BridgeMode.agentSDK.rawValue
     }
 
