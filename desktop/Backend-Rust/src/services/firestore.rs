@@ -6525,47 +6525,95 @@ impl FirestoreService {
         &self,
         uid: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": CHAT_SESSIONS_SUBCOLLECTION}],
-                "where": {
-                    "fieldFilter": {
-                        "field": {"fieldPath": "plugin_id"},
-                        "op": "EQUAL",
-                        "value": {"nullValue": null}
-                    }
-                },
-                "limit": 1
-            }
-        });
+        // Fetch ALL chat sessions and filter client-side.
+        // Firestore REST API's `WHERE plugin_id == null` does NOT match documents
+        // where plugin_id is absent or was set to null by the Python SDK (gRPC).
+        // So we fetch all sessions and find the main one ourselves.
+        let url = format!(
+            "{}/{}/{}/{}",
+            self.base_url(),
+            USERS_COLLECTION,
+            uid,
+            CHAT_SESSIONS_SUBCOLLECTION
+        );
 
         let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .build_request(reqwest::Method::GET, &url)
             .await?
-            .json(&query)
             .send()
             .await?;
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            tracing::warn!("Failed to query main chat session: {}", error_text);
+            tracing::warn!("Failed to list chat sessions: {}", error_text);
             return Ok(None);
         }
 
-        let results: Vec<Value> = response.json().await?;
-        // Extract session doc ID from the document name
-        let session_id = results.iter().find_map(|doc| {
-            doc.get("document")
-                .and_then(|d| d.get("name"))
-                .and_then(|n| n.as_str())
-                .and_then(|name| name.split('/').last())
-                .map(|id| id.to_string())
-        });
+        let body: Value = response.json().await?;
+        let documents = match body.get("documents").and_then(|d| d.as_array()) {
+            Some(docs) => docs,
+            None => {
+                tracing::info!("No chat sessions found for user {}", uid);
+                return Ok(None);
+            }
+        };
+
+        // Find main chat session: plugin_id is either null, absent, or empty string
+        let mut best_session: Option<(String, usize)> = None; // (doc_id, message_count)
+        for doc in documents {
+            let fields = match doc.get("fields") {
+                Some(f) => f,
+                None => continue,
+            };
+
+            // Check plugin_id — main chat has null/absent/empty plugin_id
+            let is_main = match fields.get("plugin_id") {
+                None => true, // field absent = main chat
+                Some(val) => {
+                    // nullValue means explicitly null
+                    if val.get("nullValue").is_some() {
+                        true
+                    } else if let Some(s) = val.get("stringValue").and_then(|v| v.as_str()) {
+                        s.is_empty()
+                    } else {
+                        false
+                    }
+                }
+            };
+
+            if !is_main {
+                continue;
+            }
+
+            // Extract doc ID from name
+            let doc_id = match doc.get("name").and_then(|n| n.as_str()) {
+                Some(name) => match name.split('/').last() {
+                    Some(id) => id.to_string(),
+                    None => continue,
+                },
+                None => continue,
+            };
+
+            // Count messages to find the most-used session
+            let msg_count = fields
+                .get("messages")
+                .and_then(|m| m.get("arrayValue"))
+                .and_then(|a| a.get("values"))
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.len())
+                .unwrap_or(0);
+
+            if best_session.as_ref().map_or(true, |(_, count)| msg_count > *count) {
+                best_session = Some((doc_id, msg_count));
+            }
+        }
+
+        let session_id = best_session.map(|(id, _)| id);
 
         if let Some(ref id) = session_id {
             tracing::info!("Found main chat session {} for user {}", id, uid);
+        } else {
+            tracing::info!("No main chat session found for user {}", uid);
         }
 
         Ok(session_id)
