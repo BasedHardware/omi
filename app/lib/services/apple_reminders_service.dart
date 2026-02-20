@@ -17,9 +17,7 @@ class AppleRemindersService {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'markExportedBatch') {
         final ids = (call.arguments['action_item_ids'] as List?)?.cast<String>() ?? [];
-        for (final id in ids) {
-          await _markActionItemExported(id);
-        }
+        await Future.wait(ids.map(_markActionItemExported));
       } else if (call.method == 'markExported') {
         final actionItemId = call.arguments['action_item_id'] as String?;
         if (actionItemId != null) {
@@ -50,9 +48,7 @@ class AppleRemindersService {
     try {
       final result = await _channel.invokeMethod('syncFromFCM', data);
       final exportedIds = (result as List?)?.cast<String>() ?? [];
-      for (final id in exportedIds) {
-        await _markActionItemExported(id);
-      }
+      await Future.wait(exportedIds.map(_markActionItemExported));
     } catch (e) {
       Logger.debug('Error triggering sync from FCM: $e');
     }
