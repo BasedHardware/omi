@@ -582,7 +582,7 @@ class ChatProvider: ObservableObject {
             isClaudeConnected = false
             return
         }
-        if let tokenCache = json["oauth:tokenCache"] as? [String: Any], !tokenCache.isEmpty {
+        if let tokenCache = json["oauth:tokenCache"] as? String, !tokenCache.isEmpty {
             isClaudeConnected = true
         } else {
             isClaudeConnected = false
