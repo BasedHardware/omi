@@ -1324,6 +1324,8 @@ async def _stream_handler(
                     continue
                 try:
                     profile = user_db.get_user_profile(owner_uid)
+                    if not profile:
+                        continue
                     emb = profile.get('speaker_embedding')
                     if emb:
                         name = profile.get('name') or owner_uid[:8]

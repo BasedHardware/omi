@@ -9983,5 +9983,25 @@
   "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
   "networkNameSsid": "Network Name (SSID)",
   "enterWifiNetworkName": "Enter WiFi network name",
-  "enterWifiPassword": "Enter WiFi password"
+  "enterWifiPassword": "Enter WiFi password",
+  "sharedWithSection": "Shared With",
+  "@sharedWithSection": {
+    "description": "Section header for profiles shared with others"
+  },
+  "sharedWithYouSection": "Shared With You",
+  "@sharedWithYouSection": {
+    "description": "Section header for profiles shared with the user"
+  },
+  "noSharedProfiles": "You haven't shared your profile with anyone yet",
+  "@noSharedProfiles": {
+    "description": "Empty state text when user has not shared their profile"
+  },
+  "noProfilesSharedWithYou": "No one has shared their profile with you yet",
+  "@noProfilesSharedWithYou": {
+    "description": "Empty state text when no profiles shared with user"
+  },
+  "revokeShareConfirmation": "Are you sure you want to revoke sharing with this user?",
+  "@revokeShareConfirmation": {
+    "description": "Confirmation message for revoking speech profile sharing"
+  }
 }

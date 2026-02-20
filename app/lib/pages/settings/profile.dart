@@ -8,13 +8,13 @@ import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
+import 'package:omi/pages/settings/speech_profile_sharing_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
-
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -28,85 +28,55 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  void _showSpeechProfileSharingDialog(BuildContext context) async {
-    final TextEditingController controller = TextEditingController();
+  void _showSpeechProfileSharingDialog(BuildContext context) {
+    final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text(context.l10n.shareSpeechProfile),
+          backgroundColor: const Color(0xFF1C1C1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(context.l10n.shareSpeechProfile, style: const TextStyle(color: Colors.white)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(context.l10n.enterUserIdToShare),
-              const SizedBox(height: 8),
+              Text(context.l10n.enterUserIdToShare, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
+              const SizedBox(height: 12),
               TextField(
                 controller: controller,
-                decoration: InputDecoration(hintText: context.l10n.userId),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () async {
-                  final targetUid = controller.text.trim();
-                  if (targetUid.isEmpty) return;
-                  final ok = await shareSpeechProfile(targetUid);
-
-                  if (!context.mounted) return;
-
-                  Navigator.pop(ctx);
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(ok ? context.l10n.profileSharedSuccess : context.l10n.profileSharedFail)),
-                  );
-                },
-                child: Text(context.l10n.share),
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: context.l10n.userId,
+                  hintStyle: const TextStyle(color: Color(0xFF636366)),
+                  enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
+                  focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                ),
               ),
             ],
-          ),
-        );
-      },
-    ).then((_) => controller.dispose());
-  }
-
-  void _showSpeechProfileSharingStatus(BuildContext context) async {
-    final sharedWith = await getUsersIHaveSharedWith();
-    final sharedWithMe = await getProfilesSharedWithMe();
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(context.l10n.speechProfileSharingStatus),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(context.l10n.youHaveSharedWith),
-                ...sharedWith.map((uid) => Row(
-                      children: [
-                        Expanded(child: Text(uid)),
-                        IconButton(
-                          icon: const Icon(Icons.cancel, size: 18),
-                          onPressed: () async {
-                            await revokeSpeechProfile(uid);
-
-                            if (!context.mounted) return;
-
-                            Navigator.pop(ctx);
-                            _showSpeechProfileSharingStatus(context);
-                          },
-                        ),
-                      ],
-                    )),
-                const SizedBox(height: 16),
-                Text(context.l10n.sharedWithYou),
-                ...sharedWithMe.map((uid) => Text(uid)),
-              ],
-            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text(context.l10n.ok),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
+            ),
+            TextButton(
+              onPressed: () async {
+                final targetUid = controller.text.trim();
+                if (targetUid.isEmpty) return;
+                if (targetUid == SharedPreferencesUtil().uid) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.l10n.profileSharedFail)),
+                  );
+                  return;
+                }
+                final ok = await shareSpeechProfile(targetUid);
+                if (!context.mounted) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ok ? context.l10n.profileSharedSuccess : context.l10n.profileSharedFail)),
+                );
+              },
+              child: Text(context.l10n.share, style: const TextStyle(color: Colors.white)),
             ),
           ],
         );
@@ -331,7 +301,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 _buildProfileItem(
                   title: context.l10n.speechProfileSharingStatus,
                   icon: const Icon(Icons.people, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () => _showSpeechProfileSharingStatus(context),
+                  onTap: () => routeToPage(context, const SpeechProfileSharingPage()),
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(

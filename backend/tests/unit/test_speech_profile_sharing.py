@@ -60,6 +60,9 @@ class _FakeDocRef:
     def update(self, data):
         self._data.update(data)
 
+    def to_dict(self):
+        return self._data
+
 
 class _FakeCollectionRef:
     def __init__(self, docs=None):
