@@ -215,35 +215,8 @@ class AuthService {
 
     @MainActor
     func signInWithApple() async throws {
-        guard !isLoading else {
-            NSLog("OMI AUTH: Sign in already in progress, ignoring duplicate request")
-            return
-        }
-
-        // Try native Apple Sign In first (works in release builds with proper entitlements)
-        // Falls back to web OAuth if native fails (e.g., dev builds without provisioning profile)
-        do {
-            try await signInWithAppleNative()
-            return
-        } catch let error as ASAuthorizationError where error.code == .canceled {
-            // Don't return here — on some macOS versions, missing entitlements surface as .canceled
-            // instead of .unknown. Fall back to web OAuth so the user can still sign in.
-            NSLog("OMI AUTH: Native Apple Sign In canceled (may be user or missing entitlement), falling back to web OAuth")
-            log("AUTH: Native Apple Sign In canceled, falling back to web OAuth")
-        } catch let error as ASAuthorizationError where error.code == .unknown {
-            // Error 1000 = missing entitlement (dev builds signed with Developer ID)
-            NSLog("OMI AUTH: Native Apple Sign In unavailable (error 1000), falling back to web OAuth")
-            logError("AUTH: Native Apple Sign In failed with ASAuthorizationError.unknown (code \(error.code.rawValue))", error: error)
-        } catch let error as ASAuthorizationError {
-            NSLog("OMI AUTH: Native Apple Sign In ASAuthorizationError (code %d), falling back to web OAuth", error.code.rawValue)
-            logError("AUTH: Native Apple Sign In failed with ASAuthorizationError code \(error.code.rawValue)", error: error)
-        } catch {
-            let nsError = error as NSError
-            NSLog("OMI AUTH: Native Apple Sign In failed (domain=%@ code=%d desc=%@), falling back to web OAuth", nsError.domain, nsError.code, error.localizedDescription)
-            logError("AUTH: Native Apple Sign In failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
-        }
-
-        // Fall back to web OAuth flow (browser-based, works without special entitlements)
+        // Use web OAuth directly — native Apple Sign In requires entitlements that
+        // don't work reliably across dev/release builds. Web OAuth works everywhere.
         try await signIn(provider: "apple")
     }
 
