@@ -22,6 +22,7 @@ import type {
   InboundMessage,
   OutboundMessage,
   QueryMessage,
+  WarmupMessage,
   AuthMethod,
 } from "./protocol.js";
 
@@ -304,6 +305,7 @@ function startAcpProcess(): void {
     // Session is lost when ACP process dies
     sessionId = "";
     sessionModel = "";
+    sessionCwd = "";
     isInitialized = false;
     for (const [, handler] of acpResponseHandlers) {
       handler.reject(new Error(`ACP process exited (code ${code})`));
@@ -326,11 +328,13 @@ class AcpError extends Error {
 
 let sessionId = "";
 let sessionModel = ""; // model used for the current session
+let sessionCwd = ""; // cwd used for the current session
 let activeAbort: AbortController | null = null;
 let interruptRequested = false;
 let isInitialized = false;
 let authMethods: AuthMethod[] = [];
 let authResolve: (() => void) | null = null;
+let preWarmPromise: Promise<void> | null = null;
 
 // --- ACP initialization ---
 
@@ -408,6 +412,85 @@ async function initializeAcp(): Promise<void> {
   }
 }
 
+// --- MCP server config builder ---
+
+type McpServerConfig = {
+  name: string;
+  command: string;
+  args: string[];
+  env: Array<{ name: string; value: string }>;
+};
+
+function buildMcpServers(mode: string): McpServerConfig[] {
+  const servers: McpServerConfig[] = [];
+
+  // omi-tools (stdio, connects back via Unix socket)
+  servers.push({
+    name: "omi-tools",
+    command: process.execPath,
+    args: [omiToolsStdioScript],
+    env: [
+      { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
+      { name: "OMI_QUERY_MODE", value: mode },
+    ],
+  });
+
+  // Playwright MCP server
+  const playwrightArgs = [playwrightCli];
+  if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+    playwrightArgs.push("--extension");
+  }
+  const playwrightEnv: Array<{ name: string; value: string }> = [];
+  if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
+    playwrightEnv.push({
+      name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
+      value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
+    });
+  }
+  servers.push({
+    name: "playwright",
+    command: process.execPath,
+    args: playwrightArgs,
+    env: playwrightEnv,
+  });
+
+  return servers;
+}
+
+// --- Session pre-warming ---
+
+async function preWarmSession(cwd?: string, model?: string): Promise<void> {
+  const warmCwd = cwd || process.env.HOME || "/";
+  const warmModel = model || "";
+
+  try {
+    await initializeAcp();
+
+    // Only create session if one doesn't already exist
+    if (!sessionId) {
+      const sessionParams: Record<string, unknown> = {
+        cwd: warmCwd,
+        mcpServers: buildMcpServers("act"),
+      };
+      if (warmModel) {
+        sessionParams.model = warmModel;
+      }
+
+      const result = (await acpRequest("session/new", sessionParams)) as {
+        sessionId: string;
+      };
+      sessionId = result.sessionId;
+      sessionModel = warmModel;
+      sessionCwd = warmCwd;
+      logErr(
+        `Pre-warmed session: ${sessionId} (cwd=${warmCwd}, model=${warmModel || "default"})`
+      );
+    }
+  } catch (err) {
+    logErr(`Pre-warm failed (will create on first query): ${err}`);
+  }
+}
+
 // --- Handle query from Swift ---
 
 async function handleQuery(msg: QueryMessage): Promise<void> {
@@ -429,6 +512,13 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     currentMode = mode;
     logErr(`Query mode: ${mode}`);
 
+    // Wait for pre-warm to finish if in progress
+    if (preWarmPromise) {
+      logErr("Waiting for pre-warm to complete...");
+      await preWarmPromise;
+      preWarmPromise = null;
+    }
+
     // Ensure ACP is initialized
     await initializeAcp();
 
@@ -439,51 +529,18 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       sessionId = "";
     }
 
+    // If cwd changed since last session, force new session
+    const requestedCwd = msg.cwd || process.env.HOME || "/";
+    if (sessionId && requestedCwd !== sessionCwd) {
+      logErr(`Cwd changed (${sessionCwd} -> ${requestedCwd}), creating new session`);
+      sessionId = "";
+    }
+
     // Reuse existing session if alive, otherwise create a new one
     if (!sessionId) {
-      // Build MCP servers array for session (stdio format only)
-      // Schema: { name: string, command: string, args: string[], env: {name,value}[] }
-      const mcpServers: Array<{
-        name: string;
-        command: string;
-        args: string[];
-        env: Array<{ name: string; value: string }>;
-      }> = [];
-
-      // Add omi-tools as stdio MCP server (spawned by ACP, connects back via Unix socket)
-      mcpServers.push({
-        name: "omi-tools",
-        command: process.execPath,
-        args: [omiToolsStdioScript],
-        env: [
-          { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-          { name: "OMI_QUERY_MODE", value: mode },
-        ],
-      });
-
-      // Add Playwright MCP server
-      const playwrightArgs = [playwrightCli];
-      if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
-        playwrightArgs.push("--extension");
-      }
-      const playwrightEnv: Array<{ name: string; value: string }> = [];
-      if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
-        playwrightEnv.push({
-          name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
-          value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
-        });
-      }
-
-      mcpServers.push({
-        name: "playwright",
-        command: process.execPath,
-        args: playwrightArgs,
-        env: playwrightEnv,
-      });
-
       const sessionParams: Record<string, unknown> = {
-        cwd: msg.cwd || process.env.HOME || "/",
-        mcpServers,
+        cwd: requestedCwd,
+        mcpServers: buildMcpServers(mode),
       };
       if (requestedModel) {
         sessionParams.model = requestedModel;
@@ -493,8 +550,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
       sessionId = sessionResult.sessionId;
       sessionModel = requestedModel;
+      sessionCwd = requestedCwd;
       isNewSession = true;
-      logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"})`);
+      logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
       logErr(`Reusing existing ACP session: ${sessionId}`);
@@ -561,6 +619,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
         sessionId = "";
         sessionModel = "";
+        sessionCwd = "";
         // Recursive call to handleQuery will create a new session
         return handleQuery(msg);
       }
@@ -823,6 +882,13 @@ async function main(): Promise<void> {
           send({ type: "error", message: String(err) });
         });
         break;
+
+      case "warmup": {
+        const wm = msg as WarmupMessage;
+        logErr(`Warmup requested (cwd=${wm.cwd || "default"}, model=${wm.model || "default"})`);
+        preWarmPromise = preWarmSession(wm.cwd, wm.model);
+        break;
+      }
 
       case "tool_result":
         resolveToolCall(msg);

@@ -237,6 +237,21 @@ actor ACPBridge {
         }
     }
 
+    // MARK: - Session Pre-warming
+
+    /// Tell the bridge to pre-create an ACP session in the background.
+    /// This saves ~4s on the first query by doing session/new ahead of time.
+    func warmupSession(cwd: String? = nil, model: String? = nil) {
+        guard isRunning else { return }
+        var dict: [String: Any] = ["type": "warmup"]
+        if let cwd = cwd { dict["cwd"] = cwd }
+        if let model = model { dict["model"] = model }
+        if let data = try? JSONSerialization.data(withJSONObject: dict),
+           let str = String(data: data, encoding: .utf8) {
+            sendLine(str)
+        }
+    }
+
     // MARK: - Query
 
     /// Send a query to the ACP agent and stream results back.
