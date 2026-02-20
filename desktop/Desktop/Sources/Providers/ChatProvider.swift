@@ -585,15 +585,19 @@ class ChatProvider: ObservableObject {
             return
         }
 
-        // Check Keychain
-        let keychainQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials",
-            kSecReturnData as String: false,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        let status = SecItemCopyMatching(keychainQuery as CFDictionary, nil)
-        isClaudeConnected = (status == errSecSuccess)
+        // Check Keychain via security CLI (Keychain item owned by Claude Desktop)
+        let secProcess = Process()
+        secProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        secProcess.arguments = ["find-generic-password", "-s", "Claude Code-credentials"]
+        secProcess.standardOutput = FileHandle.nullDevice
+        secProcess.standardError = FileHandle.nullDevice
+        do {
+            try secProcess.run()
+            secProcess.waitUntilExit()
+            isClaudeConnected = (secProcess.terminationStatus == 0)
+        } catch {
+            isClaudeConnected = false
+        }
     }
 
     /// Disconnect from Claude: stop bridge, clear OAuth token, switch back to free mode
@@ -615,17 +619,23 @@ class ChatProvider: ObservableObject {
         }
 
         // 3. Clear OAuth credentials from macOS Keychain
-        let keychainQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Claude Code-credentials"
-        ]
-        let status = SecItemDelete(keychainQuery as CFDictionary)
-        if status == errSecSuccess {
-            log("ChatProvider: Cleared Claude Code credentials from Keychain")
-        } else if status == errSecItemNotFound {
-            log("ChatProvider: No Claude Code credentials found in Keychain")
-        } else {
-            log("ChatProvider: Failed to clear Keychain credentials (status=\(status))")
+        //    The Keychain item is owned by Claude Desktop/CLI, so SecItemDelete fails
+        //    with errSecInvalidOwnerEdit. Use the `security` CLI which runs as the user.
+        let secProcess = Process()
+        secProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        secProcess.arguments = ["delete-generic-password", "-s", "Claude Code-credentials"]
+        secProcess.standardOutput = FileHandle.nullDevice
+        secProcess.standardError = FileHandle.nullDevice
+        do {
+            try secProcess.run()
+            secProcess.waitUntilExit()
+            if secProcess.terminationStatus == 0 {
+                log("ChatProvider: Cleared Claude Code credentials from Keychain")
+            } else {
+                log("ChatProvider: No Claude Code credentials found in Keychain (status=\(secProcess.terminationStatus))")
+            }
+        } catch {
+            log("ChatProvider: Failed to run security command: \(error.localizedDescription)")
         }
 
         // 4. Update state
