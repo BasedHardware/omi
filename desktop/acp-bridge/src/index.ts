@@ -533,11 +533,40 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
             `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
           );
         } catch (err) {
+          // If pre-warm fails with auth error, send auth_required to Swift
+          if (err instanceof AcpError && err.code === -32000) {
+            const data = err.data as {
+              authMethods?: Array<{
+                id: string;
+                name: string;
+                description?: string;
+                type?: string;
+              }>;
+            };
+            if (data?.authMethods) {
+              authMethods = data.authMethods.map((m) => ({
+                id: m.id,
+                type: (m.type ?? "agent_auth") as AuthMethod["type"],
+                displayName: m.name || m.description || m.id,
+              }));
+            }
+            logErr(`Pre-warm failed with auth error, requesting authentication`);
+            isInitialized = false;
+            send({ type: "auth_required", methods: authMethods });
+            return;
+          }
           logErr(`Pre-warm failed for ${warmModel}: ${err}`);
         }
       })
     );
   } catch (err) {
+    // If init/warmup fails with auth error, send auth_required to Swift
+    if (err instanceof AcpError && err.code === -32000) {
+      logErr(`Warmup init failed with auth error, requesting authentication`);
+      isInitialized = false;
+      send({ type: "auth_required", methods: authMethods });
+      return;
+    }
     logErr(`Pre-warm failed (will create on first query): ${err}`);
   }
 }
@@ -686,6 +715,28 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         pendingTools.length = 0;
         send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0 });
       }
+      return;
+    }
+    // If the error is an auth error, send auth_required so Swift shows the sign-in sheet
+    if (err instanceof AcpError && err.code === -32000) {
+      const data = err.data as {
+        authMethods?: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          type?: string;
+        }>;
+      };
+      if (data?.authMethods) {
+        authMethods = data.authMethods.map((m) => ({
+          id: m.id,
+          type: (m.type ?? "agent_auth") as AuthMethod["type"],
+          displayName: m.name || m.description || m.id,
+        }));
+      }
+      logErr(`Query failed with auth error, requesting re-authentication`);
+      isInitialized = false;
+      send({ type: "auth_required", methods: authMethods });
       return;
     }
     const errMsg = err instanceof Error ? err.message : String(err);
