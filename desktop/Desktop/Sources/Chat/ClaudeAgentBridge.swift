@@ -249,6 +249,12 @@ actor ClaudeAgentBridge {
         }
 
         isInterrupted = false
+        // Discard any stale messages from a previous interrupted/timed-out query
+        // to avoid desynchronizing the request-response protocol.
+        if !pendingMessages.isEmpty {
+            log("ClaudeAgentBridge: clearing \(pendingMessages.count) stale pending messages before new query")
+            pendingMessages.removeAll()
+        }
         sendLine(jsonString)
 
         // Read messages until we get a result or error
