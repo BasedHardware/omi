@@ -290,6 +290,13 @@ if [ -n "$SIGN_IDENTITY" ]; then
         substep "Signing Sparkle framework"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
     fi
+    # Sign the bundled node binary with developer identity + Node.entitlements
+    # (macOS requires executables inside app bundles to be properly signed)
+    NODE_BIN="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+    if [ -f "$NODE_BIN" ]; then
+        substep "Signing bundled node binary"
+        codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
+    fi
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else

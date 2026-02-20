@@ -2064,6 +2064,7 @@ impl FirestoreService {
         relevance_score: Option<i32>,
         sort_order: Option<i32>,
         indent_level: Option<i32>,
+        recurrence_rule: Option<&str>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         // Build update mask and fields
         let mut field_paths: Vec<&str> = vec!["updated_at"];
@@ -2123,6 +2124,15 @@ impl FirestoreService {
         if let Some(indent) = indent_level {
             field_paths.push("indent_level");
             fields["indent_level"] = json!({"integerValue": indent.to_string()});
+        }
+
+        if let Some(rule) = recurrence_rule {
+            field_paths.push("recurrence_rule");
+            if rule.is_empty() {
+                fields["recurrence_rule"] = json!({"nullValue": null});
+            } else {
+                fields["recurrence_rule"] = json!({"stringValue": rule});
+            }
         }
 
         let update_mask = field_paths
@@ -2274,6 +2284,8 @@ impl FirestoreService {
         category: Option<&str>,
         relevance_score: Option<i32>,
         from_staged: Option<bool>,
+        recurrence_rule: Option<&str>,
+        recurrence_parent_id: Option<&str>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -2320,6 +2332,14 @@ impl FirestoreService {
 
         if let Some(staged) = from_staged {
             fields["from_staged"] = json!({"booleanValue": staged});
+        }
+
+        if let Some(rule) = recurrence_rule {
+            fields["recurrence_rule"] = json!({"stringValue": rule});
+        }
+
+        if let Some(pid) = recurrence_parent_id {
+            fields["recurrence_parent_id"] = json!({"stringValue": pid});
         }
 
         let doc = json!({"fields": fields});
@@ -3859,6 +3879,8 @@ impl FirestoreService {
             sort_order: self.parse_int(fields, "sort_order"),
             indent_level: self.parse_int(fields, "indent_level"),
             from_staged: self.parse_bool(fields, "from_staged").ok(),
+            recurrence_rule: self.parse_string(fields, "recurrence_rule"),
+            recurrence_parent_id: self.parse_string(fields, "recurrence_parent_id"),
         })
     }
 
