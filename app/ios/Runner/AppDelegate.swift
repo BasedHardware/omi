@@ -5,7 +5,6 @@ import app_links
 import WatchConnectivity
 import AVFoundation
 import Speech
-import EventKit
 
 extension FlutterError: Error {}
 
@@ -16,8 +15,6 @@ extension FlutterError: Error {}
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
-  private static let iso8601DateFormatter = ISO8601DateFormatter()
-
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -132,9 +129,6 @@ extension FlutterError: Error {}
 
   // MARK: - Silent Push for Apple Reminders Auto-Sync
 
-  private let syncEventStore = EKEventStore()
-  private static let syncedItemsKey = "omi_synced_action_items"
-
   override func application(
       _ application: UIApplication,
       didReceiveRemoteNotification userInfo: [AnyHashable: Any],
@@ -161,101 +155,20 @@ extension FlutterError: Error {}
       userInfo: [AnyHashable: Any],
       completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      // Parse batch items from JSON payload
-      let items: [[String: Any]]
-      if let itemsJson = userInfo["items"] as? String,
-         let data = itemsJson.data(using: .utf8),
-         let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-          items = parsed
-      } else {
+      guard let itemsJson = userInfo["items"] as? String else {
           completionHandler(.failed)
           return
       }
 
-      guard !items.isEmpty else {
-          completionHandler(.noData)
-          return
-      }
+      let exportedIds = appleRemindersService.syncBatchFromJSON(itemsJson)
 
-      // Check permission
-      let status = EKEventStore.authorizationStatus(for: .reminder)
-      let hasAccess: Bool
-      if #available(iOS 17.0, *) {
-          hasAccess = status == .fullAccess || status == .writeOnly || status == .authorized
-      } else {
-          hasAccess = status == .authorized
-      }
-      guard hasAccess else {
-          completionHandler(.failed)
-          return
-      }
-
-      guard let calendar = syncEventStore.defaultCalendarForNewReminders() else {
-          completionHandler(.failed)
-          return
-      }
-
-      var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppDelegate.syncedItemsKey) ?? [])
-      var createdCount = 0
-      var exportedIds: [String] = []
-
-      for item in items {
-          guard let actionItemId = item["id"] as? String,
-                let reminderTitle = item["description"] as? String else {
-              continue
-          }
-
-          // Skip already synced
-          if syncedIds.contains(actionItemId) {
-              continue
-          }
-
-          // Parse due date
-          let dueDate: Date? = {
-              if let dueDateStr = item["due_at"] as? String, !dueDateStr.isEmpty {
-                  return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
-              }
-              return nil
-          }()
-
-          // Create reminder
-          let reminder = EKReminder(eventStore: syncEventStore)
-          reminder.title = reminderTitle
-          reminder.notes = "From Omi"
-          reminder.calendar = calendar
-
-          if let due = dueDate {
-              reminder.dueDateComponents = Calendar.current.dateComponents(
-                  [.year, .month, .day, .hour, .minute], from: due
-              )
-          }
-
-          do {
-              try syncEventStore.save(reminder, commit: true)
-              syncedIds.insert(actionItemId)
-              exportedIds.append(actionItemId)
-              createdCount += 1
-          } catch {
-              // Continue with remaining items even if one fails
-              continue
-          }
-      }
-
-      // Persist dedup set (keep most recent 100 entries)
-      var syncedArray = Array(syncedIds)
-      if syncedArray.count > 100 {
-          syncedArray = Array(syncedArray.suffix(100))
-      }
-      UserDefaults.standard.set(syncedArray, forKey: AppDelegate.syncedItemsKey)
-
-      // Notify Flutter of all exported items
       if !exportedIds.isEmpty {
           DispatchQueue.main.async {
               self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["action_item_ids": exportedIds])
           }
       }
 
-      completionHandler(createdCount > 0 ? .newData : .noData)
+      completionHandler(exportedIds.isEmpty ? .noData : .newData)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
