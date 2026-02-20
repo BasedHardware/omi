@@ -1,7 +1,10 @@
 import Foundation
 import Sentry
 
-private let logFile = "/tmp/omi.log"
+private let logFile: String = {
+    let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
+    return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
+}()
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()

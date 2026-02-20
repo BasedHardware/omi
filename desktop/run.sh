@@ -72,7 +72,7 @@ auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSig
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Clear log file for fresh run (must be before backend starts)
-rm -f /tmp/omi.log 2>/dev/null || true
+rm -f /tmp/omi-dev.log 2>/dev/null || true
 
 step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir

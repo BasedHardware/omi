@@ -47,12 +47,12 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // Open log file (same as Swift app: /tmp/omi.log)
+    // Open log file (same as Swift dev app: /tmp/omi-dev.log)
     // Wrap in LineWriter to flush after each line (ensures logs appear immediately)
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/omi.log")
+        .open("/tmp/omi-dev.log")
         .expect("Failed to open log file");
     let line_writer = LineWriter::new(log_file);
 
