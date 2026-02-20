@@ -1824,6 +1824,12 @@ class ChatProvider: ObservableObject {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
+            // On timeout, cancel the stuck ACP session so it's not left dangling
+            if let bridgeError = error as? BridgeError, case .timeout = bridgeError, isACPMode {
+                log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
+                await acpBridge.interrupt()
+            }
+
             // Flush any remaining buffered streaming text before handling the error
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
