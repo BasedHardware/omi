@@ -83,6 +83,10 @@ struct OmiTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
+        // Keep the coordinator's binding fresh so textDidChange writes to the
+        // correct task's draftText when SwiftUI reuses this NSView across tasks.
+        context.coordinator._text = _text
+
         if textView.string != text {
             context.coordinator.isUpdating = true
             textView.string = text
@@ -97,6 +101,14 @@ struct OmiTextEditor: NSViewRepresentable {
 
             if onHeightChange != nil {
                 context.coordinator.updateHeight(for: textView, scrollView: scrollView)
+            }
+
+            // Re-focus the text view when content changes programmatically
+            // (e.g. switching between task chats reuses this NSView)
+            if focusOnAppear, let window = scrollView.window {
+                DispatchQueue.main.async {
+                    window.makeFirstResponder(textView)
+                }
             }
         }
 
