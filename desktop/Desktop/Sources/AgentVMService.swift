@@ -182,31 +182,57 @@ actor AgentVMService {
             return
         }
 
-        log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB)...")
+        log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB) via streaming gzip...")
 
-        // Gzip compress the database
-        let compressedData: Data
+        // Stream-compress to a temp file using shell gzip (uses ~0 MB memory vs loading entire DB)
+        let tempGzPath = dbPath.appendingPathExtension("upload.gz")
         do {
-            let rawData = try Data(contentsOf: dbPath)
-            compressedData = try gzipCompress(rawData)
-            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedData.count / 1024 / 1024) MB (\(compressedData.count * 100 / Int(originalSize))%)")
+            // Remove any stale temp file
+            try? FileManager.default.removeItem(at: tempGzPath)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            process.arguments = ["-c", dbPath.path]
+
+            FileManager.default.createFile(atPath: tempGzPath.path, contents: nil)
+            guard let outHandle = FileHandle(forWritingAtPath: tempGzPath.path) else {
+                log("AgentVMService: Failed to create temp gzip file")
+                return
+            }
+            process.standardOutput = outHandle
+            try process.run()
+            process.waitUntilExit()
+            try outHandle.close()
+
+            guard process.terminationStatus == 0 else {
+                log("AgentVMService: gzip failed with exit code \(process.terminationStatus)")
+                try? FileManager.default.removeItem(at: tempGzPath)
+                return
+            }
+
+            let compressedAttrs = try FileManager.default.attributesOfItem(atPath: tempGzPath.path)
+            let compressedSize = compressedAttrs[.size] as? UInt64 ?? 0
+            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedSize / 1024 / 1024) MB (\(compressedSize * 100 / originalSize)%)")
         } catch {
             log("AgentVMService: Compression failed — \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: tempGzPath)
             return
         }
 
-        log("AgentVMService: Uploading compressed database (\(compressedData.count / 1024 / 1024) MB) to \(vmIP)...")
+        log("AgentVMService: Uploading compressed database to \(vmIP)...")
 
         let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)")!
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("deflate", forHTTPHeaderField: "Content-Encoding")
-        request.setValue(String(compressedData.count), forHTTPHeaderField: "Content-Length")
         request.timeoutInterval = 600
 
         do {
-            let (data, response) = try await URLSession.shared.upload(for: request, from: compressedData)
+            // Upload from file — streams from disk, doesn't load into memory
+            let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempGzPath)
+            try? FileManager.default.removeItem(at: tempGzPath)
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 log("AgentVMService: Upload failed — invalid response")
                 return
@@ -224,6 +250,7 @@ actor AgentVMService {
                 log("AgentVMService: Upload failed — HTTP \(httpResponse.statusCode): \(body)")
             }
         } catch {
+            try? FileManager.default.removeItem(at: tempGzPath)
             log("AgentVMService: Upload failed — \(error.localizedDescription)")
         }
     }
@@ -267,13 +294,4 @@ actor AgentVMService {
         }
     }
 
-    /// Gzip compress data using Apple's Compression framework.
-    private func gzipCompress(_ data: Data) throws -> Data {
-        // Use NSData's built-in compressed method (available macOS 10.15+)
-        let nsData = data as NSData
-        guard let compressed = try? nsData.compressed(using: .zlib) else {
-            throw NSError(domain: "AgentVMService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Compression failed"])
-        }
-        return compressed as Data
-    }
 }
