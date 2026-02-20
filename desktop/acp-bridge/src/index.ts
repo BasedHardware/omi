@@ -445,46 +445,43 @@ async function initializeAcp(): Promise<void> {
 }
 
 // --- MCP server config builder ---
+// Must match the SDK's McpStdioServerConfig: Record<string, { command, args?, env? }>
+// where env is Record<string, string> (flat key-value), NOT Array<{name, value}>
 
 type McpServerConfig = {
-  name: string;
   command: string;
-  args: string[];
-  env: Array<{ name: string; value: string }>;
+  args?: string[];
+  env?: Record<string, string>;
 };
 
-function buildMcpServers(mode: string): McpServerConfig[] {
-  const servers: McpServerConfig[] = [];
+function buildMcpServers(mode: string): Record<string, McpServerConfig> {
+  const servers: Record<string, McpServerConfig> = {};
 
   // omi-tools (stdio, connects back via Unix socket)
-  servers.push({
-    name: "omi-tools",
+  servers["omi-tools"] = {
     command: process.execPath,
     args: [omiToolsStdioScript],
-    env: [
-      { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-      { name: "OMI_QUERY_MODE", value: mode },
-    ],
-  });
+    env: {
+      OMI_BRIDGE_PIPE: omiToolsPipePath,
+      OMI_QUERY_MODE: mode,
+    },
+  };
 
   // Playwright MCP server
   const playwrightArgs = [playwrightCli];
   if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
     playwrightArgs.push("--extension");
   }
-  const playwrightEnv: Array<{ name: string; value: string }> = [];
+  const playwrightEnv: Record<string, string> = {};
   if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
-    playwrightEnv.push({
-      name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
-      value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
-    });
+    playwrightEnv.PLAYWRIGHT_MCP_EXTENSION_TOKEN =
+      process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN;
   }
-  servers.push({
-    name: "playwright",
+  servers["playwright"] = {
     command: process.execPath,
     args: playwrightArgs,
     env: playwrightEnv,
-  });
+  };
 
   return servers;
 }
