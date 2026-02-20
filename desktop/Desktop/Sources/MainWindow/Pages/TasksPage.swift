@@ -3692,15 +3692,12 @@ struct TaskRow: View {
                 .popover(isPresented: $showDatePicker) {
                     dueDatePopover
                 }
-                .popover(isPresented: $showRepeatPicker) {
-                    repeatPopover
-                }
             }
 
         }
         .overlay(alignment: .trailing) {
             // Hover actions overlaid on trailing edge (no layout shift)
-            if isHovering && !isMultiSelectMode && !isDeletedTask {
+            if (isHovering || showRepeatPicker) && !isMultiSelectMode && !isDeletedTask {
                 HStack(spacing: 4) {
                     // Add date button (shown on hover when no due date)
                     if task.dueAt == nil && !task.completed {
@@ -3730,6 +3727,9 @@ struct TaskRow: View {
                         }
                         .buttonStyle(.plain)
                         .help(task.isRecurring ? "Edit repeat" : "Set repeat")
+                        .popover(isPresented: $showRepeatPicker) {
+                            repeatPopover
+                        }
                     }
 
                     // Outdent button (decrease indent)
