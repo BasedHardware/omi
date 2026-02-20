@@ -810,7 +810,8 @@ actor ActionItemStorage {
         description: String? = nil,
         dueAt: Date? = nil,
         priority: String? = nil,
-        metadata: [String: Any]? = nil
+        metadata: [String: Any]? = nil,
+        recurrenceRule: String? = nil
     ) async throws {
         let db = try await ensureInitialized()
 
@@ -831,6 +832,9 @@ actor ActionItemStorage {
             }
             if let metadata = metadata {
                 record.setMetadata(metadata)
+            }
+            if let recurrenceRule = recurrenceRule {
+                record.recurrenceRule = recurrenceRule.isEmpty ? nil : recurrenceRule
             }
             record.updatedAt = Date()
             try record.update(database)

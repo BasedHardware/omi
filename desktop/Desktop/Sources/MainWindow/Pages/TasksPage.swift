@@ -3040,7 +3040,7 @@ struct TaskCategorySection: View {
     var onToggle: ((TaskActionItem) async -> Void)?
     var onDelete: ((TaskActionItem) async -> Void)?
     var onToggleSelection: ((TaskActionItem) -> Void)?
-    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?, String?) async -> Void)?
     var onIncrementIndent: ((String) -> Void)?
     var onDecrementIndent: ((String) -> Void)?
     var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
@@ -3280,7 +3280,7 @@ struct TaskRow: View {
     var onToggle: ((TaskActionItem) async -> Void)?
     var onDelete: ((TaskActionItem) async -> Void)?
     var onToggleSelection: ((TaskActionItem) -> Void)?
-    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?, String?) async -> Void)?
     var onIncrementIndent: ((String) -> Void)?
     var onDecrementIndent: ((String) -> Void)?
     var onOpenChat: ((TaskActionItem) -> Void)?
@@ -3313,6 +3313,7 @@ struct TaskRow: View {
     // Inline due date popover
     @State private var showDatePicker = false
     @State private var editDueDate: Date = Date()
+    @State private var editRecurrenceRule: String = ""
 
     // Swipe gesture state
     @State private var swipeOffset: CGFloat = 0
@@ -3692,6 +3693,7 @@ struct TaskRow: View {
                     if task.dueAt == nil && !task.completed {
                         Button {
                             editDueDate = Date()
+                            editRecurrenceRule = task.recurrenceRule ?? ""
                             showDatePicker = true
                         } label: {
                             Image(systemName: "calendar.badge.plus")
@@ -3840,7 +3842,7 @@ struct TaskRow: View {
         }
 
         Task {
-            await onUpdateDetails?(task, trimmed, nil, nil)
+            await onUpdateDetails?(task, trimmed, nil, nil, nil)
         }
     }
 
@@ -3941,8 +3943,11 @@ struct TaskRow: View {
 struct DueDateBadgeInteractive: View {
     let dueAt: Date
     let isCompleted: Bool
+    let isRecurring: Bool
     @Binding var showDatePicker: Bool
     @Binding var editDueDate: Date
+    @Binding var editRecurrenceRule: String
+    let recurrenceRule: String?
 
     @State private var isHovering = false
 
@@ -3976,6 +3981,7 @@ struct DueDateBadgeInteractive: View {
     var body: some View {
         Button {
             editDueDate = dueAt
+            editRecurrenceRule = recurrenceRule ?? ""
             showDatePicker = true
         } label: {
             HStack(spacing: 3) {
@@ -3983,6 +3989,10 @@ struct DueDateBadgeInteractive: View {
                     .scaledFont(size: 9)
                 Text(displayText)
                     .scaledFont(size: 11, weight: .medium)
+                if isRecurring {
+                    Image(systemName: "repeat")
+                        .scaledFont(size: 9)
+                }
                 if isHovering {
                     Image(systemName: "pencil")
                         .scaledFont(size: 8)

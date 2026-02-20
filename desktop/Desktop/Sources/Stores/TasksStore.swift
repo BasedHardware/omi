@@ -992,6 +992,40 @@ class TasksStore: ObservableObject {
         }
     }
 
+    // MARK: - Recurrence Helpers
+
+    /// Compute the next due date for a recurring task, skipping past dates.
+    private func nextFutureDueDate(from dueDate: Date, rule: String) -> Date? {
+        let calendar = Calendar.current
+        func nextDate(from date: Date) -> Date? {
+            switch rule {
+            case "daily":
+                return calendar.date(byAdding: .day, value: 1, to: date)
+            case "weekdays":
+                var next = calendar.date(byAdding: .day, value: 1, to: date)!
+                while calendar.isDateInWeekend(next) {
+                    next = calendar.date(byAdding: .day, value: 1, to: next)!
+                }
+                return next
+            case "weekly":
+                return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+            case "biweekly":
+                return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
+            case "monthly":
+                return calendar.date(byAdding: .month, value: 1, to: date)
+            default:
+                return nil
+            }
+        }
+        guard var next = nextDate(from: dueDate) else { return nil }
+        // Skip past dates to avoid pile-up when completing late
+        while next < Date() {
+            guard let n = nextDate(from: next) else { return nil }
+            next = n
+        }
+        return next
+    }
+
     // MARK: - Task Actions
 
     func toggleTask(_ task: TaskActionItem) async {
@@ -1048,6 +1082,27 @@ class TasksStore: ObservableObject {
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+
+            // Spawn next recurring instance when completing a recurring task
+            if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty, let dueAt = task.dueAt {
+                if let nextDue = nextFutureDueDate(from: dueAt, rule: rule) {
+                    let parentId = task.recurrenceParentId ?? task.id
+                    if let spawned = try? await APIClient.shared.createActionItem(
+                        description: task.description,
+                        dueAt: nextDue,
+                        source: "recurring",
+                        priority: task.priority,
+                        category: task.category,
+                        recurrenceRule: rule,
+                        recurrenceParentId: parentId
+                    ) {
+                        try? await ActionItemStorage.shared.syncTaskActionItems([spawned])
+                        incompleteTasks.insert(spawned, at: 0)
+                        log("TasksStore: Spawned recurring task \(spawned.id) due \(nextDue)")
+                    }
+                }
+            }
+
             await loadDashboardTasks()
         } catch {
             logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
@@ -1068,7 +1123,7 @@ class TasksStore: ObservableObject {
     }
 
     @discardableResult
-    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async -> TaskActionItem? {
+    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil, recurrenceRule: String? = nil) async -> TaskActionItem? {
         do {
             var metadata: [String: Any]? = nil
             if let tags = tags, !tags.isEmpty {
@@ -1081,7 +1136,8 @@ class TasksStore: ObservableObject {
                 source: "manual",
                 priority: priority,
                 category: tags?.first,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
 
             // Sync to local SQLite cache
@@ -1170,7 +1226,7 @@ class TasksStore: ObservableObject {
         }
     }
 
-    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
+    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
         // Track manual edits: if description is changed, mark as manually edited
         var metadata: [String: Any]? = nil
         if description != nil {
@@ -1188,7 +1244,8 @@ class TasksStore: ObservableObject {
                 description: description,
                 dueAt: dueAt,
                 priority: priority,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
         } catch {
             logError("TasksStore: Failed to update task locally", error: error)
@@ -1216,7 +1273,8 @@ class TasksStore: ObservableObject {
                 description: description,
                 dueAt: dueAt,
                 priority: priority,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
