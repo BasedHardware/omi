@@ -1,0 +1,7 @@
+[deploy]
+startCommand = "python main.py"
+
+# Persistent storage for user tokens and sessions
+[[deploy.volumes]]
+mountPath = "/app/data"
+

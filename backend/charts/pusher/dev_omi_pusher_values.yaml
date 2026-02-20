@@ -242,6 +242,13 @@ env:
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

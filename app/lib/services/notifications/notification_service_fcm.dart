@@ -218,10 +218,11 @@ class _FCMNotificationService implements NotificationInterface {
 
       // Plugin
       if (data.isNotEmpty) {
-        late Map<String, String> payload = <String, String>{};
-        payload.addAll({
-          "navigate_to": data['navigate_to'] ?? "",
-        });
+        final Map<String, String> payload = <String, String>{};
+        final navigateTo = data['navigate_to'];
+        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
+          payload['navigate_to'] = navigateTo.toString();
+        }
 
         // Handle action item data messages
         final messageType = data['type'];

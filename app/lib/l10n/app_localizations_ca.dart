@@ -8038,13 +8038,13 @@ class AppLocalizationsCa extends AppLocalizations {
   String get couldNotOpenUrl => 'No s\'ha pogut obrir l\'URL. Torneu-ho a provar.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nova tasca';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Veure tot';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Afegir tasca';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8113,4 +8113,160 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'No s\'ha pogut reproduir l\'àudio. El fitxer pot estar malmès o no existir.';
+
+  @override
+  String get connectionGuide => 'Guia de connexió';
+
+  @override
+  String get iveDoneThis => 'Ja ho he fet';
+
+  @override
+  String get pairNewDevice => 'Aparellar un dispositiu nou';
+
+  @override
+  String get dontSeeYourDevice => 'No veus el teu dispositiu?';
+
+  @override
+  String get reportAnIssue => 'Informar d\'un problema';
+
+  @override
+  String get pairingTitleOmi => 'Enceneu Omi';
+
+  @override
+  String get pairingDescOmi => 'Manteniu premut el dispositiu fins que vibri per encendre\'l.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Posa Omi DevKit en mode d\'aparellament';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Premeu el botó un cop per encendre. El LED parpellejarà en violeta en mode d\'aparellament.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Enceneu Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Manteniu premut el botó lateral durant 3 segons per encendre.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Posa Plaud Note en mode d\'aparellament';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Manteniu premut el botó lateral durant 2 segons. El LED vermell parpellejarà quan estigui llest per aparellar.';
+
+  @override
+  String get pairingTitleBee => 'Posa Bee en mode d\'aparellament';
+
+  @override
+  String get pairingDescBee => 'Premeu el botó 5 vegades seguidament. La llum començarà a parpellejar en blau i verd.';
+
+  @override
+  String get pairingTitleLimitless => 'Posa Limitless en mode d\'aparellament';
+
+  @override
+  String get pairingDescLimitless =>
+      'Quan qualsevol llum sigui visible, premeu un cop i després manteniu premut fins que el dispositiu mostri una llum rosa, després deixeu anar.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Posa Friend Pendant en mode d\'aparellament';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Premeu el botó del penjoll per encendre\'l. Entrarà en mode d\'aparellament automàticament.';
+
+  @override
+  String get pairingTitleFieldy => 'Posa Fieldy en mode d\'aparellament';
+
+  @override
+  String get pairingDescFieldy => 'Manteniu premut el dispositiu fins que aparegui la llum per encendre\'l.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Connecteu Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Instal·leu i obriu l\'aplicació Omi al vostre Apple Watch, després toqueu Connectar a l\'aplicació.';
+
+  @override
+  String get pairingTitleNeoOne => 'Posa Neo One en mode d\'aparellament';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Manteniu premut el botó d\'engegada fins que el LED parpellegi. El dispositiu serà detectable.';
+
+  @override
+  String get downloadingFromDevice => 'Descarregant del dispositiu';
+
+  @override
+  String get reconnectingToInternet => 'Reconnectant a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Pujant $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Processat';
+
+  @override
+  String get corruptedStatus => 'Corrupte';
+
+  @override
+  String nPending(int count) {
+    return '$count pendents';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processats';
+  }
+
+  @override
+  String get synced => 'Sincronitzat';
+
+  @override
+  String get noPendingRecordings => 'No hi ha enregistraments pendents';
+
+  @override
+  String get noProcessedRecordings => 'Encara no hi ha enregistraments processats';
+
+  @override
+  String get pending => 'Pendent';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novetats a $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Afegir a la llista de tasques?';
+
+  @override
+  String get failedToCreateShareLink => 'No s\'ha pogut crear l\'enllaç per compartir';
+
+  @override
+  String get deleteGoal => 'Eliminar objectiu';
+
+  @override
+  String get deviceUpToDate => 'El dispositiu està actualitzat';
+
+  @override
+  String get wifiConfiguration => 'Configuració WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.';
+
+  @override
+  String get networkNameSsid => 'Nom de la xarxa (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduïu el nom de la xarxa WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

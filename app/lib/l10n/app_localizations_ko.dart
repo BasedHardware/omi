@@ -7858,13 +7858,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotOpenUrl => 'URL을 열 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => '새 작업';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => '모두 보기';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => '작업 추가';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -7933,4 +7933,153 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => '오디오를 재생할 수 없습니다. 파일이 손상되었거나 없을 수 있습니다.';
+
+  @override
+  String get connectionGuide => '연결 가이드';
+
+  @override
+  String get iveDoneThis => '완료했습니다';
+
+  @override
+  String get pairNewDevice => '새 기기 페어링';
+
+  @override
+  String get dontSeeYourDevice => '기기가 보이지 않나요?';
+
+  @override
+  String get reportAnIssue => '문제 신고';
+
+  @override
+  String get pairingTitleOmi => 'Omi 전원 켜기';
+
+  @override
+  String get pairingDescOmi => '기기가 진동할 때까지 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Omi DevKit를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescOmiDevkit => '버튼을 한 번 눌러 전원을 켜세요. 페어링 모드에서 LED가 보라색으로 깜빡입니다.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Omi Glass 전원 켜기';
+
+  @override
+  String get pairingDescOmiGlass => '측면 버튼을 3초간 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Plaud Note를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescPlaudNote => '측면 버튼을 2초간 길게 누르세요. 페어링 준비가 되면 빨간 LED가 깜빡입니다.';
+
+  @override
+  String get pairingTitleBee => 'Bee를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescBee => '버튼을 연속으로 5번 누르세요. 표시등이 파란색과 녹색으로 깜빡이기 시작합니다.';
+
+  @override
+  String get pairingTitleLimitless => 'Limitless를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescLimitless => '표시등이 켜져 있을 때 한 번 누른 다음 기기가 분홍색 빛을 보일 때까지 길게 누른 후 놓으세요.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Friend Pendant를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFriendPendant => '펜던트의 버튼을 눌러 전원을 켜세요. 자동으로 페어링 모드로 전환됩니다.';
+
+  @override
+  String get pairingTitleFieldy => 'Fieldy를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescFieldy => '표시등이 나타날 때까지 기기를 길게 눌러 전원을 켜세요.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Apple Watch 연결';
+
+  @override
+  String get pairingDescAppleWatch => 'Apple Watch에 Omi 앱을 설치하고 열어서 앱에서 연결을 탭하세요.';
+
+  @override
+  String get pairingTitleNeoOne => 'Neo One를 페어링 모드로 전환';
+
+  @override
+  String get pairingDescNeoOne => '전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.';
+
+  @override
+  String get downloadingFromDevice => '기기에서 다운로드 중';
+
+  @override
+  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total 업로드 중';
+  }
+
+  @override
+  String get processedStatus => '처리됨';
+
+  @override
+  String get corruptedStatus => '손상됨';
+
+  @override
+  String nPending(int count) {
+    return '$count개 대기 중';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count개 처리됨';
+  }
+
+  @override
+  String get synced => '동기화됨';
+
+  @override
+  String get noPendingRecordings => '대기 중인 녹음이 없습니다';
+
+  @override
+  String get noProcessedRecordings => '아직 처리된 녹음이 없습니다';
+
+  @override
+  String get pending => '대기 중';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version의 새로운 기능';
+  }
+
+  @override
+  String get addToYourTaskList => '작업 목록에 추가하시겠습니까?';
+
+  @override
+  String get failedToCreateShareLink => '공유 링크 생성에 실패했습니다';
+
+  @override
+  String get deleteGoal => '목표 삭제';
+
+  @override
+  String get deviceUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get wifiConfiguration => 'WiFi 설정';
+
+  @override
+  String get wifiConfigurationSubtitle => '기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.';
+
+  @override
+  String get networkNameSsid => '네트워크 이름 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi 네트워크 이름을 입력하세요';
+
+  @override
+  String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

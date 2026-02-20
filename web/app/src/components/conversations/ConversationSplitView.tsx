@@ -565,9 +565,10 @@ export function ConversationSplitView() {
                 value={searchQuery}
                 onChange={setSearchQuery}
                 onSearch={handleSearch}
-                placeholder="Search conversations..."
-                className="flex-1"
+                placeholder="Search"
+                className="flex-1 min-w-0"
               />
+
               <DateFilter
                 selectedDate={filterDate}
                 onDateChange={handleDateFilterChange}
@@ -576,7 +577,7 @@ export function ConversationSplitView() {
               <button
                 onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap',
                   'text-sm font-medium transition-colors',
                   isSelectionMode
                     ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
@@ -666,12 +667,12 @@ export function ConversationSplitView() {
                   {isSearching
                     ? 'No conversations found'
                     : filterDate
-                    ? 'No conversations on this date'
-                    : selectedFolderId === FOLDER_STARRED
-                    ? 'No starred conversations'
-                    : selectedFolderId !== FOLDER_ALL
-                    ? 'No conversations in this folder'
-                    : 'No conversations yet'}
+                      ? 'No conversations on this date'
+                      : selectedFolderId === FOLDER_STARRED
+                        ? 'No starred conversations'
+                        : selectedFolderId !== FOLDER_ALL
+                          ? 'No conversations in this folder'
+                          : 'No conversations yet'}
                 </p>
               </div>
             )}

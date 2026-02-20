@@ -7934,13 +7934,13 @@ class AppLocalizationsAr extends AppLocalizations {
   String get couldNotOpenUrl => 'تعذر فتح الرابط. يرجى المحاولة مرة أخرى.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'مهمة جديدة';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'عرض الكل';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'إضافة مهمة';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8009,4 +8009,156 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'تعذر تشغيل الصوت. قد يكون الملف تالفًا أو مفقودًا.';
+
+  @override
+  String get connectionGuide => 'دليل الاتصال';
+
+  @override
+  String get iveDoneThis => 'لقد فعلت هذا';
+
+  @override
+  String get pairNewDevice => 'إقران جهاز جديد';
+
+  @override
+  String get dontSeeYourDevice => 'لا ترى جهازك؟';
+
+  @override
+  String get reportAnIssue => 'الإبلاغ عن مشكلة';
+
+  @override
+  String get pairingTitleOmi => 'تشغيل Omi';
+
+  @override
+  String get pairingDescOmi => 'اضغط مع الاستمرار على الجهاز حتى يهتز لتشغيله.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'ضع Omi DevKit في وضع الإقران';
+
+  @override
+  String get pairingDescOmiDevkit => 'اضغط على الزر مرة واحدة للتشغيل. سيومض مؤشر LED باللون الأرجواني في وضع الإقران.';
+
+  @override
+  String get pairingTitleOmiGlass => 'تشغيل Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'اضغط مع الاستمرار على الزر الجانبي لمدة 3 ثوانٍ لتشغيل الجهاز.';
+
+  @override
+  String get pairingTitlePlaudNote => 'ضع Plaud Note في وضع الإقران';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'اضغط مع الاستمرار على الزر الجانبي لمدة ثانيتين. سيومض مؤشر LED الأحمر عندما يكون جاهزًا للإقران.';
+
+  @override
+  String get pairingTitleBee => 'ضع Bee في وضع الإقران';
+
+  @override
+  String get pairingDescBee => 'اضغط على الزر 5 مرات متتالية. سيبدأ الضوء بالوميض بالأزرق والأخضر.';
+
+  @override
+  String get pairingTitleLimitless => 'ضع Limitless في وضع الإقران';
+
+  @override
+  String get pairingDescLimitless =>
+      'عندما يكون أي ضوء مرئيًا، اضغط مرة واحدة ثم اضغط مع الاستمرار حتى يظهر الجهاز ضوءًا ورديًا، ثم حرر.';
+
+  @override
+  String get pairingTitleFriendPendant => 'ضع Friend Pendant في وضع الإقران';
+
+  @override
+  String get pairingDescFriendPendant => 'اضغط على الزر الموجود على القلادة لتشغيلها. ستدخل وضع الإقران تلقائيًا.';
+
+  @override
+  String get pairingTitleFieldy => 'ضع Fieldy في وضع الإقران';
+
+  @override
+  String get pairingDescFieldy => 'اضغط مع الاستمرار على الجهاز حتى يظهر الضوء لتشغيله.';
+
+  @override
+  String get pairingTitleAppleWatch => 'توصيل Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'قم بتثبيت وفتح تطبيق Omi على Apple Watch الخاص بك، ثم اضغط على اتصال في التطبيق.';
+
+  @override
+  String get pairingTitleNeoOne => 'ضع Neo One في وضع الإقران';
+
+  @override
+  String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
+
+  @override
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
+
+  @override
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'جارٍ رفع $current من $total';
+  }
+
+  @override
+  String get processedStatus => 'تمت المعالجة';
+
+  @override
+  String get corruptedStatus => 'تالف';
+
+  @override
+  String nPending(int count) {
+    return '$count قيد الانتظار';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count تمت معالجتها';
+  }
+
+  @override
+  String get synced => 'تمت المزامنة';
+
+  @override
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
+
+  @override
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
+
+  @override
+  String get pending => 'قيد الانتظار';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'ما الجديد في $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'إضافة إلى قائمة مهامك؟';
+
+  @override
+  String get failedToCreateShareLink => 'فشل إنشاء رابط المشاركة';
+
+  @override
+  String get deleteGoal => 'حذف الهدف';
+
+  @override
+  String get deviceUpToDate => 'جهازك محدّث';
+
+  @override
+  String get wifiConfiguration => 'إعدادات الواي فاي';
+
+  @override
+  String get wifiConfigurationSubtitle => 'أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.';
+
+  @override
+  String get networkNameSsid => 'اسم الشبكة (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'أدخل اسم شبكة الواي فاي';
+
+  @override
+  String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

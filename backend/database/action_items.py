@@ -332,6 +332,45 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     return True
 
 
+def batch_update_action_items(uid: str, items: list) -> None:
+    """
+    Batch update sort_order and/or indent_level for multiple action items.
+
+    Args:
+        uid: User ID
+        items: List of objects with id, sort_order (optional), indent_level (optional)
+    """
+    if not items:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    count = 0
+
+    for item in items:
+        update_data = {'updated_at': now}
+        if item.sort_order is not None:
+            update_data['sort_order'] = item.sort_order
+        if item.indent_level is not None:
+            update_data['indent_level'] = item.indent_level
+
+        if len(update_data) > 1:  # More than just updated_at
+            doc_ref = action_items_ref.document(item.id)
+            batch.update(doc_ref, update_data)
+            count += 1
+
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
+        batch.commit()
+
+
 def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = True) -> bool:
     """
     Mark an action item as completed or uncompleted.

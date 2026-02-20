@@ -295,7 +295,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
             children: [
               OmiSettingsTile(
                 title: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.setYourName : context.l10n.changeYourName,
-                subtitle: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
+                value: SharedPreferencesUtil().givenName.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().givenName,
                 icon: FontAwesomeIcons.user,
                 onTap: () async {
                   MixpanelManager().pageOpened('Profile Change Name');
@@ -317,7 +317,7 @@ class _DesktopProfilePageState extends State<DesktopProfilePage> with TickerProv
 
                   return OmiSettingsTile(
                     title: context.l10n.primaryLanguage,
-                    subtitle: languageName,
+                    value: languageName,
                     icon: FontAwesomeIcons.language,
                     onTap: () async {
                       MixpanelManager().pageOpened('Profile Change Language');
