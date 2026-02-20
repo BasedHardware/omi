@@ -161,9 +161,19 @@ extension FlutterError: Error {}
       userInfo: [AnyHashable: Any],
       completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      guard let actionItemId = userInfo["action_item_id"] as? String,
-            let reminderTitle = userInfo["description"] as? String else {
+      // Parse batch items from JSON payload
+      let items: [[String: Any]]
+      if let itemsJson = userInfo["items"] as? String,
+         let data = itemsJson.data(using: .utf8),
+         let parsed = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+          items = parsed
+      } else {
           completionHandler(.failed)
+          return
+      }
+
+      guard !items.isEmpty else {
+          completionHandler(.noData)
           return
       }
 
@@ -180,54 +190,72 @@ extension FlutterError: Error {}
           return
       }
 
-      // Dedup via UserDefaults
-      var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppDelegate.syncedItemsKey) ?? [])
-      guard !syncedIds.contains(actionItemId) else {
-          completionHandler(.noData)
-          return
-      }
-
       guard let calendar = syncEventStore.defaultCalendarForNewReminders() else {
           completionHandler(.failed)
           return
       }
 
-      // Parse due date
-      let dueDate: Date? = {
-          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
+      var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppDelegate.syncedItemsKey) ?? [])
+      var createdCount = 0
+      var exportedIds: [String] = []
+
+      for item in items {
+          guard let actionItemId = item["id"] as? String,
+                let reminderTitle = item["description"] as? String else {
+              continue
           }
-          return nil
-      }()
 
-      // Create reminder
-      let reminder = EKReminder(eventStore: syncEventStore)
-      reminder.title = reminderTitle
-      reminder.notes = "From Omi"
-      reminder.calendar = calendar
+          // Skip already synced
+          if syncedIds.contains(actionItemId) {
+              continue
+          }
 
-      if let due = dueDate {
-          reminder.dueDateComponents = Calendar.current.dateComponents(
-              [.year, .month, .day, .hour, .minute], from: due
-          )
+          // Parse due date
+          let dueDate: Date? = {
+              if let dueDateStr = item["due_at"] as? String, !dueDateStr.isEmpty {
+                  return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
+              }
+              return nil
+          }()
+
+          // Create reminder
+          let reminder = EKReminder(eventStore: syncEventStore)
+          reminder.title = reminderTitle
+          reminder.notes = "From Omi"
+          reminder.calendar = calendar
+
+          if let due = dueDate {
+              reminder.dueDateComponents = Calendar.current.dateComponents(
+                  [.year, .month, .day, .hour, .minute], from: due
+              )
+          }
+
+          do {
+              try syncEventStore.save(reminder, commit: true)
+              syncedIds.insert(actionItemId)
+              exportedIds.append(actionItemId)
+              createdCount += 1
+          } catch {
+              // Continue with remaining items even if one fails
+              continue
+          }
       }
 
-      do {
-          try syncEventStore.save(reminder, commit: true)
-          syncedIds.insert(actionItemId)
-          // Keep only the most recent 100 entries to avoid unbounded growth
-          var syncedArray = Array(syncedIds)
-          if syncedArray.count > 100 {
-              syncedArray = Array(syncedArray.suffix(100))
-          }
-          UserDefaults.standard.set(syncedArray, forKey: AppDelegate.syncedItemsKey)
+      // Persist dedup set (keep most recent 100 entries)
+      var syncedArray = Array(syncedIds)
+      if syncedArray.count > 100 {
+          syncedArray = Array(syncedArray.suffix(100))
+      }
+      UserDefaults.standard.set(syncedArray, forKey: AppDelegate.syncedItemsKey)
+
+      // Notify Flutter of all exported items
+      if !exportedIds.isEmpty {
           DispatchQueue.main.async {
-              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+              self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["action_item_ids": exportedIds])
           }
-          completionHandler(.newData)
-      } catch {
-          completionHandler(.failed)
       }
+
+      completionHandler(createdCount > 0 ? .newData : .noData)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
