@@ -505,7 +505,7 @@ class ChatProvider: ObservableObject {
                 acpBridgeStarted = true
                 log("ChatProvider: ACP bridge started successfully")
                 // Pre-warm an ACP session in background so first query is faster
-                await acpBridge.warmupSession(cwd: workingDirectory, models: ["claude-opus-4-6", "claude-sonnet-4-5-20250929"])
+                await acpBridge.warmupSession(cwd: workingDirectory, models: ["claude-opus-4-6", "claude-sonnet-4-6"])
                 return true
             } catch {
                 logError("Failed to start ACP bridge", error: error)
