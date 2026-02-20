@@ -1229,7 +1229,7 @@ class ChatProvider: ObservableObject {
         await loadTasksIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
-        discoverClaudeConfig()
+        await discoverClaudeConfig()
 
         // Set working directory for Claude Agent SDK if workspace is configured
         if workingDirectory == nil, !aiChatWorkingDirectory.isEmpty {
@@ -1254,76 +1254,78 @@ class ChatProvider: ObservableObject {
 
     // MARK: - CLAUDE.md & Skills Discovery
 
-    /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
-    func discoverClaudeConfig() {
+    /// Results from background Claude config discovery
+    private struct ClaudeConfigResult: Sendable {
+        let claudeMdContent: String?
+        let claudeMdPath: String?
+        let skills: [(name: String, description: String, path: String)]
+        let projectClaudeMdContent: String?
+        let projectClaudeMdPath: String?
+        let projectSkills: [(name: String, description: String, path: String)]
+        let devModeContext: String?
+    }
+
+    /// Perform all file I/O for Claude config discovery off the main thread
+    private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let claudeDir = "\(home)/.claude"
+        let fm = FileManager.default
 
         // Discover global CLAUDE.md
         let mdPath = "\(claudeDir)/CLAUDE.md"
-        if FileManager.default.fileExists(atPath: mdPath),
+        var globalMdContent: String?
+        var globalMdPath: String?
+        if fm.fileExists(atPath: mdPath),
            let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
-            claudeMdContent = content
-            claudeMdPath = mdPath
-        } else {
-            claudeMdContent = nil
-            claudeMdPath = nil
+            globalMdContent = content
+            globalMdPath = mdPath
         }
 
         // Discover global skills
         var skills: [(name: String, description: String, path: String)] = []
         let skillsDir = "\(claudeDir)/skills"
-        if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
+        if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
             for dir in skillDirs.sorted() {
                 let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
-                if FileManager.default.fileExists(atPath: skillPath),
+                if fm.fileExists(atPath: skillPath),
                    let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
                     let desc = extractSkillDescription(from: content)
                     skills.append((name: dir, description: desc, path: skillPath))
                 }
             }
         }
-        discoveredSkills = skills
 
         // Discover project-level config from workspace directory
-        let workspace = aiChatWorkingDirectory
-        if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
-            // Project CLAUDE.md at <workspace>/CLAUDE.md
+        var projMdContent: String?
+        var projMdPath: String?
+        var projectSkills: [(name: String, description: String, path: String)] = []
+
+        if !workspace.isEmpty, fm.fileExists(atPath: workspace) {
             let projectMdPath = "\(workspace)/CLAUDE.md"
-            if FileManager.default.fileExists(atPath: projectMdPath),
+            if fm.fileExists(atPath: projectMdPath),
                let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
-                projectClaudeMdContent = content
-                projectClaudeMdPath = projectMdPath
-            } else {
-                projectClaudeMdContent = nil
-                projectClaudeMdPath = nil
+                projMdContent = content
+                projMdPath = projectMdPath
             }
 
-            // Project skills at <workspace>/.claude/skills/
-            var projectSkills: [(name: String, description: String, path: String)] = []
             let projectSkillsDir = "\(workspace)/.claude/skills"
-            if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
+            if let skillDirs = try? fm.contentsOfDirectory(atPath: projectSkillsDir) {
                 for dir in skillDirs.sorted() {
                     let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
-                    if FileManager.default.fileExists(atPath: skillPath),
+                    if fm.fileExists(atPath: skillPath),
                        let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
                         let desc = extractSkillDescription(from: content)
                         projectSkills.append((name: dir, description: desc, path: skillPath))
                     }
                 }
             }
-            projectDiscoveredSkills = projectSkills
-        } else {
-            projectClaudeMdContent = nil
-            projectClaudeMdPath = nil
-            projectDiscoveredSkills = []
         }
 
         // Load dev-mode skill content (full SKILL.md, not just description)
+        var devMode: String?
         let devModeSkillPath = "\(skillsDir)/dev-mode/SKILL.md"
-        if FileManager.default.fileExists(atPath: devModeSkillPath),
+        if fm.fileExists(atPath: devModeSkillPath),
            let content = try? String(contentsOfFile: devModeSkillPath, encoding: .utf8) {
-            // Strip YAML frontmatter, keep the markdown body
             var body = content
             if body.hasPrefix("---") {
                 let lines = body.components(separatedBy: "\n")
@@ -1331,11 +1333,10 @@ class ChatProvider: ObservableObject {
                     body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
                 }
             }
-            devModeContext = body
+            devMode = body
         } else {
-            // Also check project skills directory
             let projectDevModePath = "\(workspace)/.claude/skills/dev-mode/SKILL.md"
-            if !workspace.isEmpty, FileManager.default.fileExists(atPath: projectDevModePath),
+            if !workspace.isEmpty, fm.fileExists(atPath: projectDevModePath),
                let content = try? String(contentsOfFile: projectDevModePath, encoding: .utf8) {
                 var body = content
                 if body.hasPrefix("---") {
@@ -1344,17 +1345,42 @@ class ChatProvider: ObservableObject {
                         body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
                     }
                 }
-                devModeContext = body
-            } else {
-                devModeContext = nil
+                devMode = body
             }
         }
 
-        log("ChatProvider: discovered global CLAUDE.md=\(claudeMdContent != nil), global skills=\(skills.count), project CLAUDE.md=\(projectClaudeMdContent != nil), project skills=\(projectDiscoveredSkills.count), dev_mode_skill=\(devModeContext != nil)")
+        return ClaudeConfigResult(
+            claudeMdContent: globalMdContent,
+            claudeMdPath: globalMdPath,
+            skills: skills,
+            projectClaudeMdContent: projMdContent,
+            projectClaudeMdPath: projMdPath,
+            projectSkills: projectSkills,
+            devModeContext: devMode
+        )
+    }
+
+    /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
+    func discoverClaudeConfig() async {
+        let workspace = aiChatWorkingDirectory
+        let result = await Task.detached(priority: .utility) {
+            Self.loadClaudeConfigFromDisk(workspace: workspace)
+        }.value
+
+        // Assign results back on main actor
+        claudeMdContent = result.claudeMdContent
+        claudeMdPath = result.claudeMdPath
+        discoveredSkills = result.skills
+        projectClaudeMdContent = result.projectClaudeMdContent
+        projectClaudeMdPath = result.projectClaudeMdPath
+        projectDiscoveredSkills = result.projectSkills
+        devModeContext = result.devModeContext
+
+        log("ChatProvider: discovered global CLAUDE.md=\(claudeMdContent != nil), global skills=\(discoveredSkills.count), project CLAUDE.md=\(projectClaudeMdContent != nil), project skills=\(projectDiscoveredSkills.count), dev_mode_skill=\(devModeContext != nil)")
     }
 
     /// Extract description from YAML frontmatter in SKILL.md
-    private func extractSkillDescription(from content: String) -> String {
+    private static func extractSkillDescription(from content: String) -> String {
         guard content.hasPrefix("---") else {
             // No frontmatter — use first non-empty line as description
             let lines = content.components(separatedBy: "\n")

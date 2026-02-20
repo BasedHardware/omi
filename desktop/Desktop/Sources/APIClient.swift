@@ -2703,7 +2703,7 @@ struct ScoreResponse: Codable {
 // MARK: - App Models
 
 /// App summary for list views (lightweight)
-struct OmiApp: Codable, Identifiable {
+struct OmiApp: Codable, Identifiable, Sendable {
     let id: String
     let name: String
     let description: String
@@ -2865,13 +2865,13 @@ struct OmiAppDetails: Codable, Identifiable {
 }
 
 /// App category
-struct OmiAppCategory: Codable, Identifiable {
+struct OmiAppCategory: Codable, Identifiable, Sendable {
     let id: String
     let title: String
 }
 
 /// App capability definition
-struct OmiAppCapability: Codable, Identifiable {
+struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
     let description: String
@@ -2907,13 +2907,13 @@ struct OmiAppReview: Codable, Identifiable {
 // MARK: - V2 Apps Response Types
 
 /// Capability info in v2/apps response
-struct OmiCapabilityInfo: Codable {
+struct OmiCapabilityInfo: Codable, Sendable {
     let id: String
     let title: String
 }
 
 /// Pagination metadata in v2/apps response
-struct OmiPaginationMeta: Codable {
+struct OmiPaginationMeta: Codable, Sendable {
     let total: Int
     let count: Int
     let offset: Int
@@ -2921,14 +2921,14 @@ struct OmiPaginationMeta: Codable {
 }
 
 /// A single group in the v2/apps response
-struct OmiAppGroup: Codable {
+struct OmiAppGroup: Codable, Sendable {
     let capability: OmiCapabilityInfo
     let data: [OmiApp]
     let pagination: OmiPaginationMeta
 }
 
 /// Metadata in v2/apps response
-struct OmiAppsV2Meta: Codable {
+struct OmiAppsV2Meta: Codable, Sendable {
     let capabilities: [OmiCapabilityInfo]
     let groupCount: Int
     let limit: Int
@@ -2936,7 +2936,7 @@ struct OmiAppsV2Meta: Codable {
 }
 
 /// Full v2/apps grouped response
-struct OmiAppsV2Response: Codable {
+struct OmiAppsV2Response: Codable, Sendable {
     let groups: [OmiAppGroup]
     let meta: OmiAppsV2Meta
 }

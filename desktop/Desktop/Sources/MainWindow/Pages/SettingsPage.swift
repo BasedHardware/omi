@@ -1569,7 +1569,7 @@ struct SettingsContentView: View {
                                 refreshAIChatConfig()
                                 // Update ChatProvider
                                 chatProvider?.aiChatWorkingDirectory = url.path
-                                chatProvider?.discoverClaudeConfig()
+                                Task { await chatProvider?.discoverClaudeConfig() }
                                 if chatProvider?.workingDirectory == nil {
                                     chatProvider?.workingDirectory = url.path
                                 }
@@ -1583,7 +1583,7 @@ struct SettingsContentView: View {
                                 aiChatWorkingDirectory = ""
                                 refreshAIChatConfig()
                                 chatProvider?.aiChatWorkingDirectory = ""
-                                chatProvider?.discoverClaudeConfig()
+                                Task { await chatProvider?.discoverClaudeConfig() }
                                 chatProvider?.workingDirectory = nil
                             }
                             .buttonStyle(.bordered)
