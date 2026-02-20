@@ -1572,6 +1572,8 @@ class AppState: ObservableObject {
     /// Refresh conversations silently (for auto-refresh timer and app-activate).
     /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
     func refreshConversations() async {
+        // Skip if user is signed out (tokens are cleared)
+        guard AuthState.shared.isSignedIn else { return }
         // Skip if currently doing a full load
         guard !isLoadingConversations else { return }
 

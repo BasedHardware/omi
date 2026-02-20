@@ -992,6 +992,11 @@ class AuthService {
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
         clearTokens()
 
+        // Stop background services that make API calls before clearing caches
+        Task {
+            await AgentSyncService.shared.stop()
+        }
+
         // Close database and invalidate all storage caches so the next sign-in
         // opens a fresh per-user database.
         // Capture the current configureGeneration so closeIfStale() can detect if

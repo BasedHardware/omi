@@ -216,6 +216,8 @@ class MemoriesViewModel: ObservableObject {
 
     /// Refresh memories if already loaded (for auto-refresh)
     private func refreshMemoriesIfNeeded() async {
+        // Skip if user is signed out (tokens are cleared)
+        guard AuthState.shared.isSignedIn else { return }
         // Skip if page is not visible
         guard isActive else { return }
 

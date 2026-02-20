@@ -1452,6 +1452,8 @@ class ChatProvider: ObservableObject {
     /// Poll for new messages from other platforms (e.g. mobile).
     /// Merges new messages into the existing array without disrupting the UI.
     private func pollForNewMessages() async {
+        // Skip if user is signed out (tokens are cleared)
+        guard AuthState.shared.isSignedIn else { return }
         // Skip if we're in the middle of sending, loading, or streaming
         guard !isSending, !isLoading, !isLoadingSessions else { return }
         // Skip if messages haven't been loaded yet (initial load not done)
