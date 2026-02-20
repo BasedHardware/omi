@@ -293,7 +293,7 @@ class ChatProvider: ObservableObject {
 
     /// Override the Claude model for this provider's queries.
     /// When set, the bridge uses this model instead of the default (Opus).
-    /// e.g. "claude-sonnet-4-5-20250929" for faster floating bar responses.
+    /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
     var modelOverride: String?
 
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
@@ -1568,7 +1568,7 @@ class ChatProvider: ObservableObject {
     /// Persists both user and AI messages to backend
     /// - Parameters:
     ///   - text: The message text
-    ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-5-20250929" for floating bar)
+    ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
     func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }

@@ -109,7 +109,7 @@ class ShortcutSettings: ObservableObject {
 
     /// Available models for Ask Omi.
     static let availableModels: [(id: String, label: String)] = [
-        ("claude-sonnet-4-5-20250929", "Sonnet"),
+        ("claude-sonnet-4-6", "Sonnet"),
         ("claude-opus-4-6", "Opus"),
     ]
 
@@ -151,7 +151,7 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
-        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-sonnet-4-5-20250929"
+        self.selectedModel = UserDefaults.standard.string(forKey: "shortcut_selectedModel") ?? "claude-sonnet-4-6"
         if let saved = UserDefaults.standard.string(forKey: "shortcut_pttTranscriptionMode"),
            let mode = PTTTranscriptionMode(rawValue: saved) {
             self.pttTranscriptionMode = mode

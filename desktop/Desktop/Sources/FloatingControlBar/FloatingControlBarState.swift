@@ -49,11 +49,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var voiceFollowUpTranscript: String = ""
 
     // Model selection
-    @Published var selectedModel: String = "claude-sonnet-4-5-20250929"
+    @Published var selectedModel: String = "claude-sonnet-4-6"
 
     /// Available models for the floating bar picker
     static let availableModels: [(id: String, label: String)] = [
-        ("claude-sonnet-4-5-20250929", "Sonnet"),
+        ("claude-sonnet-4-6", "Sonnet"),
         ("claude-opus-4-6", "Opus"),
     ]
 }
