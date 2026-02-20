@@ -459,9 +459,11 @@ function buildMcpServers(mode: string): McpServerConfig[] {
 
 // --- Session pre-warming ---
 
+const DEFAULT_MODEL = "claude-opus-4-6";
+
 async function preWarmSession(cwd?: string, model?: string): Promise<void> {
   const warmCwd = cwd || process.env.HOME || "/";
-  const warmModel = model || "";
+  const warmModel = model || DEFAULT_MODEL;
 
   try {
     await initializeAcp();
@@ -471,19 +473,25 @@ async function preWarmSession(cwd?: string, model?: string): Promise<void> {
       const sessionParams: Record<string, unknown> = {
         cwd: warmCwd,
         mcpServers: buildMcpServers("act"),
+        model: warmModel,
       };
-      if (warmModel) {
-        sessionParams.model = warmModel;
+
+      // Retry once after a short delay if session/new fails
+      // (ACP subprocess may not be fully ready immediately after initialize)
+      let result: { sessionId: string };
+      try {
+        result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+      } catch (firstErr) {
+        logErr(`Pre-warm session/new failed, retrying in 2s: ${firstErr}`);
+        await new Promise((r) => setTimeout(r, 2000));
+        result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
       }
 
-      const result = (await acpRequest("session/new", sessionParams)) as {
-        sessionId: string;
-      };
       sessionId = result.sessionId;
       sessionModel = warmModel;
       sessionCwd = warmCwd;
       logErr(
-        `Pre-warmed session: ${sessionId} (cwd=${warmCwd}, model=${warmModel || "default"})`
+        `Pre-warmed session: ${sessionId} (cwd=${warmCwd}, model=${warmModel})`
       );
     }
   } catch (err) {
@@ -523,7 +531,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     await initializeAcp();
 
     // If model changed since last session, force new session
-    const requestedModel = msg.model || "";
+    const requestedModel = msg.model || DEFAULT_MODEL;
     if (sessionId && requestedModel !== sessionModel) {
       logErr(`Model changed (${sessionModel} -> ${requestedModel}), creating new session`);
       sessionId = "";
