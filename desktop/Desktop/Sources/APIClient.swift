@@ -1536,7 +1536,8 @@ extension APIClient {
         priority: String? = nil,
         metadata: [String: Any]? = nil,
         goalId: String? = nil,
-        relevanceScore: Int? = nil
+        relevanceScore: Int? = nil,
+        recurrenceRule: String? = nil
     ) async throws -> TaskActionItem {
         struct UpdateRequest: Encodable {
             let completed: Bool?
@@ -1546,12 +1547,14 @@ extension APIClient {
             let metadata: String?
             let goalId: String?
             let relevanceScore: Int?
+            let recurrenceRule: String?
 
             enum CodingKeys: String, CodingKey {
                 case completed, description, priority, metadata
                 case dueAt = "due_at"
                 case goalId = "goal_id"
                 case relevanceScore = "relevance_score"
+                case recurrenceRule = "recurrence_rule"
             }
         }
 
@@ -1610,7 +1613,9 @@ extension APIClient {
         priority: String? = nil,
         category: String? = nil,
         metadata: [String: Any]? = nil,
-        relevanceScore: Int? = nil
+        relevanceScore: Int? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil
     ) async throws -> TaskActionItem {
         struct CreateRequest: Encodable {
             let description: String
@@ -1620,12 +1625,16 @@ extension APIClient {
             let category: String?
             let metadata: String?
             let relevanceScore: Int?
+            let recurrenceRule: String?
+            let recurrenceParentId: String?
 
             enum CodingKeys: String, CodingKey {
                 case description
                 case dueAt = "due_at"
                 case source, priority, category, metadata
                 case relevanceScore = "relevance_score"
+                case recurrenceRule = "recurrence_rule"
+                case recurrenceParentId = "recurrence_parent_id"
             }
         }
 
@@ -1647,7 +1656,9 @@ extension APIClient {
             priority: priority,
             category: category,
             metadata: metadataString,
-            relevanceScore: relevanceScore
+            relevanceScore: relevanceScore,
+            recurrenceRule: recurrenceRule,
+            recurrenceParentId: recurrenceParentId
         )
 
         return try await post("v1/action-items", body: request)
@@ -2095,6 +2106,10 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     let goalId: String?
     /// Whether this task was promoted from staged_tasks
     let fromStaged: Bool?
+    /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
+    let recurrenceRule: String?
+    /// ID of original parent task in recurrence chain
+    let recurrenceParentId: String?
 
     // Ordering (synced to backend)
     var sortOrder: Int?            // Sort position within category
@@ -2119,6 +2134,12 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     // Chat session for task-scoped AI chat (stored locally, not synced to backend)
     var chatSessionId: String?
 
+    /// Whether this task has an active recurrence rule
+    var isRecurring: Bool {
+        guard let rule = recurrenceRule, !rule.isEmpty else { return false }
+        return true
+    }
+
     /// Custom Equatable: compares only display-relevant fields.
     /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
     /// `updatedAt` (set to Date() when nil on sync), and fields lost through SQLite.
@@ -2133,7 +2154,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         lhs.category == rhs.category &&
         lhs.deleted == rhs.deleted &&
         lhs.deletedBy == rhs.deletedBy &&
-        lhs.goalId == rhs.goalId
+        lhs.goalId == rhs.goalId &&
+        lhs.recurrenceRule == rhs.recurrenceRule
     }
 
     enum CodingKeys: String, CodingKey {
@@ -2149,6 +2171,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         case keptTaskId = "kept_task_id"
         case goalId = "goal_id"
         case fromStaged = "from_staged"
+        case recurrenceRule = "recurrence_rule"
+        case recurrenceParentId = "recurrence_parent_id"
         case sortOrder = "sort_order"
         case indentLevel = "indent_level"
         case relevanceScore = "relevance_score"
@@ -2175,6 +2199,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         keptTaskId: String? = nil,
         goalId: String? = nil,
         fromStaged: Bool? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil,
         sortOrder: Int? = nil,
         indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
@@ -2208,6 +2234,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         self.keptTaskId = keptTaskId
         self.goalId = goalId
         self.fromStaged = fromStaged
+        self.recurrenceRule = recurrenceRule
+        self.recurrenceParentId = recurrenceParentId
         self.sortOrder = sortOrder
         self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
@@ -2244,6 +2272,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
         goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
         fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
+        recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule)
+        recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
         sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
         indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
         relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
