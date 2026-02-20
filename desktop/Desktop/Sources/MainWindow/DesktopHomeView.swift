@@ -98,6 +98,11 @@ struct DesktopHomeView: View {
                                         log("DesktopHomeView: Screen analysis started")
                                     } else {
                                         log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown")")
+                                        // Revert persistent setting so UI reflects actual state
+                                        DispatchQueue.main.async {
+                                            AssistantSettings.shared.screenAnalysisEnabled = false
+                                            UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
+                                        }
                                     }
                                 }
                             } else {
@@ -137,15 +142,28 @@ struct DesktopHomeView: View {
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
                         }
-                        // Periodic file re-scan (every 3 hours in production, 2 min for testing)
+                        // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
+                        // hasCompletedOnboarding must be set here (in a View) because @AppStorage
+                        // on ObservableObject caches internally and ignores UserDefaults.removeObject().
+                        // Stopping transcription here prevents FOREIGN KEY errors from an old
+                        // transcription session writing to a new user's database.
+                        .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+                            log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
+                            appState.hasCompletedOnboarding = false
+                            appState.stopTranscription()
+                        }
+                        // Periodic file re-scan (every 3 hours)
                         .task {
                             while !Task.isCancelled {
-                                try? await Task.sleep(for: .seconds(2 * 60))
+                                try? await Task.sleep(for: .seconds(3 * 60 * 60))
                                 guard !Task.isCancelled else { break }
                                 guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { continue }
                                 log("DesktopHomeView: Triggering background file rescan")
                                 await FileIndexerService.shared.backgroundRescan()
                             }
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
+                            showFileIndexingSheet = true
                         }
                         .dismissableSheet(isPresented: $showFileIndexingSheet) {
                             FileIndexingView(
@@ -154,7 +172,7 @@ struct DesktopHomeView: View {
                                     showFileIndexingSheet = false
                                 }
                             )
-                            .frame(width: 700, height: 700)
+                            .frame(width: 600, height: 650)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {

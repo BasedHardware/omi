@@ -242,10 +242,17 @@ actor RewindStorage {
         }
 
         // Load the extracted frame
-        guard let imageData = try? Data(contentsOf: outputPath),
-              let image = NSImage(data: imageData)
-        else {
-            throw RewindError.storageError("Failed to load extracted frame")
+        let fileExists = FileManager.default.fileExists(atPath: outputPath.path)
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: outputPath.path)[.size] as? Int) ?? 0
+        let imageData = try? Data(contentsOf: outputPath)
+        let image = imageData.flatMap { NSImage(data: $0) }
+
+        guard let imageData, let image else {
+            let memoryMB = ProcessInfo.processInfo.physicalMemory > 0
+                ? Int(Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576)
+                : -1
+            let detail = "fileExists=\(fileExists), fileSize=\(fileSize), dataLoaded=\(imageData != nil), imageDecoded=\(image != nil), systemMemoryMB=\(memoryMB), videoPath=\(videoPath), frameOffset=\(frameOffset), timeOffset=\(timeOffset)"
+            throw RewindError.storageError("Failed to load extracted frame, \(detail)")
         }
 
         // Log extracted frame dimensions to Sentry for debugging quality issues

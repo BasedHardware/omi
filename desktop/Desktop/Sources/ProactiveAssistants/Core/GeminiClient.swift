@@ -212,30 +212,37 @@ actor GeminiClient {
 
         for attempt in 0...maxRetries {
             do {
-                let base64Data = imageData.base64EncodedString()
+                // Wrap base64 encoding + JSON serialization in autoreleasepool.
+                // These create bridged Obj-C objects (NSString, NSData) that accumulate
+                // in Swift concurrency's cooperative thread pool without being drained.
+                let requestBody: Data = try autoreleasepool {
+                    let base64Data = imageData.base64EncodedString()
 
-                let request = GeminiRequest(
-                    contents: [
-                        GeminiRequest.Content(parts: [
-                            GeminiRequest.Part(text: prompt),
-                            GeminiRequest.Part(mimeType: "image/jpeg", data: base64Data)
-                        ])
-                    ],
-                    systemInstruction: GeminiRequest.SystemInstruction(
-                        parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
-                    ),
-                    generationConfig: GeminiRequest.GenerationConfig(
-                        responseMimeType: "application/json",
-                        responseSchema: responseSchema
+                    let request = GeminiRequest(
+                        contents: [
+                            GeminiRequest.Content(parts: [
+                                GeminiRequest.Part(text: prompt),
+                                GeminiRequest.Part(mimeType: "image/jpeg", data: base64Data)
+                            ])
+                        ],
+                        systemInstruction: GeminiRequest.SystemInstruction(
+                            parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
+                        ),
+                        generationConfig: GeminiRequest.GenerationConfig(
+                            responseMimeType: "application/json",
+                            responseSchema: responseSchema
+                        )
                     )
-                )
+
+                    return try JSONEncoder().encode(request)
+                }
 
                 let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
                 var urlRequest = URLRequest(url: url)
                 urlRequest.httpMethod = "POST"
                 urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 urlRequest.timeoutInterval = 300
-                urlRequest.httpBody = try JSONEncoder().encode(request)
+                urlRequest.httpBody = requestBody
 
                 let (data, _) = try await URLSession.shared.data(for: urlRequest)
 
@@ -1047,35 +1054,41 @@ extension GeminiClient {
 
         for attempt in 0...maxRetries {
             do {
-                let base64Data = imageData.base64EncodedString()
+                // Wrap base64 encoding + JSON serialization in autoreleasepool.
+                // See sendRequest() comment for rationale.
+                let requestBody: Data = try autoreleasepool {
+                    let base64Data = imageData.base64EncodedString()
 
-                let toolConfig = forceToolCall ? GeminiImageToolRequest.ToolConfig(
-                    functionCallingConfig: .init(mode: "ANY")
-                ) : nil
+                    let toolConfig = forceToolCall ? GeminiImageToolRequest.ToolConfig(
+                        functionCallingConfig: .init(mode: "ANY")
+                    ) : nil
 
-                let request = GeminiImageToolRequest(
-                    contents: [
-                        GeminiImageToolRequest.Content(
-                            role: "user",
-                            parts: [
-                                GeminiImageToolRequest.Part(text: prompt),
-                                GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
-                            ]
-                        )
-                    ],
-                    systemInstruction: GeminiImageToolRequest.SystemInstruction(
-                        parts: [.init(text: systemPrompt)]
-                    ),
-                    tools: tools,
-                    toolConfig: toolConfig
-                )
+                    let request = GeminiImageToolRequest(
+                        contents: [
+                            GeminiImageToolRequest.Content(
+                                role: "user",
+                                parts: [
+                                    GeminiImageToolRequest.Part(text: prompt),
+                                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
+                                ]
+                            )
+                        ],
+                        systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                            parts: [.init(text: systemPrompt)]
+                        ),
+                        tools: tools,
+                        toolConfig: toolConfig
+                    )
+
+                    return try JSONEncoder().encode(request)
+                }
 
                 let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
                 var urlRequest = URLRequest(url: url)
                 urlRequest.httpMethod = "POST"
                 urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 urlRequest.timeoutInterval = 300
-                urlRequest.httpBody = try JSONEncoder().encode(request)
+                urlRequest.httpBody = requestBody
 
                 let (data, _) = try await URLSession.shared.data(for: urlRequest)
 
@@ -1134,25 +1147,31 @@ extension GeminiClient {
 
         for attempt in 0...maxRetries {
             do {
-                let toolConfig = forceToolCall ? GeminiImageToolRequest.ToolConfig(
-                    functionCallingConfig: .init(mode: "ANY")
-                ) : nil
+                // Wrap JSON serialization in autoreleasepool (contents may include
+                // large base64 image data that creates bridged Obj-C intermediaries).
+                let requestBody: Data = try autoreleasepool {
+                    let toolConfig = forceToolCall ? GeminiImageToolRequest.ToolConfig(
+                        functionCallingConfig: .init(mode: "ANY")
+                    ) : nil
 
-                let request = GeminiImageToolRequest(
-                    contents: contents,
-                    systemInstruction: GeminiImageToolRequest.SystemInstruction(
-                        parts: [.init(text: systemPrompt)]
-                    ),
-                    tools: tools,
-                    toolConfig: toolConfig
-                )
+                    let request = GeminiImageToolRequest(
+                        contents: contents,
+                        systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                            parts: [.init(text: systemPrompt)]
+                        ),
+                        tools: tools,
+                        toolConfig: toolConfig
+                    )
+
+                    return try JSONEncoder().encode(request)
+                }
 
                 let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
                 var urlRequest = URLRequest(url: url)
                 urlRequest.httpMethod = "POST"
                 urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 urlRequest.timeoutInterval = 300
-                urlRequest.httpBody = try JSONEncoder().encode(request)
+                urlRequest.httpBody = requestBody
 
                 let (data, _) = try await URLSession.shared.data(for: urlRequest)
 
@@ -1212,61 +1231,60 @@ extension GeminiClient {
 
         for attempt in 0...maxRetries {
             do {
-                let base64Data = originalImageData.base64EncodedString()
+                // Wrap base64 encoding + JSON serialization in autoreleasepool.
+                // See sendRequest() comment for rationale.
+                let requestBody: Data = try autoreleasepool {
+                    let base64Data = originalImageData.base64EncodedString()
 
-                // Build the full conversation:
-                // 1. User message with image + text
-                // 2. Model's function call
-                // 3. Function response with results
-                let contents: [GeminiImageToolRequest.Content] = [
-                    // User turn: image + prompt
-                    GeminiImageToolRequest.Content(
-                        role: "user",
-                        parts: [
-                            GeminiImageToolRequest.Part(text: originalPrompt),
-                            GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
-                        ]
-                    ),
-                    // Model turn: function call
-                    GeminiImageToolRequest.Content(
-                        role: "model",
-                        parts: [
-                            GeminiImageToolRequest.Part(
-                                functionCall: .init(
+                    let contents: [GeminiImageToolRequest.Content] = [
+                        GeminiImageToolRequest.Content(
+                            role: "user",
+                            parts: [
+                                GeminiImageToolRequest.Part(text: originalPrompt),
+                                GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
+                            ]
+                        ),
+                        GeminiImageToolRequest.Content(
+                            role: "model",
+                            parts: [
+                                GeminiImageToolRequest.Part(
+                                    functionCall: .init(
+                                        name: toolCall.name,
+                                        args: toolCall.arguments.compactMapValues { "\($0)" }
+                                    ),
+                                    thoughtSignature: toolCall.thoughtSignature
+                                )
+                            ]
+                        ),
+                        GeminiImageToolRequest.Content(
+                            role: "user",
+                            parts: [
+                                GeminiImageToolRequest.Part(functionResponse: .init(
                                     name: toolCall.name,
-                                    args: toolCall.arguments.compactMapValues { "\($0)" }
-                                ),
-                                thoughtSignature: toolCall.thoughtSignature
-                            )
-                        ]
-                    ),
-                    // User turn: function response
-                    GeminiImageToolRequest.Content(
-                        role: "user",
-                        parts: [
-                            GeminiImageToolRequest.Part(functionResponse: .init(
-                                name: toolCall.name,
-                                response: .init(result: toolResult)
-                            ))
-                        ]
-                    )
-                ]
+                                    response: .init(result: toolResult)
+                                ))
+                            ]
+                        )
+                    ]
 
-                let request = GeminiImageToolRequest(
-                    contents: contents,
-                    systemInstruction: GeminiImageToolRequest.SystemInstruction(
-                        parts: [.init(text: systemPrompt)]
-                    ),
-                    tools: nil,   // No tools on continuation
-                    toolConfig: nil
-                )
+                    let request = GeminiImageToolRequest(
+                        contents: contents,
+                        systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                            parts: [.init(text: systemPrompt)]
+                        ),
+                        tools: nil,
+                        toolConfig: nil
+                    )
+
+                    return try JSONEncoder().encode(request)
+                }
 
                 let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
                 var urlRequest = URLRequest(url: url)
                 urlRequest.httpMethod = "POST"
                 urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 urlRequest.timeoutInterval = 300
-                urlRequest.httpBody = try JSONEncoder().encode(request)
+                urlRequest.httpBody = requestBody
 
                 let (data, _) = try await URLSession.shared.data(for: urlRequest)
 

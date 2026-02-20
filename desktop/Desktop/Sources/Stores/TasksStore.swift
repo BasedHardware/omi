@@ -133,9 +133,13 @@ class TasksStore: ObservableObject {
             )
 
             let (overdue, today, noDueDate) = try await (overdueResult, todayResult, noDueDateResult)
-            overdueTasks = overdue.sorted(by: Self.sortByDueDateThenSource)
-            todaysTasks = today.sorted(by: Self.sortByDueDateThenSource)
-            tasksWithoutDueDate = noDueDate.sorted(by: Self.sortByDueDateThenSource)
+            let sortedOverdue = overdue.sorted(by: Self.sortByDueDateThenSource)
+            let sortedToday = today.sorted(by: Self.sortByDueDateThenSource)
+            let sortedNoDueDate = noDueDate.sorted(by: Self.sortByDueDateThenSource)
+            // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
+            if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
+            if todaysTasks != sortedToday { todaysTasks = sortedToday }
+            if tasksWithoutDueDate != sortedNoDueDate { tasksWithoutDueDate = sortedNoDueDate }
             log("TasksStore: Dashboard loaded from SQLite - overdue: \(overdue.count), today: \(today.count), noDeadline: \(noDueDate.count)")
         } catch {
             logError("TasksStore: Failed to load dashboard tasks from SQLite", error: error)

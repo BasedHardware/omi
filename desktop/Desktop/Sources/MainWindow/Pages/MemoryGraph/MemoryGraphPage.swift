@@ -378,7 +378,7 @@ class MemoryGraphViewModel: ObservableObject {
         }
 
         // Camera needs to be far enough to see the outermost node
-        // Account for field of view (60°) — distance = maxDist / tan(fov/2) + padding
+        // Account for field of view (60deg) — distance = maxDist / tan(fov/2) + padding
         let fovRadians: Float = 60.0 * Float.pi / 180.0
         let minDistance = maxDist / tan(fovRadians / 2) * 1.3 // 30% padding
         let cameraZ = max(minDistance, 1200) // minimum distance for very small graphs

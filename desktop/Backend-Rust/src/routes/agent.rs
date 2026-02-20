@@ -437,48 +437,49 @@ async fn create_gce_vm(
 
     // Build startup script that starts the agent server
     // Uses stdbuf for line-buffered output, writes env to file so restarts work
-    let startup_script = format!(
-        r#"#!/bin/bash
+    let startup_script = r#"#!/bin/bash
 cd /home/matthewdi/omi-agent
 
-# Write per-VM env vars (unique to this VM, set at creation time)
-cat > .env-vm.sh << 'ENVEOF'
-export AUTH_TOKEN='{auth_token}'
-export DB_PATH='data/omi.db'
-ENVEOF
-
 # Pull shared env vars from GCS (API keys, URLs — updated centrally)
-curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/env-shared.sh || echo 'GCS env pull failed, using existing .env-shared.sh'
+curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/env-shared.sh || echo 'GCS env pull failed'
 
 # Pull latest agent.mjs from GCS
-curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed, using existing agent.mjs'
+curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed'
 
-chown matthewdi:matthewdi .env-vm.sh .env-shared.sh agent.mjs 2>/dev/null
+chown matthewdi:matthewdi .env-shared.sh agent.mjs 2>/dev/null
 
-# Kill any existing agent process and stop old systemd unit
-systemctl stop omi-agent 2>/dev/null
-pkill -x node 2>/dev/null || true
-sleep 1
-
-# Read env vars for systemd-run
+# Read shared env vars
 ANTHROPIC=$(grep ANTHROPIC_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
 GEMINI=$(grep GEMINI_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
 BACKEND=$(grep BACKEND_URL .env-shared.sh 2>/dev/null | cut -d\' -f2)
 
-# Start agent as matthewdi user via systemd (survives SSH disconnect, proper detachment)
+# Get AUTH_TOKEN from GCE instance metadata
+META_HEADERS="Metadata-Flavor: Google"
+AUTH=$(curl -sf -H "$META_HEADERS" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/auth-token" 2>/dev/null)
+[ -z "$AUTH" ] && AUTH=$(grep AUTH_TOKEN .env-vm.sh 2>/dev/null | head -1 | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
+
+if [ -z "$AUTH" ]; then
+  echo "ERROR: No AUTH_TOKEN found in metadata or env files"
+  exit 1
+fi
+
+# Kill any existing agent
+systemctl stop omi-agent 2>/dev/null
+pkill -x node 2>/dev/null || true
+sleep 1
+
+# Start agent as matthewdi via systemd (proper process management)
 systemd-run --uid=matthewdi --gid=matthewdi \
   --setenv=HOME=/home/matthewdi \
-  --setenv=AUTH_TOKEN='{auth_token}' \
+  --setenv=AUTH_TOKEN="$AUTH" \
   --setenv=DB_PATH=data/omi.db \
-  --setenv=ANTHROPIC_API_KEY=$ANTHROPIC \
-  --setenv=GEMINI_API_KEY=$GEMINI \
-  --setenv=BACKEND_URL=${{BACKEND:-https://api.omi.me}} \
+  --setenv=ANTHROPIC_API_KEY="$ANTHROPIC" \
+  --setenv=GEMINI_API_KEY="$GEMINI" \
+  --setenv=BACKEND_URL="${BACKEND:-https://api.omi.me}" \
   --working-directory=/home/matthewdi/omi-agent \
   --unit=omi-agent \
   stdbuf -oL node agent.mjs --serve
-"#,
-        auth_token = auth_token
-    );
+"#.to_string();
 
     // GCE instances.insert REST API
     let url = format!(
@@ -512,6 +513,9 @@ systemd-run --uid=matthewdi --gid=matthewdi \
             "items": [{
                 "key": "startup-script",
                 "value": startup_script
+            }, {
+                "key": "auth-token",
+                "value": auth_token
             }]
         }
     });

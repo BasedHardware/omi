@@ -1088,6 +1088,11 @@ struct SidebarView: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             // Request both traditional TCC and ScreenCaptureKit permissions
@@ -1119,8 +1124,10 @@ struct SidebarView: View {
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
-                        // Revert on failure
+                        // Revert on failure including persistent setting
                         isMonitoring = false
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -1134,7 +1141,13 @@ struct SidebarView: View {
     }
 
     private func syncMonitoringState() {
-        isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+        isMonitoring = pluginState
+        // Keep persistent setting in sync when monitoring stops due to errors
+        if !pluginState && screenAnalysisEnabled {
+            screenAnalysisEnabled = false
+            AssistantSettings.shared.screenAnalysisEnabled = false
+        }
     }
 
     // MARK: - Page Loading Helpers

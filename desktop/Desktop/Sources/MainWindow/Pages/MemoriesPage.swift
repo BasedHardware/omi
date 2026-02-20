@@ -667,9 +667,13 @@ class MemoriesViewModel: ObservableObject {
             await performActualDelete(existingPending)
         }
 
-        // Remove from UI immediately (optimistic)
+        // Remove from UI immediately (optimistic) — must also remove from filter source arrays
+        // so recomputeFilteredMemories() doesn't resurrect the deleted memory
         withAnimation(.easeInOut(duration: 0.2)) {
             memories.removeAll { $0.id == memory.id }
+            filteredFromDatabase.removeAll { $0.id == memory.id }
+            allFilteredResults.removeAll { $0.id == memory.id }
+            searchResults.removeAll { $0.id == memory.id }
             pendingDeleteMemory = memory
             undoTimeRemaining = 4
         }
@@ -701,10 +705,20 @@ class MemoriesViewModel: ObservableObject {
         deleteTask?.cancel()
         deleteTask = nil
 
-        // Restore the memory to the list
+        // Restore the memory to all relevant lists (including filter sources)
         withAnimation(.easeInOut(duration: 0.2)) {
             memories.append(memory)
             memories.sort { $0.createdAt > $1.createdAt }
+            if isInFilteredMode {
+                filteredFromDatabase.append(memory)
+                filteredFromDatabase.sort { $0.createdAt > $1.createdAt }
+                allFilteredResults.append(memory)
+                allFilteredResults.sort { $0.createdAt > $1.createdAt }
+            }
+            if !searchText.isEmpty {
+                searchResults.append(memory)
+                searchResults.sort { $0.createdAt > $1.createdAt }
+            }
             pendingDeleteMemory = nil
             undoTimeRemaining = 0
         }

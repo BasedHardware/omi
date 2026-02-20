@@ -811,15 +811,16 @@ class AppState: ObservableObject {
     func checkAccessibilityPermission() {
         let tccGranted = AXIsProcessTrusted()
         let previouslyGranted = hasAccessibilityPermission
-        hasAccessibilityPermission = tccGranted
-
-        // Log transitions
-        if tccGranted != previouslyGranted {
-            let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
-            log("ACCESSIBILITY_CHECK: TCC state changed \(previouslyGranted) → \(tccGranted) (bundleId=\(bundleId))")
-        }
 
         if tccGranted {
+            hasAccessibilityPermission = true
+
+            // Log transitions
+            if !previouslyGranted {
+                let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+                log("ACCESSIBILITY_CHECK: Permission granted (bundleId=\(bundleId))")
+            }
+
             // TCC says yes — verify with an actual AX call
             let broken = !testAccessibilityPermission()
             if broken != isAccessibilityBroken {
@@ -831,8 +832,28 @@ class AppState: ObservableObject {
                 }
             }
         } else {
-            // TCC not granted, clear broken flag
-            isAccessibilityBroken = false
+            // AXIsProcessTrusted() says not granted — but on macOS 26 this may be stale.
+            // Probe via event tap which checks the live TCC database.
+            if probeAccessibilityViaEventTap() {
+                log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                let axWorks = testAccessibilityPermission()
+                hasAccessibilityPermission = true
+                if !axWorks {
+                    isAccessibilityBroken = true
+                    log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
+                } else {
+                    isAccessibilityBroken = false
+                    log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
+                }
+            } else {
+                // Event tap also failed — permission genuinely not granted
+                if previouslyGranted {
+                    let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+                    log("ACCESSIBILITY_CHECK: Permission revoked (bundleId=\(bundleId))")
+                }
+                hasAccessibilityPermission = false
+                isAccessibilityBroken = false
+            }
         }
     }
 
@@ -865,9 +886,28 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Probe accessibility permission by attempting to create a CGEvent tap.
+    /// Unlike AXIsProcessTrusted(), event tap creation checks the live TCC database,
+    /// bypassing the per-process cache that can go stale on macOS 26 (Tahoe).
+    private func probeAccessibilityViaEventTap() -> Bool {
+        let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .tailAppendEventTap,
+            options: .listenOnly,
+            eventsOfInterest: CGEventMask(1 << CGEventType.mouseMoved.rawValue),
+            callback: { _, _, event, _ in Unmanaged.passRetained(event) },
+            userInfo: nil
+        )
+        if let tap = tap {
+            CFMachPortInvalidate(tap)
+            return true
+        }
+        return false
+    }
+
     /// Check if accessibility permission was explicitly denied
     func isAccessibilityPermissionDenied() -> Bool {
-        return hasCompletedOnboarding && (!AXIsProcessTrusted() || isAccessibilityBroken)
+        return hasCompletedOnboarding && (!hasAccessibilityPermission || isAccessibilityBroken)
     }
 
     /// Trigger accessibility permission prompt
@@ -879,7 +919,12 @@ class AppState: ObservableObject {
         // This will prompt the user if not already trusted
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
-        hasAccessibilityPermission = trusted
+        if trusted {
+            hasAccessibilityPermission = true
+        }
+        // Don't set hasAccessibilityPermission = false here — the API may return
+        // stale data on macOS 26. Let checkAccessibilityPermission() handle detection
+        // via the event tap probe on the next poll cycle.
         log("ACCESSIBILITY_TRIGGER: AXIsProcessTrustedWithOptions returned \(trusted)")
 
         // On macOS Sequoia+, AXIsProcessTrustedWithOptions no longer shows a visible dialog,
@@ -2519,4 +2564,6 @@ extension Notification.Name {
     static let navigateToTasks = Notification.Name("navigateToTasks")
     /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
     static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
+    /// Posted from Settings to trigger the file indexing sheet
+    static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
 }

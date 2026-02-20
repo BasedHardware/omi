@@ -629,7 +629,8 @@ class TasksViewModel: ObservableObject {
     @Published var inlineCreateAfterTaskId: String?
     @Published var editingTaskId: String?
     var hoveredTaskId: String?
-    var isAnyTaskEditing = false
+    @Published var animateToggleTaskId: String?
+    @Published var isAnyTaskEditing = false
     var lastEnterPressTime: Date?
     var scrollProxy: ScrollViewProxy?
 
@@ -908,7 +909,7 @@ class TasksViewModel: ObservableObject {
 
         // Cmd+D: delete task
         if modifiers == .command && keyCode == 2 {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId,
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId,
                   let task = findTask(taskId) else { return false }
             let nav = navigationOrder
             if let idx = nav.firstIndex(where: { $0.id == taskId }) {
@@ -923,14 +924,26 @@ class TasksViewModel: ObservableObject {
             return true
         }
 
+        // Space: toggle task complete (triggers animation in TaskRow)
+        if keyCode == 49 && modifiers.isEmpty {
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId,
+                  findTask(taskId) != nil else { return false }
+            animateToggleTaskId = taskId
+            // Reset so pressing space on the same task again triggers onChange
+            DispatchQueue.main.async { [weak self] in
+                self?.animateToggleTaskId = nil
+            }
+            return true
+        }
+
         // Tab / Shift+Tab: indent
         if keyCode == 48 && modifiers.isEmpty {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId else { return false }
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId else { return false }
             incrementIndent(for: taskId)
             return true
         }
         if keyCode == 48 && modifiers == .shift {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId else { return false }
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId else { return false }
             decrementIndent(for: taskId)
             return true
         }
@@ -1933,8 +1946,9 @@ struct TasksPage: View {
     @State private var showSaveFilterAlert = false
     @State private var saveFilterName = ""
 
-    /// Width added to the window for the chat panel
-    private static let chatExpandWidth: CGFloat = 400
+    // Chat panel resize state
+    @State private var isDraggingDivider = false
+    @State private var dragStartWidth: Double = 0
 
     init(viewModel: TasksViewModel, chatProvider: ChatProvider? = nil) {
         self.viewModel = viewModel
@@ -1944,7 +1958,7 @@ struct TasksPage: View {
     }
 
     var body: some View {
-        let isChatVisible = showChatPanel && chatProvider != nil
+        let isChatVisible = showChatPanel
 
         HStack(spacing: 0) {
             // Left panel: Tasks content (always full width)
@@ -1952,20 +1966,53 @@ struct TasksPage: View {
                 .frame(maxWidth: .infinity)
 
             if isChatVisible {
-                // Divider line
+                // Draggable divider
                 Rectangle()
-                    .fill(OmiColors.border)
+                    .fill(isDraggingDivider ? OmiColors.textSecondary : OmiColors.border)
                     .frame(width: 1)
+                    .contentShape(Rectangle().inset(by: -4))
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.resizeLeftRight.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                    .gesture(
+                        DragGesture(coordinateSpace: .global)
+                            .onChanged { value in
+                                isDraggingDivider = true
+                                if dragStartWidth == 0 {
+                                    dragStartWidth = chatPanelWidth
+                                }
+                                let delta = value.startLocation.x - value.location.x
+                                chatPanelWidth = min(600, max(300, dragStartWidth + delta))
+                            }
+                            .onEnded { _ in
+                                isDraggingDivider = false
+                                dragStartWidth = 0
+                            }
+                    )
 
                 // Right panel: Task chat (slides in from right)
-                TaskChatPanel(
-                    chatProvider: chatProvider!,
-                    coordinator: chatCoordinator,
-                    task: activeTask,
-                    onClose: {
-                        closeChatPanel()
+                Group {
+                    if let taskState = chatCoordinator.activeTaskState {
+                        TaskChatPanel(
+                            taskState: taskState,
+                            coordinator: chatCoordinator,
+                            task: activeTask,
+                            onClose: {
+                                closeChatPanel()
+                            }
+                        )
+                    } else {
+                        // No task selected — show empty panel with close button
+                        TaskChatPanelPlaceholder(
+                            coordinator: chatCoordinator,
+                            onClose: { closeChatPanel() }
+                        )
                     }
-                )
+                }
                 .frame(width: chatPanelWidth)
                 .transition(.move(edge: .trailing))
             }
@@ -1999,7 +2046,7 @@ struct TasksPage: View {
             if showChatPanel {
                 adjustWindowWidth(expand: false)
                 showChatPanel = false
-                Task { await chatCoordinator.closeChat() }
+                chatCoordinator.closeChat()
             }
         }
     }
@@ -2028,7 +2075,7 @@ struct TasksPage: View {
 
     /// Close the chat panel and shrink window
     private func closeChatPanel() {
-        Task { await chatCoordinator.closeChat() }
+        chatCoordinator.closeChat()
         // Animate panel out and shrink window together
         withAnimation(.easeInOut(duration: 0.25)) {
             showChatPanel = false
@@ -2115,6 +2162,8 @@ struct TasksPage: View {
                         hasSelection: viewModel.keyboardSelectedTaskId != nil
                     )
                     .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
                 }
                 // Undo toast
                 if viewModel.showUndoToast, let lastAction = viewModel.undoStack.last {
@@ -2127,10 +2176,8 @@ struct TasksPage: View {
                 }
             }
             .padding(.bottom, 16)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
         }
-        .animation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
-        .animation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
-        .animation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
         .onAppear {
             installKeyboardMonitor()
         }
@@ -2854,6 +2901,7 @@ struct TasksPage: View {
                                         viewModel.isAnyTaskEditing = editing
                                         if !editing { viewModel.editingTaskId = nil }
                                     },
+                                    animateToggleTaskId: viewModel.animateToggleTaskId,
                                     isInlineCreating: viewModel.isInlineCreating,
                                     inlineCreateAfterTaskId: viewModel.inlineCreateAfterTaskId,
                                     inlineCreateText: $inlineCreateText,
@@ -2891,7 +2939,8 @@ struct TasksPage: View {
                                     onEditingChanged: { editing in
                                         viewModel.isAnyTaskEditing = editing
                                         if !editing { viewModel.editingTaskId = nil }
-                                    }
+                                    },
+                                    animateToggleTaskId: viewModel.animateToggleTaskId
                                 )
                                 .id(task.id)
 
@@ -3006,6 +3055,9 @@ struct TaskCategorySection: View {
     var editingTaskId: String?
     var onEditingChanged: ((Bool) -> Void)?
 
+    // Space-key animated toggle
+    var animateToggleTaskId: String?
+
     // Inline creation support
     var isInlineCreating: Bool = false
     var inlineCreateAfterTaskId: String?
@@ -3069,28 +3121,20 @@ struct TaskCategorySection: View {
                                 activeChatTaskId: activeChatTaskId,
                                 chatCoordinator: chatCoordinator,
                                 editingTaskId: editingTaskId,
-                                onEditingChanged: onEditingChanged
+                                onEditingChanged: onEditingChanged,
+                                animateToggleTaskId: animateToggleTaskId
                             )
                             .id(task.id)
-                            .draggable(task.id) {
-                                // Drag preview
-                                TaskDragPreview(task: task)
-                            }
-                            .dropDestination(for: String.self) { droppedIds, _ in
-                                guard let droppedId = droppedIds.first,
-                                      orderedTasks.contains(where: { $0.id == droppedId }),
-                                      let targetIndex = orderedTasks.firstIndex(where: { $0.id == task.id }) else {
-                                    return false
-                                }
-                                // Move the task
-                                if let droppedTask = orderedTasks.first(where: { $0.id == droppedId }) {
+                            .modifier(TaskDragDropModifier(
+                                isEnabled: !isMultiSelectMode,
+                                taskId: task.id,
+                                taskDescription: task.description,
+                                findTask: { id in orderedTasks.first(where: { $0.id == id }) },
+                                findTargetIndex: { orderedTasks.firstIndex(where: { $0.id == task.id }) },
+                                validateDrop: { id in orderedTasks.contains(where: { $0.id == id }) },
+                                onMoveTask: { droppedTask, targetIndex in
                                     onMoveTask?(droppedTask, targetIndex, category)
                                 }
-                                return true
-                            }
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .move(edge: .trailing))
                             ))
 
                             // Inline creation row after this task
@@ -3112,10 +3156,48 @@ struct TaskCategorySection: View {
     }
 }
 
-// MARK: - Task Drag Preview
+// MARK: - Conditional Drag & Drop (reduces gesture graph depth when disabled)
 
-struct TaskDragPreview: View {
-    let task: TaskActionItem
+/// Conditionally applies .draggable + .dropDestination to avoid deep ExclusiveGesture nesting.
+/// When disabled (e.g. multi-select mode), the view has fewer gesture modifiers, preventing hangs.
+/// Uses closures instead of the full orderedTasks array to avoid gesture graph rebuilds
+/// when the array identity changes during recomputes (every 30s auto-refresh).
+struct TaskDragDropModifier: ViewModifier {
+    let isEnabled: Bool
+    let taskId: String
+    let taskDescription: String
+    var findTask: ((String) -> TaskActionItem?)?
+    var findTargetIndex: (() -> Int?)?
+    var validateDrop: ((String) -> Bool)?
+    var onMoveTask: ((TaskActionItem, Int) -> Void)?
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .draggable(taskId) {
+                    TaskDragPreviewSimple(taskId: taskId, description: taskDescription)
+                }
+                .dropDestination(for: String.self) { droppedIds, _ in
+                    guard let droppedId = droppedIds.first,
+                          validateDrop?(droppedId) == true,
+                          let targetIndex = findTargetIndex?() else {
+                        return false
+                    }
+                    if let droppedTask = findTask?(droppedId) {
+                        onMoveTask?(droppedTask, targetIndex)
+                    }
+                    return true
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// Lightweight drag preview that doesn't hold a TaskActionItem reference
+struct TaskDragPreviewSimple: View {
+    let taskId: String
+    let description: String
 
     var body: some View {
         HStack(spacing: 8) {
@@ -3123,7 +3205,7 @@ struct TaskDragPreview: View {
                 .scaledFont(size: 16)
                 .foregroundColor(OmiColors.textTertiary)
 
-            Text(task.description)
+            Text(description)
                 .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(1)
@@ -3212,6 +3294,9 @@ struct TaskRow: View {
     var editingTaskId: String?
     var onEditingChanged: ((Bool) -> Void)?
 
+    // Space-key animated toggle (set by parent when space is pressed)
+    var animateToggleTaskId: String?
+
     @State private var isHovering = false
     @State private var isCompletingAnimation = false
     @State private var checkmarkScale: CGFloat = 1.0
@@ -3263,14 +3348,13 @@ struct TaskRow: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
             )
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    onSelect?(task)
-                    if isChatActive, !isActiveChatTask {
-                        onOpenChat?(task)
-                    }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onSelect?(task)
+                if isChatActive, !isActiveChatTask {
+                    onOpenChat?(task)
                 }
-            )
+            }
             .sheet(isPresented: $showTaskDetail) {
                 TaskDetailView(
                     task: task,
@@ -3727,6 +3811,11 @@ struct TaskRow: View {
             rowOffset = 0
             isCompletingAnimation = false
             checkmarkScale = 1.0
+        }
+        .onChange(of: animateToggleTaskId) { _, newValue in
+            if newValue == task.id {
+                handleToggle()
+            }
         }
         .onHover { hovering in
             isHovering = hovering
@@ -4358,19 +4447,20 @@ struct KeyboardHintBar: View {
             } else if isAnyTaskEditing {
                 keyboardHint("esc", label: "Save & exit")
             } else if hasSelection {
-                keyboardHint("\u{2191}\u{2193}", label: "Navigate")
+                keyboardHint("\u{2191} \u{2193}", label: "Navigate")
                 keyboardHint("\u{21A9}", label: "New below")
-                keyboardHint("\u{21A9}\u{21A9}", label: "Edit")
+                keyboardHint("\u{21A9} \u{21A9}", label: "Edit")
+                keyboardHint("\u{2423}", label: "Done")
                 keyboardHint("esc", label: "Deselect")
                 keyboardHint("\u{2318}D", label: "Delete")
                 keyboardHint("\u{21E5}", label: "Indent")
-                keyboardHint("\u{21E7}\u{21E5}", label: "Outdent")
+                keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
             } else {
-                keyboardHint("\u{2191}\u{2193}", label: "Navigate")
+                keyboardHint("\u{2191} \u{2193}", label: "Navigate")
                 keyboardHint("\u{2318}N", label: "New")
                 keyboardHint("\u{2318}D", label: "Delete")
                 keyboardHint("\u{21E5}", label: "Indent")
-                keyboardHint("\u{21E7}\u{21E5}", label: "Outdent")
+                keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
             }
         }
         .padding(.horizontal, 16)
@@ -4383,17 +4473,17 @@ struct KeyboardHintBar: View {
     }
 
     private func keyboardHint(_ key: String, label: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Text(key)
-                .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                .scaledFont(size: 11, weight: .medium, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
                 .background(OmiColors.backgroundTertiary)
                 .cornerRadius(4)
 
             Text(label)
-                .scaledFont(size: 10)
+                .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }

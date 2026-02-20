@@ -5486,6 +5486,9 @@ impl FirestoreService {
         );
 
         let mut fields = json!({
+            // CRITICAL: id field required - Python ChatSession model requires it
+            // and chat.py accesses chat_session['id'] directly
+            "id": {"stringValue": &session_id},
             "title": {"stringValue": title.unwrap_or("New Chat")},
             "created_at": {"timestampValue": now.to_rfc3339()},
             "updated_at": {"timestampValue": now.to_rfc3339()},
@@ -6343,6 +6346,9 @@ impl FirestoreService {
             vec![]
         };
 
+        // channel: None means stable (missing field or null in Firestore)
+        let channel = self.parse_string(fields, "channel");
+
         Ok(crate::routes::updates::ReleaseInfo {
             version: self.parse_string(fields, "version").unwrap_or_default(),
             build_number: self.parse_int(fields, "build_number").unwrap_or(0) as u32,
@@ -6352,6 +6358,7 @@ impl FirestoreService {
             changelog,
             is_live: self.parse_bool(fields, "is_live").unwrap_or(false),
             is_critical: self.parse_bool(fields, "is_critical").unwrap_or(false),
+            channel,
         })
     }
 
@@ -6374,6 +6381,12 @@ impl FirestoreService {
             .map(|s| json!({"stringValue": s}))
             .collect();
 
+        // Channel field: stringValue for non-stable, nullValue for stable
+        let channel_value = match &release.channel {
+            Some(ch) if !ch.is_empty() => json!({"stringValue": ch}),
+            _ => json!({"nullValue": null}),
+        };
+
         let doc = json!({
             "fields": {
                 "version": {"stringValue": release.version},
@@ -6383,7 +6396,8 @@ impl FirestoreService {
                 "published_at": {"stringValue": release.published_at},
                 "changelog": {"arrayValue": {"values": changelog_values}},
                 "is_live": {"booleanValue": release.is_live},
-                "is_critical": {"booleanValue": release.is_critical}
+                "is_critical": {"booleanValue": release.is_critical},
+                "channel": channel_value
             }
         });
 
@@ -6403,9 +6417,137 @@ impl FirestoreService {
         Ok(doc_id)
     }
 
+    /// Promote a desktop release to the next channel: staging → beta → stable
+    /// Returns (old_channel, new_channel) where empty string = stable
+    pub async fn promote_desktop_release(
+        &self,
+        doc_id: &str,
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch the current document
+        let url = format!(
+            "{}/desktop_releases/{}",
+            self.base_url(),
+            doc_id
+        );
+
+        let response = self
+            .build_request(reqwest::Method::GET, &url)
+            .await?
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Release not found: {}", error_text).into());
+        }
+
+        let doc: Value = response.json().await?;
+        let fields = doc.get("fields").ok_or("Missing fields in document")?;
+        let current_channel = self.parse_string(fields, "channel").unwrap_or_default();
+
+        // Determine next channel
+        let (old_channel, new_channel_value) = match current_channel.as_str() {
+            "staging" => ("staging".to_string(), json!({"stringValue": "beta"})),
+            "beta" => ("beta".to_string(), json!({"nullValue": null})),
+            "" => return Err("Release is already on stable channel, cannot promote further".into()),
+            other => return Err(format!("Unknown channel '{}', cannot promote", other).into()),
+        };
+
+        let new_channel = match new_channel_value.get("stringValue").and_then(|v| v.as_str()) {
+            Some(ch) => ch.to_string(),
+            None => String::new(), // stable
+        };
+
+        // PATCH only the channel field
+        let patch_url = format!(
+            "{}/desktop_releases/{}?updateMask.fieldPaths=channel",
+            self.base_url(),
+            doc_id
+        );
+
+        let patch_doc = json!({
+            "fields": {
+                "channel": new_channel_value
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::PATCH, &patch_url)
+            .await?
+            .json(&patch_doc)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Failed to update channel: {}", error_text).into());
+        }
+
+        tracing::info!("Promoted release {}: {} → {}", doc_id,
+            if old_channel.is_empty() { "stable" } else { &old_channel },
+            if new_channel.is_empty() { "stable" } else { &new_channel },
+        );
+
+        Ok((old_channel, new_channel))
+    }
+
     // =========================================================================
     // MESSAGES (Chat Persistence)
     // =========================================================================
+
+    /// Get the mobile app's main chat session ID for a user.
+    /// The mobile (Python) backend creates a chat_session with plugin_id=null for the main chat,
+    /// and filters all messages by chat_session_id. Desktop messages must include this ID
+    /// to be visible on mobile.
+    pub async fn get_main_chat_session_id(
+        &self,
+        uid: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+
+        let query = json!({
+            "structuredQuery": {
+                "from": [{"collectionId": CHAT_SESSIONS_SUBCOLLECTION}],
+                "where": {
+                    "fieldFilter": {
+                        "field": {"fieldPath": "plugin_id"},
+                        "op": "EQUAL",
+                        "value": {"nullValue": null}
+                    }
+                },
+                "limit": 1
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .await?
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            tracing::warn!("Failed to query main chat session: {}", error_text);
+            return Ok(None);
+        }
+
+        let results: Vec<Value> = response.json().await?;
+        // Extract session doc ID from the document name
+        let session_id = results.iter().find_map(|doc| {
+            doc.get("document")
+                .and_then(|d| d.get("name"))
+                .and_then(|n| n.as_str())
+                .and_then(|name| name.split('/').last())
+                .map(|id| id.to_string())
+        });
+
+        if let Some(ref id) = session_id {
+            tracing::info!("Found main chat session {} for user {}", id, uid);
+        }
+
+        Ok(session_id)
+    }
 
     /// Save a chat message to Firestore
     /// Used for chat history persistence
@@ -6456,7 +6598,35 @@ impl FirestoreService {
             fields["plugin_id"] = json!({"nullValue": null});
         }
 
-        if let Some(session) = session_id {
+        // Determine chat_session_id for cross-platform compatibility
+        // The mobile (Python) backend filters messages by chat_session_id,
+        // so desktop messages must include the mobile's session ID to be visible there.
+        let effective_session_id: Option<String> = if let Some(session) = session_id {
+            Some(session.to_string())
+        } else if app_id.is_none() {
+            // Default main chat — look up the mobile's chat session
+            match self.get_main_chat_session_id(uid).await {
+                Ok(Some(main_session_id)) => {
+                    tracing::info!(
+                        "Using mobile main chat session {} for desktop message",
+                        main_session_id
+                    );
+                    Some(main_session_id)
+                }
+                Ok(None) => {
+                    tracing::info!("No mobile main chat session found for user {}", uid);
+                    None
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to look up main chat session: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        if let Some(ref session) = effective_session_id {
             fields["session_id"] = json!({"stringValue": session});
             // Also set chat_session_id for Python compatibility
             fields["chat_session_id"] = json!({"stringValue": session});
@@ -6486,7 +6656,7 @@ impl FirestoreService {
             created_at: now,
             sender: sender.to_string(),
             app_id: app_id.map(|s| s.to_string()),
-            session_id: session_id.map(|s| s.to_string()),
+            session_id: effective_session_id,
             rating: None,
             reported: false,
             metadata: metadata.map(|s| s.to_string()),

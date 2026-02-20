@@ -90,6 +90,7 @@ actor GoalStorage {
                     .filter(Column("backendId") == goal.id)
                     .fetchOne(database) {
                     existingRecord.updateFrom(goal)
+                    existingRecord.deleted = false
                     try existingRecord.update(database)
                 } else {
                     _ = try GoalRecord.from(goal).inserted(database)

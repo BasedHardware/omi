@@ -162,6 +162,21 @@ else
     echo "Warning: agent-bridge directory not found at $AGENT_BRIDGE_DIR"
 fi
 
+step "Building acp-bridge (npm install + tsc)..."
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
+    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
+        substep "Installing npm dependencies"
+        npm install --no-fund --no-audit 2>&1 | tail -1
+    fi
+    substep "Compiling TypeScript"
+    npx tsc
+    cd - > /dev/null
+else
+    echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"
+fi
+
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
 
@@ -197,8 +212,12 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
 auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
-substep "Copying GoogleService-Info.plist"
-cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+substep "Copying GoogleService-Info.plist (dev version for com.omi.desktop-dev)"
+if [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
+    cp -f Desktop/Sources/GoogleService-Info-Dev.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+else
+    cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+fi
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
 RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
@@ -215,6 +234,14 @@ if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
     cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
 fi
 
+substep "Copying acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+fi
+
 substep "Copying .env.app"
 if [ -f ".env.app" ]; then
     cp -f .env.app "$APP_BUNDLE/Contents/Resources/.env"
@@ -229,6 +256,16 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null ||
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
+# Embed provisioning profile (required for Sign In with Apple entitlement)
+# Use dev profile for dev builds, production profile for release builds
+if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+    substep "Copying dev provisioning profile"
+    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+elif [ -f "Desktop/embedded.provisionprofile" ]; then
+    substep "Copying provisioning profile"
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+fi
+
 auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Removing extended attributes (xattr -cr)..."
@@ -239,10 +276,11 @@ step "Signing app with hardened runtime..."
 # Ad-hoc signing (--sign -) generates a new CDHash each build, causing macOS to
 # reset Screen Recording, Accessibility, and Notification permissions every time.
 if [ -z "$SIGN_IDENTITY" ]; then
-    # Try Developer ID first, then Apple Development, then self-signed
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    # For dev builds: prefer Apple Development (matches Mac Development provisioning profile,
+    # required for native Sign In with Apple). Fall back to Developer ID if unavailable.
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
     if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
     fi
 fi
 

@@ -210,7 +210,7 @@ struct FloatingControlBarView: View {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
                 onSendQuery(message, screenshot)
             },
@@ -234,10 +234,7 @@ struct FloatingControlBarView: View {
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            responseText: Binding(
-                get: { state.aiResponseText },
-                set: { state.aiResponseText = $0 }
-            ),
+            currentMessage: state.currentAIMessage,
             userInput: state.displayedQuery,
             chatHistory: state.chatHistory,
             isVoiceFollowUp: Binding(
@@ -252,16 +249,15 @@ struct FloatingControlBarView: View {
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
-                let currentResponse = state.aiResponseText
-                if !currentQuery.isEmpty && !currentResponse.isEmpty {
-                    state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
 
                 state.displayedQuery = message
                 let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
                 onSendQuery(message, screenshot)
             }

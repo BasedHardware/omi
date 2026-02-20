@@ -31,6 +31,16 @@ actor RewindIndexer {
 
     private init() {}
 
+    /// Reset the indexer state so it re-initializes on the next frame.
+    /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
+    func reset() {
+        isInitialized = false
+        isInitializing = false
+        initFailureCount = 0
+        nextRetryTime = .distantPast
+        log("RewindIndexer: Reset (will re-initialize on next frame)")
+    }
+
     /// Initialize all Rewind services
     func initialize() async throws {
         guard !isInitialized, !isInitializing else { return }

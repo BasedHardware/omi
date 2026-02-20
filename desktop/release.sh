@@ -7,6 +7,15 @@ unset TOOLCHAINS
 # Track release timing
 START_TIME=$(date +%s)
 
+# =============================================================================
+# Release log — all stdout/stderr is tee'd to this file for post-mortem review
+# =============================================================================
+RELEASE_LOG="/private/tmp/omi-release.log"
+exec > >(tee -a "$RELEASE_LOG") 2>&1
+echo ""
+echo "=== Release started at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+echo "Log file: $RELEASE_LOG"
+
 # Load .env if present (for RELEASE_SECRET, SPARKLE_PRIVATE_KEY, etc.)
 # Using set -a/source instead of xargs to handle multiline values (APPLE_PRIVATE_KEY)
 if [ -f ".env" ]; then
@@ -47,6 +56,10 @@ GITHUB_REPO="BasedHardware/omi"
 # Backend (for Firestore release registration)
 DESKTOP_BACKEND_URL="${DESKTOP_BACKEND_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app}"
 RELEASE_SECRET="${RELEASE_SECRET:-}"
+
+# Release channel: staging (default), beta, or stable
+# New releases start on staging; use promote_release.sh to advance
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-staging}"
 
 # Read changelog from CHANGELOG.json
 CHANGELOG_FILE="CHANGELOG.json"
@@ -251,6 +264,84 @@ fi
 echo "  ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
 
 # -----------------------------------------------------------------------------
+# Step 1.6: Prepare Universal Node.js binary (for AI chat / Claude Agent Bridge)
+# -----------------------------------------------------------------------------
+echo "[1.6/12] Preparing universal Node.js binary..."
+
+NODE_RESOURCE="Desktop/Sources/Resources/node"
+NODE_TEMP_DIR="/tmp/node-universal-$$"
+NODE_VERSION="v22.14.0"
+
+# Check if current node is already universal
+if file "$NODE_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
+    echo "  Node.js is already universal, skipping download"
+else
+    echo "  Creating universal Node.js binary..."
+
+    mkdir -p "$NODE_TEMP_DIR"
+
+    # Backup current node if exists
+    if [ -f "$NODE_RESOURCE" ]; then
+        cp "$NODE_RESOURCE" "$NODE_TEMP_DIR/node.backup"
+    fi
+
+    # Download arm64 Node.js
+    echo "  Downloading arm64 Node.js $NODE_VERSION..."
+    curl -L -o "$NODE_TEMP_DIR/node-arm64.tar.gz" \
+        "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-arm64.tar.gz" || {
+        echo "Error: Failed to download arm64 Node.js"
+        exit 1
+    }
+    tar -xzf "$NODE_TEMP_DIR/node-arm64.tar.gz" -C "$NODE_TEMP_DIR" --strip-components=1 --include="*/bin/node" 2>/dev/null || \
+    tar -xzf "$NODE_TEMP_DIR/node-arm64.tar.gz" -C "$NODE_TEMP_DIR"
+    ARM64_NODE=$(find "$NODE_TEMP_DIR" -name "node" -type f | head -1)
+    # Move arm64 node aside so x86_64 extraction doesn't overwrite
+    mv "$ARM64_NODE" "$NODE_TEMP_DIR/node-arm64"
+
+    # Download x86_64 Node.js
+    echo "  Downloading x86_64 Node.js $NODE_VERSION..."
+    curl -L -o "$NODE_TEMP_DIR/node-x86_64.tar.gz" \
+        "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-x64.tar.gz" || {
+        echo "Error: Failed to download x86_64 Node.js"
+        exit 1
+    }
+    tar -xzf "$NODE_TEMP_DIR/node-x86_64.tar.gz" -C "$NODE_TEMP_DIR" --strip-components=1 --include="*/bin/node" 2>/dev/null || \
+    tar -xzf "$NODE_TEMP_DIR/node-x86_64.tar.gz" -C "$NODE_TEMP_DIR"
+    X86_64_NODE=$(find "$NODE_TEMP_DIR" -name "node" -type f ! -name "node-arm64" | head -1)
+
+    if [ -z "$NODE_TEMP_DIR/node-arm64" ] || [ ! -f "$NODE_TEMP_DIR/node-arm64" ] || [ -z "$X86_64_NODE" ]; then
+        echo "Error: Could not find Node.js binaries in downloaded archives"
+        exit 1
+    fi
+
+    # Create universal binary with lipo
+    echo "  Creating universal Node.js with lipo..."
+    lipo -create "$NODE_TEMP_DIR/node-arm64" "$X86_64_NODE" -output "$NODE_RESOURCE"
+
+    # Make executable and ad-hoc sign
+    chmod +x "$NODE_RESOURCE"
+    xattr -cr "$NODE_RESOURCE"
+    codesign -f -s - "$NODE_RESOURCE"
+
+    # Verify it's universal
+    if file "$NODE_RESOURCE" | grep -q "universal binary"; then
+        echo "  ✓ Universal Node.js created successfully"
+    else
+        echo "Error: Failed to create universal Node.js"
+        if [ -f "$NODE_TEMP_DIR/node.backup" ]; then
+            mv "$NODE_TEMP_DIR/node.backup" "$NODE_RESOURCE"
+        fi
+        exit 1
+    fi
+
+    # Cleanup temp files
+    rm -rf "$NODE_TEMP_DIR"
+fi
+
+# Show node architectures
+echo "  node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
+
+# -----------------------------------------------------------------------------
 # Step 2: Build Desktop App (Universal Binary: arm64 + x86_64)
 # -----------------------------------------------------------------------------
 echo "[2/12] Building $APP_NAME (Universal Binary)..."
@@ -369,6 +460,12 @@ fi
 
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
+# Embed provisioning profile (required for Sign In with Apple entitlement)
+if [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
+fi
+
 echo "  ✓ Build complete"
 
 # -----------------------------------------------------------------------------
@@ -386,6 +483,18 @@ if [ -f "$FFMPEG_PATH" ]; then
     codesign --force --options runtime --timestamp \
         --sign "$SIGN_IDENTITY" \
         "$FFMPEG_PATH"
+fi
+
+# Sign node binary in resource bundle (if present)
+# Node.js requires JIT entitlements for V8 and WebAssembly (used by fetch/undici).
+# Without these, Hardened Runtime blocks MAP_JIT causing SIGTRAP on launch.
+NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+if [ -f "$NODE_BUNDLE_PATH" ]; then
+    echo "  Signing node binary (with JIT entitlements)..."
+    codesign --force --options runtime --timestamp \
+        --sign "$SIGN_IDENTITY" \
+        --entitlements Desktop/Node.entitlements \
+        "$NODE_BUNDLE_PATH"
 fi
 
 # Sign native binaries in agent-bridge node_modules
@@ -610,6 +719,12 @@ EOF
 
 # Check if gh CLI is available
 if command -v gh &> /dev/null; then
+    # Delete existing release if it exists (ensures re-runs are safe)
+    if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPO" &>/dev/null; then
+        echo "  Deleting existing GitHub release $RELEASE_TAG..."
+        gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null
+    fi
+
     # Create GitHub release with both Omi.zip and DMG
     gh release create "$RELEASE_TAG" \
         --repo "$GITHUB_REPO" \
@@ -634,12 +749,21 @@ fi
 # Upload DMG to GCS for direct downloads (avoids GitHub redirect chain that triggers Chrome warnings)
 GCS_BUCKET="gs://omi_macos_updates"
 echo "  Uploading DMG to GCS..."
-gcloud storage cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" 2>/dev/null && \
-gcloud storage cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg" 2>/dev/null && {
-    echo "  ✓ Uploaded DMG to GCS (direct download)"
+gcloud storage cp --content-disposition='attachment; filename="Omi Beta.dmg"' "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" 2>/dev/null && {
+    echo "  ✓ Uploaded DMG to GCS (versioned)"
 } || {
     echo "  Warning: Could not upload DMG to GCS"
 }
+# Only update the latest/ pointer for stable releases (macos.omi.me serves this)
+if [ "$RELEASE_CHANNEL" = "stable" ]; then
+    gcloud storage cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg" 2>/dev/null && {
+        echo "  ✓ Updated latest/ pointer (direct download)"
+    } || {
+        echo "  Warning: Could not update latest/ pointer"
+    }
+else
+    echo "  ⏭ Skipping latest/ update (channel: $RELEASE_CHANNEL)"
+fi
 
 # Get the GitHub release download URL for Omi.zip
 DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG/Omi.zip"
@@ -655,7 +779,8 @@ if [ -n "$RELEASE_SECRET" ]; then
     "ed_signature": "$ED_SIGNATURE",
     "changelog": $CHANGELOG_JSON,
     "is_live": true,
-    "is_critical": false
+    "is_critical": false,
+    "channel": "${RELEASE_CHANNEL:-staging}"
 }
 EOJSON
 )

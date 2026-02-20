@@ -28,7 +28,7 @@ actor AIUserProfileService {
     static let shared = AIUserProfileService()
 
     private let model = "gemini-3-pro-preview"
-    private let maxProfileLength = 2000
+    private let maxProfileLength = 10000
 
     /// Whether profile generation is currently in progress
     private var isGenerating = false
@@ -93,7 +93,7 @@ actor AIUserProfileService {
         return await getLatestProfile()
     }
 
-    /// Update the profile text of an existing record
+    /// Update the profile text of an existing record and sync to backend
     func updateProfileText(id: Int64, newText: String) async -> Bool {
         guard let db = try? await ensureDB() else { return false }
         do {
@@ -103,8 +103,84 @@ actor AIUserProfileService {
                     arguments: [newText, id]
                 )
             }
+            // Sync updated profile to backend (fire-and-forget)
+            let text = newText
+            Task {
+                do {
+                    // Fetch the record to get generatedAt and dataSourcesUsed
+                    let record = try? await db.read { database in
+                        try AIUserProfileRecord.fetchOne(database, key: id)
+                    }
+                    try await APIClient.shared.syncAIUserProfile(
+                        profileText: text,
+                        generatedAt: record?.generatedAt ?? Date(),
+                        dataSourcesUsed: record?.dataSourcesUsed ?? 0
+                    )
+                    _ = try? await db.write { database in
+                        try database.execute(
+                            sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
+                            arguments: [id]
+                        )
+                    }
+                    log("AIUserProfileService: Synced updated profile to backend")
+                } catch {
+                    log("AIUserProfileService: Failed to sync updated profile to backend: \(error.localizedDescription)")
+                }
+            }
             return true
         } catch {
+            log("AIUserProfileService: Failed to update profile text: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Save exploration text as a new profile record (when no profile exists yet)
+    func saveExplorationAsProfile(text: String) async -> Bool {
+        guard let db = try? await ensureDB() else {
+            log("AIUserProfileService: DB not available for saving exploration profile")
+            return false
+        }
+        let generatedAt = Date()
+        let record = AIUserProfileRecord(
+            profileText: String(text.prefix(maxProfileLength)),
+            dataSourcesUsed: 1,
+            backendSynced: false,
+            generatedAt: generatedAt
+        )
+        do {
+            let insertedId = try await db.write { database -> Int64? in
+                let mutableRecord = record
+                try mutableRecord.insert(database)
+                return mutableRecord.id
+            }
+            log("AIUserProfileService: Saved exploration as new profile (\(record.profileText.count) chars)")
+
+            // Sync to backend (fire-and-forget)
+            let profileText = record.profileText
+            let recordId = insertedId
+            Task {
+                do {
+                    try await APIClient.shared.syncAIUserProfile(
+                        profileText: profileText,
+                        generatedAt: generatedAt,
+                        dataSourcesUsed: 1
+                    )
+                    if let id = recordId, let db = try? await self.ensureDB() {
+                        _ = try? await db.write { database in
+                            try database.execute(
+                                sql: "UPDATE ai_user_profiles SET backendSynced = 1 WHERE id = ?",
+                                arguments: [id]
+                            )
+                        }
+                    }
+                    log("AIUserProfileService: Synced exploration profile to backend")
+                } catch {
+                    log("AIUserProfileService: Failed to sync exploration profile to backend: \(error.localizedDescription)")
+                }
+            }
+            return true
+        } catch {
+            log("AIUserProfileService: Failed to save exploration profile: \(error.localizedDescription)")
             return false
         }
     }

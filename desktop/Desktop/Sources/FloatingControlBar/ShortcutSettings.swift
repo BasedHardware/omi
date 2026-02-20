@@ -1,3 +1,4 @@
+import Carbon
 import Cocoa
 
 /// Persistent settings for keyboard shortcuts.
@@ -56,6 +57,16 @@ class ShortcutSettings: ObservableObject {
             case .cmdShiftEnter: return [.command, .shift]
             case .cmdJ: return .command
             case .cmdO: return .command
+            }
+        }
+
+        /// Carbon modifier flags for RegisterEventHotKey.
+        var carbonModifiers: Int {
+            switch self {
+            case .cmdEnter: return Int(cmdKey)
+            case .cmdShiftEnter: return Int(cmdKey) | Int(shiftKey)
+            case .cmdJ: return Int(cmdKey)
+            case .cmdO: return Int(cmdKey)
             }
         }
 

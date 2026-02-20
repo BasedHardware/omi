@@ -768,16 +768,20 @@ actor TaskAssistant: ProactiveAssistant {
         let currentSystemPrompt = await systemPrompt
 
         // 5. Build initial contents
-        let base64Data = jpegData.base64EncodedString()
-        var contents: [GeminiImageToolRequest.Content] = [
-            GeminiImageToolRequest.Content(
-                role: "user",
-                parts: [
-                    GeminiImageToolRequest.Part(text: prompt),
-                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
-                ]
-            )
-        ]
+        // Wrap base64 encoding in autoreleasepool — Swift concurrency doesn't
+        // drain autorelease pools, causing bridged NSString objects to accumulate.
+        var contents: [GeminiImageToolRequest.Content] = autoreleasepool {
+            let base64Data = jpegData.base64EncodedString()
+            return [
+                GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [
+                        GeminiImageToolRequest.Part(text: prompt),
+                        GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data)
+                    ]
+                )
+            ]
+        }
 
         // 6. Tool-calling loop (max 5 iterations)
         var searchCount = 0

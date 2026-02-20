@@ -10,6 +10,8 @@ Release a new version of the OMI Desktop app with auto-generated changelog.
 
 ## CRITICAL RULES
 
+**NEVER run release.sh more than once.** Each run generates a unique EdDSA signature for the Sparkle ZIP. If you run it twice, the second run creates a new ZIP with a different signature but GitHub keeps the old ZIP — causing "improperly signed" errors for all users.
+
 **NEVER run release steps manually.** Always use `./release.sh` for the entire pipeline.
 
 If `release.sh` fails mid-way:
@@ -22,6 +24,32 @@ If `release.sh` fails mid-way:
 **Why?** Manual steps lead to errors (wrong entitlements, wrong endpoints, missing signatures). The script is designed to run as a complete unit.
 
 **Exception:** If the failure is in the project code itself (not release.sh), fix the project code, then re-run release.sh.
+
+## Monitoring a Release
+
+release.sh logs all output to `/private/tmp/omi-release.log`. Use this to check progress:
+
+```bash
+# Check current step
+tail -20 /private/tmp/omi-release.log
+
+# Watch live progress
+tail -f /private/tmp/omi-release.log
+
+# Check if release.sh is still running
+ps aux | grep 'release.sh' | grep -v grep
+
+# Check if release was published to GitHub
+gh release list --repo BasedHardware/omi --limit 3
+
+# Check if appcast is serving the new version
+curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml | grep shortVersionString
+```
+
+**If the Bash tool sends release.sh to background** (long-running command), do NOT re-run it. Instead:
+1. Check `/private/tmp/omi-release.log` to see progress
+2. Check `ps aux | grep release.sh` to confirm it's still running
+3. Wait for completion — the full pipeline takes ~10-15 minutes
 
 ## Release Process
 

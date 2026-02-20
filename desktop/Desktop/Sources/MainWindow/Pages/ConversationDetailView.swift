@@ -1,5 +1,4 @@
 import SwiftUI
-import MarkdownUI
 
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
@@ -53,32 +52,40 @@ struct ConversationDetailView: View {
         displayConversation.startedAt ?? displayConversation.createdAt
     }
 
+    // Static date formatters — creating DateFormatter is expensive, avoid per-render allocation
+    private static let dayDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE, MMM d, yyyy"
+        return f
+    }()
+    private static let timeOnlyFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+    private static let shortDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
     /// Format date for display
     private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEEE, MMM d, yyyy"
-        return formatter.string(from: displayDate)
+        Self.dayDateFormatter.string(from: displayDate)
     }
 
     /// Format time for display
     private var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter.string(from: displayDate)
+        Self.timeOnlyFormatter.string(from: displayDate)
     }
 
     /// Format time range for header subtitle (e.g., "Jan 15, 2025 from 2:30 PM to 3:15 PM")
     private var formattedTimeRange: String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "MMM d, yyyy"
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "h:mm a"
-
-        let dateStr = dateFormatter.string(from: displayDate)
-        let startStr = timeFormatter.string(from: displayDate)
+        let dateStr = Self.shortDateFormatter.string(from: displayDate)
+        let startStr = Self.timeOnlyFormatter.string(from: displayDate)
 
         if let finishedAt = displayConversation.finishedAt {
-            let endStr = timeFormatter.string(from: finishedAt)
+            let endStr = Self.timeOnlyFormatter.string(from: finishedAt)
             return "\(dateStr) from \(startStr) to \(endStr)"
         }
         return "\(dateStr) at \(startStr)"
@@ -686,8 +693,7 @@ struct ConversationDetailView: View {
                     .foregroundColor(OmiColors.textSecondary)
             }
 
-            Markdown(displayConversation.overview)
-                .scaledMarkdownTheme(.ai)
+            SelectableMarkdown(text: displayConversation.overview, sender: .ai)
                 .textSelection(.enabled)
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -860,7 +866,8 @@ struct ConversationDetailView: View {
     // MARK: - Action Items Section
 
     private var actionItemsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let activeItems = displayConversation.structured.actionItems.filter { !$0.deleted }
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "checklist")
                     .scaledFont(size: 14)
@@ -871,7 +878,7 @@ struct ConversationDetailView: View {
                     .foregroundColor(OmiColors.textSecondary)
 
                 // Count badge
-                Text("\(displayConversation.structured.actionItems.filter { !$0.deleted }.count)")
+                Text("\(activeItems.count)")
                     .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.purplePrimary)
                     .padding(.horizontal, 8)
@@ -885,7 +892,7 @@ struct ConversationDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(displayConversation.structured.actionItems.filter { !$0.deleted }) { item in
+                ForEach(activeItems) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: item.completed ? "checkmark.circle.fill" : "circle")
                             .scaledFont(size: 16)

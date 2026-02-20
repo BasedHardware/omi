@@ -279,21 +279,39 @@ class ResourceMonitor {
     /// Attempt to free memory by flushing heavy components.
     /// Called at most once per warningCooldown (5 min) when critical threshold is exceeded.
     private func triggerMemoryRemediation() {
-        log("ResourceMonitor: Triggering memory remediation — flushing video encoder and clearing assistant pending work")
+        log("ResourceMonitor: Triggering memory remediation — flushing video encoder, clearing assistant pending work, pausing AgentSync")
 
-        // Flush VideoChunkEncoder to release ffmpeg process + H.265 hardware encoder context
-        Task {
-            _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
-        }
+        let memoryBefore = getMemoryFootprintMB()
 
         // Clear queued frames in assistant coordinator
         AssistantCoordinator.shared.clearAllPendingWork()
+
+        Task {
+            // Flush VideoChunkEncoder and await completion
+            _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
+
+            // Clear focus assistant pending tasks specifically
+            if let focusAssistant = ProactiveAssistantsPlugin.shared.currentFocusAssistant {
+                await focusAssistant.clearPendingWork()
+            }
+
+            // Pause AgentSync to reduce memory pressure and resume after 60s
+            await AgentSyncService.shared.pause()
+            Task {
+                try? await Task.sleep(nanoseconds: 60_000_000_000) // 60s
+                await AgentSyncService.shared.resume()
+                log("ResourceMonitor: AgentSync resumed after 60s cooldown")
+            }
+
+            let memoryAfter = await MainActor.run { self.getMemoryFootprintMB() }
+            log("ResourceMonitor: Memory remediation completed — \(memoryBefore)MB -> \(memoryAfter)MB")
+        }
 
         if !isDevBuild {
             let breadcrumb = Breadcrumb(level: .warning, category: "memory_remediation")
             breadcrumb.message = "Memory remediation triggered at critical threshold"
             breadcrumb.data = [
-                "memory_footprint_mb": getMemoryFootprintMB(),
+                "memory_footprint_mb": memoryBefore,
                 "threshold_mb": memoryCriticalThreshold
             ]
             SentrySDK.addBreadcrumb(breadcrumb)

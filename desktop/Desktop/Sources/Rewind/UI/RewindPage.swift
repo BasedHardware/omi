@@ -155,7 +155,13 @@ struct RewindPage: View {
             isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
-            isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+            isMonitoring = pluginState
+            // Keep persistent setting in sync when monitoring stops due to errors
+            if !pluginState && screenAnalysisEnabled {
+                screenAnalysisEnabled = false
+                AssistantSettings.shared.screenAnalysisEnabled = false
+            }
         }
         .onChange(of: isSearchFocused) { _, focused in
             if !focused {
@@ -348,6 +354,11 @@ struct RewindPage: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             ScreenCaptureService.requestAllScreenCapturePermissions()
@@ -378,6 +389,9 @@ struct RewindPage: View {
                     isTogglingMonitoring = false
                     if !success {
                         isMonitoring = false
+                        // Revert persistent setting so UI and auto-start stay in sync
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }

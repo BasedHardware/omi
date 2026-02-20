@@ -5,6 +5,11 @@ import AppKit
 import AuthenticationServices
 import Sentry
 
+extension Notification.Name {
+    /// Posted by AuthService.signOut() so views can reset @AppStorage-backed properties directly.
+    static let userDidSignOut = Notification.Name("com.omi.desktop.userDidSignOut")
+}
+
 @MainActor
 class AuthService {
     static let shared = AuthService()
@@ -221,13 +226,21 @@ class AuthService {
             try await signInWithAppleNative()
             return
         } catch let error as ASAuthorizationError where error.code == .canceled {
-            NSLog("OMI AUTH: User cancelled Apple Sign In")
-            return
+            // Don't return here — on some macOS versions, missing entitlements surface as .canceled
+            // instead of .unknown. Fall back to web OAuth so the user can still sign in.
+            NSLog("OMI AUTH: Native Apple Sign In canceled (may be user or missing entitlement), falling back to web OAuth")
+            log("AUTH: Native Apple Sign In canceled, falling back to web OAuth")
         } catch let error as ASAuthorizationError where error.code == .unknown {
             // Error 1000 = missing entitlement (dev builds signed with Developer ID)
             NSLog("OMI AUTH: Native Apple Sign In unavailable (error 1000), falling back to web OAuth")
+            logError("AUTH: Native Apple Sign In failed with ASAuthorizationError.unknown (code \(error.code.rawValue))", error: error)
+        } catch let error as ASAuthorizationError {
+            NSLog("OMI AUTH: Native Apple Sign In ASAuthorizationError (code %d), falling back to web OAuth", error.code.rawValue)
+            logError("AUTH: Native Apple Sign In failed with ASAuthorizationError code \(error.code.rawValue)", error: error)
         } catch {
-            NSLog("OMI AUTH: Native Apple Sign In failed (%@), falling back to web OAuth", error.localizedDescription)
+            let nsError = error as NSError
+            NSLog("OMI AUTH: Native Apple Sign In failed (domain=%@ code=%d desc=%@), falling back to web OAuth", nsError.domain, nsError.code, error.localizedDescription)
+            logError("AUTH: Native Apple Sign In failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
         }
 
         // Fall back to web OAuth flow (browser-based, works without special entitlements)
@@ -274,20 +287,36 @@ class AuthService {
             AuthState.shared.userEmail = email
         }
 
-        // Step 4: Sign in with Firebase using Apple identity token (REST API)
+        // Step 4: Sign in with Firebase using Apple credential
+        // Use Firebase SDK first (handles native bundle ID audience correctly),
+        // fall back to REST API (for web OAuth audience 'me.omi.web')
         NSLog("OMI AUTH: Signing in with Firebase using Apple identity token...")
-        let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
 
-        // Step 5: Store tokens
-        saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
+        let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
+        var userId = ""
 
-        // Also try Firebase SDK sign-in (best effort for other Firebase features)
         do {
-            let credential = OAuthProvider.credential(providerID: .apple, idToken: identityToken, rawNonce: nonce)
+            // Firebase SDK sign-in (works with native bundle ID as token audience)
             let authResult = try await Auth.auth().signIn(with: credential)
             NSLog("OMI AUTH: Firebase SDK sign-in SUCCESS - uid: %@", authResult.user.uid)
-        } catch let firebaseError as NSError {
-            NSLog("OMI AUTH: Firebase SDK sign-in failed (using REST API tokens): %@", firebaseError.localizedDescription)
+            userId = authResult.user.uid
+
+            // Get ID token from Firebase SDK for API calls
+            let tokenResult = try await authResult.user.getIDTokenResult()
+            let idToken = tokenResult.token
+            let refreshToken = authResult.user.refreshToken ?? ""
+            let expiresIn = Int(tokenResult.expirationDate.timeIntervalSinceNow)
+
+            saveTokens(idToken: idToken, refreshToken: refreshToken, expiresIn: expiresIn, userId: userId)
+        } catch {
+            // Fall back to REST API (works when Firebase SDK has keychain issues)
+            let nsError = error as NSError
+            NSLog("OMI AUTH: Firebase SDK Apple sign-in failed (domain=%@ code=%d): %@", nsError.domain, nsError.code, error.localizedDescription)
+            logError("AUTH: Firebase SDK Apple sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
+            NSLog("OMI AUTH: Falling back to REST API for Apple sign-in...")
+            let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
+            userId = firebaseTokens.localId
+            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: userId)
         }
 
         isSignedIn = true
@@ -300,7 +329,6 @@ class AuthService {
             }
         }
 
-        let userId = firebaseTokens.localId
         saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
 
         if givenName.isEmpty {
@@ -438,7 +466,9 @@ class AuthService {
             fetchConversations()
 
         } catch {
+            let nsError = error as NSError
             NSLog("OMI AUTH: Error during sign in: %@", error.localizedDescription)
+            logError("AUTH: \(provider) web OAuth sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
             AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
             self.error = error.localizedDescription
             throw error
@@ -990,9 +1020,13 @@ class AuthService {
         clearTokens()
 
         // Close database and invalidate all storage caches so the next sign-in
-        // opens a fresh per-user database
+        // opens a fresh per-user database.
+        // Capture the current configureGeneration so closeIfStale() can detect if
+        // a new sign-in session has already called configure() by the time this runs.
+        let closeGeneration = RewindDatabase.configureGeneration
         Task {
-            await RewindDatabase.shared.close()
+            await RewindDatabase.shared.closeIfStale(generation: closeGeneration)
+            await RewindIndexer.shared.reset()
             await RewindStorage.shared.reset()
             await TranscriptionStorage.shared.invalidateCache()
             await MemoryStorage.shared.invalidateCache()
@@ -1002,14 +1036,24 @@ class AuthService {
             await AIUserProfileService.shared.invalidateCache()
         }
 
-        // Clear onboarding step/trigger flags but keep hasCompletedOnboarding
-        // Permissions are per-app on macOS, so no need to re-show onboarding after logout
+        // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.
+        // Using removeObject() on @AppStorage properties doesn't work because the cached value
+        // in AppState (an ObservableObject, not a View) gets written back immediately.
+        NotificationCenter.default.post(name: .userDidSignOut, object: nil)
+
+        // Clear non-@AppStorage onboarding keys via UserDefaults (these work fine).
         UserDefaults.standard.removeObject(forKey: "onboardingStep")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredNotification")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredAutomation")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredScreenRecording")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredMicrophone")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredSystemAudio")
+
+        // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
+        // it from the server within ~200ms of sign-in. Instead, onboarding force-starts
+        // monitoring regardless of this setting.
+        // transcriptionEnabled: removeObject works since nothing writes it back.
+        UserDefaults.standard.removeObject(forKey: "transcriptionEnabled")
 
         NSLog("OMI AUTH: Signed out and cleared saved state + onboarding")
     }

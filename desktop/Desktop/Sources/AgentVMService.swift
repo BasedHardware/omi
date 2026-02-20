@@ -152,7 +152,10 @@ actor AgentVMService {
     }
 
     /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
+    /// Pauses AgentSync during upload to prevent competing for memory and network.
     private func uploadDatabase(vmIP: String, authToken: String) async {
+        await AgentSyncService.shared.pause()
+        defer { Task { await AgentSyncService.shared.resume() } }
         // Find the local database path
         let dbPath = await MainActor.run {
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

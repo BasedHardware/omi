@@ -472,26 +472,37 @@ final class ScreenCaptureService: Sendable {
                 onScreenWindowsOnly: true
             )
 
-            guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+            // Wrap synchronous ScreenCaptureKit object processing in autoreleasepool.
+            // SCShareableContent enumerates all windows, creating Obj-C objects that
+            // accumulate in Swift concurrency's cooperative thread pool (which doesn't
+            // drain autorelease pools between tasks).
+            let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
+                guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+                    return nil
+                }
+
+                let filter = SCContentFilter(desktopIndependentWindow: window)
+                let config = SCStreamConfiguration()
+                config.scalesToFit = true
+                config.showsCursor = false
+                let windowWidth = window.frame.width
+                let windowHeight = window.frame.height
+                let aspectRatio = windowWidth / windowHeight
+                var configWidth = min(windowWidth, maxSize)
+                var configHeight = configWidth / aspectRatio
+                if configHeight > maxSize {
+                    configHeight = maxSize
+                    configWidth = configHeight * aspectRatio
+                }
+                config.width = Int(configWidth)
+                config.height = Int(configHeight)
+                return (filter, config)
+            }
+
+            guard let (filter, config) = filterAndConfig else {
                 log("Window not found in SCShareableContent")
                 return nil
             }
-
-            let filter = SCContentFilter(desktopIndependentWindow: window)
-            let config = SCStreamConfiguration()
-            config.scalesToFit = true
-            config.showsCursor = false
-            let windowWidth = window.frame.width
-            let windowHeight = window.frame.height
-            let aspectRatio = windowWidth / windowHeight
-            var configWidth = min(windowWidth, maxSize)
-            var configHeight = configWidth / aspectRatio
-            if configHeight > maxSize {
-                configHeight = maxSize
-                configWidth = configHeight * aspectRatio
-            }
-            config.width = Int(configWidth)
-            config.height = Int(configHeight)
 
             return try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
@@ -504,8 +515,12 @@ final class ScreenCaptureService: Sendable {
     }
 
     /// Encode a CGImage to JPEG data. Public wrapper for use by callers that need JPEG once.
+    /// Wrapped in autoreleasepool because callers often run this in detached Tasks
+    /// on the cooperative thread pool, which doesn't drain autorelease pools.
     func encodeJPEG(from cgImage: CGImage) -> Data? {
-        return jpegData(from: cgImage)
+        return autoreleasepool {
+            jpegData(from: cgImage)
+        }
     }
 
     // MARK: - Synchronous Capture (Legacy)

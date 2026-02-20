@@ -64,6 +64,10 @@ class AudioCaptureService {
     private var isReconfiguring = false
     private let listenerQueue = DispatchQueue(label: "com.omi.audiocapture.listener")
 
+    /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
+    /// to avoid blocking the main thread on AudioDeviceStart/Stop calls.
+    private let audioQueue = DispatchQueue(label: "com.omi.audiocapture.device")
+
     // MARK: - Public Methods
 
     /// Check if microphone permission is granted
@@ -205,12 +209,12 @@ class AudioCaptureService {
 
         removePropertyListeners()
 
-        if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-            AudioDeviceStop(deviceID, procID)
-            AudioDeviceDestroyIOProcID(deviceID, procID)
-            ioProcID = nil
-        }
+        // Capture values before clearing state so we can dispatch the heavy
+        // CoreAudio calls off the main thread.
+        let procID = self.ioProcID
+        let devID = self.deviceID
 
+        ioProcID = nil
         deviceID = kAudioObjectUnknown
         isCapturing = false
         isReconfiguring = false
@@ -223,6 +227,14 @@ class AudioCaptureService {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
+
+        // AudioDeviceStop can block waiting for the IO thread — run off main thread
+        if let procID = procID, devID != kAudioObjectUnknown {
+            audioQueue.async {
+                AudioDeviceStop(devID, procID)
+                AudioDeviceDestroyIOProcID(devID, procID)
+            }
+        }
 
         log("AudioCapture: Stopped capturing")
     }
@@ -427,7 +439,7 @@ class AudioCaptureService {
         )
 
         let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -448,7 +460,7 @@ class AudioCaptureService {
         )
 
         let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -497,6 +509,7 @@ class AudioCaptureService {
     // MARK: - Device Change Handling
 
     /// Handle audio configuration change (e.g., user switched microphone)
+    /// Runs on audioQueue to avoid blocking the main thread.
     private func handleConfigurationChange() {
         guard isCapturing, !isReconfiguring else { return }
         isReconfiguring = true
@@ -527,7 +540,7 @@ class AudioCaptureService {
         }
 
         // Delay to let the audio hardware settle after device change
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        audioQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.reconfigureAfterChange(retryCount: 0)
         }
     }
@@ -630,7 +643,7 @@ class AudioCaptureService {
         )
 
         let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -651,7 +664,7 @@ class AudioCaptureService {
         if retryCount < Self.maxRetries {
             let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
             log("AudioCapture: Retrying in \(delay)s...")
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            audioQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.reconfigureAfterChange(retryCount: retryCount + 1)
             }
         } else {
@@ -664,8 +677,11 @@ class AudioCaptureService {
         if isCapturing {
             removePropertyListeners()
             if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-                AudioDeviceStop(deviceID, procID)
-                AudioDeviceDestroyIOProcID(deviceID, procID)
+                // Use sync in deinit to ensure cleanup completes before deallocation
+                audioQueue.sync {
+                    AudioDeviceStop(deviceID, procID)
+                    AudioDeviceDestroyIOProcID(deviceID, procID)
+                }
             }
         }
     }

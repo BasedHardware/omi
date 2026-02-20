@@ -258,12 +258,14 @@ enum ChatMode: String, CaseIterable {
 class ChatProvider: ObservableObject {
     // MARK: - Published State
     @Published var chatMode: ChatMode = .act
+    @Published var draftText = ""
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
     @Published var isLoading = false
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
+    @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
     @Published var sessionsLoadError: String?
@@ -272,6 +274,10 @@ class ChatProvider: ObservableObject {
     @Published var isLoadingMoreMessages = false
     @Published var showStarredOnly = false
     @Published var searchQuery = ""
+
+    /// Triggered when a browser tool is called but the extension token isn't configured.
+    /// The UI should observe this and present BrowserExtensionSetup.
+    @Published var needsBrowserExtensionSetup = false
 
     /// Whether the user is currently viewing the default chat (syncs with Flutter app)
     @Published var isInDefaultChat = true
@@ -296,9 +302,31 @@ class ChatProvider: ObservableObject {
 
     private let claudeBridge = ClaudeAgentBridge()
     private var bridgeStarted = false
+
+    // MARK: - Dual Bridge (Mode A: Agent SDK, Mode B: ACP)
+    private let acpBridge = ACPBridge()
+    private var acpBridgeStarted = false
+
+    enum BridgeMode: String {
+        case agentSDK = "agentSDK"
+        case claudeCode = "claudeCode"
+    }
+    @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.agentSDK.rawValue
+
+    /// Whether the ACP bridge requires authentication (shown as sheet in UI)
+    @Published var isClaudeAuthRequired = false
+    /// Auth methods returned by ACP bridge
+    @Published var claudeAuthMethods: [[String: Any]] = []
+
     private let messagesPageSize = 50
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
+
+    // MARK: - Cross-Platform Message Polling
+    /// Polls for new messages from other platforms (mobile) every 15 seconds.
+    /// Similar to TasksStore's 30-second polling pattern.
+    private var messagePollTimer: AnyCancellable?
+    private static let messagePollInterval: TimeInterval = 15.0
 
     // MARK: - Streaming Buffer
     /// Accumulates text deltas during streaming and flushes them to the published
@@ -342,12 +370,23 @@ class ChatProvider: ObservableObject {
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
 
-    // MARK: - CLAUDE.md & Skills
+    // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
     @Published var claudeMdPath: String?
     @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
     @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
-    @AppStorage("enabledSkillsJSON") private var enabledSkillsJSON: String = "[]"
+    @AppStorage("disabledSkillsJSON") private var disabledSkillsJSON: String = ""
+
+    // MARK: - Project-level CLAUDE.md & Skills
+    @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
+    @Published var projectClaudeMdContent: String?
+    @Published var projectClaudeMdPath: String?
+    @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
+
+    // MARK: - Dev Mode
+    @AppStorage("devModeEnabled") var devModeEnabled = false
+    private var devModeContext: String?
 
     // MARK: - Current Session ID
     var currentSessionId: String? {
@@ -375,6 +414,15 @@ class ChatProvider: ObservableObject {
                 }
             }
 
+        // Poll for new messages from other platforms (mobile) every 15 seconds
+        messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    await self?.pollForNewMessages()
+                }
+            }
+
         // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
         playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
             .dropFirst()
@@ -386,21 +434,34 @@ class ChatProvider: ObservableObject {
                         log("ChatProvider: Skipping bridge restart — query in progress")
                         return
                     }
-                    guard self.bridgeStarted else { return }
-                    log("ChatProvider: Playwright extension setting changed, restarting bridge")
-                    self.bridgeStarted = false
-                    do {
-                        try await self.claudeBridge.restart()
-                        self.bridgeStarted = true
-                        log("ChatProvider: Bridge restarted with new Playwright settings")
-                    } catch {
-                        logError("Failed to restart bridge after Playwright setting change", error: error)
+                    if self.isACPMode {
+                        guard self.acpBridgeStarted else { return }
+                        log("ChatProvider: Playwright extension setting changed, restarting ACP bridge")
+                        self.acpBridgeStarted = false
+                        do {
+                            try await self.acpBridge.restart()
+                            self.acpBridgeStarted = true
+                            log("ChatProvider: ACP bridge restarted with new Playwright settings")
+                        } catch {
+                            logError("Failed to restart ACP bridge after Playwright setting change", error: error)
+                        }
+                    } else {
+                        guard self.bridgeStarted else { return }
+                        log("ChatProvider: Playwright extension setting changed, restarting bridge")
+                        self.bridgeStarted = false
+                        do {
+                            try await self.claudeBridge.restart()
+                            self.bridgeStarted = true
+                            log("ChatProvider: Bridge restarted with new Playwright settings")
+                        } catch {
+                            logError("Failed to restart bridge after Playwright setting change", error: error)
+                        }
                     }
                 }
             }
     }
 
-    /// Pre-start the Claude bridge so the first query doesn't wait for process launch
+    /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
         _ = await ensureBridgeStarted()
     }
@@ -409,7 +470,7 @@ class ChatProvider: ObservableObject {
     /// Ensures the bridge is started (restarting if needed to pick up new token),
     /// then sends a lightweight test query that triggers a browser_snapshot tool call.
     func testPlaywrightConnection() async throws -> Bool {
-        // Restart bridge to pick up any newly-saved token from UserDefaults
+        // Only use agent-bridge for Playwright testing (Mode A always has our API key)
         bridgeStarted = false
         do {
             try await claudeBridge.restart()
@@ -422,26 +483,84 @@ class ChatProvider: ObservableObject {
         return try await claudeBridge.testPlaywrightConnection()
     }
 
-    /// Ensure the Claude Agent bridge is started (restarts if the process died)
+    /// Whether we're currently in ACP (Mode B) mode
+    private var isACPMode: Bool {
+        bridgeMode == BridgeMode.claudeCode.rawValue
+    }
+
+    /// Ensure the active bridge is started (restarts if the process died)
     private func ensureBridgeStarted() async -> Bool {
-        // If we thought the bridge was started but the process died, reset so we restart
-        if bridgeStarted {
-            let alive = await claudeBridge.isAlive
-            if !alive {
-                log("ChatProvider: Bridge process died, will restart")
-                bridgeStarted = false
+        if isACPMode {
+            // Mode B: ACP bridge
+            if acpBridgeStarted {
+                let alive = await acpBridge.isAlive
+                if !alive {
+                    log("ChatProvider: ACP bridge process died, will restart")
+                    acpBridgeStarted = false
+                }
+            }
+            guard !acpBridgeStarted else { return true }
+            do {
+                try await acpBridge.start()
+                acpBridgeStarted = true
+                log("ChatProvider: ACP bridge started successfully")
+                return true
+            } catch {
+                logError("Failed to start ACP bridge", error: error)
+                errorMessage = "AI not available: \(error.localizedDescription)"
+                return false
+            }
+        } else {
+            // Mode A: Agent SDK bridge (existing)
+            if bridgeStarted {
+                let alive = await claudeBridge.isAlive
+                if !alive {
+                    log("ChatProvider: Bridge process died, will restart")
+                    bridgeStarted = false
+                }
+            }
+            guard !bridgeStarted else { return true }
+            do {
+                try await claudeBridge.start()
+                bridgeStarted = true
+                log("ChatProvider: Claude bridge started successfully")
+                return true
+            } catch {
+                logError("Failed to start Claude bridge", error: error)
+                errorMessage = "AI not available: \(error.localizedDescription)"
+                return false
             }
         }
-        guard !bridgeStarted else { return true }
-        do {
-            try await claudeBridge.start()
-            bridgeStarted = true
-            log("ChatProvider: Claude bridge started successfully")
-            return true
-        } catch {
-            logError("Failed to start Claude bridge", error: error)
-            errorMessage = "AI not available: \(error.localizedDescription)"
-            return false
+    }
+
+    /// Switch between bridge modes (Agent SDK vs Claude Code ACP)
+    func switchBridgeMode(to mode: BridgeMode) async {
+        guard mode.rawValue != bridgeMode else { return }
+        log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
+
+        // Stop the current bridge
+        if isACPMode {
+            await acpBridge.stop()
+            acpBridgeStarted = false
+        } else {
+            await claudeBridge.stop()
+            bridgeStarted = false
+        }
+
+        // Switch mode
+        bridgeMode = mode.rawValue
+
+        // Warm up the new bridge
+        _ = await ensureBridgeStarted()
+    }
+
+    /// Start Claude OAuth authentication (Mode B)
+    func startClaudeAuth() {
+        guard isACPMode else { return }
+        Task {
+            // Pick the first available auth method (usually "agent_auth")
+            let methodId = (claudeAuthMethods.first?["id"] as? String) ?? "auth-0"
+            await acpBridge.authenticate(methodId: methodId)
         }
     }
 
@@ -973,15 +1092,21 @@ class ChatProvider: ObservableObject {
             prompt += "\n\n<conversation_history>\n\(history)\n</conversation_history>"
         }
 
-        // Append CLAUDE.md instructions if enabled
+        // Append global CLAUDE.md instructions if enabled
         if claudeMdEnabled, let claudeMd = claudeMdContent {
             prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
         }
 
-        // Append enabled skills as available context
+        // Append project CLAUDE.md instructions if enabled
+        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
+            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
+        }
+
+        // Append enabled skills as available context (global + project)
         let enabledSkillNames = getEnabledSkillNames()
         if !enabledSkillNames.isEmpty {
-            let skillDescriptions = discoveredSkills
+            let allSkills = discoveredSkills + projectDiscoveredSkills
+            let skillDescriptions = allSkills
                 .filter { enabledSkillNames.contains($0.name) }
                 .map { "- \($0.name): \($0.description)" }
                 .joined(separator: "\n")
@@ -990,10 +1115,66 @@ class ChatProvider: ObservableObject {
             }
         }
 
+        // Append dev mode context if enabled
+        if devModeEnabled, let devMode = devModeContext {
+            let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
+            prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
+        }
+
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), dev_mode: \(devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
 
+        return prompt
+    }
+
+    /// Build system prompt for task chat sessions.
+    /// Same as buildSystemPrompt but **omits** conversation_history section
+    /// (the Claude SDK handles history via `resume: sessionId`).
+    func buildTaskChatSystemPrompt() -> String {
+        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let contextSection = formatMemoriesSection()
+        let goalSection = formatGoalSection()
+        let tasksSection = formatTasksSection()
+        let aiProfileSection = formatAIProfileSection()
+
+        var prompt = ChatPromptBuilder.buildDesktopChat(
+            userName: userName,
+            memoriesSection: contextSection,
+            goalSection: goalSection,
+            tasksSection: tasksSection,
+            aiProfileSection: aiProfileSection,
+            databaseSchema: cachedDatabaseSchema
+        )
+
+        // NO conversation_history — SDK handles this via resume
+
+        if claudeMdEnabled, let claudeMd = claudeMdContent {
+            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
+        }
+        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
+            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
+        }
+
+        let enabledSkillNames = getEnabledSkillNames()
+        if !enabledSkillNames.isEmpty {
+            let allSkills = discoveredSkills + projectDiscoveredSkills
+            let skillDescriptions = allSkills
+                .filter { enabledSkillNames.contains($0.name) }
+                .map { "- \($0.name): \($0.description)" }
+                .joined(separator: "\n")
+            if !skillDescriptions.isEmpty {
+                prompt += "\n\n<available_skills>\n\(skillDescriptions)\n</available_skills>"
+            }
+        }
+
+        // Append dev mode context if enabled
+        if devModeEnabled, let devMode = devModeContext {
+            let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
+            prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
+        }
+
+        log("ChatProvider: task chat prompt built — prompt_length: \(prompt.count) chars")
         return prompt
     }
 
@@ -1046,6 +1227,11 @@ class ChatProvider: ObservableObject {
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
         discoverClaudeConfig()
+
+        // Set working directory for Claude Agent SDK if workspace is configured
+        if workingDirectory == nil, !aiChatWorkingDirectory.isEmpty {
+            workingDirectory = aiChatWorkingDirectory
+        }
     }
 
     /// Reinitialize after settings change
@@ -1065,12 +1251,12 @@ class ChatProvider: ObservableObject {
 
     // MARK: - CLAUDE.md & Skills Discovery
 
-    /// Discover ~/.claude/CLAUDE.md and skills from ~/.claude/skills/
+    /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
     func discoverClaudeConfig() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let claudeDir = "\(home)/.claude"
 
-        // Discover CLAUDE.md
+        // Discover global CLAUDE.md
         let mdPath = "\(claudeDir)/CLAUDE.md"
         if FileManager.default.fileExists(atPath: mdPath),
            let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
@@ -1081,7 +1267,7 @@ class ChatProvider: ObservableObject {
             claudeMdPath = nil
         }
 
-        // Discover skills
+        // Discover global skills
         var skills: [(name: String, description: String, path: String)] = []
         let skillsDir = "\(claudeDir)/skills"
         if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
@@ -1095,7 +1281,73 @@ class ChatProvider: ObservableObject {
             }
         }
         discoveredSkills = skills
-        log("ChatProvider: discovered CLAUDE.md=\(claudeMdContent != nil), skills=\(skills.count)")
+
+        // Discover project-level config from workspace directory
+        let workspace = aiChatWorkingDirectory
+        if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
+            // Project CLAUDE.md at <workspace>/CLAUDE.md
+            let projectMdPath = "\(workspace)/CLAUDE.md"
+            if FileManager.default.fileExists(atPath: projectMdPath),
+               let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
+                projectClaudeMdContent = content
+                projectClaudeMdPath = projectMdPath
+            } else {
+                projectClaudeMdContent = nil
+                projectClaudeMdPath = nil
+            }
+
+            // Project skills at <workspace>/.claude/skills/
+            var projectSkills: [(name: String, description: String, path: String)] = []
+            let projectSkillsDir = "\(workspace)/.claude/skills"
+            if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
+                for dir in skillDirs.sorted() {
+                    let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
+                    if FileManager.default.fileExists(atPath: skillPath),
+                       let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                        let desc = extractSkillDescription(from: content)
+                        projectSkills.append((name: dir, description: desc, path: skillPath))
+                    }
+                }
+            }
+            projectDiscoveredSkills = projectSkills
+        } else {
+            projectClaudeMdContent = nil
+            projectClaudeMdPath = nil
+            projectDiscoveredSkills = []
+        }
+
+        // Load dev-mode skill content (full SKILL.md, not just description)
+        let devModeSkillPath = "\(skillsDir)/dev-mode/SKILL.md"
+        if FileManager.default.fileExists(atPath: devModeSkillPath),
+           let content = try? String(contentsOfFile: devModeSkillPath, encoding: .utf8) {
+            // Strip YAML frontmatter, keep the markdown body
+            var body = content
+            if body.hasPrefix("---") {
+                let lines = body.components(separatedBy: "\n")
+                if let endIdx = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("---") }) {
+                    body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            devModeContext = body
+        } else {
+            // Also check project skills directory
+            let projectDevModePath = "\(workspace)/.claude/skills/dev-mode/SKILL.md"
+            if !workspace.isEmpty, FileManager.default.fileExists(atPath: projectDevModePath),
+               let content = try? String(contentsOfFile: projectDevModePath, encoding: .utf8) {
+                var body = content
+                if body.hasPrefix("---") {
+                    let lines = body.components(separatedBy: "\n")
+                    if let endIdx = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("---") }) {
+                        body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+                devModeContext = body
+            } else {
+                devModeContext = nil
+            }
+        }
+
+        log("ChatProvider: discovered global CLAUDE.md=\(claudeMdContent != nil), global skills=\(skills.count), project CLAUDE.md=\(projectClaudeMdContent != nil), project skills=\(projectDiscoveredSkills.count), dev_mode_skill=\(devModeContext != nil)")
     }
 
     /// Extract description from YAML frontmatter in SKILL.md
@@ -1122,20 +1374,27 @@ class ChatProvider: ObservableObject {
         return ""
     }
 
-    /// Get the set of enabled skill names from UserDefaults
+    /// Get the set of enabled skill names (all skills minus explicitly disabled ones)
     func getEnabledSkillNames() -> Set<String> {
-        guard let data = enabledSkillsJSON.data(using: .utf8),
+        let allSkillNames = Set(discoveredSkills.map { $0.name } + projectDiscoveredSkills.map { $0.name })
+        let disabled = getDisabledSkillNames()
+        return allSkillNames.subtracting(disabled)
+    }
+
+    /// Get the set of explicitly disabled skill names from UserDefaults
+    func getDisabledSkillNames() -> Set<String> {
+        guard let data = disabledSkillsJSON.data(using: .utf8),
               let names = try? JSONDecoder().decode([String].self, from: data) else {
-            return Set(discoveredSkills.map { $0.name }) // Default: all enabled
+            return [] // Default: nothing disabled = all enabled
         }
         return Set(names)
     }
 
-    /// Save the set of enabled skill names to UserDefaults
-    func setEnabledSkillNames(_ names: Set<String>) {
+    /// Save the set of disabled skill names to UserDefaults
+    func setDisabledSkillNames(_ names: Set<String>) {
         if let data = try? JSONEncoder().encode(Array(names)),
            let json = String(data: data, encoding: .utf8) {
-            enabledSkillsJSON = json
+            disabledSkillsJSON = json
         }
     }
 
@@ -1185,6 +1444,51 @@ class ChatProvider: ObservableObject {
         isLoading = false
     }
 
+    // MARK: - Cross-Platform Message Polling
+
+    /// Poll for new messages from other platforms (e.g. mobile).
+    /// Merges new messages into the existing array without disrupting the UI.
+    private func pollForNewMessages() async {
+        // Skip if we're in the middle of sending, loading, or streaming
+        guard !isSending, !isLoading, !isLoadingSessions else { return }
+        // Skip if messages haven't been loaded yet (initial load not done)
+        guard !messages.isEmpty || sessionsLoadError != nil else { return }
+        // Skip if there's an active streaming message
+        guard !messages.contains(where: { $0.isStreaming }) else { return }
+
+        do {
+            let persistedMessages: [ChatMessageDB]
+
+            if let session = currentSession {
+                // Multi-chat: fetch for current session
+                persistedMessages = try await APIClient.shared.getMessages(
+                    sessionId: session.id,
+                    limit: messagesPageSize
+                )
+            } else {
+                // Default chat
+                persistedMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize
+                )
+            }
+
+            let existingIds = Set(messages.map(\.id))
+            let newMessages = persistedMessages
+                .filter { !existingIds.contains($0.id) }
+                .map(ChatMessage.init(from:))
+
+            if !newMessages.isEmpty {
+                log("ChatProvider poll: found \(newMessages.count) new message(s) from other platforms")
+                messages.append(contentsOf: newMessages)
+                messages.sort(by: { $0.createdAt < $1.createdAt })
+            }
+        } catch {
+            // Silent failure — polling errors shouldn't disrupt the user
+            logError("ChatProvider poll failed", error: error)
+        }
+    }
+
     // MARK: - Stop / Follow-Up
 
     /// Text of a follow-up queued while the current query is being interrupted.
@@ -1194,8 +1498,13 @@ class ChatProvider: ObservableObject {
     /// Stop the running agent, keeping partial response
     func stopAgent() {
         guard isSending else { return }
+        isStopping = true
         Task {
-            await claudeBridge.interrupt()
+            if isACPMode {
+                await acpBridge.interrupt()
+            } else {
+                await claudeBridge.interrupt()
+            }
         }
         // Result flows back normally through the bridge with partial text
     }
@@ -1214,17 +1523,25 @@ class ChatProvider: ObservableObject {
         )
         messages.append(userMessage)
 
-        // Persist to backend (fire-and-forget)
+        // Persist to backend and sync server ID back to prevent poll duplicates
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
-        Task {
+        let localId = userMessage.id
+        Task { [weak self] in
             do {
-                _ = try await APIClient.shared.saveMessage(
+                let response = try await APIClient.shared.saveMessage(
                     text: trimmedText,
                     sender: "human",
                     appId: capturedAppId,
                     sessionId: capturedSessionId
                 )
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                }
+                log("Saved follow-up message to backend: \(response.id)")
             } catch {
                 logError("Failed to persist follow-up message", error: error)
             }
@@ -1234,7 +1551,11 @@ class ChatProvider: ObservableObject {
         // When sendMessage finishes (due to the interrupt), it checks
         // pendingFollowUpText and chains a new full query automatically.
         pendingFollowUpText = trimmedText
-        await claudeBridge.interrupt()
+        if isACPMode {
+            await acpBridge.interrupt()
+        } else {
+            await claudeBridge.interrupt()
+        }
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
@@ -1245,9 +1566,17 @@ class ChatProvider: ObservableObject {
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-5-20250929" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil) async {
+    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+
+        // Guard against concurrent sendMessage calls.
+        // The bridge uses a single message continuation, so concurrent queries
+        // would cause responses to be consumed by the wrong caller.
+        guard !isSending else {
+            log("ChatProvider: sendMessage called while already sending, ignoring")
+            return
+        }
 
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {
@@ -1274,40 +1603,42 @@ class ChatProvider: ObservableObject {
         isSending = true
         errorMessage = nil
 
-        // Save user message to backend (fire and forget - don't block UI)
+        // Save user message to backend and add to UI
+        // (skip for follow-ups — sendFollowUp already did both)
         let userMessageId = UUID().uuidString
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
-        Task { [weak self] in
-            do {
-                let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
-                    sender: "human",
-                    appId: capturedAppId,
-                    sessionId: capturedSessionId
-                )
-                // Sync local message ID with server ID
-                await MainActor.run {
-                    if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
-                        self?.messages[index].id = response.id
-                        self?.messages[index].isSynced = true
+        if !isFollowUp {
+            Task { [weak self] in
+                do {
+                    let response = try await APIClient.shared.saveMessage(
+                        text: trimmedText,
+                        sender: "human",
+                        appId: capturedAppId,
+                        sessionId: capturedSessionId
+                    )
+                    // Sync local message ID with server ID
+                    await MainActor.run {
+                        if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
+                            self?.messages[index].id = response.id
+                            self?.messages[index].isSynced = true
+                        }
                     }
+                    log("Saved user message to backend: \(response.id)")
+                } catch {
+                    logError("Failed to persist user message", error: error)
+                    // Non-critical - continue with chat
                 }
-                log("Saved user message to backend: \(response.id)")
-            } catch {
-                logError("Failed to persist user message", error: error)
-                // Non-critical - continue with chat
             }
-        }
 
-        // Add user message to UI
-        let userMessage = ChatMessage(
-            id: userMessageId,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
+            let userMessage = ChatMessage(
+                id: userMessageId,
+                text: trimmedText,
+                sender: .user
+            )
+            messages.append(userMessage)
+        }
 
         // Create placeholder AI message
         let aiMessageId = UUID().uuidString
@@ -1328,57 +1659,99 @@ class ChatProvider: ObservableObject {
             // Build system prompt with locally cached memories (no backend Gemini call)
             let systemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
 
-            // Query the Claude Agent SDK bridge with streaming
+            // Query the active bridge with streaming
             // Each query is standalone — conversation history is in the system prompt
             // This ensures cross-platform sync (mobile messages appear in context)
-            let queryResult = try await claudeBridge.query(
-                prompt: trimmedText,
-                systemPrompt: systemPrompt,
-                cwd: workingDirectory,
-                mode: chatMode.rawValue,
-                model: model ?? modelOverride,
-                onTextDelta: { [weak self] delta in
-                    Task { @MainActor [weak self] in
-                        self?.appendToMessage(id: aiMessageId, text: delta)
-                    }
-                },
-                onToolCall: { callId, name, input in
-                    // Route OMI tool calls (execute_sql, semantic_search) through ChatToolExecutor
-                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
-                    log("OMI tool \(name) executed for callId=\(callId)")
-                    return result
-                },
-                onToolActivity: { [weak self] name, status, toolUseId, input in
-                    Task { @MainActor [weak self] in
-                        self?.addToolActivity(
-                            messageId: aiMessageId,
-                            toolName: name,
-                            status: status == "started" ? .running : .completed,
-                            toolUseId: toolUseId,
-                            input: input
-                        )
-                        // Track tool timing
-                        if status == "started" {
-                            toolNames.append(name)
-                            toolStartTimes[name] = Date()
-                        } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                            let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                            AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+
+            // Shared callbacks for both bridges
+            let textDeltaHandler: ClaudeAgentBridge.TextDeltaHandler = { [weak self] delta in
+                Task { @MainActor [weak self] in
+                    self?.appendToMessage(id: aiMessageId, text: delta)
+                }
+            }
+            let toolCallHandler: ClaudeAgentBridge.ToolCallHandler = { callId, name, input in
+                let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                let result = await ChatToolExecutor.execute(toolCall)
+                log("OMI tool \(name) executed for callId=\(callId)")
+                return result
+            }
+            let toolActivityHandler: ClaudeAgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                Task { @MainActor [weak self] in
+                    self?.addToolActivity(
+                        messageId: aiMessageId,
+                        toolName: name,
+                        status: status == "started" ? .running : .completed,
+                        toolUseId: toolUseId,
+                        input: input
+                    )
+                    if status == "started" {
+                        toolNames.append(name)
+                        toolStartTimes[name] = Date()
+                        if (name.contains("browser") || name.contains("playwright")) {
+                            let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                            if token.isEmpty {
+                                log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
+                                self?.needsBrowserExtensionSetup = true
+                                self?.stopAgent()
+                            }
                         }
-                    }
-                },
-                onThinkingDelta: { [weak self] text in
-                    Task { @MainActor [weak self] in
-                        self?.appendThinking(messageId: aiMessageId, text: text)
-                    }
-                },
-                onToolResultDisplay: { [weak self] toolUseId, name, output in
-                    Task { @MainActor [weak self] in
-                        self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
+                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                     }
                 }
-            )
+            }
+            let thinkingDeltaHandler: ClaudeAgentBridge.ThinkingDeltaHandler = { [weak self] text in
+                Task { @MainActor [weak self] in
+                    self?.appendThinking(messageId: aiMessageId, text: text)
+                }
+            }
+            let toolResultDisplayHandler: ClaudeAgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
+                Task { @MainActor [weak self] in
+                    self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                }
+            }
+
+            let queryResult: ClaudeAgentBridge.QueryResult
+            if isACPMode {
+                let acpResult = try await acpBridge.query(
+                    prompt: trimmedText,
+                    systemPrompt: systemPrompt,
+                    cwd: workingDirectory,
+                    mode: chatMode.rawValue,
+                    model: model ?? modelOverride,
+                    onTextDelta: textDeltaHandler,
+                    onToolCall: toolCallHandler,
+                    onToolActivity: toolActivityHandler,
+                    onThinkingDelta: thinkingDeltaHandler,
+                    onToolResultDisplay: toolResultDisplayHandler,
+                    onAuthRequired: { [weak self] methods in
+                        Task { @MainActor [weak self] in
+                            self?.claudeAuthMethods = methods
+                            self?.isClaudeAuthRequired = true
+                        }
+                    },
+                    onAuthSuccess: { [weak self] in
+                        Task { @MainActor [weak self] in
+                            self?.isClaudeAuthRequired = false
+                        }
+                    }
+                )
+                queryResult = ClaudeAgentBridge.QueryResult(text: acpResult.text, costUsd: acpResult.costUsd, sessionId: "")
+            } else {
+                queryResult = try await claudeBridge.query(
+                    prompt: trimmedText,
+                    systemPrompt: systemPrompt,
+                    cwd: workingDirectory,
+                    mode: chatMode.rawValue,
+                    model: model ?? modelOverride,
+                    onTextDelta: textDeltaHandler,
+                    onToolCall: toolCallHandler,
+                    onToolActivity: toolActivityHandler,
+                    onThinkingDelta: thinkingDeltaHandler,
+                    onToolResultDisplay: toolResultDisplayHandler
+                )
+            }
 
             // Flush any remaining buffered streaming text before finalizing
             streamingFlushWorkItem?.cancel()
@@ -1395,12 +1768,14 @@ class ChatProvider: ObservableObject {
                 completeRemainingToolCalls(messageId: aiMessageId)
             } else {
                 // Message no longer in memory (user switched away from this session).
-                // Still need to persist the response to the backend.
                 messageText = queryResult.text
-                log("Chat response arrived after session switch, persisting to backend only")
+                log("Chat response arrived after session switch")
             }
 
-            // Always save AI response to backend (even if the user navigated away)
+            // Always save AI response to backend with the captured session ID.
+            // Even if the user switched to a different task, this response belongs
+            // to the original session (concurrent queries are prevented by the
+            // isSending guard, so the response is always correct for its session).
             let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
             if !textToSave.isEmpty {
                 do {
@@ -1416,7 +1791,7 @@ class ChatProvider: ObservableObject {
                         messages[syncIndex].id = response.id
                         messages[syncIndex].isSynced = true
                     }
-                    log("Saved and synced AI response: \(response.id) (tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
+                    log("Saved and synced AI response: \(response.id) (session=\(capturedSessionId ?? "nil"), tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
                 } catch {
                     logError("Failed to persist AI response", error: error)
                 }
@@ -1488,15 +1863,23 @@ class ChatProvider: ObservableObject {
 
             logError("Failed to get AI response", error: error)
             AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+
+            // Show error to user (unless they intentionally stopped)
+            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                // User stopped — no error to show
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
 
         isSending = false
+        isStopping = false
 
         // If a follow-up was queued while we were running, chain it as a new full query
         if let followUp = pendingFollowUpText {
             pendingFollowUpText = nil
             log("ChatProvider: chaining follow-up query")
-            await sendMessage(followUp)
+            await sendMessage(followUp, isFollowUp: true)
         }
     }
 

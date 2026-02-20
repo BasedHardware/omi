@@ -13,6 +13,7 @@ struct ChatInputView: View {
     var onFollowUp: ((String) -> Void)? = nil
     var onStop: (() -> Void)? = nil
     let isSending: Bool
+    var isStopping: Bool = false
     var placeholder: String = "Type a message..."
     @Binding var mode: ChatMode
     /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
@@ -20,7 +21,7 @@ struct ChatInputView: View {
 
     @AppStorage("askModeEnabled") private var askModeEnabled = false
     @Environment(\.fontScale) private var fontScale
-    @State private var inputText = ""
+    @Binding var inputText: String
 
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -60,11 +61,11 @@ struct ChatInputView: View {
 
                     // NSTextView with lineFragmentPadding=0 and explicit textContainerInset
                     // so cursor position is deterministic and matches placeholder exactly
-                    ChatTextEditor(
+                    OmiTextEditor(
                         text: $inputText,
                         fontSize: round(14 * fontScale),
-                        horizontalInset: inputPaddingH,
-                        verticalInset: inputPaddingV,
+                        textColor: NSColor(OmiColors.textPrimary),
+                        textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                         onSubmit: handleSubmit
                     )
                     .frame(minHeight: 0, maxHeight: .infinity)
@@ -84,12 +85,18 @@ struct ChatInputView: View {
 
             // Send/Stop button — inline to the right of the input
             if isSending && !hasText {
-                Button(action: { onStop?() }) {
-                    Image(systemName: "stop.circle.fill")
-                        .scaledFont(size: 24)
-                        .foregroundColor(.red.opacity(0.8))
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                } else {
+                    Button(action: { onStop?() }) {
+                        Image(systemName: "stop.circle.fill")
+                            .scaledFont(size: 24)
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else {
                 Button(action: handleSubmit) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -131,106 +138,6 @@ struct ChatInputView: View {
             onFollowUp?(text)
         } else {
             onSend(text)
-        }
-    }
-}
-
-// MARK: - NSTextView wrapper with deterministic padding
-
-/// NSTextView-based text editor with explicit control over internal padding,
-/// ensuring the cursor position is deterministic and matches the placeholder overlay.
-/// Uses `lineFragmentPadding = 0` and `textContainerInset` for all spacing.
-private struct ChatTextEditor: NSViewRepresentable {
-    @Binding var text: String
-    let fontSize: CGFloat
-    let horizontalInset: CGFloat
-    let verticalInset: CGFloat
-    var onSubmit: (() -> Void)?
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView()
-        textView.font = .systemFont(ofSize: fontSize)
-        textView.textColor = NSColor(OmiColors.textPrimary)
-        textView.backgroundColor = .clear
-        textView.drawsBackground = false
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.delegate = context.coordinator
-
-        // Zero lineFragmentPadding — text/cursor starts exactly at textContainerInset
-        textView.textContainer?.lineFragmentPadding = 0
-        textView.textContainerInset = NSSize(width: horizontalInset, height: verticalInset)
-        textView.textContainer?.widthTracksTextView = true
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.maxSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-
-        let scrollView = NSScrollView()
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.backgroundColor = .clear
-        scrollView.drawsBackground = false
-        scrollView.borderType = .noBorder
-
-        // Auto-focus the text view
-        DispatchQueue.main.async {
-            textView.window?.makeFirstResponder(textView)
-        }
-
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-        if textView.string != text {
-            context.coordinator.isUpdating = true
-            textView.string = text
-            context.coordinator.isUpdating = false
-        }
-        let newFont = NSFont.systemFont(ofSize: fontSize)
-        if textView.font != newFont {
-            textView.font = newFont
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text, onSubmit: onSubmit)
-    }
-
-    class Coordinator: NSObject, NSTextViewDelegate {
-        @Binding var text: String
-        let onSubmit: (() -> Void)?
-        var isUpdating = false
-
-        init(text: Binding<String>, onSubmit: (() -> Void)?) {
-            self._text = text
-            self.onSubmit = onSubmit
-        }
-
-        func textDidChange(_ notification: Notification) {
-            guard !isUpdating, let textView = notification.object as? NSTextView else { return }
-            self.text = textView.string
-        }
-
-        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            // Enter without shift submits; Shift+Enter inserts newline
-            if commandSelector == #selector(NSResponder.insertNewline(_:)) {
-                let flags = NSApp.currentEvent?.modifierFlags ?? []
-                if !flags.contains(.shift) {
-                    onSubmit?()
-                    return true
-                }
-            }
-            return false
         }
     }
 }

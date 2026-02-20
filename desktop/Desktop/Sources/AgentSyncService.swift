@@ -34,6 +34,8 @@ actor AgentSyncService {
     private var syncTask: Task<Void, Never>?
     private var consecutiveFailures = 0
     private var lastTokenRefresh: Date = .distantPast
+    private var isPaused = false
+    private var latencyBackoffMultiplier: UInt64 = 1
 
     private let batchSize = 100
     private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
@@ -95,11 +97,29 @@ actor AgentSyncService {
         log("AgentSync: stopped")
     }
 
+    /// Pause sync — ticks are skipped but the loop keeps running.
+    func pause() {
+        guard !isPaused else { return }
+        isPaused = true
+        log("AgentSync: paused")
+    }
+
+    /// Resume sync after a pause.
+    func resume() {
+        guard isPaused else { return }
+        isPaused = false
+        log("AgentSync: resumed")
+    }
+
     // MARK: - Sync loop
 
     private func syncLoop() {
         syncTask = Task {
             while !Task.isCancelled && isRunning {
+                if isPaused {
+                    try? await Task.sleep(nanoseconds: baseSyncInterval)
+                    continue
+                }
                 await syncTick()
                 let interval = currentSyncInterval()
                 try? await Task.sleep(nanoseconds: interval)
@@ -108,13 +128,19 @@ actor AgentSyncService {
     }
 
     private func currentSyncInterval() -> UInt64 {
-        guard consecutiveFailures > 0 else { return baseSyncInterval }
-        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, capped at 60s
-        let backoff = baseSyncInterval * UInt64(1 << min(consecutiveFailures, 5))
-        return min(backoff, maxSyncInterval)
+        let base: UInt64
+        if consecutiveFailures > 0 {
+            // Exponential backoff: 3s, 6s, 12s, 24s, 48s, capped at 60s
+            base = baseSyncInterval * UInt64(1 << min(consecutiveFailures, 5))
+        } else {
+            base = baseSyncInterval
+        }
+        return min(base * latencyBackoffMultiplier, maxSyncInterval)
     }
 
     private func syncTick() async {
+        let tickStart = ContinuousClock.now
+
         // Periodically refresh Firebase token on the VM (every 30 min)
         if Date().timeIntervalSince(lastTokenRefresh) >= tokenRefreshInterval {
             await refreshFirebaseToken()
@@ -142,6 +168,23 @@ actor AgentSyncService {
             consecutiveFailures = 0
             log("AgentSync: pushed \(totalSynced) rows")
             saveCursors()
+        }
+
+        // Latency-based backpressure
+        let elapsed = ContinuousClock.now - tickStart
+        let elapsedSeconds = elapsed / .seconds(1)
+        if elapsedSeconds > 10 {
+            let prev = latencyBackoffMultiplier
+            latencyBackoffMultiplier = min(latencyBackoffMultiplier * 2, maxSyncInterval / baseSyncInterval)
+            if latencyBackoffMultiplier != prev {
+                log("AgentSync: tick took \(String(format: "%.1f", elapsedSeconds))s, backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x (interval \(currentSyncInterval() / 1_000_000_000)s)")
+            }
+        } else if elapsedSeconds < 5 && latencyBackoffMultiplier > 1 {
+            let prev = latencyBackoffMultiplier
+            latencyBackoffMultiplier = max(latencyBackoffMultiplier / 2, 1)
+            if latencyBackoffMultiplier != prev {
+                log("AgentSync: tick fast (\(String(format: "%.1f", elapsedSeconds))s), backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x")
+            }
         }
     }
 

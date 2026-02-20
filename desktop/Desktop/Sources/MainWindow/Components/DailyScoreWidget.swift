@@ -23,62 +23,65 @@ struct ScoreWidget: View {
         }
     }
 
-    private let gaugeWidth: CGFloat = 140
-    private var gaugeHeight: CGFloat { gaugeWidth / 2 }
-    private let lineWidth: CGFloat = 12
-    private let fontSize: CGFloat = 28
-
     var body: some View {
-        VStack(spacing: 12) {
-            // Semicircle gauge
-            ZStack {
-                // Background arc
-                SemicircleShape()
-                    .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .frame(width: gaugeWidth, height: gaugeHeight)
+        GeometryReader { geometry in
+            let gaugeWidth = min(geometry.size.width * 0.55, 180)
+            let gaugeHeight = gaugeWidth / 2
+            let lineWidth = max(gaugeWidth * 0.085, 8)
+            let fontSize = max(gaugeWidth * 0.2, 18)
 
-                // Progress arc
-                SemicircleShape()
-                    .trim(from: 0, to: min(weeklyScore.score / 100, 1.0))
-                    .stroke(scoreColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    .frame(width: gaugeWidth, height: gaugeHeight)
-                    .animation(.easeInOut(duration: 0.3), value: weeklyScore.score)
+            VStack(spacing: 12) {
+                // Semicircle gauge
+                ZStack {
+                    // Background arc
+                    SemicircleShape()
+                        .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .frame(width: gaugeWidth, height: gaugeHeight)
 
-                // Score text
-                VStack(spacing: 2) {
-                    Text("\(Int(weeklyScore.score))%")
-                        .scaledFont(size: fontSize, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .contentTransition(.numericText())
-                }
-                .offset(y: gaugeHeight * 0.14)
-            }
+                    // Progress arc
+                    SemicircleShape()
+                        .trim(from: 0, to: min(weeklyScore.score / 100, 1.0))
+                        .stroke(scoreColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                        .frame(width: gaugeWidth, height: gaugeHeight)
+                        .animation(.easeInOut(duration: 0.3), value: weeklyScore.score)
 
-            // Task count and subtitle
-            VStack(spacing: 4) {
-                if weeklyScore.hasTasks {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(scoreColor)
-                        Text("\(weeklyScore.completedTasks) of \(weeklyScore.totalTasks) tasks completed")
-                            .scaledMonospacedDigitFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
+                    // Score text
+                    VStack(spacing: 2) {
+                        Text("\(Int(weeklyScore.score))%")
+                            .scaledFont(size: fontSize, weight: .bold)
+                            .foregroundColor(OmiColors.textPrimary)
                             .contentTransition(.numericText())
                     }
-                } else {
-                    Text("No tasks this week")
-                        .scaledFont(size: 12)
-                        .foregroundColor(OmiColors.textTertiary)
+                    .offset(y: gaugeHeight * 0.14)
                 }
 
-                Text("Last 7 days")
-                    .scaledFont(size: 10)
-                    .foregroundColor(OmiColors.textQuaternary)
+                // Task count and subtitle
+                VStack(spacing: 4) {
+                    if weeklyScore.hasTasks {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .scaledFont(size: 12)
+                                .foregroundColor(scoreColor)
+                            Text("\(weeklyScore.completedTasks) of \(weeklyScore.totalTasks) tasks completed")
+                                .scaledMonospacedDigitFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .contentTransition(.numericText())
+                        }
+                    } else {
+                        Text("No tasks this week")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Text("Last 7 days")
+                        .scaledFont(size: 10)
+                        .foregroundColor(OmiColors.textQuaternary)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(20)
         }
-        .frame(maxWidth: .infinity)
-        .padding(20)
+        .frame(minHeight: 200)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
