@@ -7,8 +7,15 @@ class GoalGenerationService {
     static let shared = GoalGenerationService()
 
     private static let kLastGenerationDate = "goalGeneration_lastDate"
+    static let kAutoGenerationEnabled = "goalGeneration_autoEnabled"
     private let maxActiveGoals = 3
     private let staleGoalDays: TimeInterval = 3 * 86400 // 3 days
+
+    /// Whether automatic goal generation is enabled. Defaults to false (off).
+    var isAutoGenerationEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.kAutoGenerationEnabled) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kAutoGenerationEnabled) }
+    }
 
     private init() {}
 
@@ -17,6 +24,10 @@ class GoalGenerationService {
     /// Called after each conversation is saved.
     /// Removes stale goals and checks if a day has passed since last generation.
     func onConversationCreated() {
+        guard isAutoGenerationEnabled else {
+            log("GoalGenerationService: Auto-generation disabled, skipping")
+            return
+        }
         Task {
             await removeStaleGoals()
             await checkDailyGeneration()
@@ -25,17 +36,17 @@ class GoalGenerationService {
 
     // MARK: - Stale Goal Removal
 
-    /// Complete (deactivate) goals that haven't had any progress update in 3+ days
-    /// Instead of deleting, marks them as completed so they appear in history
+    /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
+    /// Only applies to goals with source == "ai". User-created goals (source == "user" or no source) are never auto-removed.
     private func removeStaleGoals() async {
         do {
             let goals = try await APIClient.shared.getGoals()
             let now = Date()
 
-            for goal in goals where goal.isActive {
+            for goal in goals where goal.isActive && goal.source == "ai" {
                 let daysSinceUpdate = now.timeIntervalSince(goal.updatedAt)
                 if daysSinceUpdate >= staleGoalDays {
-                    log("GoalGenerationService: Completing stale goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
+                    log("GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
                     _ = try await APIClient.shared.completeGoal(id: goal.id)
                     try? await GoalStorage.shared.markCompleted(backendId: goal.id)
                     NotificationCenter.default.post(name: .goalAutoCreated, object: nil)

@@ -25,9 +25,8 @@ struct OnboardingView: View {
 
     // State for file indexing step (step 4)
     @State private var fileIndexingDone = false
+    @State private var isBrainMapPhase = false
 
-    // Track whether we've initialized bluetooth on the permissions step
-    @State private var hasInitializedBluetoothForPermissions = false
 
     // Privacy sheet
     @State private var showPrivacySheet = false
@@ -110,30 +109,11 @@ struct OnboardingView: View {
                 bringToFront()
             }
         }
-        .onChange(of: appState.hasBluetoothPermission) { _, granted in
-            if granted && currentStep == 3 {
-                log("Bluetooth permission granted on permissions step, bringing to front")
-                bringToFront()
-            }
-        }
-        .onChange(of: currentStep) { _, newStep in
-            // Initialize Bluetooth when reaching permissions step
-            if newStep == 3 && !hasInitializedBluetoothForPermissions {
-                log("Reached Permissions step, initializing Bluetooth manager")
-                appState.initializeBluetoothIfNeeded()
-                hasInitializedBluetoothForPermissions = true
-            }
-        }
         .onAppear {
             // Handle relaunch case: if app restarts on step 3 (e.g., after Screen Recording quit & reopen),
-            // immediately initialize Bluetooth and check all permissions.
+            // immediately check all permissions.
             // onChange(of: currentStep) won't fire since the value didn't change.
             if currentStep == 3 {
-                if !hasInitializedBluetoothForPermissions {
-                    log("OnboardingView onAppear: on permissions step, initializing Bluetooth")
-                    appState.initializeBluetoothIfNeeded()
-                    hasInitializedBluetoothForPermissions = true
-                }
                 log("OnboardingView onAppear: on permissions step, checking all permissions immediately")
                 appState.checkAllPermissions()
             }
@@ -188,7 +168,6 @@ struct OnboardingView: View {
             && appState.hasNotificationPermission
             && appState.hasAccessibilityPermission
             && appState.hasAutomationPermission
-            && (appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied)
     }
 
     private var requiredPermissionsGranted: Bool {
@@ -206,7 +185,6 @@ struct OnboardingView: View {
         if !appState.hasNotificationPermission { return 2 }
         if !appState.hasAccessibilityPermission { return 3 }
         if !appState.hasAutomationPermission { return 4 }
-        if !(appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied) { return 5 }
         return -1 // All granted
     }
 
@@ -214,6 +192,7 @@ struct OnboardingView: View {
         switch activePermissionIndex {
         case 0: return "permissions"
         case 2: return "enable_notifications"
+        case 3: return "accessibility_permission"
         default: return nil
         }
     }
@@ -229,7 +208,6 @@ struct OnboardingView: View {
                 return "Having trouble? Open System Settings → Privacy & Security → Automation, find Omi and toggle it ON. If Omi isn't listed, try quitting and reopening the app."
             }
             return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
-        case 5: return "Click 'Grant Access' to allow Omi to connect to Bluetooth wearable devices."
         default: return "All permissions granted! Click Continue to finish setup."
         }
     }
@@ -241,7 +219,6 @@ struct OnboardingView: View {
         case 2: return "bell"
         case 3: return "hand.raised"
         case 4: return "gearshape.2"
-        case 5: return "antenna.radiowaves.left.and.right"
         default: return "checkmark.circle"
         }
     }
@@ -253,7 +230,6 @@ struct OnboardingView: View {
         case 2: return "Notifications"
         case 3: return "Accessibility"
         case 4: return "Automation"
-        case 5: return "Bluetooth"
         default: return ""
         }
     }
@@ -261,74 +237,45 @@ struct OnboardingView: View {
     private var onboardingContent: some View {
         Group {
             if currentStep == 0 {
-                // Full-window video with overlaid controls, capped at native resolution
+                // Full-window video
                 ZStack {
                     OnboardingVideoView()
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
                         .frame(maxWidth: 960)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    // Overlay progress indicators and button
                     VStack {
-                        // Progress indicators at top
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
-                            }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
-
                         Spacer()
-
-                        // Continue button at bottom
                         Button(action: handleMainAction) {
                             Text("Continue")
-                                .frame(maxWidth: 200)
-                                .padding(.vertical, 8)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: 220)
+                                .padding(.vertical, 12)
+                                .background(OmiColors.purplePrimary)
+                                .cornerRadius(12)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .padding(.bottom, 24)
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 32)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if currentStep == 4 && isBrainMapPhase {
+                // Full-bleed brain map
+                stepContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Standard card layout for all other steps
-                VStack(spacing: 24) {
-                    Spacer()
-
+                // Minimal centered content — no card
+                ZStack {
                     VStack(spacing: 24) {
-                        // Progress indicators
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
-                            }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
-
-                        Spacer()
-                            .frame(height: 20)
-
                         stepContent
 
-                        Spacer()
-                            .frame(height: 20)
-
-                        buttonSection
+                        if currentStep != 4 {
+                            buttonSection
+                        }
                     }
-                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 600 : 420))
-                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 650 : 420))
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(OmiColors.backgroundSecondary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-
-                    Spacer()
+                    .frame(maxWidth: currentStep == 3 ? 720 : 420)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -380,7 +327,7 @@ struct OnboardingView: View {
         case 3:
             permissionsStepView
         case 4:
-            FileIndexingView(chatProvider: chatProvider) { fileCount in
+            FileIndexingView(chatProvider: chatProvider, isBrainMapPhase: $isBrainMapPhase) { fileCount in
                 handleFileIndexingComplete(fileCount: fileCount)
             }
         default:
@@ -487,6 +434,16 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = AssistantSettings.shared.transcriptionLanguage
             autoDetectEnabled = false
+            // Fetch language from Firestore (source of truth) for returning users
+            Task {
+                if let response = try? await APIClient.shared.getUserLanguage(),
+                   !response.language.isEmpty {
+                    await MainActor.run {
+                        selectedLanguage = response.language
+                        AssistantSettings.shared.transcriptionLanguage = response.language
+                    }
+                }
+            }
         }
     }
 
@@ -494,6 +451,9 @@ struct OnboardingView: View {
 
     private func handleFileIndexingComplete(fileCount: Int) {
         fileIndexingDone = true
+
+        // Mark file indexing as done so DesktopHomeView doesn't show it again as a sheet
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
         if fileCount > 0 {
             log("OnboardingView: File indexing completed with \(fileCount) files")
@@ -514,6 +474,24 @@ struct OnboardingView: View {
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
+
+        // Create a welcome task for the new user
+        Task {
+            await TasksStore.shared.createTask(
+                description: "Run Omi for two days to start receiving helpful advice",
+                dueAt: Date(),
+                priority: "low"
+            )
+        }
+
+        // Send a welcome notification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            NotificationService.shared.sendNotification(
+                title: "You're all set!",
+                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
+            )
+        }
+
         if let onComplete = onComplete {
             onComplete()
         }
@@ -590,19 +568,6 @@ struct OnboardingView: View {
                             appState.triggerAutomationPermission()
                         }
                     )
-                    permissionRow(
-                        number: 6,
-                        icon: "antenna.radiowaves.left.and.right",
-                        name: "Bluetooth",
-                        isGranted: appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied,
-                        isActive: activePermissionIndex == 5,
-                        action: {
-                            AnalyticsManager.shared.permissionRequested(permission: "bluetooth")
-                            appState.initializeBluetoothIfNeeded()
-                            appState.triggerBluetoothPermission()
-                        }
-                    )
-
                     // Privacy link
                     Button(action: { showPrivacySheet = true }) {
                         HStack(spacing: 6) {
@@ -635,9 +600,9 @@ struct OnboardingView: View {
                 AnimatedGIFView(gifName: gifName)
                     .id(gifName)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 280)
             } else if activePermissionIndex >= 0 {
-                Spacer()
                 Image(systemName: activePermissionIcon)
                     .scaledFont(size: 40)
                     .foregroundColor(OmiColors.purplePrimary)
@@ -649,9 +614,7 @@ struct OnboardingView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
-                Spacer()
             } else {
-                Spacer()
                 Image(systemName: "checkmark.circle.fill")
                     .scaledFont(size: 48)
                     .foregroundColor(.green)
@@ -661,7 +624,6 @@ struct OnboardingView: View {
                     .scaledFont(size: 13)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
-                Spacer()
             }
         }
         .padding(12)
@@ -718,14 +680,6 @@ struct OnboardingView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(isActive && !isGranted ? OmiColors.purplePrimary.opacity(0.4) : Color.clear, lineWidth: 1.5)
         )
-    }
-
-    private var isBluetoothPermissionDenied: Bool {
-        appState.isBluetoothPermissionDenied()
-    }
-
-    private var isBluetoothUnsupported: Bool {
-        appState.isBluetoothUnsupported()
     }
 
     @ViewBuilder
@@ -825,9 +779,6 @@ struct OnboardingView: View {
             if appState.hasAutomationPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "automation")
             }
-            if appState.hasBluetoothPermission {
-                AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
-            }
             // Log skipped permissions
             if !appState.hasScreenRecordingPermission {
                 AnalyticsManager.shared.permissionSkipped(permission: "screen_recording")
@@ -869,8 +820,9 @@ struct OnboardingVideoView: NSViewRepresentable {
         if let url = Bundle.resourceBundle.url(forResource: "omi-demo", withExtension: "mp4") {
             let player = AVPlayer(url: url)
             playerView.player = player
-            playerView.controlsStyle = .inline
+            playerView.controlsStyle = .none
             playerView.showsFullScreenToggleButton = false
+            playerView.showsSharingServiceButton = false
             player.play()
 
             NotificationCenter.default.addObserver(

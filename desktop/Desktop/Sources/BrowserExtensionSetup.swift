@@ -20,6 +20,7 @@ struct BrowserExtensionSetup: View {
 
     @State private var phase: Phase = .welcome
     @State private var tokenInput: String = ""
+    @State private var tokenError: String? = nil
     @State private var isVerifying = false
     @State private var verifyError: String? = nil
     @State private var verifySuccess = false
@@ -196,9 +197,18 @@ struct BrowserExtensionSetup: View {
                                 .fill(OmiColors.backgroundPrimary.opacity(0.5))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .stroke(OmiColors.textTertiary.opacity(0.3), lineWidth: 1)
+                                        .stroke(tokenError != nil ? OmiColors.error.opacity(0.5) : OmiColors.textTertiary.opacity(0.3), lineWidth: 1)
                                 )
                         )
+                        .onChange(of: tokenInput) { _, _ in
+                            tokenError = nil
+                        }
+
+                    if let error = tokenError {
+                        Text(error)
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.error)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -303,6 +313,32 @@ struct BrowserExtensionSetup: View {
             .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
     }
 
+    /// Strip the "PLAYWRIGHT_MCP_EXTENSION_TOKEN=" prefix if the user copied the full env var line.
+    static func parseToken(_ input: String) -> String {
+        var token = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let eqIndex = token.firstIndex(of: "="), token.hasPrefix("PLAYWRIGHT") {
+            token = String(token[token.index(after: eqIndex)...])
+        }
+        return token
+    }
+
+    /// Validate that a parsed token looks like a real extension auth token.
+    /// Returns an error message if invalid, nil if valid.
+    static func validateToken(_ token: String) -> String? {
+        if token.isEmpty {
+            return "Please paste the token from the extension page."
+        }
+        if token.count < 20 {
+            return "Token is too short. Copy the full token from the extension page."
+        }
+        // Extension tokens are base64url: alphanumeric + hyphen + underscore
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        if token.unicodeScalars.contains(where: { !allowed.contains($0) }) {
+            return "Token contains invalid characters. Copy the token value only, not the surrounding text."
+        }
+        return nil
+    }
+
     /// Open the extension status page explicitly in Chrome (macOS doesn't handle chrome-extension:// URLs natively)
     static func openExtensionInChrome() {
         let extensionURL = URL(string: "chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/status.html")!
@@ -365,8 +401,11 @@ struct BrowserExtensionSetup: View {
             }
 
         case .connect:
-            // Save token
-            let token = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+            let token = Self.parseToken(tokenInput)
+            if let error = Self.validateToken(token) {
+                tokenError = error
+                return
+            }
             UserDefaults.standard.set(token, forKey: "playwrightExtensionToken")
             log("BrowserExtensionSetup: Token saved (\(token.prefix(8))...)")
 

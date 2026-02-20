@@ -1074,19 +1074,19 @@ struct MemoriesPage: View {
                 categoryFilterPopover
             }
 
-            // Memory Graph button (commented out — functionality not ready yet)
-            // Button {
-            //     showingMemoryGraph = true
-            // } label: {
-            //     Image(systemName: "brain")
-            //         .scaledFont(size: 14)
-            //         .foregroundColor(OmiColors.textSecondary)
-            //         .frame(width: 32, height: 32)
-            //         .background(OmiColors.backgroundTertiary)
-            //         .cornerRadius(8)
-            // }
-            // .buttonStyle(.plain)
-            // .help("View Memory Graph")
+            // Memory Graph button
+            Button {
+                showingMemoryGraph = true
+            } label: {
+                Image(systemName: "brain")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .frame(width: 32, height: 32)
+                    .background(OmiColors.backgroundTertiary)
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .help("View Memory Graph")
 
             // Add Memory button (icon only)
             Button {

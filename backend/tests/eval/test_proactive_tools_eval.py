@@ -1,8 +1,12 @@
 """
-Live LLM evaluation for proactive mentor tools.
+Live LLM evaluation for the proactive mentor notification system.
 
-Runs 30 test cases (10 per tool) against gpt-4.1-mini with tool calling,
-then uses gpt-5.1 as judge to evaluate quality.
+Tests the unified prompt + structured output approach with rich context.
+Verifies:
+- Generic advice gets low confidence scores
+- Advice connecting to specific goals gets high confidence
+- LLM self-regulates when notification history is populated
+- Anti-patterns (wellness advice, vague suggestions) produce has_advice=false
 
 Usage:
     cd backend && python -m tests.eval.test_proactive_tools_eval
@@ -15,7 +19,8 @@ import os
 import sys
 from typing import List, Dict, Any
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from pydantic import BaseModel, Field
+
 from langchain_openai import ChatOpenAI
 
 # ---------------------------------------------------------------------------
@@ -24,272 +29,119 @@ from langchain_openai import ChatOpenAI
 llm_mini = ChatOpenAI(model="gpt-4.1-mini")
 llm_judge = ChatOpenAI(model="gpt-5.1")
 
-# ---------------------------------------------------------------------------
-# Tool definitions (same as production)
-# ---------------------------------------------------------------------------
-PROACTIVE_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_argument_perspective",
-            "description": (
-                "User is in a disagreement with someone. Offer an honest outside perspective "
-                "on who might be right and why, based on what you know about the user."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "notification_text": {
-                        "type": "string",
-                        "description": "Push notification message (<300 chars, direct, empathetic)",
-                    },
-                    "other_person": {
-                        "type": "string",
-                        "description": "Who the user is disagreeing with",
-                    },
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "rationale": {
-                        "type": "string",
-                        "description": "Why this notification is warranted",
-                    },
-                },
-                "required": ["notification_text", "confidence", "rationale"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_goal_misalignment",
-            "description": (
-                "User is discussing plans that contradict their stored goals. "
-                "Alert them to the conflict so they can course-correct."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "notification_text": {
-                        "type": "string",
-                        "description": "Push notification message (<300 chars, direct, empathetic)",
-                    },
-                    "goal_name": {
-                        "type": "string",
-                        "description": "Which goal is conflicted",
-                    },
-                    "conflict_description": {
-                        "type": "string",
-                        "description": "How the plan conflicts with the goal",
-                    },
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                },
-                "required": ["notification_text", "goal_name", "conflict_description", "confidence"],
-                "additionalProperties": False,
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_emotional_support",
-            "description": (
-                "User is expressing complaints or negative emotions. "
-                "Suggest a concrete, actionable step they can take right now."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "notification_text": {
-                        "type": "string",
-                        "description": "Push notification message (<300 chars, direct, empathetic)",
-                    },
-                    "detected_emotion": {
-                        "type": "string",
-                        "description": "Primary emotion detected (e.g. frustration, loneliness, anxiety)",
-                    },
-                    "suggested_action": {
-                        "type": "string",
-                        "description": "Concrete actionable suggestion",
-                    },
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                },
-                "required": ["notification_text", "detected_emotion", "confidence"],
-                "additionalProperties": False,
-            },
-        },
-    },
-]
 
 # ---------------------------------------------------------------------------
-# System prompt (same as production)
+# Models (same as production)
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT_TEMPLATE = (
-    "You are {user_name}'s proactive AI mentor and trusted friend. "
-    "You may call multiple tools if multiple triggers clearly apply. "
-    "Call a tool ONLY when the conversation clearly matches a trigger. "
-    "If no trigger applies, respond with no tool calls.\n\n"
-    "IMPORTANT RULES:\n"
-    "- notification_text must be <300 chars, warm, and personal — like texting a close friend\n"
-    "- Reference specific details from the conversation (names, situations, feelings)\n"
-    "- For arguments: validate feelings first, then offer perspective. Don't be clinical.\n"
-    "- For goal misalignment: ONLY trigger when user is ACTIVELY contradicting a goal. "
-    "Do NOT trigger when they are doing something aligned with or neutral to their goals.\n"
-    "- For emotional support: suggest ONE concrete action they can do RIGHT NOW\n"
-    "- Always end with a gentle question or suggestion, never a lecture"
-)
+class ProactiveAdvice(BaseModel):
+    notification_text: str = Field(description="The push notification message (<300 chars, direct, personal)")
+    reasoning: str = Field(
+        description="Why this notification is worth sending. MUST cite a specific fact, goal, or past conversation."
+    )
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence score")
+    category: str = Field(
+        description="One of: goal_connection, pattern_insight, mistake_prevention, commitment_reminder, dot_connecting"
+    )
+
+
+class ProactiveNotificationResult(BaseModel):
+    has_advice: bool = Field(description="True ONLY when the notification scores high on at least 3 of 4 axes.")
+    advice: ProactiveAdvice | None = Field(default=None, description="The notification to send.")
+    context_summary: str = Field(description="Brief summary of current conversation context.")
+
 
 # ---------------------------------------------------------------------------
-# Test cases: 10 per tool
+# Prompt template (same as production)
+# ---------------------------------------------------------------------------
+PROACTIVE_PROMPT_TEMPLATE = """You are {user_name}'s sharp, observant friend who has been listening to their conversations and knows their history deeply. You are NOT a life coach, therapist, or wellness advisor. You are the friend who connects dots others miss.
+
+Your job: Decide if the current conversation warrants a push notification. Most of the time, it does NOT.
+
+== {user_name}'S FACTS & PERSONALITY ==
+{user_facts}
+
+== {user_name}'S ACTIVE GOALS ==
+{goals_text}
+
+== RELEVANT PAST CONVERSATIONS ==
+{past_conversations}
+
+== CURRENT LIVE CONVERSATION ==
+{current_conversation}
+
+== YOUR RECENT NOTIFICATIONS (last 20) ==
+{recent_notifications}
+
+== NOTIFICATION FREQUENCY SETTING ==
+{frequency_guidance}
+
+== EVALUATION FRAMEWORK ==
+Before deciding to send a notification, evaluate on ALL FOUR axes:
+
+1. ACTIONABILITY: Can {user_name} DO something concrete right now based on this? ("You should think about..." = NOT actionable. "Call Mike back about the deal before 5pm" = actionable.)
+
+2. TIMELINESS: Does this matter RIGHT NOW vs later? Is there a window closing? A decision being made? If it can wait until tomorrow, don't send it now.
+
+3. NON-OBVIOUSNESS: Would {user_name} have figured this out themselves? This is the "holy shit" axis. Connecting their goal X with something they said 2 weeks ago with what they're about to do RIGHT NOW = non-obvious. Telling them to "stay focused" = painfully obvious.
+
+4. CONNECTION TO HISTORY/GOALS: Does this link the current conversation to their stated goals, past patterns, or previous commitments? The more specific the connection, the higher the value.
+
+has_advice should be true ONLY when the notification scores high on at least 3 of these 4 axes.
+
+== CONFIDENCE CALIBRATION ==
+- 0.90+ : Preventing a concrete mistake OR critical connection to a specific goal with time pressure
+- 0.75-0.89 : Non-obvious dot-connecting across different conversations or time periods
+- 0.50-0.74 : Useful insight but user might figure it out themselves
+- Below 0.50 : Generic observation — DO NOT SEND
+
+== ANTI-PATTERNS (instant has_advice=false) ==
+- Generic wellness advice ("take a break", "stay hydrated", "practice mindfulness")
+- Vague suggestions without specific references ("you might want to consider...")
+- Restating what the user just said back to them
+- Motivational platitudes ("you've got this!", "believe in yourself!")
+- Advice that doesn't reference a specific fact, goal, or past conversation
+- Hedging with "however" or "on the other hand" — take a clear stance or don't send
+
+== REASONING REQUIREMENT ==
+The reasoning field MUST cite a specific fact, goal, or past conversation. Example:
+- GOOD: "User's goal is 'save $50k for house' and they're about to spend $3k on a vacation they mentioned regretting last month"
+- BAD: "User seems stressed and could use some encouragement"
+If you cannot write a reasoning that cites a concrete connection, set has_advice=false.
+
+== OUTPUT ==
+Always provide context_summary (brief summary of current conversation).
+Set has_advice=true only when you have a genuinely valuable, non-obvious notification.
+When has_advice=true, provide the full advice object with notification_text (<300 chars), reasoning, confidence, and category."""
+
+FREQUENCY_GUIDANCE = {
+    1: "Ultra selective. Only for preventing clear mistakes or truly critical insights. 1-3 per day max.",
+    2: "Very selective. Only non-obvious insights that connect to their goals or history. 3-5 per day.",
+    3: "Balanced. Interrupt when you have specific, actionable value tied to their goals/patterns. 5-10 per day.",
+    4: "Proactive. Share relevant insights connecting current conversation to goals/history. 8-12 per day.",
+    5: "Very proactive. Look for any opportunity to connect dots and add value. Up to 12 per day.",
+}
+
+
+# ---------------------------------------------------------------------------
+# Test cases
 # ---------------------------------------------------------------------------
 
-# Each test case: {conversation, user_name, user_facts, goals, expected_tool, should_trigger}
-ARGUMENT_TEST_CASES = [
-    {
-        "id": "arg_01",
-        "conversation": [
-            "[Alex]: My wife thinks I should quit my job and start a business",
-            "[other]: What do you think?",
-            "[Alex]: She's crazy, we have a mortgage to pay",
-            "[other]: But she has a point about your unhappiness at work",
-        ],
-        "user_name": "Alex",
-        "user_facts": "Alex is a software engineer, married, has a mortgage, has been complaining about work for months.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_02",
-        "conversation": [
-            "[Maria]: My partner wants to move to another city for his job",
-            "[other]: And you don't want to?",
-            "[Maria]: No way, my whole family is here. He's being selfish",
-        ],
-        "user_name": "Maria",
-        "user_facts": "Maria is very close with her family, works remotely, has been dating partner for 3 years.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_03",
-        "conversation": [
-            "[Tom]: My coworker keeps taking credit for my work in meetings",
-            "[other]: Have you talked to them about it?",
-            "[Tom]: No, they'll just deny it. My manager saw it happen too and said nothing",
-        ],
-        "user_name": "Tom",
-        "user_facts": "Tom is a junior developer, conflict-avoidant, values fairness.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_04",
-        "conversation": [
-            "[Sam]: My mom keeps telling me I should have kids already",
-            "[other]: That's annoying",
-            "[Sam]: She says I'm being irresponsible. I told her it's my choice",
-        ],
-        "user_name": "Sam",
-        "user_facts": "Sam is 32, focused on career, doesn't want kids right now.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_05",
-        "conversation": [
-            "[Pat]: My friend said my startup idea is stupid",
-            "[other]: Ouch. What did they say exactly?",
-            "[Pat]: That nobody would pay for it. But they don't understand the market",
-        ],
-        "user_name": "Pat",
-        "user_facts": "Pat has been working on a B2B SaaS idea for 6 months, has 3 paying beta users.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_06",
-        "conversation": [
-            "[Dana]: My roommate ate my leftovers again",
-            "[other]: Did you talk to them?",
-            "[Dana]: Yeah they said it's not a big deal. But it IS a big deal to me",
-        ],
-        "user_name": "Dana",
-        "user_facts": "Dana is a college student on a tight budget.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_07",
-        "conversation": [
-            "[Chris]: My brother wants to borrow money again, I said no and now he's angry",
-            "[other]: How much does he want?",
-            "[Chris]: Five thousand. He never pays me back. He says family should help family",
-        ],
-        "user_name": "Chris",
-        "user_facts": "Chris has lent brother money 3 times before, never repaid. Chris values family but is financially responsible.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_08",
-        "conversation": [
-            "[Jo]: Had a great lunch today",
-            "[other]: Nice, where did you go?",
-            "[Jo]: That new Thai place downtown, really good pad thai",
-        ],
-        "user_name": "Jo",
-        "user_facts": "Jo likes trying new restaurants.",
-        "goals": [],
-        "expected_tool": None,
-        "should_trigger": False,
-    },
-    {
-        "id": "arg_09",
-        "conversation": [
-            "[Riley]: I disagree with the new company policy on remote work",
-            "[other]: What changed?",
-            "[Riley]: They want everyone back 5 days. My manager agrees with me that it's counterproductive",
-        ],
-        "user_name": "Riley",
-        "user_facts": "Riley is a senior engineer, top performer, works best from home.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-    {
-        "id": "arg_10",
-        "conversation": [
-            "[Lee]: My wife and I can't agree on where to send our kid to school",
-            "[other]: Public vs private?",
-            "[Lee]: She wants private, I think public is fine. We had a big fight about it last night",
-        ],
-        "user_name": "Lee",
-        "user_facts": "Lee went to public school, values practical education, budget-conscious. Wife went to private school.",
-        "goals": [],
-        "expected_tool": "trigger_argument_perspective",
-        "should_trigger": True,
-    },
-]
-
-GOAL_MISALIGNMENT_TEST_CASES = [
+# Cases where notification SHOULD fire (goal connection, pattern insight, dot-connecting)
+SHOULD_NOTIFY_CASES = [
     {
         "id": "goal_01",
         "conversation": [
             "[Emma]: I'm thinking of ordering pizza tonight",
             "[other]: Sounds good",
-            "[Emma]: Yeah, and maybe some wings too. I deserve a treat",
+            "[Emma]: Yeah, and maybe some wings too. Third time this week",
         ],
         "user_name": "Emma",
-        "user_facts": "Emma has been dieting for 2 months, lost 10 pounds.",
+        "user_facts": "Emma has been dieting for 2 months, lost 10 pounds. She tends to order out when stressed about work.",
         "goals": [{"title": "Lose 20 pounds by June"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
+        "past_conversations": "Last week Emma said she was proud of cooking at home 5 days in a row.",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Goal contradiction with pattern insight",
     },
     {
         "id": "goal_02",
@@ -299,52 +151,79 @@ GOAL_MISALIGNMENT_TEST_CASES = [
             "[Mike]: Machine learning. That's my fifth course this month",
         ],
         "user_name": "Mike",
-        "user_facts": "Mike starts many courses but rarely finishes them.",
+        "user_facts": "Mike starts many courses but rarely finishes them. He's completed 1 out of 8 courses in the past year.",
         "goals": [{"title": "Complete AWS certification by March"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
+        "past_conversations": "Two weeks ago Mike complained about not finishing things and said he'd focus on AWS only.",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Breaking own commitment with historical pattern",
     },
     {
         "id": "goal_03",
-        "conversation": [
-            "[Sara]: I'm going to skip my morning run tomorrow",
-            "[other]: Why?",
-            "[Sara]: I want to sleep in. I'll run next week instead",
-        ],
-        "user_name": "Sara",
-        "user_facts": "Sara is training for a half marathon in 6 weeks.",
-        "goals": [{"title": "Run half marathon in under 2 hours"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
-    },
-    {
-        "id": "goal_04",
         "conversation": [
             "[Jake]: I'm going to buy that new gaming console",
             "[other]: Nice, which one?",
             "[Jake]: The latest one, it's only 600 bucks",
         ],
         "user_name": "Jake",
-        "user_facts": "Jake has been saving for a down payment on a house.",
+        "user_facts": "Jake has been saving for a down payment. Currently at $42,000 saved. Budget is tight.",
         "goals": [{"title": "Save $50,000 for house down payment by December"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
+        "past_conversations": "Last month Jake said every dollar counts toward the house goal.",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Spending contradicts active savings goal",
     },
     {
-        "id": "goal_05",
+        "id": "pattern_01",
         "conversation": [
-            "[Nina]: I'm going to stay up late binge-watching that new show",
-            "[other]: Which one?",
-            "[Nina]: The one everyone's talking about. Probably until 3am",
+            "[Sara]: I'm going to skip my morning run tomorrow",
+            "[other]: Why?",
+            "[Sara]: I want to sleep in. I'll run next week instead",
         ],
-        "user_name": "Nina",
-        "user_facts": "Nina has been struggling with sleep quality.",
-        "goals": [{"title": "Fix sleep schedule - be in bed by 11pm every night"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
+        "user_name": "Sara",
+        "user_facts": "Sara is training for a half marathon in 6 weeks. She's skipped 3 of her last 5 planned runs.",
+        "goals": [{"title": "Run half marathon in under 2 hours"}],
+        "past_conversations": "Sara said two weeks ago that she can't afford to miss any more training runs.",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Declining pattern threatens goal with time pressure",
     },
     {
-        "id": "goal_06",
+        "id": "dot_connect_01",
+        "conversation": [
+            "[Ben]: I'm going to accept that job offer at the big company",
+            "[other]: What about your startup?",
+            "[Ben]: I'll put it on pause. The salary is too good to pass up",
+        ],
+        "user_name": "Ben",
+        "user_facts": "Ben has been building a startup for 8 months with 500 users. Last month he said he'd never go back to corporate.",
+        "goals": [{"title": "Grow startup to 5,000 users by Q3"}],
+        "past_conversations": "Three weeks ago Ben said 'I'd rather eat ramen than go back to a desk job.' His startup just got a mention in TechCrunch.",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Cross-time dot-connecting: contradicting own strong statement",
+    },
+]
+
+# Cases where notification should NOT fire (generic, obvious, anti-patterns)
+SHOULD_NOT_NOTIFY_CASES = [
+    {
+        "id": "generic_01",
+        "conversation": [
+            "[Jo]: Had a great lunch today",
+            "[other]: Nice, where did you go?",
+            "[Jo]: That new Thai place downtown, really good pad thai",
+        ],
+        "user_name": "Jo",
+        "user_facts": "Jo likes trying new restaurants.",
+        "goals": [],
+        "past_conversations": "",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Casual conversation, no goal connection",
+    },
+    {
+        "id": "generic_02",
         "conversation": [
             "[Dan]: I'm going to read for an hour today",
             "[other]: What book?",
@@ -353,144 +232,13 @@ GOAL_MISALIGNMENT_TEST_CASES = [
         "user_name": "Dan",
         "user_facts": "Dan loves reading.",
         "goals": [{"title": "Read 2 books per month"}],
-        "expected_tool": None,
-        "should_trigger": False,
+        "past_conversations": "",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "User doing something aligned with goal — no conflict",
     },
     {
-        "id": "goal_07",
-        "conversation": [
-            "[Ava]: I think I'll skip Spanish class again this week",
-            "[other]: How many have you missed?",
-            "[Ava]: Like three in a row. The teacher is boring anyway",
-        ],
-        "user_name": "Ava",
-        "user_facts": "Ava enrolled in Spanish classes 2 months ago.",
-        "goals": [{"title": "Become conversational in Spanish by summer"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
-    },
-    {
-        "id": "goal_08",
-        "conversation": [
-            "[Ben]: I'm going to accept that job offer at the big company",
-            "[other]: What about your startup?",
-            "[Ben]: I'll put it on pause. The salary is too good to pass up",
-        ],
-        "user_name": "Ben",
-        "user_facts": "Ben has been building a startup for 8 months with 500 users.",
-        "goals": [{"title": "Grow startup to 5,000 users by Q3"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
-    },
-    {
-        "id": "goal_09",
-        "conversation": [
-            "[Chloe]: I'm going to start meditating every morning",
-            "[other]: That's a great idea",
-            "[Chloe]: Yeah, I heard it helps with focus",
-        ],
-        "user_name": "Chloe",
-        "user_facts": "Chloe struggles with focus at work.",
-        "goals": [{"title": "Improve focus and productivity at work"}],
-        "expected_tool": None,
-        "should_trigger": False,
-    },
-    {
-        "id": "goal_10",
-        "conversation": [
-            "[Eli]: I'm going to eat out every day this week",
-            "[other]: That's expensive",
-            "[Eli]: I know but I hate cooking. It's just easier",
-        ],
-        "user_name": "Eli",
-        "user_facts": "Eli spends a lot on food delivery.",
-        "goals": [{"title": "Cook at home at least 5 days a week to save money"}],
-        "expected_tool": "trigger_goal_misalignment",
-        "should_trigger": True,
-    },
-]
-
-EMOTIONAL_SUPPORT_TEST_CASES = [
-    {
-        "id": "emo_01",
-        "conversation": [
-            "[Zoe]: I feel so lonely lately",
-            "[other]: Have you tried reaching out to friends?",
-            "[Zoe]: Nobody has time for me. I just sit at home every night",
-        ],
-        "user_name": "Zoe",
-        "user_facts": "Zoe recently moved to a new city, works remotely.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_02",
-        "conversation": [
-            "[Max]: I'm so anxious about my presentation tomorrow",
-            "[other]: You'll do fine",
-            "[Max]: No I won't. I always freeze up. I couldn't sleep last night thinking about it",
-        ],
-        "user_name": "Max",
-        "user_facts": "Max has public speaking anxiety, is a data scientist.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_03",
-        "conversation": [
-            "[Ivy]: Everything feels pointless right now",
-            "[other]: What do you mean?",
-            "[Ivy]: I work all day, come home exhausted, repeat. What's the point",
-        ],
-        "user_name": "Ivy",
-        "user_facts": "Ivy is a nurse working 12-hour shifts.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_04",
-        "conversation": [
-            "[Ray]: I got rejected from another job today",
-            "[other]: Sorry to hear that",
-            "[Ray]: That's the 15th rejection this month. I'm starting to think I'm just not good enough",
-        ],
-        "user_name": "Ray",
-        "user_facts": "Ray was laid off 3 months ago, has 8 years of experience in marketing.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_05",
-        "conversation": [
-            "[Lily]: I can't stop comparing myself to my friends",
-            "[other]: In what way?",
-            "[Lily]: They all seem to have their life together. Houses, marriages, babies. I have nothing",
-        ],
-        "user_name": "Lily",
-        "user_facts": "Lily is 29, single, renting, loves travel and adventure.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_06",
-        "conversation": [
-            "[Finn]: I'm so frustrated with my code today",
-            "[other]: What's wrong?",
-            "[Finn]: This bug has been driving me crazy for 3 days. I want to throw my laptop out the window",
-        ],
-        "user_name": "Finn",
-        "user_facts": "Finn is a frontend developer, perfectionist.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
-    },
-    {
-        "id": "emo_07",
+        "id": "generic_03",
         "conversation": [
             "[Nora]: I had a really productive day today",
             "[other]: That's awesome! What did you accomplish?",
@@ -499,104 +247,129 @@ EMOTIONAL_SUPPORT_TEST_CASES = [
         "user_name": "Nora",
         "user_facts": "Nora is a project manager.",
         "goals": [],
-        "expected_tool": None,
-        "should_trigger": False,
+        "past_conversations": "",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Positive update, no intervention needed",
     },
     {
-        "id": "emo_08",
+        "id": "generic_04",
         "conversation": [
-            "[Oscar]: I'm exhausted. I can't keep doing this",
-            "[other]: Doing what?",
-            "[Oscar]: Working two jobs, taking care of my mom, never sleeping. Something has to give",
+            "[Chloe]: I'm going to start meditating every morning",
+            "[other]: That's a great idea",
+            "[Chloe]: Yeah, I heard it helps with focus",
         ],
-        "user_name": "Oscar",
-        "user_facts": "Oscar is caretaking for his elderly mother while working two jobs.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
+        "user_name": "Chloe",
+        "user_facts": "Chloe struggles with focus at work.",
+        "goals": [{"title": "Improve focus and productivity at work"}],
+        "past_conversations": "",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "User taking positive action aligned with goals",
     },
     {
-        "id": "emo_09",
+        "id": "wellness_01",
         "conversation": [
-            "[Uma]: I feel like such a failure as a parent",
-            "[other]: Why do you say that?",
-            "[Uma]: My kid got in trouble at school again. I must be doing something wrong",
+            "[Pat]: I'm so tired today",
+            "[other]: Long day?",
+            "[Pat]: Yeah, didn't sleep well",
         ],
-        "user_name": "Uma",
-        "user_facts": "Uma is a single parent of a 10-year-old.",
+        "user_name": "Pat",
+        "user_facts": "Pat works in marketing.",
         "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
+        "past_conversations": "",
+        "recent_notifications": [],
+        "frequency": 3,
+        "description": "Would produce generic wellness advice (anti-pattern)",
     },
+]
+
+# Cases testing self-regulation with populated notification history
+SELF_REGULATION_CASES = [
     {
-        "id": "emo_10",
+        "id": "selfregulate_01",
         "conversation": [
-            "[Vera]: I'm dreading going to work tomorrow",
-            "[other]: What happened?",
-            "[Vera]: My boss publicly criticized me in a meeting. I felt humiliated",
+            "[Eli]: I'm going to eat out every day this week",
+            "[other]: That's expensive",
+            "[Eli]: I know but I hate cooking",
         ],
-        "user_name": "Vera",
-        "user_facts": "Vera is sensitive to criticism, works in sales.",
-        "goals": [],
-        "expected_tool": "trigger_emotional_support",
-        "should_trigger": True,
+        "user_name": "Eli",
+        "user_facts": "Eli spends a lot on food delivery.",
+        "goals": [{"title": "Cook at home at least 5 days a week to save money"}],
+        "past_conversations": "",
+        "recent_notifications": [
+            {
+                "text": "Hey Eli, you mentioned cooking more to save money — today would be a great day to try that new recipe!",
+                "created_at": "10 minutes ago",
+            },
+            {
+                "text": "Eli, your food spending is trending up again. Remember your goal to cook 5x/week?",
+                "created_at": "2 hours ago",
+            },
+            {
+                "text": "Quick reminder: your goal to cook more is slipping. Maybe prep something tonight?",
+                "created_at": "5 hours ago",
+            },
+        ],
+        "frequency": 3,
+        "description": "Already sent 3 similar notifications — should self-regulate and NOT send another",
     },
 ]
 
 
-def run_tool_call(case: Dict[str, Any]) -> Dict[str, Any]:
-    """Run a single test case against gpt-4.1-mini with tool calling."""
-    conversation_text = "\n".join(case["conversation"])
-    goals_text = "\n".join(f"- {g['title']}" for g in case.get("goals", [])) if case.get("goals") else "No goals set."
-
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(user_name=case["user_name"])
-    user_message = (
-        f"Conversation:\n{conversation_text}\n\n"
-        f"What we know about {case['user_name']}:\n{case['user_facts']}\n\n"
-        f"{case['user_name']}'s active goals:\n{goals_text}"
+def run_eval_case(case: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a single test case against the unified prompt with structured output."""
+    goals_text = (
+        "\n".join(f"- {g['title']}" for g in case.get("goals", [])) if case.get("goals") else "No active goals set."
     )
 
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_message)]
-    llm_with_tools = llm_mini.bind_tools(PROACTIVE_TOOLS, tool_choice="auto")
-    resp = llm_with_tools.invoke(messages)
+    conversation_text = "\n".join(case["conversation"])
 
-    tool_calls = []
-    for tc in resp.tool_calls:
-        tool_calls.append(
-            {
-                "name": tc["name"],
-                "args": tc["args"],
-            }
-        )
+    recent_noti_text = "No recent notifications sent."
+    if case.get("recent_notifications"):
+        lines = [f"[{n['created_at']}]: {n['text']}" for n in case["recent_notifications"]]
+        recent_noti_text = "\n".join(lines)
+
+    prompt = PROACTIVE_PROMPT_TEMPLATE.format(
+        user_name=case["user_name"],
+        user_facts=case["user_facts"],
+        goals_text=goals_text,
+        past_conversations=case.get("past_conversations") or "No relevant past conversations found.",
+        current_conversation=conversation_text,
+        recent_notifications=recent_noti_text,
+        frequency_guidance=FREQUENCY_GUIDANCE.get(case.get("frequency", 3)),
+    )
+
+    with_parser = llm_mini.with_structured_output(ProactiveNotificationResult)
+    result: ProactiveNotificationResult = with_parser.invoke(prompt)
 
     return {
         "case_id": case["id"],
-        "expected_tool": case["expected_tool"],
-        "should_trigger": case["should_trigger"],
-        "tool_calls": tool_calls,
-        "triggered": len(tool_calls) > 0,
-        "correct_tool": (
-            any(tc["name"] == case["expected_tool"] for tc in tool_calls) if case["expected_tool"] else True
-        ),
+        "has_advice": result.has_advice,
+        "confidence": result.advice.confidence if result.advice else 0,
+        "notification_text": result.advice.notification_text if result.advice else "",
+        "reasoning": result.advice.reasoning if result.advice else "",
+        "category": result.advice.category if result.advice else "",
+        "context_summary": result.context_summary,
     }
 
 
-def judge_notification(case: Dict[str, Any], tool_result: Dict[str, Any]) -> Dict[str, Any]:
-    """Use gpt-5.1 to judge the quality of a notification."""
-    if not tool_result["tool_calls"]:
-        return {"score": 0, "explanation": "No tool call made", "pass": not case["should_trigger"]}
+def judge_notification(case: Dict[str, Any], eval_result: Dict[str, Any], should_notify: bool) -> Dict[str, Any]:
+    """Use gpt-5.1 to judge the quality of a notification decision."""
+    if not should_notify:
+        # For cases that should NOT notify
+        if not eval_result["has_advice"]:
+            return {"pass": True, "total": 25, "explanation": "Correctly did not send notification"}
+        else:
+            # It notified when it shouldn't have
+            return {
+                "pass": False,
+                "total": 5,
+                "explanation": f"Should NOT have notified. Sent: '{eval_result['notification_text'][:100]}'",
+            }
 
-    # Find the relevant tool call
-    relevant_tc = None
-    for tc in tool_result["tool_calls"]:
-        if tc["name"] == case.get("expected_tool"):
-            relevant_tc = tc
-            break
-    if not relevant_tc:
-        relevant_tc = tool_result["tool_calls"][0]
-
-    notification_text = relevant_tc["args"].get("notification_text", "")
-    confidence = relevant_tc["args"].get("confidence", 0)
+    if not eval_result["has_advice"]:
+        return {"pass": False, "total": 0, "explanation": "Should have notified but didn't"}
 
     judge_prompt = f"""You are evaluating the quality of a proactive push notification from an AI mentor.
 
@@ -607,27 +380,28 @@ USER CONTEXT:
 - Name: {case["user_name"]}
 - Facts: {case["user_facts"]}
 - Goals: {json.dumps(case.get("goals", []))}
+- Past conversations: {case.get("past_conversations", "None")}
 
 NOTIFICATION SENT:
-Tool: {relevant_tc["name"]}
-Text: "{notification_text}"
-Confidence: {confidence}
+Text: "{eval_result['notification_text']}"
+Confidence: {eval_result['confidence']}
+Reasoning: "{eval_result['reasoning']}"
+Category: {eval_result['category']}
 
 Rate this notification on 5 criteria (1-5 each):
 1. RELEVANCE: Does the notification directly address what's happening in the conversation?
-2. EMPATHY: Is the tone warm, direct, and non-judgmental?
+2. NON-OBVIOUSNESS: Does it connect dots the user wouldn't connect themselves?
 3. ACTIONABILITY: Does it suggest something concrete the user can do?
-4. BREVITY: Is it concise (<300 chars) and easy to read as a push notification?
-5. APPROPRIATENESS: Should a notification have been sent at all? Is the tool choice correct?
+4. REASONING QUALITY: Does the reasoning cite specific facts/goals/past conversations?
+5. APPROPRIATENESS: Is the confidence level well-calibrated?
 
 Return ONLY a JSON object:
-{{"relevance": N, "empathy": N, "actionability": N, "brevity": N, "appropriateness": N, "total": N, "explanation": "brief explanation"}}
+{{"relevance": N, "non_obviousness": N, "actionability": N, "reasoning_quality": N, "appropriateness": N, "total": N, "explanation": "brief explanation"}}
 
 Total is the sum of all 5 scores (max 25). A score >= 18 is PASS."""
 
     resp = llm_judge.invoke(judge_prompt)
     try:
-        # Parse the JSON response
         content = resp.content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1].rsplit("```", 1)[0]
@@ -639,71 +413,96 @@ Total is the sum of all 5 scores (max 25). A score >= 18 is PASS."""
 
 
 def main():
-    all_cases = ARGUMENT_TEST_CASES + GOAL_MISALIGNMENT_TEST_CASES + EMOTIONAL_SUPPORT_TEST_CASES
+    all_should_notify = SHOULD_NOTIFY_CASES
+    all_should_not = SHOULD_NOT_NOTIFY_CASES
+    all_self_reg = SELF_REGULATION_CASES
+    total_cases = len(all_should_notify) + len(all_should_not) + len(all_self_reg)
 
     print(f"\n{'='*70}")
-    print(f"PROACTIVE MENTOR TOOLS — LIVE EVAL ({len(all_cases)} test cases)")
+    print(f"PROACTIVE MENTOR — UNIFIED PROMPT EVAL ({total_cases} test cases)")
     print(f"Model: gpt-4.1-mini | Judge: gpt-5.1")
-    print(f"{'='*70}\n")
+    print(f"{'='*70}")
 
     results = []
-    category_stats = {
-        "arg": {"total": 0, "correct_trigger": 0, "judge_pass": 0},
-        "goal": {"total": 0, "correct_trigger": 0, "judge_pass": 0},
-        "emo": {"total": 0, "correct_trigger": 0, "judge_pass": 0},
+    stats = {
+        "should_notify": {"total": 0, "pass": 0},
+        "should_not": {"total": 0, "pass": 0},
+        "self_reg": {"total": 0, "pass": 0},
     }
 
-    for case in all_cases:
-        category = case["id"].split("_")[0]
-        category_stats[category]["total"] += 1
+    # Should notify cases
+    print(f"\n  --- SHOULD NOTIFY (goal/pattern/dot-connecting) ---")
+    for case in all_should_notify:
+        stats["should_notify"]["total"] += 1
+        print(f"  [{case['id']}] {case['description'][:50]}... ", end="", flush=True)
 
-        print(f"  [{case['id']}] ", end="", flush=True)
+        eval_result = run_eval_case(case)
+        judge_result = judge_notification(case, eval_result, should_notify=True)
 
-        # Run tool call
-        tool_result = run_tool_call(case)
+        if judge_result.get("pass"):
+            stats["should_notify"]["pass"] += 1
 
-        # Check trigger correctness
-        trigger_correct = tool_result["triggered"] == case["should_trigger"]
-        tool_correct = tool_result["correct_tool"] if case["should_trigger"] else not tool_result["triggered"]
+        status = "PASS" if judge_result.get("pass") else "FAIL"
+        conf_str = f" conf={eval_result['confidence']:.2f}" if eval_result["has_advice"] else " no_advice"
+        judge_str = f" judge={judge_result.get('total', 'N/A')}/25" if eval_result["has_advice"] else ""
+        print(f"{status}{conf_str}{judge_str}")
 
-        if trigger_correct and tool_correct:
-            category_stats[category]["correct_trigger"] += 1
+        if not judge_result.get("pass"):
+            print(f"         -> {judge_result.get('explanation', '')[:120]}")
 
-        # Judge quality (only for cases that should trigger and did)
-        judge_result = {"pass": True, "total": "N/A"}
-        if case["should_trigger"] and tool_result["triggered"]:
-            judge_result = judge_notification(case, tool_result)
-            if judge_result.get("pass"):
-                category_stats[category]["judge_pass"] += 1
-        elif not case["should_trigger"] and not tool_result["triggered"]:
-            category_stats[category]["judge_pass"] += 1  # Correctly not triggered
+        results.append({"case": case, "eval_result": eval_result, "judge_result": judge_result, "expected": "notify"})
 
-        # Status
-        trigger_status = "OK" if trigger_correct else "WRONG"
-        tool_status = ""
-        if tool_result["triggered"]:
-            tools_str = ", ".join(tc["name"] for tc in tool_result["tool_calls"])
-            confidence_str = ", ".join(f"{tc['args'].get('confidence', '?')}" for tc in tool_result["tool_calls"])
-            tool_status = f" tools=[{tools_str}] conf=[{confidence_str}]"
-        judge_status = (
-            f" judge={judge_result.get('total', 'N/A')}/25"
-            if case["should_trigger"] and tool_result["triggered"]
-            else ""
+    # Should NOT notify cases
+    print(f"\n  --- SHOULD NOT NOTIFY (generic/obvious/anti-pattern) ---")
+    for case in all_should_not:
+        stats["should_not"]["total"] += 1
+        print(f"  [{case['id']}] {case['description'][:50]}... ", end="", flush=True)
+
+        eval_result = run_eval_case(case)
+        judge_result = judge_notification(case, eval_result, should_notify=False)
+
+        if judge_result.get("pass"):
+            stats["should_not"]["pass"] += 1
+
+        status = "PASS" if judge_result.get("pass") else "FAIL"
+        advice_str = (
+            " (correctly silent)"
+            if not eval_result["has_advice"]
+            else f" UNEXPECTED conf={eval_result['confidence']:.2f}"
         )
-        pass_str = "PASS" if judge_result.get("pass") else "FAIL"
+        print(f"{status}{advice_str}")
 
-        print(f"{pass_str} trigger={trigger_status}{tool_status}{judge_status}")
+        if not judge_result.get("pass"):
+            print(f"         -> {judge_result.get('explanation', '')[:120]}")
 
-        if not judge_result.get("pass") and judge_result.get("explanation"):
+        results.append({"case": case, "eval_result": eval_result, "judge_result": judge_result, "expected": "silent"})
+
+    # Self-regulation cases
+    print(f"\n  --- SELF-REGULATION (notification history populated) ---")
+    for case in all_self_reg:
+        stats["self_reg"]["total"] += 1
+        print(f"  [{case['id']}] {case['description'][:50]}... ", end="", flush=True)
+
+        eval_result = run_eval_case(case)
+        # Should NOT notify because of recent notification history
+        judge_result = judge_notification(case, eval_result, should_notify=False)
+
+        if judge_result.get("pass"):
+            stats["self_reg"]["pass"] += 1
+
+        status = "PASS" if judge_result.get("pass") else "FAIL"
+        advice_str = (
+            " (correctly self-regulated)"
+            if not eval_result["has_advice"]
+            else f" FAILED conf={eval_result['confidence']:.2f}"
+        )
+        print(f"{status}{advice_str}")
+
+        if not judge_result.get("pass"):
             print(f"         -> {judge_result.get('explanation', '')[:120]}")
 
         results.append(
-            {
-                "case": case,
-                "tool_result": tool_result,
-                "judge_result": judge_result,
-                "trigger_correct": trigger_correct,
-            }
+            {"case": case, "eval_result": eval_result, "judge_result": judge_result, "expected": "self_regulate"}
         )
 
     # Summary
@@ -712,15 +511,11 @@ def main():
     print(f"{'='*70}")
 
     total_pass = sum(1 for r in results if r["judge_result"].get("pass"))
-    total = len(results)
 
-    for cat, label in [("arg", "Argument Perspective"), ("goal", "Goal Misalignment"), ("emo", "Emotional Support")]:
-        stats = category_stats[cat]
-        print(f"\n  {label}:")
-        print(f"    Trigger accuracy: {stats['correct_trigger']}/{stats['total']}")
-        print(f"    Judge pass:       {stats['judge_pass']}/{stats['total']}")
-
-    print(f"\n  OVERALL: {total_pass}/{total} passed ({total_pass/total*100:.0f}%)")
+    print(f"\n  Should Notify:    {stats['should_notify']['pass']}/{stats['should_notify']['total']}")
+    print(f"  Should NOT Notify: {stats['should_not']['pass']}/{stats['should_not']['total']}")
+    print(f"  Self-Regulation:   {stats['self_reg']['pass']}/{stats['self_reg']['total']}")
+    print(f"\n  OVERALL: {total_pass}/{total_cases} passed ({total_pass/total_cases*100:.0f}%)")
     print(f"{'='*70}\n")
 
     # Write results to file
@@ -729,7 +524,7 @@ def main():
         json.dump(results, f, indent=2, default=str)
     print(f"  Full results written to: {output_path}")
 
-    return total_pass >= total * 0.8  # Pass if >= 80%
+    return total_pass >= total_cases * 0.8  # Pass if >= 80%
 
 
 if __name__ == "__main__":

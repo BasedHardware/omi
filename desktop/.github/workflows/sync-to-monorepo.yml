@@ -1,9 +1,7 @@
 name: Sync to OMI monorepo
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:  # Manual only — local bi-directional sync handles this now
 
 jobs:
   sync:

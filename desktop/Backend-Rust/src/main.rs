@@ -42,6 +42,7 @@ pub struct AppState {
     pub integrations: Arc<IntegrationService>,
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
+    pub crisp_session_cache: routes::crisp::SessionCache,
 }
 
 #[tokio::main]
@@ -164,6 +165,7 @@ async fn main() {
         integrations,
         redis,
         config: Arc::new(config.clone()),
+        crisp_session_cache: routes::crisp::new_session_cache(),
     };
 
     // Build CORS layer

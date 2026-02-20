@@ -23,30 +23,35 @@ struct ScoreWidget: View {
         }
     }
 
+    private let gaugeWidth: CGFloat = 140
+    private var gaugeHeight: CGFloat { gaugeWidth / 2 }
+    private let lineWidth: CGFloat = 12
+    private let fontSize: CGFloat = 28
+
     var body: some View {
         VStack(spacing: 12) {
             // Semicircle gauge
             ZStack {
                 // Background arc
                 SemicircleShape()
-                    .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .frame(width: 140, height: 70)
+                    .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .frame(width: gaugeWidth, height: gaugeHeight)
 
                 // Progress arc
                 SemicircleShape()
                     .trim(from: 0, to: min(weeklyScore.score / 100, 1.0))
-                    .stroke(scoreColor, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                    .frame(width: 140, height: 70)
+                    .stroke(scoreColor, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .frame(width: gaugeWidth, height: gaugeHeight)
                     .animation(.easeInOut(duration: 0.3), value: weeklyScore.score)
 
                 // Score text
                 VStack(spacing: 2) {
                     Text("\(Int(weeklyScore.score))%")
-                        .scaledFont(size: 28, weight: .bold)
+                        .scaledFont(size: fontSize, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
                         .contentTransition(.numericText())
                 }
-                .offset(y: 10)
+                .offset(y: gaugeHeight * 0.14)
             }
 
             // Task count and subtitle
@@ -72,8 +77,8 @@ struct ScoreWidget: View {
                     .foregroundColor(OmiColors.textQuaternary)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))

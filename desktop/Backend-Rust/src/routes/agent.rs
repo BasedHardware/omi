@@ -83,9 +83,6 @@ async fn provision_agent_vm(
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
-    let anthropic_key = state.config.agent_anthropic_api_key.clone();
-    let gemini_key = state.config.gemini_api_key.clone();
-
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -93,8 +90,6 @@ async fn provision_agent_vm(
             &firestore,
             &vm_name_clone,
             &auth_token_clone,
-            anthropic_key.as_deref(),
-            gemini_key.as_deref(),
         )
         .await
         {
@@ -436,47 +431,53 @@ async fn create_gce_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     auth_token: &str,
-    anthropic_key: Option<&str>,
-    gemini_key: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let project = "based-hardware";
     let zone = "us-central1-a";
 
     // Build startup script that starts the agent server
     // Uses stdbuf for line-buffered output, writes env to file so restarts work
-    let mut startup_script = format!(
+    let startup_script = format!(
         r#"#!/bin/bash
 cd /home/matthewdi/omi-agent
 
-# Write env vars to file (persists across restarts)
-cat > .env.sh << 'ENVEOF'
-export AUTH_TOKEN='{}'
+# Write per-VM env vars (unique to this VM, set at creation time)
+cat > .env-vm.sh << 'ENVEOF'
+export AUTH_TOKEN='{auth_token}'
 export DB_PATH='data/omi.db'
-"#,
-        auth_token
-    );
-    if let Some(key) = anthropic_key {
-        startup_script.push_str(&format!("export ANTHROPIC_API_KEY='{}'\n", key));
-    }
-    if let Some(key) = gemini_key {
-        startup_script.push_str(&format!("export GEMINI_API_KEY='{}'\n", key));
-    }
-    startup_script.push_str("export BACKEND_URL='https://api.omi.me'\n");
-    startup_script.push_str(
-        r#"ENVEOF
+ENVEOF
 
-source .env.sh
+# Pull shared env vars from GCS (API keys, URLs — updated centrally)
+curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/env-shared.sh || echo 'GCS env pull failed, using existing .env-shared.sh'
 
 # Pull latest agent.mjs from GCS
-curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS pull failed, using existing agent.mjs'
+curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed, using existing agent.mjs'
 
-# Kill any existing agent process
+chown matthewdi:matthewdi .env-vm.sh .env-shared.sh agent.mjs 2>/dev/null
+
+# Kill any existing agent process and stop old systemd unit
+systemctl stop omi-agent 2>/dev/null
 pkill -x node 2>/dev/null || true
 sleep 1
 
-# Start agent with line-buffered output
-nohup stdbuf -oL node agent.mjs --serve > /home/matthewdi/omi-agent/agent-server.log 2>&1 &
+# Read env vars for systemd-run
+ANTHROPIC=$(grep ANTHROPIC_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+GEMINI=$(grep GEMINI_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+BACKEND=$(grep BACKEND_URL .env-shared.sh 2>/dev/null | cut -d\' -f2)
+
+# Start agent as matthewdi user via systemd (survives SSH disconnect, proper detachment)
+systemd-run --uid=matthewdi --gid=matthewdi \
+  --setenv=HOME=/home/matthewdi \
+  --setenv=AUTH_TOKEN='{auth_token}' \
+  --setenv=DB_PATH=data/omi.db \
+  --setenv=ANTHROPIC_API_KEY=$ANTHROPIC \
+  --setenv=GEMINI_API_KEY=$GEMINI \
+  --setenv=BACKEND_URL=${{BACKEND:-https://api.omi.me}} \
+  --working-directory=/home/matthewdi/omi-agent \
+  --unit=omi-agent \
+  stdbuf -oL node agent.mjs --serve
 "#,
+        auth_token = auth_token
     );
 
     // GCE instances.insert REST API

@@ -68,7 +68,7 @@ struct FloatingControlBarView: View {
             }
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 11)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 5)
     }
 
     private func openFloatingBarSettings() {
@@ -110,24 +110,11 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal icon shown when not hovering
+    /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        Group {
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png")!) {
-                Image(nsImage: logoImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 12)
-                    .colorInvert()
-            } else {
-                Image(systemName: "waveform")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .frame(height: 22)
-        .padding(.horizontal, 8)
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.white.opacity(0.5))
+            .frame(width: 28, height: 4)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {

@@ -199,36 +199,36 @@ struct AppsPage: View {
                         } else {
                             // Featured section (apps marked as is_popular in backend)
                             if !appProvider.popularApps.isEmpty {
-                                HorizontalAppSection(
+                                AppGridSection(
                                     title: "Featured",
                                     apps: Array(appProvider.popularApps.prefix(6)),
                                     appProvider: appProvider,
                                     onSelectApp: { selectedApp = $0 },
-                                    showSeeMore: appProvider.popularApps.count >= 6,
+                                    showSeeMore: appProvider.popularApps.count > 6,
                                     onSeeMore: { viewAllSection = "featured" }
                                 )
                             }
 
                             // Integrations section (external_integration capability)
                             if !appProvider.integrationApps.isEmpty {
-                                HorizontalAppSection(
+                                AppGridSection(
                                     title: "Integrations",
                                     apps: Array(appProvider.integrationApps.prefix(6)),
                                     appProvider: appProvider,
                                     onSelectApp: { selectedApp = $0 },
-                                    showSeeMore: appProvider.integrationApps.count >= 6,
+                                    showSeeMore: appProvider.integrationApps.count > 6,
                                     onSeeMore: { viewAllSection = "integrations" }
                                 )
                             }
 
                             // Realtime Notifications section (proactive_notification capability)
                             if !appProvider.notificationApps.isEmpty {
-                                HorizontalAppSection(
+                                AppGridSection(
                                     title: "Realtime Notifications",
                                     apps: Array(appProvider.notificationApps.prefix(6)),
                                     appProvider: appProvider,
                                     onSelectApp: { selectedApp = $0 },
-                                    showSeeMore: appProvider.notificationApps.count >= 6,
+                                    showSeeMore: appProvider.notificationApps.count > 6,
                                     onSeeMore: { viewAllSection = "notifications" }
                                 )
                             }
@@ -668,17 +668,34 @@ struct AppGridSection: View {
     let apps: [OmiApp]
     let appProvider: AppProvider
     let onSelectApp: (OmiApp) -> Void
+    var showSeeMore: Bool = false
+    var onSeeMore: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .scaledFont(size: 18, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+            HStack {
+                Text(title)
+                    .scaledFont(size: 18, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                if showSeeMore, let onSeeMore = onSeeMore {
+                    Button(action: onSeeMore) {
+                        HStack(spacing: 4) {
+                            Text("See all")
+                                .scaledFont(size: 13, weight: .medium)
+                            Image(systemName: "chevron.right")
+                                .scaledFont(size: 10, weight: .medium)
+                        }
+                        .foregroundColor(OmiColors.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
             LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 16),
-                GridItem(.flexible(), spacing: 16),
-                GridItem(.flexible(), spacing: 16)
+                GridItem(.adaptive(minimum: 220), spacing: 16)
             ], spacing: 16) {
                 ForEach(apps) { app in
                     AppCard(app: app, appProvider: appProvider, onSelect: { onSelectApp(app) })

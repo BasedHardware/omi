@@ -100,6 +100,10 @@ final class DeviceProvider: ObservableObject {
         guard !hasSetupBluetoothBindings else { return }
         hasSetupBluetoothBindings = true
 
+        // Force CBCentralManager creation to start receiving state updates
+        // This triggers the Bluetooth permission dialog on first use
+        _ = bluetoothManager.centralManager
+
         // Observe Bluetooth state changes
         bluetoothManager.$bluetoothState
             .receive(on: DispatchQueue.main)

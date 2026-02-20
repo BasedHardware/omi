@@ -33,7 +33,7 @@ struct ConversationsPage: View {
     var embedded: Bool = false
 
     // Compact view mode - persisted preference
-    @AppStorage("conversationsCompactView") private var isCompactView = false
+    @AppStorage("conversationsCompactView") private var isCompactView = true
 
     // Search state
     @State private var searchQuery: String = ""

@@ -161,6 +161,9 @@ class AppState: ObservableObject {
     private var screenCapturePermissionLostObserver: NSObjectProtocol?
     private var screenCaptureKitBrokenObserver: NSObjectProtocol?
 
+    // Track transcription state across sleep/wake cycles
+    private var wasTranscribingBeforeSleep = false
+
     // Debounce timestamps to prevent duplicate system notifications
     private var lastScreenLockTime: Date?
     private var lastScreenUnlockTime: Date?
@@ -216,7 +219,9 @@ class AppState: ObservableObject {
         // Start periodic notification health check (every 30 min)
         // Detects when macOS silently revokes notification authorization and auto-repairs
         notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
-            self?.checkNotificationPermission()
+            DispatchQueue.main.async {
+                self?.checkNotificationPermission()
+            }
         }
     }
 
@@ -274,8 +279,9 @@ class AppState: ObservableObject {
         ) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
+                self.wasTranscribingBeforeSleep = self.isTranscribing
                 if self.isTranscribing {
-                    log("Computer sleeping - finalizing conversation")
+                    log("Computer sleeping - finalizing conversation (will restart on wake)")
                     _ = await self.finalizeConversation()
                     self.stopAudioCapture()
                     self.clearTranscriptionState()
@@ -290,9 +296,23 @@ class AppState: ObservableObject {
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             log("System woke from sleep")
             NotificationCenter.default.post(name: .systemDidWake, object: nil)
+
+            // Restart transcription if it was active before sleep
+            Task { @MainActor in
+                guard let self = self else { return }
+                if self.wasTranscribingBeforeSleep && AssistantSettings.shared.transcriptionEnabled {
+                    log("System wake: Restarting transcription (was active before sleep)")
+                    // Brief delay to let audio subsystem settle after wake
+                    try? await Task.sleep(for: .seconds(2))
+                    if !self.isTranscribing {
+                        self.startTranscription()
+                    }
+                }
+                self.wasTranscribingBeforeSleep = false
+            }
         }
 
         // Screen locked (debounced - macOS sometimes fires multiple times)
@@ -425,12 +445,12 @@ class AppState: ObservableObject {
                             // which prevents the notification center from registering the app.
                             // Fix: unregister from LaunchServices and re-register to clear the flag, then retry.
                             if nsError.domain == "UNErrorDomain" && nsError.code == 1 {
-                                AnalyticsManager.shared.notificationRepairTriggered(
-                                    reason: "launch_disabled_error",
-                                    previousStatus: "notDetermined",
-                                    currentStatus: "error_code_1"
-                                )
                                 DispatchQueue.main.async {
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "launch_disabled_error",
+                                        previousStatus: "notDetermined",
+                                        currentStatus: "error_code_1"
+                                    )
                                     self?.repairNotificationRegistrationAndRetry()
                                 }
                                 return
@@ -566,6 +586,10 @@ class AppState: ObservableObject {
         checkMicrophonePermission()
         checkSystemAudioPermission()
         checkAccessibilityPermission()
+        // One-time startup diagnostic for accessibility
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+        log("ACCESSIBILITY_STARTUP: bundleId=\(bundleId), macOS=\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion), TCC=\(hasAccessibilityPermission), broken=\(isAccessibilityBroken), onboarded=\(hasCompletedOnboarding)")
         // Only check Bluetooth if already initialized (to avoid triggering permission prompt early)
         if bluetoothStateCancellable != nil {
             checkBluetoothPermission()
@@ -786,7 +810,14 @@ class AppState: ObservableObject {
     /// so we also do a functional AX test to detect the "broken" state.
     func checkAccessibilityPermission() {
         let tccGranted = AXIsProcessTrusted()
+        let previouslyGranted = hasAccessibilityPermission
         hasAccessibilityPermission = tccGranted
+
+        // Log transitions
+        if tccGranted != previouslyGranted {
+            let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+            log("ACCESSIBILITY_CHECK: TCC state changed \(previouslyGranted) → \(tccGranted) (bundleId=\(bundleId))")
+        }
 
         if tccGranted {
             // TCC says yes — verify with an actual AX call
@@ -823,13 +854,13 @@ class AppState: ObservableObject {
         case .success, .noValue, .notImplemented, .attributeUnsupported:
             return true
         case .apiDisabled:
-            log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck")
+            log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
             return false
         case .cannotComplete:
-            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck")
+            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
             return false
         default:
-            // Other errors (parameterizedAttributeUnsupported, etc.) aren't permission-related
+            log("ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(frontApp.localizedName ?? "unknown") — not permission-related, treating as OK")
             return true
         }
     }
@@ -841,14 +872,20 @@ class AppState: ObservableObject {
 
     /// Trigger accessibility permission prompt
     func triggerAccessibilityPermission() {
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+        let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
+        log("ACCESSIBILITY_TRIGGER: User clicked Grant Access — bundleId=\(bundleId), macOS \(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)")
+
         // This will prompt the user if not already trusted
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         hasAccessibilityPermission = trusted
+        log("ACCESSIBILITY_TRIGGER: AXIsProcessTrustedWithOptions returned \(trusted)")
 
         // On macOS Sequoia+, AXIsProcessTrustedWithOptions no longer shows a visible dialog,
         // so explicitly open System Settings to the Accessibility pane
         if !trusted {
+            log("ACCESSIBILITY_TRIGGER: Not trusted, opening System Settings Accessibility pane")
             openAccessibilityPreferences()
         }
     }
@@ -2479,6 +2516,7 @@ extension Notification.Name {
     static let goalCompleted = Notification.Name("goalCompleted")
     /// Posted to navigate to AI Chat page
     static let navigateToChat = Notification.Name("navigateToChat")
+    static let navigateToTasks = Notification.Name("navigateToTasks")
     /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
     static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
 }

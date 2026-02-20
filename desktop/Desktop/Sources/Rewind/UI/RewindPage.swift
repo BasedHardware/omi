@@ -20,6 +20,7 @@ struct RewindPage: View {
     @State private var searchViewMode: SearchViewMode? = nil
     @State private var selectedGroupIndex: Int = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isPageFocused: Bool
 
     // Monitoring toggle state
     @State private var isMonitoring = false
@@ -144,14 +145,22 @@ struct RewindPage: View {
                 rewindIntroOverlay
             }
         }
+        .focusable()
+        .focused($isPageFocused)
         .task {
             await viewModel.loadInitialData()
         }
         .onAppear {
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        }
+        .onChange(of: isSearchFocused) { _, focused in
+            if !focused {
+                isPageFocused = true
+            }
         }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
@@ -217,14 +226,14 @@ struct RewindPage: View {
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored
