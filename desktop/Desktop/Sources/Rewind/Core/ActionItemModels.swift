@@ -23,6 +23,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var tagsJson: String?               // JSON array: ["work", "code"]
     var deletedBy: String?              // "user", "ai_dedup"
     var dueAt: Date?
+    var recurrenceRule: String?          // "daily", "weekdays", "weekly", "biweekly", "monthly"
+    var recurrenceParentId: String?      // ID of original parent task in recurrence chain
 
     // Desktop extraction fields
     var screenshotId: Int64?
@@ -79,6 +81,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         tagsJson: String? = nil,
         deletedBy: String? = nil,
         dueAt: Date? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil,
         screenshotId: Int64? = nil,
         confidence: Double? = nil,
         sourceApp: String? = nil,
@@ -116,6 +120,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.tagsJson = tagsJson
         self.deletedBy = deletedBy
         self.dueAt = dueAt
+        self.recurrenceRule = recurrenceRule
+        self.recurrenceParentId = recurrenceParentId
         self.screenshotId = screenshotId
         self.confidence = confidence
         self.sourceApp = sourceApp
@@ -290,6 +296,8 @@ extension ActionItemRecord {
             tagsJson: tagsJson,
             deletedBy: item.deletedBy,
             dueAt: item.dueAt,
+            recurrenceRule: item.recurrenceRule,
+            recurrenceParentId: item.recurrenceParentId,
             screenshotId: nil,
             confidence: nil,
             sourceApp: item.sourceApp,
@@ -331,6 +339,8 @@ extension ActionItemRecord {
         self.priority = item.priority
         self.category = item.category
         self.dueAt = item.dueAt
+        self.recurrenceRule = item.recurrenceRule
+        self.recurrenceParentId = item.recurrenceParentId
         self.metadataJson = item.metadata
         if let staged = item.fromStaged {
             self.fromStaged = staged
@@ -419,6 +429,8 @@ extension ActionItemRecord {
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
             fromStaged: fromStaged,
+            recurrenceRule: recurrenceRule,
+            recurrenceParentId: recurrenceParentId,
             sortOrder: sortOrder,
             indentLevel: indentLevel,
             relevanceScore: relevanceScore,

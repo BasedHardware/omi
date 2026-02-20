@@ -2076,6 +2076,11 @@ actor RewindDatabase {
             """)
         }
 
+        migrator.registerMigration("addActionItemRecurrence") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceRule TEXT")
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
+        }
+
         try migrator.migrate(queue)
     }
 

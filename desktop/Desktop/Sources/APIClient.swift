@@ -1576,7 +1576,8 @@ extension APIClient {
             priority: priority,
             metadata: metadataString,
             goalId: goalId,
-            relevanceScore: relevanceScore
+            relevanceScore: relevanceScore,
+            recurrenceRule: recurrenceRule
         )
 
         return try await patch("v1/action-items/\(id)", body: request)
