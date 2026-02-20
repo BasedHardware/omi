@@ -1,0 +1,2 @@
+export const SIDE_PANEL_WIDTH = 404;
+export const SIDE_PANEL_OFFSET = SIDE_PANEL_WIDTH + 4;

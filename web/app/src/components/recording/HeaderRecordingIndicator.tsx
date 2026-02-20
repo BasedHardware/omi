@@ -12,6 +12,7 @@ import { useNotificationContext } from '@/components/notifications/NotificationC
 import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { SIDE_PANEL_OFFSET, SIDE_PANEL_WIDTH } from '@/lib/layout';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -49,7 +50,7 @@ export function HeaderRecordingIndicator() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Calculate panel offset for transform (shift left when panels open)
-  const panelOffset = (isChatOpen ? 404 : 0) + (isNotificationOpen ? 404 : 0);
+  const panelOffset = (isChatOpen ? SIDE_PANEL_WIDTH : 0) + (isNotificationOpen ? SIDE_PANEL_OFFSET : 0);
 
   const isRecording = state === 'recording';
   const isPaused = state === 'paused';
