@@ -334,10 +334,9 @@ function startAcpProcess(): void {
     logErr(`ACP process exited with code ${code}`);
     acpProcess = null;
     acpStdinWriter = null;
-    // Session is lost when ACP process dies
-    sessionId = "";
-    sessionModel = "";
-    sessionCwd = "";
+    // All sessions are lost when ACP process dies
+    sessions.clear();
+    activeSessionId = "";
     isInitialized = false;
     for (const [, handler] of acpResponseHandlers) {
       handler.reject(new Error(`ACP process exited (code ${code})`));
@@ -358,9 +357,10 @@ class AcpError extends Error {
 
 // --- State ---
 
-let sessionId = "";
-let sessionModel = ""; // model used for the current session
-let sessionCwd = ""; // cwd used for the current session
+/** Pre-warmed sessions keyed by model name */
+const sessions = new Map<string, { sessionId: string; cwd: string }>();
+/** The session currently being used by an active query (for interrupt) */
+let activeSessionId = "";
 let activeAbort: AbortController | null = null;
 let interruptRequested = false;
 let isInitialized = false;
@@ -492,40 +492,51 @@ function buildMcpServers(mode: string): McpServerConfig[] {
 // --- Session pre-warming ---
 
 const DEFAULT_MODEL = "claude-opus-4-6";
+const SONNET_MODEL = "claude-sonnet-4-5-20250929";
 
-async function preWarmSession(cwd?: string, model?: string): Promise<void> {
+async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
   const warmCwd = cwd || process.env.HOME || "/";
-  const warmModel = model || DEFAULT_MODEL;
+  const warmModels = models && models.length > 0 ? models : [DEFAULT_MODEL, SONNET_MODEL];
 
   try {
     await initializeAcp();
 
-    // Only create session if one doesn't already exist
-    if (!sessionId) {
-      const sessionParams: Record<string, unknown> = {
-        cwd: warmCwd,
-        mcpServers: buildMcpServers("act"),
-        model: warmModel,
-      };
-
-      // Retry once after a short delay if session/new fails
-      // (ACP subprocess may not be fully ready immediately after initialize)
-      let result: { sessionId: string };
-      try {
-        result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-      } catch (firstErr) {
-        logErr(`Pre-warm session/new failed, retrying in 2s: ${firstErr}`);
-        await new Promise((r) => setTimeout(r, 2000));
-        result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-      }
-
-      sessionId = result.sessionId;
-      sessionModel = warmModel;
-      sessionCwd = warmCwd;
-      logErr(
-        `Pre-warmed session: ${sessionId} (cwd=${warmCwd}, model=${warmModel})`
-      );
+    // Pre-warm each model that doesn't already have a session, in parallel
+    const toWarm = warmModels.filter((m) => !sessions.has(m));
+    if (toWarm.length === 0) {
+      logErr("All requested models already have pre-warmed sessions");
+      return;
     }
+
+    await Promise.all(
+      toWarm.map(async (warmModel) => {
+        try {
+          const sessionParams: Record<string, unknown> = {
+            cwd: warmCwd,
+            mcpServers: buildMcpServers("act"),
+            model: warmModel,
+          };
+
+          // Retry once after a short delay if session/new fails
+          // (ACP subprocess may not be fully ready immediately after initialize)
+          let result: { sessionId: string };
+          try {
+            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+          } catch (firstErr) {
+            logErr(`Pre-warm session/new failed for ${warmModel}, retrying in 2s: ${firstErr}`);
+            await new Promise((r) => setTimeout(r, 2000));
+            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
+          }
+
+          sessions.set(warmModel, { sessionId: result.sessionId, cwd: warmCwd });
+          logErr(
+            `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
+          );
+        } catch (err) {
+          logErr(`Pre-warm failed for ${warmModel}: ${err}`);
+        }
+      })
+    );
   } catch (err) {
     logErr(`Pre-warm failed (will create on first query): ${err}`);
   }
@@ -562,18 +573,20 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     // Ensure ACP is initialized
     await initializeAcp();
 
-    // If model changed since last session, force new session
+    // Look up a pre-warmed session for the requested model
     const requestedModel = msg.model || DEFAULT_MODEL;
-    if (sessionId && requestedModel !== sessionModel) {
-      logErr(`Model changed (${sessionModel} -> ${requestedModel}), creating new session`);
-      sessionId = "";
-    }
-
-    // If cwd changed since last session, force new session
     const requestedCwd = msg.cwd || process.env.HOME || "/";
-    if (sessionId && requestedCwd !== sessionCwd) {
-      logErr(`Cwd changed (${sessionCwd} -> ${requestedCwd}), creating new session`);
-      sessionId = "";
+    let sessionId = "";
+
+    const existing = sessions.get(requestedModel);
+    if (existing) {
+      // If cwd changed, invalidate this specific session
+      if (existing.cwd !== requestedCwd) {
+        logErr(`Cwd changed for ${requestedModel} (${existing.cwd} -> ${requestedCwd}), creating new session`);
+        sessions.delete(requestedModel);
+      } else {
+        sessionId = existing.sessionId;
+      }
     }
 
     // Reuse existing session if alive, otherwise create a new one
@@ -589,14 +602,14 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
       sessionId = sessionResult.sessionId;
-      sessionModel = requestedModel;
-      sessionCwd = requestedCwd;
+      sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
       isNewSession = true;
       logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
-      logErr(`Reusing existing ACP session: ${sessionId}`);
+      logErr(`Reusing existing ACP session: ${sessionId} (model=${requestedModel})`);
     }
+    activeSessionId = sessionId;
 
     // Only prepend system prompt on the first message in a new session.
     // On subsequent messages the session already has the context.
