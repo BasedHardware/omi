@@ -84,6 +84,7 @@ class TranscriptionService {
     // Watchdog: detect stale connections where WebSocket dies silently
     private var watchdogTask: Task<Void, Never>?
     private var lastDataReceivedAt: Date?
+    private var lastKeepaliveSuccessAt: Date?
     private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
     private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
@@ -276,6 +277,7 @@ class TranscriptionService {
             self.isConnected = true
             self.reconnectAttempts = 0
             self.lastDataReceivedAt = Date()
+            self.lastKeepaliveSuccessAt = Date()
             log("TranscriptionService: Connected")
             self.startKeepalive()
             self.startWatchdog()
@@ -306,6 +308,8 @@ class TranscriptionService {
             if let error = error {
                 logError("TranscriptionService: Keepalive error", error: error)
                 self?.handleDisconnection()
+            } else {
+                self?.lastKeepaliveSuccessAt = Date()
             }
         }
     }
@@ -320,7 +324,15 @@ class TranscriptionService {
 
                 if let lastData = self.lastDataReceivedAt,
                    Date().timeIntervalSince(lastData) > self.staleThreshold {
-                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s) - forcing reconnect")
+                    // Check if keepalives are still succeeding — if so, the connection
+                    // is alive and Deepgram just has nothing to return (silent room).
+                    // Only force reconnect when keepalives have also gone stale.
+                    if let lastKeepalive = self.lastKeepaliveSuccessAt,
+                       Date().timeIntervalSince(lastKeepalive) < self.staleThreshold {
+                        // Keepalives working — connection is alive, just no speech to transcribe
+                        continue
+                    }
+                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s, keepalives also failing) - forcing reconnect")
                     self.handleDisconnection()
                 }
             }
