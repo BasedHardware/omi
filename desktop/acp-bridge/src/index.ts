@@ -258,8 +258,40 @@ function startAcpProcess(): void {
     try {
       const msg = JSON.parse(line) as Record<string, unknown>;
 
-      if ("id" in msg && msg.id !== null && msg.id !== undefined) {
-        // JSON-RPC response
+      if ("method" in msg && "id" in msg && msg.id !== null && msg.id !== undefined) {
+        // Server-initiated JSON-RPC request (has both method and id, expects a response)
+        const id = msg.id as number;
+        const method = msg.method as string;
+
+        if (method === "session/request_permission") {
+          // Auto-approve all tool permissions (matches agent-bridge's bypassPermissions behavior)
+          const params = msg.params as Record<string, unknown> | undefined;
+          const options = (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
+          const allowAlways = options.find((o) => o.kind === "allow_always");
+          const allowOnce = options.find((o) => o.kind === "allow_once");
+          const optionId = allowAlways?.optionId ?? allowOnce?.optionId ?? "allow";
+          logErr(`Auto-approving permission for tool (id=${id})`);
+          acpStdinWriter?.(JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            result: { outcome: { outcome: "selected", optionId } },
+          }));
+        } else if (method === "session/update") {
+          // session/update can also arrive as a request (with id) — handle and ack
+          if (acpNotificationHandler) {
+            acpNotificationHandler(method, msg.params as unknown);
+          }
+          acpStdinWriter?.(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
+        } else {
+          logErr(`Unhandled ACP request: ${method} (id=${id})`);
+          acpStdinWriter?.(JSON.stringify({
+            jsonrpc: "2.0",
+            id,
+            error: { code: -32601, message: `Method not handled: ${method}` },
+          }));
+        }
+      } else if ("id" in msg && msg.id !== null && msg.id !== undefined) {
+        // JSON-RPC response (has id but no method)
         const id = msg.id as number;
         const handler = acpResponseHandlers.get(id);
         if (handler) {
@@ -277,7 +309,7 @@ function startAcpProcess(): void {
           }
         }
       } else if ("method" in msg) {
-        // JSON-RPC notification from agent → we handle it
+        // JSON-RPC notification (has method but no id)
         if (acpNotificationHandler) {
           acpNotificationHandler(
             msg.method as string,
