@@ -2324,7 +2324,6 @@ struct TasksPage: View {
                 }
                 cancelMultiSelectButton
             } else {
-                addTaskButton
                 if chatProvider != nil && TaskAgentSettings.shared.isEnabled {
                     chatToggleButton
                 }
@@ -2719,26 +2718,6 @@ struct TasksPage: View {
         .buttonStyle(.plain)
     }
 
-    private var addTaskButton: some View {
-        Button {
-            viewModel.showingCreateTask = true
-        } label: {
-            Image(systemName: "plus")
-                .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(.black)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
 
 
     private var taskSettingsButton: some View {
