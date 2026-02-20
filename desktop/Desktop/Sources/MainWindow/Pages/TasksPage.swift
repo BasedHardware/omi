@@ -1850,8 +1850,8 @@ class TasksViewModel: ObservableObject {
         showingCreateTask = false
     }
 
-    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
-        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority)
+    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
+        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority, recurrenceRule: recurrenceRule)
         // Read the updated task back from the store for surgical update
         if let updated = store.tasks.first(where: { $0.id == task.id }) {
             updateInDisplay(updated)
@@ -2884,8 +2884,8 @@ struct TasksPage: View {
                                     onToggle: { await viewModel.toggleTask($0) },
                                     onDelete: { await viewModel.deleteTaskWithUndo($0) },
                                     onToggleSelection: { viewModel.toggleTaskSelection($0) },
-                                    onUpdateDetails: { task, desc, date, priority in
-                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                                    onUpdateDetails: { task, desc, date, priority, recurrenceRule in
+                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
                                     },
                                     onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                                     onDecrementIndent: { viewModel.decrementIndent(for: $0) },
@@ -2924,8 +2924,8 @@ struct TasksPage: View {
                                     onToggle: { await viewModel.toggleTask($0) },
                                     onDelete: { await viewModel.deleteTaskWithUndo($0) },
                                     onToggleSelection: { viewModel.toggleTaskSelection($0) },
-                                    onUpdateDetails: { task, desc, date, priority in
-                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                                    onUpdateDetails: { task, desc, date, priority, recurrenceRule in
+                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
                                     },
                                     onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                                     onDecrementIndent: { viewModel.decrementIndent(for: $0) },
@@ -3659,6 +3659,15 @@ struct TaskRow: View {
                             }
                         }
 
+                    // Recurring badge
+                    if task.isRecurring {
+                        HStack(spacing: 2) {
+                            Image(systemName: "repeat")
+                                .scaledFont(size: 9)
+                        }
+                        .foregroundColor(OmiColors.textTertiary)
+                    }
+
                     // New badge
                     if isNewlyCreated {
                         NewBadge()
@@ -3876,6 +3885,25 @@ struct TaskRow: View {
             .datePickerStyle(.graphical)
             .labelsHidden()
 
+            Divider()
+
+            HStack {
+                Text("Repeat")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textSecondary)
+                Spacer()
+                Picker("", selection: $editRecurrenceRule) {
+                    Text("Never").tag("")
+                    Text("Daily").tag("daily")
+                    Text("Weekdays").tag("weekdays")
+                    Text("Weekly").tag("weekly")
+                    Text("Every 2 Weeks").tag("biweekly")
+                    Text("Monthly").tag("monthly")
+                }
+                .pickerStyle(.menu)
+                .frame(width: 140)
+            }
+
             HStack(spacing: 8) {
                 Button("Cancel") {
                     showDatePicker = false
@@ -3884,8 +3912,9 @@ struct TaskRow: View {
 
                 Button("Save") {
                     showDatePicker = false
+                    let ruleToSave = editRecurrenceRule.isEmpty ? "" : editRecurrenceRule
                     Task {
-                        await onUpdateDetails?(task, nil, editDueDate, nil)
+                        await onUpdateDetails?(task, nil, editDueDate, nil, ruleToSave)
                     }
                 }
                 .buttonStyle(.borderedProminent)
