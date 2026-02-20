@@ -6655,15 +6655,6 @@ impl FirestoreService {
         chat_session_id: &str,
         message_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            chat_session_id
-        );
-
         // Firestore REST API: use fieldTransforms with appendMissingElements
         // to atomically append to the array (equivalent to Python's ArrayUnion)
         let update = json!({

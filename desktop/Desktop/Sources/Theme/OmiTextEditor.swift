@@ -92,11 +92,26 @@ struct OmiTextEditor: NSViewRepresentable {
             textView.string = text
             context.coordinator.isUpdating = false
 
-            // Force layout so NSScrollView knows the new content size
-            // (needed for programmatic text changes to show scrollbar)
+            // Force layout and resize the text view so NSScrollView shows
+            // the scrollbar for programmatic text changes (e.g. auto-inserted
+            // task prompts). ensureLayout alone isn't enough — we must also
+            // explicitly update the text view's frame height and re-tile the
+            // scroll view, which normally happens via NSTextView's internal
+            // editing flow during typing/pasting but is skipped for .string sets.
             if let layoutManager = textView.layoutManager,
                let textContainer = textView.textContainer {
                 layoutManager.ensureLayout(for: textContainer)
+                let usedRect = layoutManager.usedRect(for: textContainer)
+                let contentHeight = usedRect.height + textView.textContainerInset.height * 2
+                var tvFrame = textView.frame
+                tvFrame.size.height = contentHeight
+                textView.frame = tvFrame
+            }
+
+            // Re-tile the scroll view after SwiftUI finishes its layout pass
+            // so it can compare document vs clip height and show scrollbar.
+            DispatchQueue.main.async {
+                scrollView.tile()
             }
 
             if onHeightChange != nil {
