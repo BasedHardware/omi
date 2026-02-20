@@ -3692,6 +3692,9 @@ struct TaskRow: View {
                 .popover(isPresented: $showDatePicker) {
                     dueDatePopover
                 }
+                .popover(isPresented: $showRepeatPicker) {
+                    repeatPopover
+                }
             }
 
         }
@@ -3727,9 +3730,6 @@ struct TaskRow: View {
                         }
                         .buttonStyle(.plain)
                         .help(task.isRecurring ? "Edit repeat" : "Set repeat")
-                        .popover(isPresented: $showRepeatPicker) {
-                            repeatPopover
-                        }
                     }
 
                     // Outdent button (decrease indent)
