@@ -140,7 +140,7 @@ actor AgentSyncService {
 
     private func syncTick() async {
         // Skip if user is signed out (tokens are cleared)
-        guard AuthState.shared.isSignedIn else { return }
+        guard await AuthState.shared.isSignedIn else { return }
         let tickStart = ContinuousClock.now
 
         // Periodically refresh Firebase token on the VM (every 30 min)
