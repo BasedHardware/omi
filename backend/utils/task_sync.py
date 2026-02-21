@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional
 
+import httpx
+
 import database.users as users_db
 import database.action_items as action_items_db
 from utils.notifications import send_apple_reminders_sync_push
@@ -44,13 +46,15 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
     """Create task in external service using existing task_integrations logic."""
     from routers.task_integrations import _create_task_internal
 
-    result = await _create_task_internal(
-        uid=uid,
-        app_key=app_key,
-        integration=integration,
-        title=action_item["description"],
-        due_date=action_item.get("due_at"),
-    )
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        result = await _create_task_internal(
+            uid=uid,
+            app_key=app_key,
+            integration=integration,
+            title=action_item["description"],
+            due_date=action_item.get("due_at"),
+            client=client,
+        )
 
     if result.get("success"):
         # Mark action item as exported
