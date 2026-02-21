@@ -111,10 +111,11 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
         if not webhook_url:
             return
         webhook_url += f'?uid={uid}'
+        user_time_zone = notification_db.get_user_time_zone_cached(uid)
         try:
             response = requests.post(
                 webhook_url,
-                json={'segments': segments, 'session_id': uid},
+                json={'segments': segments, 'session_id': uid, 'time_zone': user_time_zone or None},
                 headers={'Content-Type': 'application/json'},
                 timeout=15,
             )
