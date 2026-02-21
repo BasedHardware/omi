@@ -441,6 +441,8 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
 
 
 def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+    user_time_zone = notification_db.get_user_time_zone_cached(uid)
+
     # Process mentor notification first (built-in feature)
     from utils.mentor_notifications import process_mentor_notification
 
@@ -499,7 +501,9 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             url += '?uid=' + uid
 
         try:
-            response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
+            response = requests.post(
+                url, json={"session_id": uid, "segments": segments, "time_zone": user_time_zone or None}, timeout=10
+            )
             if response.status_code != 200:
                 print(
                     'trigger_realtime_integrations',
