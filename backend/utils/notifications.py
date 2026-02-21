@@ -402,9 +402,16 @@ def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
         )
 
     # FCM data values must be strings, so JSON-encode the items list
+    # Include first item's fields at top level for backwards compatibility with old app versions
+    # that expect action_item_id/description as top-level keys (single-item format).
+    # Old apps will create only the first item; new apps read the full 'items' JSON array.
+    first = items_payload[0]
     data = {
         'type': 'apple_reminders_sync',
         'items': json.dumps(items_payload),
+        'action_item_id': first['id'],
+        'description': first['description'],
+        'due_at': first['due_at'],
     }
 
     # Use a unique tag per batch based on all item IDs to avoid collapsing different batches
