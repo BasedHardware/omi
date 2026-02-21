@@ -386,6 +386,7 @@ void turnoff_all()
     k_msleep(100);
 #endif
 
+    storage_flush_buffer();
     if (is_sd_on()) {
         app_sd_off();
     }
@@ -426,7 +427,6 @@ void turnoff_all()
         return;
     }
 
-    
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
     lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);
