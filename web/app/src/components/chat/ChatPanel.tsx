@@ -12,6 +12,7 @@ import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { SIDE_PANEL_OFFSET, SIDE_PANEL_WIDTH } from '@/lib/layout';
 
 interface FilePreviewItem {
   file: File;
@@ -235,7 +236,7 @@ export function ChatPanel() {
           {/* Panel - push/slide animation */}
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: 400 }}
+            animate={{ width: SIDE_PANEL_WIDTH }}
             exit={{ width: 0 }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
@@ -245,9 +246,9 @@ export function ChatPanel() {
             )}
           >
             <div className={cn(
-              'w-[400px] h-full flex flex-col',
-              'max-sm:w-full'
-            )}>
+              'h-full flex flex-col',
+              'max-sm:w-full',
+            )} style={{width: SIDE_PANEL_WIDTH}}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex items-center gap-3">

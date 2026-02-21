@@ -12,6 +12,7 @@ import { useNotificationContext } from '@/components/notifications/NotificationC
 import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { SIDE_PANEL_OFFSET, SIDE_PANEL_WIDTH } from '@/lib/layout';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -48,8 +49,8 @@ export function HeaderRecordingIndicator() {
   const [showModeSelector, setShowModeSelector] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Calculate right offset based on which panels are open (panel width is ~404px each)
-  const rightOffset = 16 + (isChatOpen ? 404 : 0) + (isNotificationOpen ? 404 : 0);
+  // Calculate panel offset for transform (shift left when panels open)
+  const panelOffset = (isChatOpen ? SIDE_PANEL_WIDTH : 0) + (isNotificationOpen ? SIDE_PANEL_OFFSET : 0);
 
   const isRecording = state === 'recording';
   const isPaused = state === 'paused';
@@ -82,10 +83,14 @@ export function HeaderRecordingIndicator() {
   };
 
   return (
-    <motion.div
+    <div
       className="fixed top-4 z-[9999]"
-      animate={{ right: rightOffset }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      style={{
+        right: 16,
+        transform: `translateX(-${panelOffset}px)`,
+        willChange: 'transform',
+        transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
     >
       <div className="relative" ref={dropdownRef}>
         {/* Idle state - Start recording button */}
@@ -423,6 +428,6 @@ export function HeaderRecordingIndicator() {
         </>
       )}
       </div>
-    </motion.div>
+    </div>
   );
 }

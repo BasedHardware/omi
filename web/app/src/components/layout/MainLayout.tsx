@@ -86,7 +86,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <ChatAppRouter />
         {/* Prefetch memories in background for instant page load */}
         <MemoriesPrefetcher />
-        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
+        <div className="h-screen w-full bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
           <Sidebar
             isOpen={sidebarOpen}
