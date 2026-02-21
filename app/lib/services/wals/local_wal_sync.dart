@@ -28,11 +28,18 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _deviceId;
   String? _deviceModel;
 
+  bool _isCancelled = false;
+
+  /// Accumulated conversation IDs from completed batches during an ongoing sync.
+  /// Accessible so that cancel can retrieve partial results.
+  SyncLocalFilesResponse? _accumulatedResponse;
+  SyncLocalFilesResponse? get accumulatedResponse => _accumulatedResponse;
+
   LocalWalSyncImpl(this.listener);
 
   @override
   void cancelSync() {
-    // Local sync doesn't support cancellation yet
+    _isCancelled = true;
   }
 
   @override
@@ -310,6 +317,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     IWifiConnectionListener? connectionListener,
   }) async {
     await _flush();
+    _isCancelled = false;
+    _accumulatedResponse = null;
 
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
@@ -318,9 +327,22 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    _accumulatedResponse = resp;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
+      if (_isCancelled) {
+        Logger.debug("LocalWalSync: Upload cancelled");
+        // Clear isSyncing on all WALs that were marked for this batch
+        for (final w in wals) {
+          w.isSyncing = false;
+          w.syncStartedAt = null;
+          w.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
+      }
       var right = i;
       var left = right - steps;
       if (left < 0) {
@@ -366,7 +388,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      progress?.onWalSyncedProgress((left).toDouble() / wals.length);
+      progress?.onWalSyncedProgress(1.0 - (left).toDouble() / wals.length);
 
       listener.onWalUpdated();
       try {
@@ -389,7 +411,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           }
         }
       } catch (e) {
-        Logger.debug('Local WAL sync failed: $e');
+        Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             wals[j].isSyncing = false;
@@ -397,7 +419,6 @@ class LocalWalSyncImpl implements LocalWalSync {
             wals[j].syncEtaSeconds = null;
           }
         }
-        rethrow;
       }
 
       await _saveWalsToFile();

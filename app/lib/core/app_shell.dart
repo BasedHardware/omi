@@ -5,14 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:app_links/app_links.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/mobile/mobile_app.dart';
+import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -46,7 +49,14 @@ class _AppShellState extends State<AppShell> {
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
-    // Handle links
+    // Handle initial link (cold start — app launched by deep link)
+    final initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) {
+      Logger.debug('onInitialAppLink: $initialUri');
+      openAppLink(initialUri);
+    }
+
+    // Handle subsequent links (warm start — app already running)
     _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
       Logger.debug('onAppLink: $uri');
       openAppLink(uri);
@@ -59,7 +69,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    if (uri.pathSegments.first == 'apps') {
+    if (uri.pathSegments.first == 'apps' && uri.pathSegments.length > 1) {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
@@ -75,20 +85,18 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Wrapped Opened From DeepLink');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const Wrapped2025Page(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
+      }
+    } else if (uri.pathSegments.first == 'tasks' && uri.pathSegments.length > 1) {
+      if (mounted) {
+        final token = uri.pathSegments[1];
+        PlatformManager.instance.mixpanel.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
+        _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const UsagePage(showUpgradeDialog: true),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback
@@ -164,7 +172,11 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _handleOAuthCallback(
-      Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
+    Uri uri,
+    String errorDisplayName,
+    String oauthLogName,
+    Future<void> Function() onSuccess,
+  ) async {
     final error = uri.queryParameters['error'];
     if (error != null) {
       Logger.debug('$oauthLogName OAuth error: $error');
@@ -179,6 +191,35 @@ class _AppShellState extends State<AppShell> {
     } else {
       Logger.debug('$oauthLogName callback received but no success flag');
     }
+  }
+
+  Future<void> _handleSharedTasksDeepLink(String token) async {
+    final data = await action_items_api.getSharedActionItems(token);
+    if (!mounted) return;
+
+    if (data == null) {
+      AppSnackbar.showSnackbarError('Shared tasks not found or link expired');
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AcceptSharedTasksSheet(
+        token: token,
+        senderName: data['sender_name'] ?? 'Someone',
+        tasks: (data['tasks'] as List<dynamic>? ?? [])
+            .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
+            .toList(),
+        onAccepted: () {
+          // Refresh action items after accepting
+          if (mounted) {
+            context.read<ActionItemsProvider>().forceRefreshActionItems();
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _handleTodoistCallback() async {
@@ -292,8 +333,14 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    initDeepLinks();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeProviders());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initializeProviders();
+      // Start deep link handling AFTER providers are ready,
+      // so getInitialLink() doesn't race against cache loading (#4763)
+      if (mounted) {
+        initDeepLinks();
+      }
+    });
   }
 
   Future<void> _initializeProviders() async {
@@ -339,7 +386,8 @@ class _AppShellState extends State<AppShell> {
       builder: (context, constraints) {
         // Route to appropriate app tree based on screen width
         if (constraints.maxWidth >= 1100) {
-          return const DesktopApp(); // Desktop app tree
+          // DEPRECATED: Flutter desktop is deprecated. See /desktop/ for the native Swift macOS app.
+          return const DesktopApp();
         } else {
           return const MobileApp(); // Mobile app tree
         }

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Omi Beta</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIconFile</key>
+    <string>OmiIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Omi needs screen recording permission to monitor your focus and detect distractions.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Omi needs permission to detect which application is currently active.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Omi needs microphone access to transcribe your conversations in real-time.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Omi needs permission to capture system audio for transcription of calls and meetings.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Omi needs Bluetooth access to connect to your Omi wearable device for audio capture and transcription.</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>Omi Auth Callback</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>omi-computer</string>
+            </array>
+        </dict>
+    </array>
+    <!-- Sparkle Auto-Update Configuration -->
+    <key>SUFeedURL</key>
+    <string>https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>vWleho4gIOl932wM4v9Gz+FTCt90+vUVdPHsRReFX40=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>600</integer>
+</dict>
+</plist>

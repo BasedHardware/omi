@@ -1268,19 +1268,24 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+def fetch_app_chat_tools_from_manifest(
+    manifest_url: str, timeout: int = 10, force_refresh: bool = False
+) -> Dict[str, Any] | None:
     """
     Fetch chat tools definitions from an app's manifest endpoint.
 
     The manifest endpoint should return a JSON object with a 'tools' array containing
     tool definitions with: name, description, endpoint, method, parameters, auth_required, status_message.
 
+    Implements caching with 2-hour TTL to reduce external requests.
+
     Args:
         manifest_url: Full URL to the manifest endpoint (e.g., https://my-app.com/.well-known/omi-tools.json)
         timeout: Request timeout in seconds
+        force_refresh: If True, bypass cache and fetch fresh data
 
     Returns:
-        List of chat tool definitions, or None if fetch fails
+        Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
 
     Example manifest response:
     {
@@ -1300,13 +1305,24 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
                 "auth_required": true,
                 "status_message": "Adding to playlist..."
             }
-        ]
+        ],
+        "proactive_messages": {
+            "enabled": true
+        }
     }
     """
     import requests
 
     if not manifest_url:
         return None
+
+    # Check cache first (unless force refresh)
+    cache_key = f'manifest:{manifest_url}'
+    if not force_refresh:
+        cached_result = get_generic_cache(cache_key)
+        if cached_result:
+            print(f"✅ Using cached manifest for: {manifest_url}")
+            return cached_result
 
     try:
         print(f"📥 Fetching chat tools manifest from: {manifest_url}")
@@ -1341,8 +1357,27 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
             else:
                 print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
 
-        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
-        return validated_tools if validated_tools else None
+        # Parse chat_messages configuration
+        chat_messages = data.get('chat_messages', {})
+        chat_messages_config = {}
+        if isinstance(chat_messages, dict) and chat_messages.get('enabled', False):
+            chat_messages_config = {
+                'enabled': True,
+                'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
+                'notify': chat_messages.get('notify', True),  # send push notification, default True
+            }
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})")
+        result = {
+            'tools': validated_tools if validated_tools else None,
+            'chat_messages': chat_messages_config if chat_messages_config else None,
+        }
+
+        # Cache for 2 hours (7200 seconds)
+        if validated_tools:
+            set_generic_cache(cache_key, result, 60 * 60 * 2)
+
+        return result
 
     except requests.Timeout:
         print(f"⚠️ Manifest fetch timed out: {manifest_url}")

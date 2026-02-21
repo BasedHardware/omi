@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+// trigger rebuild
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -73,6 +74,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -131,6 +133,14 @@ Future _init() async {
       Env.init(ProdEnv());
     } else {
       Env.init(DevEnv());
+    }
+  }
+
+  if (F.env == Environment.prod) {
+    final isTestFlight = await EnvironmentDetector.isTestFlight();
+    if (isTestFlight) {
+      Env.overrideApiBaseUrl('https://api.omiapi.com/');
+      debugPrint('TestFlight detected: using dev backend');
     }
   }
 

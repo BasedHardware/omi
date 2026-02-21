@@ -1,0 +1,1299 @@
+[
+  {
+    "case": {
+      "id": "arg_01",
+      "conversation": [
+        "[Alex]: My wife thinks I should quit my job and start a business",
+        "[other]: What do you think?",
+        "[Alex]: She's crazy, we have a mortgage to pay",
+        "[other]: But she has a point about your unhappiness at work"
+      ],
+      "user_name": "Alex",
+      "user_facts": "Alex is a software engineer, married, has a mortgage, has been complaining about work for months.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_01",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "It sounds really tough to juggle your mortgage responsibilities and feeling unhappy at work. Your wife's suggestion to start a business is bold but comes from concern. What part of her idea worries you the most?",
+            "other_person": "Your wife",
+            "confidence": 0.9,
+            "rationale": "Alex is balancing financial responsibilities and dissatisfaction with work, leading to disagreement with his wife on quitting his job to start a business."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 24,
+      "explanation": "Directly addresses Alex\u2019s conflict about quitting vs. mortgage, validates both feelings and wife\u2019s concern, and asks a focused question to move reflection forward. It\u2019s concise and fits the argument-perspective tool well; only slightly less than perfect actionability because it\u2019s reflective rather than suggesting a concrete next step.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_02",
+      "conversation": [
+        "[Maria]: My partner wants to move to another city for his job",
+        "[other]: And you don't want to?",
+        "[Maria]: No way, my whole family is here. He's being selfish"
+      ],
+      "user_name": "Maria",
+      "user_facts": "Maria is very close with her family, works remotely, has been dating partner for 3 years.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_02",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "I see you're upset about your partner moving away and feel he's being selfish. It\u2019s tough when your family means so much. I can help you see both sides so you can talk it through calmly. Want me to?",
+            "other_person": "partner",
+            "confidence": 0.9,
+            "rationale": "Maria feels her partner is being selfish for wanting to move, indicating a disagreement; perspective might help."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses her conflict about moving and feeling he\u2019s selfish. Tone is generally warm and non-judgmental, though slightly interpretive of her feelings. It offers a concrete next step (seeing both sides, talking it through) and is short enough for a notification. Given the relational conflict, sending a perspective-taking/argument tool is appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_03",
+      "conversation": [
+        "[Tom]: My coworker keeps taking credit for my work in meetings",
+        "[other]: Have you talked to them about it?",
+        "[Tom]: No, they'll just deny it. My manager saw it happen too and said nothing"
+      ],
+      "user_name": "Tom",
+      "user_facts": "Tom is a junior developer, conflict-avoidant, values fairness.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_03",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Tom, it\u2019s really frustrating when your efforts aren\u2019t recognized, especially with your manager not stepping in. Maybe consider documenting your work contributions clearly to protect yourself? How do you feel about that?",
+            "detected_emotion": "frustration",
+            "suggested_action": "Document your work contributions clearly",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": false
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 22,
+      "explanation": "Directly addresses his situation and acknowledges the lack of recognition, with a concrete suggestion (document contributions). The tone is generally warm and non-judgmental, though could validate his conflict-avoidance more. It\u2019s brief and fits a push. Emotional support is a reasonable tool here, though adding a bit more support before advice might be ideal.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_04",
+      "conversation": [
+        "[Sam]: My mom keeps telling me I should have kids already",
+        "[other]: That's annoying",
+        "[Sam]: She says I'm being irresponsible. I told her it's my choice"
+      ],
+      "user_name": "Sam",
+      "user_facts": "Sam is 32, focused on career, doesn't want kids right now.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_04",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "Sounds tough having your mom push you about kids when you're focused on your career. You're standing your ground, and that's important. It's your life and choice.",
+            "other_person": "your mom",
+            "confidence": 0.9,
+            "rationale": "Sam is facing pressure from mom to have kids despite not wanting them now, and is asserting personal choice."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 2,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 21,
+      "explanation": "Highly relevant and empathetic, clearly validates Sam\u2019s stance and fits well as a short push. However, it offers little concrete guidance (e.g., how to respond to mom or manage the pressure), and using an argument_perspective-style tool suggests there could have been more actionable support.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_05",
+      "conversation": [
+        "[Pat]: My friend said my startup idea is stupid",
+        "[other]: Ouch. What did they say exactly?",
+        "[Pat]: That nobody would pay for it. But they don't understand the market"
+      ],
+      "user_name": "Pat",
+      "user_facts": "Pat has been working on a B2B SaaS idea for 6 months, has 3 paying beta users.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_05",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "I see your friend doubts your startup idea, but you already have 3 paying beta users, showing real interest. Your friend might not fully grasp the market potential yet. Keep trusting your knowledge and momentum!",
+            "other_person": "your friend",
+            "confidence": 0.9,
+            "rationale": "Pat has 3 paying beta users, which directly contradicts the friend's claim that no one would pay. This suggests Pat understands the market better."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 2,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 20,
+      "explanation": "Directly references the friend\u2019s doubt and the 3 beta users, so it\u2019s very relevant. Tone is supportive and non-judgmental, though slightly platitude-like. It lacks a concrete next step beyond encouragement, so actionability is limited. It\u2019s concise and fits well as a push, and sending a perspective-reframing notification in this emotionally charged moment is appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_06",
+      "conversation": [
+        "[Dana]: My roommate ate my leftovers again",
+        "[other]: Did you talk to them?",
+        "[Dana]: Yeah they said it's not a big deal. But it IS a big deal to me"
+      ],
+      "user_name": "Dana",
+      "user_facts": "Dana is a college student on a tight budget.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_06",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "That\u2019s really frustrating when your stuff isn\u2019t respected, especially on a tight budget. Maybe set a clear boundary or label your food to protect it? It can help keep things clear and avoid future conflicts.",
+            "detected_emotion": "frustration",
+            "suggested_action": "Label your food with your name or a note to set clear boundaries",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": false
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 24,
+      "explanation": "Directly addresses her frustration about leftovers and budget, validates her feelings, and offers concrete steps (boundaries, labeling). It\u2019s concise and fits a push notification. Emotional support is an appropriate tool here. Could be slightly more specific on how to set boundaries, but overall very strong.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_07",
+      "conversation": [
+        "[Chris]: My brother wants to borrow money again, I said no and now he's angry",
+        "[other]: How much does he want?",
+        "[Chris]: Five thousand. He never pays me back. He says family should help family"
+      ],
+      "user_name": "Chris",
+      "user_facts": "Chris has lent brother money 3 times before, never repaid. Chris values family but is financially responsible.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_07",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "I see your brother is upset after you said no to lending $5K again, especially since he feels family should help. You want to be supportive but also need to be financially responsible. It's tough, but your feelings are valid.",
+            "other_person": "your brother",
+            "confidence": 0.9,
+            "rationale": "Chris values family but has been financially responsible by not lending more after repeated non-repayments, while brother expects financial help as family duty."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 1,
+      "brevity": 4,
+      "appropriateness": 4,
+      "total": 18,
+      "explanation": "Directly addresses the situation and validates Chris\u2019s feelings in a warm, non-judgmental way. However, it doesn\u2019t offer concrete next steps or advice, so actionability is low. Length is reasonable for a push, though a bit wordy. Using an argument-perspective style tool fits, and sending a notification here is appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_08",
+      "conversation": [
+        "[Jo]: Had a great lunch today",
+        "[other]: Nice, where did you go?",
+        "[Jo]: That new Thai place downtown, really good pad thai"
+      ],
+      "user_name": "Jo",
+      "user_facts": "Jo likes trying new restaurants.",
+      "goals": [],
+      "expected_tool": null,
+      "should_trigger": false
+    },
+    "tool_result": {
+      "case_id": "arg_08",
+      "expected_tool": null,
+      "should_trigger": false,
+      "tool_calls": [],
+      "triggered": false,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "pass": true,
+      "total": "N/A"
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_09",
+      "conversation": [
+        "[Riley]: I disagree with the new company policy on remote work",
+        "[other]: What changed?",
+        "[Riley]: They want everyone back 5 days. My manager agrees with me that it's counterproductive"
+      ],
+      "user_name": "Riley",
+      "user_facts": "Riley is a senior engineer, top performer, works best from home.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_09",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "I see you're upset about the new remote work policy and your manager also disagrees with it. It sounds like you're focused on productivity and comfort, which matters a lot for your role as a top engineer.",
+            "other_person": "company",
+            "confidence": 0.9,
+            "rationale": "Riley and the manager see the policy as counterproductive, indicating disagreement with the company stance."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 1,
+      "brevity": 5,
+      "appropriateness": 3,
+      "total": 18,
+      "explanation": "Relevance is high: it reflects Riley\u2019s stance and mentions the manager\u2019s agreement and productivity concerns. Tone is generally understanding but a bit generic. There\u2019s no concrete suggestion or next step, so actionability is low. It\u2019s concise and fits a push notification. Appropriateness is mixed: a notification is somewhat justified, but using an argument_perspective-style tool without offering any perspective, reframe, or path forward makes the choice only partially appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "arg_10",
+      "conversation": [
+        "[Lee]: My wife and I can't agree on where to send our kid to school",
+        "[other]: Public vs private?",
+        "[Lee]: She wants private, I think public is fine. We had a big fight about it last night"
+      ],
+      "user_name": "Lee",
+      "user_facts": "Lee went to public school, values practical education, budget-conscious. Wife went to private school.",
+      "goals": [],
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "arg_10",
+      "expected_tool": "trigger_argument_perspective",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_argument_perspective",
+          "args": {
+            "notification_text": "Sounds tough, Lee. It seems you value practical education and budgeting, while she might prioritize the experience she had. Both views are valid; maybe finding a middle ground could help?",
+            "other_person": "your wife",
+            "confidence": 0.9,
+            "rationale": "You value public education for its practicality and budget, she favors private due to personal experience. Both points are understandable, so a compromise might work."
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 3,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 22,
+      "explanation": "Directly addresses the school conflict and acknowledges both perspectives. Tone is warm and non-judgmental, though could be slightly more validating of the fight\u2019s emotional impact. Suggests finding middle ground but is a bit vague on how. Very concise and suitable as a push, and using an argument-perspective style tool is appropriate here.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_01",
+      "conversation": [
+        "[Emma]: I'm thinking of ordering pizza tonight",
+        "[other]: Sounds good",
+        "[Emma]: Yeah, and maybe some wings too. I deserve a treat"
+      ],
+      "user_name": "Emma",
+      "user_facts": "Emma has been dieting for 2 months, lost 10 pounds.",
+      "goals": [
+        {
+          "title": "Lose 20 pounds by June"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_01",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Emma, craving pizza and wings sounds so tempting! Just a heads-up, ordering those might slow your progress towards losing 20 pounds by June. Maybe a lighter treat could still feel like a reward?",
+            "goal_name": "Lose 20 pounds by June",
+            "conflict_description": "Ordering pizza and wings contradicts the goal of dieting for weight loss.",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 4,
+      "total": 21,
+      "explanation": "Directly addresses Emma\u2019s pizza/wings plan in light of her weight-loss goal. Tone is generally warm and non-judgmental, though it lightly risks feeling restrictive. It offers a concrete alternative (a lighter treat), is short enough for a push, and using a goal-misalignment nudge is appropriate given her explicit goal\u2014even if it could be a bit more validating of an occasional indulgence.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_02",
+      "conversation": [
+        "[Mike]: I signed up for another online course",
+        "[other]: Which one?",
+        "[Mike]: Machine learning. That's my fifth course this month"
+      ],
+      "user_name": "Mike",
+      "user_facts": "Mike starts many courses but rarely finishes them.",
+      "goals": [
+        {
+          "title": "Complete AWS certification by March"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_02",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Mike, juggling five courses sounds intense! Remember your goal to complete AWS certification by March. Taking on too much might slow you down. Maybe focus on one to make real progress?",
+            "goal_name": "Complete AWS certification by March",
+            "conflict_description": "Taking multiple courses simultaneously may distract from completing AWS certification on time.",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 22,
+      "explanation": "Directly connects his new course to his AWS goal and pattern of overcommitting. Tone is generally warm and non-judgmental, though slightly cautionary. It suggests a concrete adjustment (focus on one course). Length is a bit long but still readable as a notification. Using a goal misalignment trigger here is appropriate given the user\u2019s stated goal and behavior.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_03",
+      "conversation": [
+        "[Sara]: I'm going to skip my morning run tomorrow",
+        "[other]: Why?",
+        "[Sara]: I want to sleep in. I'll run next week instead"
+      ],
+      "user_name": "Sara",
+      "user_facts": "Sara is training for a half marathon in 6 weeks.",
+      "goals": [
+        {
+          "title": "Run half marathon in under 2 hours"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_03",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Sara, skipping your morning run might slow your marathon prep. Sleep is key, but maybe a shorter run or different time could keep you on track? Your goal of sub-2 hours is totally doable with steady training!",
+            "goal_name": "Run half marathon in under 2 hours",
+            "conflict_description": "Skipping planned run reduces training time and endurance building, impacting race time goal.",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 22,
+      "explanation": "Directly addresses skipping a run vs. her half-marathon goal and correctly uses a goal-misalignment nudge. Tone is generally warm and non-judgmental, though slightly prescriptive. Offers concrete alternatives (shorter run/different time), and is reasonably concise though a bit wordy for a push. Overall a suitable and helpful notification.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_04",
+      "conversation": [
+        "[Jake]: I'm going to buy that new gaming console",
+        "[other]: Nice, which one?",
+        "[Jake]: The latest one, it's only 600 bucks"
+      ],
+      "user_name": "Jake",
+      "user_facts": "Jake has been saving for a down payment on a house.",
+      "goals": [
+        {
+          "title": "Save $50,000 for house down payment by December"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_04",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Jake, buying that $600 gaming console might slow down your goal to save for your house down payment by December. Maybe consider waiting or setting aside a special fund for gaming? Your future home is really worth it!",
+            "goal_name": "Save $50,000 for house down payment by December",
+            "conflict_description": "Spending $600 on a gaming console contradicts the goal of saving for a house down payment.",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 4,
+      "total": 21,
+      "explanation": "Directly ties the $600 console to his house-saving goal and suggests alternatives, so it\u2019s relevant and actionable. Tone is mostly warm and non-judgmental, though a bit paternalistic (\u201creally worth it\u201d). It\u2019s slightly long but still readable as a notification. Using a goal misalignment trigger here is appropriate, though frequent nudges like this could risk feeling intrusive.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_05",
+      "conversation": [
+        "[Nina]: I'm going to stay up late binge-watching that new show",
+        "[other]: Which one?",
+        "[Nina]: The one everyone's talking about. Probably until 3am"
+      ],
+      "user_name": "Nina",
+      "user_facts": "Nina has been struggling with sleep quality.",
+      "goals": [
+        {
+          "title": "Fix sleep schedule - be in bed by 11pm every night"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_05",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Nina, binge-watching until 3am might mess with your goal to fix your sleep schedule by 11pm. Maybe pause and pick it up tomorrow? Your rest matters!",
+            "goal_name": "Fix sleep schedule",
+            "conflict_description": "Planning to stay up late binge-watching until 3am contradicts the goal of being in bed by 11pm every night.",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly ties her plan to stay up late to her sleep goal, in a timely way. Tone is generally warm and caring, though could acknowledge her excitement more. It gives a clear alternative (pause and watch tomorrow). Message is short and readable. Using a goal-misalignment nudge here is appropriate given her explicit sleep goal and ongoing struggles.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_06",
+      "conversation": [
+        "[Dan]: I'm going to read for an hour today",
+        "[other]: What book?",
+        "[Dan]: That new fiction book I bought. Really enjoying it"
+      ],
+      "user_name": "Dan",
+      "user_facts": "Dan loves reading.",
+      "goals": [
+        {
+          "title": "Read 2 books per month"
+        }
+      ],
+      "expected_tool": null,
+      "should_trigger": false
+    },
+    "tool_result": {
+      "case_id": "goal_06",
+      "expected_tool": null,
+      "should_trigger": false,
+      "tool_calls": [],
+      "triggered": false,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "pass": true,
+      "total": "N/A"
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_07",
+      "conversation": [
+        "[Ava]: I think I'll skip Spanish class again this week",
+        "[other]: How many have you missed?",
+        "[Ava]: Like three in a row. The teacher is boring anyway"
+      ],
+      "user_name": "Ava",
+      "user_facts": "Ava enrolled in Spanish classes 2 months ago.",
+      "goals": [
+        {
+          "title": "Become conversational in Spanish by summer"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_07",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Ava, I noticed you're thinking about skipping Spanish class again. Since your goal is to become conversational by summer, regular attendance could really help you get there faster! Maybe try to attend at least this week?",
+            "goal_name": "Become conversational in Spanish by summer",
+            "conflict_description": "Skipping multiple Spanish classes hinders progress towards becoming conversational by summer",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses skipping class and ties it to her Spanish goal. Tone is mostly warm and non-judgmental, though slightly prescriptive. Offers a concrete suggestion (attend this week). It's concise and well under 300 chars. Goal misalignment is clear, so sending a notification with this tool is appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_08",
+      "conversation": [
+        "[Ben]: I'm going to accept that job offer at the big company",
+        "[other]: What about your startup?",
+        "[Ben]: I'll put it on pause. The salary is too good to pass up"
+      ],
+      "user_name": "Ben",
+      "user_facts": "Ben has been building a startup for 8 months with 500 users.",
+      "goals": [
+        {
+          "title": "Grow startup to 5,000 users by Q3"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_08",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Ben, taking the big company job sounds tempting, but it might slow down your startup growth goal. How about planning specific time blocks to keep your startup moving too?",
+            "goal_name": "Grow startup to 5,000 users by Q3",
+            "conflict_description": "Accepting a full-time job and pausing the startup may delay reaching 5,000 users by Q3.",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 22,
+      "explanation": "Directly addresses Ben taking the job and how it affects his startup goal. Tone is generally supportive but slightly cautionary (\u201cmight slow down\u201d) which could feel a bit guilt-inducing. It offers a specific action (time blocking), is concise, and the goal-misalignment trigger is appropriate since his new choice conflicts with the 5,000-user growth goal.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_09",
+      "conversation": [
+        "[Chloe]: I'm going to start meditating every morning",
+        "[other]: That's a great idea",
+        "[Chloe]: Yeah, I heard it helps with focus"
+      ],
+      "user_name": "Chloe",
+      "user_facts": "Chloe struggles with focus at work.",
+      "goals": [
+        {
+          "title": "Improve focus and productivity at work"
+        }
+      ],
+      "expected_tool": null,
+      "should_trigger": false
+    },
+    "tool_result": {
+      "case_id": "goal_09",
+      "expected_tool": null,
+      "should_trigger": false,
+      "tool_calls": [],
+      "triggered": false,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "pass": true,
+      "total": "N/A"
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "goal_10",
+      "conversation": [
+        "[Eli]: I'm going to eat out every day this week",
+        "[other]: That's expensive",
+        "[Eli]: I know but I hate cooking. It's just easier"
+      ],
+      "user_name": "Eli",
+      "user_facts": "Eli spends a lot on food delivery.",
+      "goals": [
+        {
+          "title": "Cook at home at least 5 days a week to save money"
+        }
+      ],
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "goal_10",
+      "expected_tool": "trigger_goal_misalignment",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_goal_misalignment",
+          "args": {
+            "notification_text": "Hey Eli, eating out every day this week might clash with your goal to cook at home 5 days a week and save money. Maybe there's a way to make cooking more manageable for you?",
+            "goal_name": "Cook at home at least 5 days a week to save money",
+            "conflict_description": "Eating out every day this week contradicts the goal of cooking at home 5 days a week.",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 3,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 21,
+      "explanation": "Directly connects Eli\u2019s plan to eat out with their cooking/saving goal. Tone is mostly warm and non-judgmental, though slightly corrective. It suggests exploring ways to make cooking manageable but stays vague on specific steps. Length is fine for a notification. Triggering a goal misalignment here is appropriate given the clear conflict with the stated goal.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_01",
+      "conversation": [
+        "[Zoe]: I feel so lonely lately",
+        "[other]: Have you tried reaching out to friends?",
+        "[Zoe]: Nobody has time for me. I just sit at home every night"
+      ],
+      "user_name": "Zoe",
+      "user_facts": "Zoe recently moved to a new city, works remotely.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_01",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Hey Zoe, feeling lonely is really tough, especially in a new city. How about trying a small step like joining a local group or class this week to meet new people? You deserve some connection and joy!",
+            "detected_emotion": "loneliness",
+            "suggested_action": "Join a local group or class to meet new people",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses Zoe\u2019s loneliness in a new city with warm, validating language. Suggests a concrete step (joining a local group/class). Slightly on the longer side but still reasonable for a push. Emotional support tool is appropriate given the context, and sending a notification makes sense here.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_02",
+      "conversation": [
+        "[Max]: I'm so anxious about my presentation tomorrow",
+        "[other]: You'll do fine",
+        "[Max]: No I won't. I always freeze up. I couldn't sleep last night thinking about it"
+      ],
+      "user_name": "Max",
+      "user_facts": "Max has public speaking anxiety, is a data scientist.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_02",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "I can hear how anxious you feel about your presentation, especially with last night\u2019s sleeplessness. Try a calming breathing exercise or jot down key points to boost confidence right now.",
+            "detected_emotion": "anxiety",
+            "suggested_action": "Try a calming breathing exercise or jot down key points to boost confidence",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses Max\u2019s presentation anxiety and sleeplessness with a warm, validating tone. Offers two concrete coping strategies. It\u2019s slightly wordy but still suitable for a push. Emotional support is the right tool and timing, given acute anxiety.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_03",
+      "conversation": [
+        "[Ivy]: Everything feels pointless right now",
+        "[other]: What do you mean?",
+        "[Ivy]: I work all day, come home exhausted, repeat. What's the point"
+      ],
+      "user_name": "Ivy",
+      "user_facts": "Ivy is a nurse working 12-hour shifts.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_03",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Ivy, it sounds so tough feeling stuck in this exhausting cycle. Maybe take a few deep breaths or step outside for a quick moment to reset. Small breaks can really help clear your mind.",
+            "detected_emotion": "exhaustion",
+            "suggested_action": "Take a few deep breaths or step outside for a moment to clear your mind",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 4,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 21,
+      "explanation": "The message directly responds to Ivy feeling stuck and exhausted and uses a warm, validating tone. It offers a specific, simple action (deep breaths/step outside), is short enough for a push, and emotional support is the right tool. It could be more tailored to her situation as a nurse and acknowledge the deeper existential \u2018what\u2019s the point\u2019 feeling, not just stress relief, but overall it\u2019s solid.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_04",
+      "conversation": [
+        "[Ray]: I got rejected from another job today",
+        "[other]: Sorry to hear that",
+        "[Ray]: That's the 15th rejection this month. I'm starting to think I'm just not good enough"
+      ],
+      "user_name": "Ray",
+      "user_facts": "Ray was laid off 3 months ago, has 8 years of experience in marketing.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_04",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Ray, facing 15 rejections in a month must feel really tough and discouraging. Remember, it doesn't define your worth or skills. Try taking a moment now for a small self-care activity to recharge. You've got this, keep going!",
+            "detected_emotion": "discouragement",
+            "suggested_action": "Take a short walk or deep breathing to refresh your mind",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 3,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 21,
+      "explanation": "Directly addresses Ray\u2019s job rejections and feelings of inadequacy (high relevance). Tone is supportive and non-judgmental, though slightly generic (good empathy). It suggests a small self-care activity but without examples, so only moderately actionable. Length is a bit on the long side but still readable as a notification. Sending an emotional support notification here and using this tool is appropriate given repeated rejections and low self-worth language.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_05",
+      "conversation": [
+        "[Lily]: I can't stop comparing myself to my friends",
+        "[other]: In what way?",
+        "[Lily]: They all seem to have their life together. Houses, marriages, babies. I have nothing"
+      ],
+      "user_name": "Lily",
+      "user_facts": "Lily is 29, single, renting, loves travel and adventure.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_05",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Hey Lily, it's tough feeling behind when your friends seem so settled. Try listing what you love about your own journey\u2014like your love for travel and adventure. It\u2019s your unique path. How about planning a little trip to remind yourself of your wins?",
+            "detected_emotion": "insecurity",
+            "suggested_action": "List your unique strengths and plan a small adventure to celebrate them.",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 4,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 22,
+      "explanation": "Directly addresses feeling behind friends and references her love of travel, so relevance is high. Tone is generally warm and validating, though it could pause a bit more with her pain before shifting to reframing. It suggests two concrete actions (list what she loves about her journey, plan a trip), so actionability is solid. It\u2019s slightly on the long side for a push but still reasonably concise. Emotional support is an appropriate tool here, and a notification is warranted given her distress.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_06",
+      "conversation": [
+        "[Finn]: I'm so frustrated with my code today",
+        "[other]: What's wrong?",
+        "[Finn]: This bug has been driving me crazy for 3 days. I want to throw my laptop out the window"
+      ],
+      "user_name": "Finn",
+      "user_facts": "Finn is a frontend developer, perfectionist.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_06",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Hey Finn, I can tell this bug has really been wearing you down. Maybe take a 10-min break to stretch or step outside for fresh air\u2014it might clear your head and help you tackle it better.",
+            "detected_emotion": "frustration",
+            "suggested_action": "Take a 10-min break to stretch or get fresh air",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 5,
+      "total": 24,
+      "explanation": "Directly addresses Finn\u2019s frustration with the bug, validates their feelings, and suggests a short break as a concrete action. It\u2019s concise and well-suited as an emotional support notification. Could be slightly more specific to coding, but overall strong.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_07",
+      "conversation": [
+        "[Nora]: I had a really productive day today",
+        "[other]: That's awesome! What did you accomplish?",
+        "[Nora]: Finished the report, had a great meeting, and even went for a run"
+      ],
+      "user_name": "Nora",
+      "user_facts": "Nora is a project manager.",
+      "goals": [],
+      "expected_tool": null,
+      "should_trigger": false
+    },
+    "tool_result": {
+      "case_id": "emo_07",
+      "expected_tool": null,
+      "should_trigger": false,
+      "tool_calls": [],
+      "triggered": false,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "pass": true,
+      "total": "N/A"
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_08",
+      "conversation": [
+        "[Oscar]: I'm exhausted. I can't keep doing this",
+        "[other]: Doing what?",
+        "[Oscar]: Working two jobs, taking care of my mom, never sleeping. Something has to give"
+      ],
+      "user_name": "Oscar",
+      "user_facts": "Oscar is caretaking for his elderly mother while working two jobs.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_08",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Oscar, you're doing an incredible job juggling so much. Try taking a 5-minute break just for yourself now\u2014breathe deeply or stretch. You deserve a moment of calm today.",
+            "detected_emotion": "exhaustion",
+            "suggested_action": "Take a short 5-minute break to breathe or stretch.",
+            "confidence": 0.95
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 5,
+      "appropriateness": 4,
+      "total": 23,
+      "explanation": "Directly addresses Oscar\u2019s overload and caregiving, with warm validation and a simple self-care step. It\u2019s concise and suitable as emotional support. Could be slightly improved by more explicitly acknowledging his distress and not only praising his effort.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_09",
+      "conversation": [
+        "[Uma]: I feel like such a failure as a parent",
+        "[other]: Why do you say that?",
+        "[Uma]: My kid got in trouble at school again. I must be doing something wrong"
+      ],
+      "user_name": "Uma",
+      "user_facts": "Uma is a single parent of a 10-year-old.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_09",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "Uma, feeling like a failure is really tough, especially as a single parent. Remember, one setback doesn\u2019t define you or your efforts. Maybe take a moment to breathe and write down one thing you\u2019re proud of in your parenting today? It can help ground you.",
+            "detected_emotion": "frustration",
+            "suggested_action": "Take a moment to write down one thing you're proud of in your parenting today",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses her feeling like a failure and single-parent context with warmth and validation. Suggests a concrete grounding exercise, though could be slightly shorter. Emotional support is the right tool here and timing is appropriate.",
+      "pass": true
+    },
+    "trigger_correct": true
+  },
+  {
+    "case": {
+      "id": "emo_10",
+      "conversation": [
+        "[Vera]: I'm dreading going to work tomorrow",
+        "[other]: What happened?",
+        "[Vera]: My boss publicly criticized me in a meeting. I felt humiliated"
+      ],
+      "user_name": "Vera",
+      "user_facts": "Vera is sensitive to criticism, works in sales.",
+      "goals": [],
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true
+    },
+    "tool_result": {
+      "case_id": "emo_10",
+      "expected_tool": "trigger_emotional_support",
+      "should_trigger": true,
+      "tool_calls": [
+        {
+          "name": "trigger_emotional_support",
+          "args": {
+            "notification_text": "I'm really sorry your boss criticized you like that, Vera. It sounds so tough to face tomorrow after feeling humiliated today. Maybe try taking some deep breaths or writing down your feelings before bed tonight to ease the stress.",
+            "detected_emotion": "anxiety",
+            "suggested_action": "Try deep breathing or journaling your feelings tonight.",
+            "confidence": 0.9
+          }
+        }
+      ],
+      "triggered": true,
+      "correct_tool": true
+    },
+    "judge_result": {
+      "relevance": 5,
+      "empathy": 5,
+      "actionability": 4,
+      "brevity": 4,
+      "appropriateness": 5,
+      "total": 23,
+      "explanation": "Directly addresses her humiliation and dread, uses her name, and is warm and validating. Suggests concrete coping actions (breathing, journaling). Slightly on the longer side but still reasonable for a push. Emotional support is the right tool and timing after a painful work event.",
+      "pass": true
+    },
+    "trigger_correct": true
+  }
+]

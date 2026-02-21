@@ -489,7 +489,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: "What's New",
+                title: context.l10n.whatsNew,
                 icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   MixpanelManager().whatsNewOpened();

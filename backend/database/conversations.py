@@ -368,6 +368,44 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     conversation_ref.update({'structured.title': title})
 
 
+def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
+    """
+    Update a single segment's text in a conversation.
+
+    Returns:
+        'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
+        'segment_not_found' if segment_id not found.
+    """
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return 'not_found'
+
+    raw_data = doc_snapshot.to_dict()
+    if raw_data.get('is_locked', False):
+        return 'locked'
+
+    conversation_data = _prepare_conversation_for_read(raw_data, uid)
+    if not conversation_data:
+        return 'not_found'
+
+    segments = conversation_data.get('transcript_segments', [])
+    found = False
+    for segment in segments:
+        if isinstance(segment, dict) and segment.get('id') == segment_id:
+            segment['text'] = text
+            found = True
+            break
+
+    if not found:
+        return 'segment_not_found'
+
+    doc_level = conversation_data.get('data_protection_level', 'standard')
+    prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
+    doc_ref.update(prepared_payload)
+    return 'ok'
+
+
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     """
     Delete all photos in a conversation's photos subcollection.

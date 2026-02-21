@@ -31,14 +31,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   final ScrollController _scrollController = ScrollController();
   final AppReviewService _appReviewService = AppReviewService();
 
-  // Track indent levels for each task (task id -> indent level 0-3)
-  final Map<String, int> _indentLevels = {};
-
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
-
-  // Track custom order for each category (category -> list of item ids)
-  final Map<TaskCategory, List<String>> _categoryOrder = {};
 
   // Track the item being hovered over during drag
   String? _hoveredItemId;
@@ -61,7 +55,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadCategoryOrder();
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -69,21 +62,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
         provider.fetchActionItems(showShimmer: true);
-      }
-    });
-  }
-
-  void _loadCategoryOrder() {
-    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
-    setState(() {
-      for (final entry in savedOrder.entries) {
-        try {
-          final category = TaskCategory.values.firstWhere(
-            (c) => c.name == entry.key,
-            orElse: () => TaskCategory.noDeadline,
-          );
-          _categoryOrder[category] = entry.value;
-        } catch (_) {}
       }
     });
   }
@@ -130,14 +108,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (goal.id == goalId) return goal.title;
     }
     return null;
-  }
-
-  void _saveCategoryOrder() {
-    final Map<String, List<String>> toSave = {};
-    for (final entry in _categoryOrder.entries) {
-      toSave[entry.key.name] = entry.value;
-    }
-    SharedPreferencesUtil().taskCategoryOrder = toSave;
   }
 
   @override
@@ -204,8 +174,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildFab() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 48.0),
+    return Positioned(
+      right: 20,
+      bottom: 100,
       child: FloatingActionButton(
         heroTag: 'action_items_fab',
         onPressed: () {
@@ -302,56 +273,55 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     provider.updateActionItemDueDate(item, newDueDate);
   }
 
-  int _getIndentLevel(String itemId) {
-    return _indentLevels[itemId] ?? 0;
+  int _getIndentLevel(ActionItemWithMetadata item) {
+    return item.indentLevel;
   }
 
   void _incrementIndent(String itemId) {
-    setState(() {
-      final current = _indentLevels[itemId] ?? 0;
-      if (current < 3) {
-        _indentLevels[itemId] = current + 1;
-      }
-    });
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.where((i) => i.id == itemId).firstOrNull;
+    if (item == null) return;
+    final current = item.indentLevel;
+    if (current < 3) {
+      provider.updateItemIndentLevel(itemId, current + 1);
+    }
     HapticFeedback.lightImpact();
   }
 
   void _decrementIndent(String itemId) {
-    setState(() {
-      final current = _indentLevels[itemId] ?? 0;
-      if (current > 0) {
-        _indentLevels[itemId] = current - 1;
-      }
-    });
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final item = provider.actionItems.where((i) => i.id == itemId).firstOrNull;
+    if (item == null) return;
+    final current = item.indentLevel;
+    if (current > 0) {
+      provider.updateItemIndentLevel(itemId, current - 1);
+    }
     HapticFeedback.lightImpact();
   }
 
-  // Get ordered items for a category, respecting custom order
+  // Get ordered items for a category, respecting sort_order from model
   List<ActionItemWithMetadata> _getOrderedItems(
     TaskCategory category,
     List<ActionItemWithMetadata> items,
   ) {
-    final order = _categoryOrder[category];
-    if (order == null || order.isEmpty) {
-      return items;
-    }
-
-    // Sort items based on custom order, new items go at the end
-    final orderedItems = <ActionItemWithMetadata>[];
-    final itemMap = {for (var item in items) item.id: item};
-
-    // Add items in custom order
-    for (final id in order) {
-      if (itemMap.containsKey(id)) {
-        orderedItems.add(itemMap[id]!);
-        itemMap.remove(id);
+    final sorted = List<ActionItemWithMetadata>.from(items);
+    sorted.sort((a, b) {
+      // Items with sortOrder > 0 come first, sorted ascending
+      if (a.sortOrder > 0 && b.sortOrder > 0) {
+        return a.sortOrder.compareTo(b.sortOrder);
       }
-    }
-
-    // Add any remaining items (new ones not in custom order)
-    orderedItems.addAll(itemMap.values);
-
-    return orderedItems;
+      if (a.sortOrder > 0) return -1;
+      if (b.sortOrder > 0) return 1;
+      // Fallback: sort by dueAt then createdAt
+      final aDue = a.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDue = b.dueAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dueCmp = aDue.compareTo(bDue);
+      if (dueCmp != 0) return dueCmp;
+      final aCreated = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bCreated = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aCreated.compareTo(bCreated);
+    });
+    return sorted;
   }
 
   // Reorder item within category
@@ -362,40 +332,37 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    // Build the new order as a list of IDs
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+
+    final targetIndex = order.indexOf(targetItemId);
+    if (targetIndex != -1) {
+      final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+      order.insert(insertIndex, draggedItem.id);
+    } else {
+      order.add(draggedItem.id);
+    }
+
+    // Assign sequential sort_order values
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
     setState(() {
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position
-      order.remove(draggedItem.id);
-
-      // Find target position
-      final targetIndex = order.indexOf(targetItemId);
-      if (targetIndex != -1) {
-        // Insert above or below target
-        final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
-        order.insert(insertIndex, draggedItem.id);
-      } else {
-        // Target not found, add at end
-        order.add(draggedItem.id);
-      }
-
-      // Clear hover state
       _hoveredItemId = null;
     });
-    _saveCategoryOrder();
     HapticFeedback.mediumImpact();
   }
 
   // Delete task with swipe
-  Future<void> _deleteTask(ActionItemWithMetadata item) async {
+  void _deleteTask(ActionItemWithMetadata item) {
     HapticFeedback.mediumImpact();
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    await provider.deleteActionItem(item);
+    provider.deleteActionItem(item);
   }
 
   @override
@@ -409,22 +376,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          floatingActionButton: _buildFab(),
-          body: GestureDetector(
-            onTap: () {},
-            child: RefreshIndicator(
-              onRefresh: () async {
-                HapticFeedback.mediumImpact();
-                return provider.forceRefreshActionItems();
-              },
-              color: Colors.deepPurple,
-              backgroundColor: Colors.white,
-              child: provider.isLoading && provider.actionItems.isEmpty
-                  ? _buildLoadingState()
-                  : categorizedItems.values.every((l) => l.isEmpty)
-                      ? _buildEmptyTasksList()
-                      : _buildTasksList(categorizedItems, provider),
-            ),
+          body: Stack(
+            children: [
+              GestureDetector(
+                onTap: () {},
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    HapticFeedback.mediumImpact();
+                    return provider.forceRefreshActionItems();
+                  },
+                  color: Colors.deepPurple,
+                  backgroundColor: Colors.white,
+                  child: provider.isLoading && provider.actionItems.isEmpty
+                      ? _buildLoadingState()
+                      : categorizedItems.values.every((l) => l.isEmpty)
+                          ? _buildEmptyTasksList()
+                          : _buildTasksList(categorizedItems, provider),
+                ),
+              ),
+              _buildFab(),
+            ],
           ),
         );
       },
@@ -773,21 +744,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     TaskCategory category,
     List<ActionItemWithMetadata> categoryItems,
   ) {
+    final order = categoryItems.map((i) => i.id).toList();
+    order.remove(draggedItem.id);
+    order.insert(0, draggedItem.id);
+
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final Map<String, int> updates = {};
+    for (int i = 0; i < order.length; i++) {
+      updates[order[i]] = (i + 1) * 1000;
+    }
+    provider.batchUpdateSortOrders(updates);
+
     setState(() {
-      // Initialize category order if needed
-      if (!_categoryOrder.containsKey(category)) {
-        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
-      }
-
-      final order = _categoryOrder[category]!;
-
-      // Remove dragged item from its current position
-      order.remove(draggedItem.id);
-
-      // Insert at first position
-      order.insert(0, draggedItem.id);
-
-      // Clear hover state
       _hoveredItemId = null;
     });
     HapticFeedback.mediumImpact();
@@ -799,7 +767,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     required TaskCategory category,
     required List<ActionItemWithMetadata> categoryItems,
   }) {
-    final indentLevel = _getIndentLevel(item.id);
+    final indentLevel = _getIndentLevel(item);
     final indentWidth = indentLevel * 28.0;
     final isHovered = _hoveredItemId == item.id;
 
@@ -1056,72 +1024,68 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     ActionItemsProvider provider,
     double indentWidth,
   ) {
-    final indentLevel = _getIndentLevel(item.id);
+    final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
 
     return GestureDetector(
       onTap: () => _showEditSheet(item),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
-        child: Dismissible(
-          key: Key('${item.id}_dismiss'),
-          direction: DismissDirection.none, // Disable dismiss, use swipe for indent
-          child: Padding(
-            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Indent line
-                if (indentLevel > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Container(
-                      width: 1.5,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(1),
-                      ),
+        child: Padding(
+          padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Indent line
+              if (indentLevel > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Container(
+                    width: 1.5,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(1),
                     ),
                   ),
-                // Checkbox
-                GestureDetector(
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    await provider.updateActionItemState(item, !item.completed);
-                    if (!item.completed) _onActionItemCompleted();
-                  },
-                  child: _buildCheckbox(item.completed),
                 ),
-                const SizedBox(width: 12),
-                // Task text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+              // Checkbox
+              GestureDetector(
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  await provider.updateActionItemState(item, !item.completed);
+                  if (!item.completed) _onActionItemCompleted();
+                },
+                child: _buildCheckbox(item.completed),
+              ),
+              const SizedBox(width: 12),
+              // Task text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.description,
+                      style: TextStyle(
+                        color: item.completed ? Colors.grey[600] : Colors.white,
+                        fontSize: 15,
+                        decoration: item.completed ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    if (goalTitle != null) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        item.description,
+                        goalTitle,
                         style: TextStyle(
-                          color: item.completed ? Colors.grey[600] : Colors.white,
-                          fontSize: 15,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          color: Colors.grey[600],
+                          fontSize: 12,
                         ),
                       ),
-                      if (goalTitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          goalTitle,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1172,17 +1136,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               context: context,
               builder: (context) => AlertDialog(
                 backgroundColor: const Color(0xFF1F1F25),
-                title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
                 content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
+                    child: Text(context.l10n.cancel),
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Delete'),
+                    child: Text(context.l10n.delete),
                   ),
                 ],
               ),
@@ -1651,18 +1615,18 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                           context: context,
                           builder: (context) => AlertDialog(
                             backgroundColor: const Color(0xFF1F1F25),
-                            title: const Text('Delete Goal', style: TextStyle(color: Colors.white)),
+                            title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
                             content:
                                 Text('Delete "${widget.goal.title}"?', style: const TextStyle(color: Colors.white70)),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
+                                child: Text(context.l10n.cancel),
                               ),
                               TextButton(
                                 onPressed: () => Navigator.pop(context, true),
                                 style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: const Text('Delete'),
+                                child: Text(context.l10n.delete),
                               ),
                             ],
                           ),

@@ -1,3 +1,7 @@
+// DEPRECATED: The Flutter desktop app is deprecated and no longer actively maintained.
+// The new native macOS app is located at /desktop/ (Swift/SwiftUI + Rust backend).
+// See /desktop/README.md for setup and development instructions.
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +13,7 @@ import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/providers/auth_provider.dart';
 
+/// @deprecated Use the native Swift macOS app at /desktop/ instead.
 class DesktopApp extends StatelessWidget {
   const DesktopApp({super.key});
 

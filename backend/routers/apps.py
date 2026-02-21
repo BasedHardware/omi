@@ -119,6 +119,55 @@ from utils.social import (
 router = APIRouter()
 
 
+def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
+    """Fetch and process chat tools manifest, updating and returning app_dict.
+
+    Fetches the manifest from chat_tools_manifest_url, resolves relative endpoints
+    to absolute URLs using app_home_url, and stores chat_messages config.
+
+    Args:
+        external_integration: The external_integration dict from app data
+        app_dict: The app dict to update with chat_tools and chat_messages config
+
+    Returns:
+        The updated app_dict
+    """
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        return app_dict
+
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url)
+    if not manifest_result:
+        return app_dict
+
+    fetched_tools = manifest_result.get('tools')
+    if fetched_tools:
+        # Resolve relative endpoints to absolute URLs
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        if base_url:
+            for tool in fetched_tools:
+                endpoint = tool.get('endpoint', '')
+                if endpoint.startswith('/') and not endpoint.startswith('//'):
+                    tool['endpoint'] = f"{base_url}{endpoint}"
+        app_dict['chat_tools'] = fetched_tools
+
+    # Store chat_messages config in external_integration
+    chat_messages = manifest_result.get('chat_messages')
+    if 'external_integration' not in app_dict:
+        app_dict['external_integration'] = {}
+    if chat_messages:
+        app_dict['external_integration']['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        app_dict['external_integration']['chat_messages_target'] = chat_messages.get('target', 'app')
+        app_dict['external_integration']['chat_messages_notify'] = chat_messages.get('notify', False)
+    else:
+        # Reset all chat_messages fields to defaults when not in manifest
+        app_dict['external_integration']['chat_messages_enabled'] = False
+        app_dict['external_integration']['chat_messages_target'] = 'app'
+        app_dict['external_integration']['chat_messages_notify'] = False
+
+    return app_dict
+
+
 def _get_categories():
     return [
         {'title': 'Popular', 'id': 'popular'},
@@ -150,6 +199,12 @@ def _get_categories():
 def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     apps = get_available_apps(uid, include_reviews=include_reviews)
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
+
+
+@router.get('/v1/apps/enabled', tags=['v1'])
+def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
+    """Returns the list of app IDs the user has enabled/installed."""
+    return get_enabled_apps(uid)
 
 
 @router.get('/v2/apps', tags=['v2'])
@@ -278,8 +333,9 @@ def search_apps(
     category: str | None = Query(default=None, description='Filter by category id'),
     rating: float | None = Query(default=None, ge=0, le=5, description='Minimum rating filter'),
     capability: str | None = Query(default=None, description='Filter by capability id'),
-    sort: str
-    | None = Query(default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'),
+    sort: str | None = Query(
+        default=None, description='Sort order: installs, rating_asc, rating_desc, name_asc, name_desc'
+    ),
     my_apps: bool | None = Query(default=None, description='Filter to show only user\'s apps'),
     installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
     offset: int = Query(default=0, ge=0),
@@ -461,18 +517,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
     # Fetch chat tools from manifest URL (only way to add chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                app_dict['chat_tools'] = fetched_tools
+        app_dict = _process_chat_tools_manifest(external_integration, app_dict)
 
     add_app_to_db(app_dict)
 
@@ -696,18 +741,7 @@ def update_app(
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
-        manifest_url = external_integration.get('chat_tools_manifest_url')
-        if manifest_url:
-            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
-            if fetched_tools:
-                # Resolve relative endpoints to absolute URLs
-                base_url = external_integration.get('app_home_url', '').rstrip('/')
-                if base_url:
-                    for tool in fetched_tools:
-                        endpoint = tool.get('endpoint', '')
-                        if endpoint.startswith('/') and not endpoint.startswith('//'):
-                            tool['endpoint'] = f"{base_url}{endpoint}"
-                update_dict['chat_tools'] = fetched_tools
+        update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     update_app_in_db(update_dict)
 
@@ -725,6 +759,66 @@ def update_app(
         invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
+
+
+@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
+def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Refresh chat tools manifest for an app.
+
+    Forces a fresh fetch of the manifest from the external URL, bypassing cache.
+    Only the app owner can refresh their app's manifest.
+    """
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    external_integration = app.get('external_integration')
+    if not external_integration:
+        raise HTTPException(status_code=400, detail='App does not have external integration')
+
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        raise HTTPException(status_code=400, detail='App does not have a chat tools manifest URL')
+
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
+    if not manifest_result:
+        raise HTTPException(status_code=502, detail='Failed to fetch manifest from external URL')
+
+    update_dict = {'id': app_id, 'updated_at': datetime.now(timezone.utc)}
+
+    fetched_tools = manifest_result.get('tools')
+    if fetched_tools:
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        if base_url:
+            for tool in fetched_tools:
+                endpoint = tool.get('endpoint', '')
+                if endpoint.startswith('/') and not endpoint.startswith('//'):
+                    tool['endpoint'] = f"{base_url}{endpoint}"
+        update_dict['chat_tools'] = fetched_tools
+
+    chat_messages = manifest_result.get('chat_messages')
+    ext_int_update = {}
+    if chat_messages:
+        ext_int_update['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        ext_int_update['chat_messages_target'] = chat_messages.get('target', 'app')
+        ext_int_update['chat_messages_notify'] = chat_messages.get('notify', False)
+    else:
+        ext_int_update['chat_messages_enabled'] = False
+        ext_int_update['chat_messages_target'] = 'app'
+        ext_int_update['chat_messages_notify'] = False
+    update_dict['external_integration'] = ext_int_update
+
+    update_app_in_db(update_dict)
+
+    if app['approved'] and (app['private'] is None or app['private'] is False):
+        invalidate_approved_apps_cache()
+    delete_app_cache_by_id(app_id)
+
+    tools_count = len(fetched_tools) if fetched_tools else 0
+    return {'status': 'ok', 'tools_count': tools_count}
 
 
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
@@ -1541,8 +1635,7 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(
-        f"""
+    return HTMLResponse(f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1559,8 +1652,7 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """
-    )
+    """)
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])

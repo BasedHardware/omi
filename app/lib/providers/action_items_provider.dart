@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/logger.dart';
@@ -27,6 +28,12 @@ class ActionItemsProvider extends ChangeNotifier {
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
   static const Duration _refreshCooldown = Duration(seconds: 30);
+
+  // Debounced persistence for sort order and indent level
+  final Map<String, int> _pendingSortUpdates = {};
+  final Map<String, int> _pendingIndentUpdates = {};
+  Timer? _sortDebounce;
+  Timer? _indentDebounce;
 
   // Multi-selection state
   bool _isSelectionMode = false;
@@ -103,6 +110,27 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void _preload() async {
     await fetchActionItems();
+    _migrateCategoryOrderFromPrefs();
+  }
+
+  /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
+  Future<void> _migrateCategoryOrderFromPrefs() async {
+    final savedOrder = SharedPreferencesUtil().taskCategoryOrder;
+    if (savedOrder.isEmpty) return;
+
+    final Map<String, int> sortUpdates = {};
+    for (final entry in savedOrder.entries) {
+      final ids = entry.value;
+      for (int i = 0; i < ids.length; i++) {
+        sortUpdates[ids[i]] = (i + 1) * 1000;
+      }
+    }
+
+    if (sortUpdates.isNotEmpty) {
+      batchUpdateSortOrders(sortUpdates);
+      // Clear old prefs after migration
+      SharedPreferencesUtil().taskCategoryOrder = {};
+    }
   }
 
   void setLoading(bool value) {
@@ -258,19 +286,19 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
+    // Remove immediately to prevent dismissed Dismissible from being rebuilt
+    _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
+    notifyListeners();
+
     try {
       final success = await api.deleteActionItem(
         item.id,
       );
 
-      if (success) {
-        _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
-        notifyListeners();
-        return true;
-      } else {
+      if (!success) {
         Logger.debug('Failed to delete action item on server');
-        return false;
       }
+      return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
       return false;
@@ -323,6 +351,62 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error creating action item: $e');
       return null;
     }
+  }
+
+  // Sort order and indent level persistence
+
+  void _updateItemInPlace(String id, {int? sortOrder, int? indentLevel}) {
+    final index = _actionItems.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      _actionItems[index] = _actionItems[index].copyWith(
+        sortOrder: sortOrder,
+        indentLevel: indentLevel,
+      );
+    }
+  }
+
+  void updateItemSortOrder(String id, int sortOrder) {
+    _updateItemInPlace(id, sortOrder: sortOrder);
+    _pendingSortUpdates[id] = sortOrder;
+    notifyListeners();
+    _sortDebounce?.cancel();
+    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+  }
+
+  void updateItemIndentLevel(String id, int indentLevel) {
+    _updateItemInPlace(id, indentLevel: indentLevel);
+    _pendingIndentUpdates[id] = indentLevel;
+    notifyListeners();
+    _indentDebounce?.cancel();
+    _indentDebounce = Timer(const Duration(milliseconds: 500), _flushIndentUpdates);
+  }
+
+  void batchUpdateSortOrders(Map<String, int> updates) {
+    for (final entry in updates.entries) {
+      _updateItemInPlace(entry.key, sortOrder: entry.value);
+      _pendingSortUpdates[entry.key] = entry.value;
+    }
+    notifyListeners();
+    _sortDebounce?.cancel();
+    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+  }
+
+  Future<void> _flushSortUpdates() async {
+    if (_pendingSortUpdates.isEmpty) return;
+    final updates = Map<String, int>.from(_pendingSortUpdates);
+    _pendingSortUpdates.clear();
+
+    final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
+    await api.batchUpdateActionItems(items);
+  }
+
+  Future<void> _flushIndentUpdates() async {
+    if (_pendingIndentUpdates.isEmpty) return;
+    final updates = Map<String, int>.from(_pendingIndentUpdates);
+    _pendingIndentUpdates.clear();
+
+    final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
+    await api.batchUpdateActionItems(items);
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
@@ -487,6 +571,10 @@ class ActionItemsProvider extends ChangeNotifier {
   @override
   void dispose() {
     _refreshDebounceTimer?.cancel();
+    _sortDebounce?.cancel();
+    _indentDebounce?.cancel();
+    _flushSortUpdates();
+    _flushIndentUpdates();
     super.dispose();
   }
 }

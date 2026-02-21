@@ -46,6 +46,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController authUrlController = TextEditingController();
   TextEditingController appHomeUrlController = TextEditingController();
   TextEditingController chatToolsManifestUrlController = TextEditingController();
+  TextEditingController sourceCodeUrlController = TextEditingController();
 
   // Pricing
   TextEditingController priceController = TextEditingController();
@@ -200,6 +201,9 @@ class AddAppProvider extends ChangeNotifier {
         }
       }
     }
+    if (app.sourceCodeUrl != null) {
+      sourceCodeUrlController.text = app.sourceCodeUrl!;
+    }
     if (app.chatPrompt != null) {
       chatPromptController.text = app.chatPrompt!.decodeString;
     }
@@ -234,6 +238,7 @@ class AddAppProvider extends ChangeNotifier {
     authUrlController.clear();
     appHomeUrlController.clear();
     chatToolsManifestUrlController.clear();
+    sourceCodeUrlController.clear();
     priceController.clear();
     selectePaymentPlan = null;
     termsAgreed = false;
@@ -495,6 +500,14 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.addAppSelectCategory);
         return false;
       }
+      // Require source code URL for external integration or proactive notification apps
+      bool needsSourceCode = selectedCapabilities.any(
+        (cap) => cap.id == 'external_integration' || cap.id == 'proactive_notification',
+      );
+      if (needsSourceCode && sourceCodeUrlController.text.trim().isEmpty) {
+        AppSnackbar.showSnackbarError('GitHub repository URL is required for this app type');
+        return false;
+      }
       return true;
     } else {
       AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext!.l10n.addAppFillRequiredFields);
@@ -518,6 +531,7 @@ class AddAppProvider extends ChangeNotifier {
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
       'thumbnails': thumbnailIds,
+      'source_code_url': sourceCodeUrlController.text.trim().isNotEmpty ? sourceCodeUrlController.text.trim() : null,
     };
 
     for (var capability in selectedCapabilities) {
@@ -575,6 +589,34 @@ class AddAppProvider extends ChangeNotifier {
     return success;
   }
 
+  bool isRefreshingManifest = false;
+
+  void setIsRefreshingManifest(bool value) {
+    isRefreshingManifest = value;
+    notifyListeners();
+  }
+
+  Future<bool> refreshManifest() async {
+    if (updateAppId == null) {
+      AppSnackbar.showSnackbarError('App ID not found');
+      return false;
+    }
+
+    setIsRefreshingManifest(true);
+    var success = await refreshAppManifestServer(updateAppId!);
+    if (success) {
+      var app = await getAppDetailsServer(updateAppId!);
+      if (app != null) {
+        appProvider!.updateLocalApp(App.fromJson(app));
+        AppSnackbar.showSnackbarSuccess('Manifest refreshed successfully');
+      }
+    } else {
+      AppSnackbar.showSnackbarError('Failed to refresh manifest');
+    }
+    setIsRefreshingManifest(false);
+    return success;
+  }
+
   Future<String?> submitApp() async {
     setIsSubmitting(true);
 
@@ -590,6 +632,7 @@ class AddAppProvider extends ChangeNotifier {
       'price': priceController.text.isNotEmpty ? double.parse(priceController.text) : 0.0,
       'payment_plan': selectePaymentPlan,
       'thumbnails': thumbnailIds,
+      'source_code_url': sourceCodeUrlController.text.trim().isNotEmpty ? sourceCodeUrlController.text.trim() : null,
     };
 
     for (var capability in selectedCapabilities) {

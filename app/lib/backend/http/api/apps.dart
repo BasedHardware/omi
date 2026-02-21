@@ -230,6 +230,23 @@ Future<List<App>> retrievePopularApps() async {
   return SharedPreferencesUtil().appsList;
 }
 
+Future<List<String>> getEnabledAppsServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/enabled',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return [];
+    return (jsonDecode(response.body) as List).cast<String>();
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
 Future<bool> enableAppServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
@@ -501,6 +518,24 @@ Future changeAppVisibilityServer(String appId, bool makePublic) async {
   try {
     if (response == null || response.statusCode != 200) return false;
     log('changeAppVisibilityServer: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
+}
+
+Future<bool> refreshAppManifestServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/refresh-manifest',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('refreshAppManifestServer: ${response.body}');
     return true;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());

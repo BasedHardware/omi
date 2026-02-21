@@ -300,30 +300,30 @@ def _trigger_apps(
 
     app_to_run = None
 
-    # Always generate/update suggestions if not already set (even during reprocessing)
-    if not conversation.suggested_summarization_apps:
-        with track_usage(uid, Features.CONVERSATION_APPS):
-            suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
-        conversation.suggested_summarization_apps = suggested_apps
-        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
         app_to_run = all_apps_dict.get(app_id)
     else:
-        # Check if user has a preferred app set
+        # Check preferred app first — skip the suggestion LLM call if user has one
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
             print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        elif conversation.suggested_summarization_apps:
-            # Use the first suggested app if available
-            first_suggested_app_id = conversation.suggested_summarization_apps[0]
-            app_to_run = all_apps_dict.get(first_suggested_app_id)
-            if app_to_run:
-                print(f"Using first suggested app: {app_to_run.name}")
-            else:
-                print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+        else:
+            # Only run suggestion LLM call when no preferred app is set
+            if not conversation.suggested_summarization_apps:
+                with track_usage(uid, Features.CONVERSATION_APPS):
+                    suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+                conversation.suggested_summarization_apps = suggested_apps
+                print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
+
+            if conversation.suggested_summarization_apps:
+                first_suggested_app_id = conversation.suggested_summarization_apps[0]
+                app_to_run = all_apps_dict.get(first_suggested_app_id)
+                if app_to_run:
+                    print(f"Using first suggested app: {app_to_run.name}")
+                else:
+                    print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
@@ -384,6 +384,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
+    language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
     # Extract memories based on conversation source
@@ -391,10 +392,10 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source)
+            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
 
     is_locked = conversation.is_locked
     parsed_memories = []
@@ -419,7 +420,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                 )
 
         if similar_memories:
-            resolution = resolve_memory_conflict(memory.content, similar_memories)
+            resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
 
             if resolution.action == 'keep_existing':
                 continue
@@ -456,10 +457,9 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database import users as users_db
+            from database.auth import get_user_name
 
-            user = users_db.get_user_store_recording_permission(uid)
-            user_name = user.get('name', 'User') if user else 'User'
+            user_name = get_user_name(uid)
 
             from database.memories import set_memory_kg_extracted
 

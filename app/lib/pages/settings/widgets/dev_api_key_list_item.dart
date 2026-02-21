@@ -22,7 +22,7 @@ class DevApiKeyListItem extends StatelessWidget {
     final hasRead = scopes.any((s) => s.endsWith(':read'));
     final hasWrite = scopes.any((s) => s.endsWith(':write'));
 
-    if (hasRead && hasWrite && scopes.length == 6) {
+    if (hasRead && hasWrite && scopes.length == 8) {
       return [_buildChip(context.l10n.fullAccessScope, const Color(0xFF10B981))];
     }
 
@@ -152,7 +152,8 @@ class DevApiKeyListItem extends StatelessWidget {
               onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             TextButton(
-              child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+              child: Text(context.l10n.revoke,
+                  style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();

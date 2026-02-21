@@ -1,0 +1,7 @@
+[deploy]
+startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+# Persistent storage for user tokens and sessions
+[[deploy.volumes]]
+mountPath = "/app/data"
+

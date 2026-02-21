@@ -7992,13 +7992,13 @@ class AppLocalizationsVi extends AppLocalizations {
   String get couldNotOpenUrl => 'Không thể mở URL. Vui lòng thử lại.';
 
   @override
-  String get newTask => 'New Task';
+  String get newTask => 'Nhiệm vụ mới';
 
   @override
-  String get viewAll => 'View All';
+  String get viewAll => 'Xem tất cả';
 
   @override
-  String get addTask => 'Add Task';
+  String get addTask => 'Thêm nhiệm vụ';
 
   @override
   String get addMcpServer => 'Add MCP Server';
@@ -8067,4 +8067,159 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get audioPlaybackFailed => 'Không thể phát âm thanh. Tệp có thể bị hỏng hoặc bị thiếu.';
+
+  @override
+  String get connectionGuide => 'Hướng dẫn kết nối';
+
+  @override
+  String get iveDoneThis => 'Tôi đã làm xong';
+
+  @override
+  String get pairNewDevice => 'Ghép nối thiết bị mới';
+
+  @override
+  String get dontSeeYourDevice => 'Không thấy thiết bị của bạn?';
+
+  @override
+  String get reportAnIssue => 'Báo cáo sự cố';
+
+  @override
+  String get pairingTitleOmi => 'Bật Omi';
+
+  @override
+  String get pairingDescOmi => 'Nhấn và giữ thiết bị cho đến khi rung để bật nguồn.';
+
+  @override
+  String get pairingTitleOmiDevkit => 'Đặt Omi DevKit vào chế độ ghép nối';
+
+  @override
+  String get pairingDescOmiDevkit =>
+      'Nhấn nút một lần để bật nguồn. Đèn LED sẽ nhấp nháy màu tím khi ở chế độ ghép nối.';
+
+  @override
+  String get pairingTitleOmiGlass => 'Bật Omi Glass';
+
+  @override
+  String get pairingDescOmiGlass => 'Nhấn và giữ nút bên cạnh trong 3 giây để bật nguồn.';
+
+  @override
+  String get pairingTitlePlaudNote => 'Đặt Plaud Note vào chế độ ghép nối';
+
+  @override
+  String get pairingDescPlaudNote =>
+      'Nhấn và giữ nút bên cạnh trong 2 giây. Đèn LED đỏ sẽ nhấp nháy khi sẵn sàng ghép nối.';
+
+  @override
+  String get pairingTitleBee => 'Đặt Bee vào chế độ ghép nối';
+
+  @override
+  String get pairingDescBee => 'Nhấn nút 5 lần liên tiếp. Đèn sẽ bắt đầu nhấp nháy xanh dương và xanh lá.';
+
+  @override
+  String get pairingTitleLimitless => 'Đặt Limitless vào chế độ ghép nối';
+
+  @override
+  String get pairingDescLimitless =>
+      'Khi có đèn sáng, nhấn một lần rồi nhấn và giữ cho đến khi thiết bị hiện đèn hồng, sau đó thả ra.';
+
+  @override
+  String get pairingTitleFriendPendant => 'Đặt Friend Pendant vào chế độ ghép nối';
+
+  @override
+  String get pairingDescFriendPendant =>
+      'Nhấn nút trên mặt dây chuyền để bật nguồn. Thiết bị sẽ tự động vào chế độ ghép nối.';
+
+  @override
+  String get pairingTitleFieldy => 'Đặt Fieldy vào chế độ ghép nối';
+
+  @override
+  String get pairingDescFieldy => 'Nhấn và giữ thiết bị cho đến khi đèn sáng để bật nguồn.';
+
+  @override
+  String get pairingTitleAppleWatch => 'Kết nối Apple Watch';
+
+  @override
+  String get pairingDescAppleWatch =>
+      'Cài đặt và mở ứng dụng Omi trên Apple Watch của bạn, sau đó nhấn Kết nối trong ứng dụng.';
+
+  @override
+  String get pairingTitleNeoOne => 'Đặt Neo One vào chế độ ghép nối';
+
+  @override
+  String get pairingDescNeoOne =>
+      'Nhấn và giữ nút nguồn cho đến khi đèn LED nhấp nháy. Thiết bị sẽ có thể được phát hiện.';
+
+  @override
+  String get downloadingFromDevice => 'Đang tải xuống từ thiết bị';
+
+  @override
+  String get reconnectingToInternet => 'Đang kết nối lại internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Đang tải lên $current/$total';
+  }
+
+  @override
+  String get processedStatus => 'Đã xử lý';
+
+  @override
+  String get corruptedStatus => 'Bị hỏng';
+
+  @override
+  String nPending(int count) {
+    return '$count đang chờ';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count đã xử lý';
+  }
+
+  @override
+  String get synced => 'Đã đồng bộ';
+
+  @override
+  String get noPendingRecordings => 'Không có bản ghi đang chờ';
+
+  @override
+  String get noProcessedRecordings => 'Chưa có bản ghi nào được xử lý';
+
+  @override
+  String get pending => 'Đang chờ';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Có gì mới trong $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Thêm vào danh sách công việc?';
+
+  @override
+  String get failedToCreateShareLink => 'Không thể tạo liên kết chia sẻ';
+
+  @override
+  String get deleteGoal => 'Xóa mục tiêu';
+
+  @override
+  String get deviceUpToDate => 'Thiết bị của bạn đã được cập nhật';
+
+  @override
+  String get wifiConfiguration => 'Cấu hình WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Nhập thông tin WiFi để thiết bị có thể tải xuống firmware.';
+
+  @override
+  String get networkNameSsid => 'Tên mạng (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Nhập tên mạng WiFi';
+
+  @override
+  String get enterWifiPassword => 'Nhập mật khẩu WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

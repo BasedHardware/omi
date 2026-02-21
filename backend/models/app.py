@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Set
+from typing import List, Literal, Optional, Set
 
 from pydantic import BaseModel, field_validator
 
@@ -72,6 +72,10 @@ class ExternalIntegration(BaseModel):
     actions: Optional[List[Action]] = []
     # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
     chat_tools_manifest_url: Optional[str] = None
+    # Chat messages configuration from manifest (enabled, target, notify)
+    chat_messages_enabled: bool = False
+    chat_messages_target: Literal['main', 'app'] = 'app'
+    chat_messages_notify: bool = False
     # MCP server URL (e.g., https://mcp.example.com/mcp)
     mcp_server_url: Optional[str] = None
     # OAuth tokens for MCP server authentication
@@ -91,9 +95,9 @@ class ChatTool(BaseModel):
     method: str = "POST"  # HTTP method (GET, POST, etc.)
     parameters: Optional[dict] = None  # JSON schema for parameters (optional)
     auth_required: bool = True  # Whether to include user auth in request
-    status_message: Optional[
-        str
-    ] = None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
+    status_message: Optional[str] = (
+        None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
+    )
     is_mcp: bool = False  # Whether this tool comes from an MCP server
     transport: str = "streamable_http"  # MCP transport: "streamable_http" or "sse"
 
@@ -149,6 +153,7 @@ class AppBaseModel(BaseModel):
     is_popular: Optional[bool] = False
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
+    source_code_url: Optional[str] = None
 
 
 class App(AppBaseModel):
@@ -251,6 +256,7 @@ class AppCreate(BaseModel):
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
     chat_tools: Optional[List[ChatTool]] = []
+    source_code_url: Optional[str] = None
 
 
 class AppUpdate(BaseModel):
@@ -279,6 +285,7 @@ class AppUpdate(BaseModel):
     thumbnails: Optional[List[str]] = None  # List of thumbnail IDs
     chat_tools: Optional[List[ChatTool]] = None
     updated_at: Optional[datetime] = None
+    source_code_url: Optional[str] = None
 
 
 class UsageHistoryType(str, Enum):
