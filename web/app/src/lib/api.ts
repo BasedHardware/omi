@@ -409,6 +409,10 @@ export interface CreateMemoryParams {
   content: string;
   visibility?: MemoryVisibility;
   category?: MemoryCategory;
+  sourceApp?: string;
+  confidence?: number;
+  contextSummary?: string;
+  currentActivity?: string;
 }
 
 export async function createMemory(
@@ -420,6 +424,10 @@ export async function createMemory(
       content: params.content,
       visibility: params.visibility || 'public',
       category: params.category || 'manual',
+      source_app: params.sourceApp,
+      confidence: params.confidence,
+      context_summary: params.contextSummary,
+      current_activity: params.currentActivity,
     }),
   });
   invalidateCache(invalidationPatterns.memories);
@@ -1795,13 +1803,13 @@ const INTEGRATION_DEFINITIONS: Array<{
   logo: string;
   coming_soon?: boolean;
 }> = [
-  { id: 'google_calendar', appKey: 'google_calendar', name: 'Google Calendar', description: 'Sync with your calendar', logo: '/integrations/google-calendar.png' },
-  { id: 'whoop', appKey: 'whoop', name: 'Whoop', description: 'Health & fitness tracking', logo: '/integrations/whoop.png' },
-  { id: 'notion', appKey: 'notion', name: 'Notion', description: 'Sync notes to Notion', logo: '/integrations/notion-logo.png' },
-  { id: 'github', appKey: 'github', name: 'GitHub', description: 'Create issues and notes', logo: '/integrations/github-logo.png' },
-  { id: 'twitter', appKey: 'twitter', name: 'X (Twitter)', description: 'Share to Twitter', logo: '/integrations/x-logo.avif' },
-  { id: 'gmail', appKey: 'gmail', name: 'Gmail', description: 'Email integrations', logo: '/integrations/gmail-logo.jpeg', coming_soon: true },
-];
+    { id: 'google_calendar', appKey: 'google_calendar', name: 'Google Calendar', description: 'Sync with your calendar', logo: '/integrations/google-calendar.png' },
+    { id: 'whoop', appKey: 'whoop', name: 'Whoop', description: 'Health & fitness tracking', logo: '/integrations/whoop.png' },
+    { id: 'notion', appKey: 'notion', name: 'Notion', description: 'Sync notes to Notion', logo: '/integrations/notion-logo.png' },
+    { id: 'github', appKey: 'github', name: 'GitHub', description: 'Create issues and notes', logo: '/integrations/github-logo.png' },
+    { id: 'twitter', appKey: 'twitter', name: 'X (Twitter)', description: 'Share to Twitter', logo: '/integrations/x-logo.avif' },
+    { id: 'gmail', appKey: 'gmail', name: 'Gmail', description: 'Email integrations', logo: '/integrations/gmail-logo.jpeg', coming_soon: true },
+  ];
 
 /**
  * Get individual integration connection status (like mobile app)
