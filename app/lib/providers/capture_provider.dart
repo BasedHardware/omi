@@ -198,7 +198,7 @@ class CaptureProvider extends ChangeNotifier
     DebugLogManager.logEvent('app_lifecycle_changed', {
       'state': state.name,
       'recording_state': recordingState.name,
-      'has_device': _recordingDevice != null,
+      'has_device': _audioDevice != null || _glassDevice != null,
       'socket_connected': _socket?.state == SocketServiceState.connected,
     });
 
@@ -236,13 +236,24 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  BtDevice? _recordingDevice;
+  BtDevice? _audioDevice;  // was: BtDevice? _recordingDevice
+  BtDevice? _glassDevice;
+
+  BtDevice? get recordingDevice => _audioDevice ?? _glassDevice;
+  BtDevice? get _recordingDevice => recordingDevice;
+
+  bool get havingRecordingDevice => _audioDevice != null || _glassDevice != null;
+  bool get isMultiModal => _audioDevice != null && _glassDevice != null;
 
   String? _getConversationSourceFromDevice() {
-    if (_recordingDevice == null) {
+    if (_audioDevice != null && _glassDevice != null) {
+      return 'multimodal';
+    }
+    final device = _audioDevice ?? _glassDevice;
+    if (device == null){
       return null;
     }
-    switch (_recordingDevice!.type) {
+    switch (device.type) {
       case DeviceType.friendPendant:
         return 'friend_com';
       case DeviceType.omi:
@@ -279,6 +290,7 @@ class CaptureProvider extends ChangeNotifier
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _blePhotoStream;
+  StreamSubscription? _glassAudioStream;
 
   get bleBytesStream => _bleBytesStream;
 
@@ -324,13 +336,11 @@ class CaptureProvider extends ChangeNotifier
 
   // having a connected device or using the phone's mic for recording
   bool get recordingDeviceServiceReady =>
-      _recordingDevice != null ||
+      _audioDevice != null ||
+      _glassDevice != null ||
       recordingState == RecordingState.record ||
       recordingState == RecordingState.systemAudioRecord;
 
-  bool get havingRecordingDevice => _recordingDevice != null;
-
-  BtDevice? get recordingDevice => _recordingDevice;
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -344,8 +354,18 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _updateRecordingDevice(BtDevice? device) {
-    Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
-    _recordingDevice = device;
+    if (device == null) {
+      // null clears BOTH slots (e.g. on full disconnect)
+      Logger.debug('connected device cleared (both slots)');
+      _audioDevice = null;
+      _glassDevice = null;
+    } else if (device.type == DeviceType.openglass) {
+      Logger.debug('glass device set: ${device.id}');
+      _glassDevice = device;
+    } else {
+      Logger.debug('audio device set: ${device.id}');
+      _audioDevice = device;
+    }
     notifyListeners();
   }
 
@@ -373,9 +393,9 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug("Transcription settings changed, refreshing socket connection...");
 
     // Handle device recording
-    if (_recordingDevice != null) {
+    if (_audioDevice != null) {
       await _socket?.stop(reason: 'transcription settings changed');
-      BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      BleAudioCodec codec = await _getAudioCodec(_audioDevice!.id);
       await _initiateWebsocket(
         audioCodec: codec,
         force: true,
@@ -480,12 +500,12 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    if (_recordingDevice == null) {
-      Logger.debug("Recording device is null, cannot process voice command");
+    if (_audioDevice == null) {
+      Logger.debug("Audio device is null, cannot process voice command");
       return;
     }
 
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    BleAudioCodec codec = await _getAudioCodec(_audioDevice!.id);
     if (messageProvider != null) {
       await messageProvider?.sendVoiceMessageStreamToServer(
         data,
@@ -635,8 +655,8 @@ class CaptureProvider extends ChangeNotifier
       _blesBytesReceived += snapshot.length;
 
       // Command button triggered
-      bool voiceCommandSupported = _recordingDevice != null
-          ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
+      bool voiceCommandSupported = _audioDevice != null
+          ? (_audioDevice?.type == DeviceType.omi || _audioDevice?.type == DeviceType.openglass)
           : false;
       if (_voiceCommandSession != null && voiceCommandSupported) {
         _commandBytes.add(snapshot.sublist(3));
@@ -644,7 +664,7 @@ class CaptureProvider extends ChangeNotifier
 
       // Local storage syncs
       var checkWalSupported =
-          (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
+          (_audioDevice?.type == DeviceType.omi || _audioDevice?.type == DeviceType.openglass) &&
               codec.isOpusSupported() &&
               (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
       if (checkWalSupported != _isWalSupported) {
@@ -657,7 +677,7 @@ class CaptureProvider extends ChangeNotifier
       // Send WS
       if (_socket?.state == SocketServiceState.connected) {
         final paddingLeft =
-            (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) ? 3 : 0;
+            (_audioDevice?.type == DeviceType.omi || _audioDevice?.type == DeviceType.openglass) ? 3 : 0;
         final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
         _socket?.send(trimmedValue);
 
@@ -677,13 +697,13 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('resetState');
     await _cleanupCurrentState();
 
-    // Always try to stream audio if a device is present
+    // Start audio streaming for _audioDevice if present.
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
 
-    // Additionally, stream photos if the device supports it
-    if (_recordingDevice != null) {
-      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+    // Start photo streaming for _glassDevice if present.
+    if (_glassDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(_glassDevice!.id);
       if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
         await _initiateDevicePhotoStreaming();
       }
@@ -736,10 +756,11 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _ensureDeviceSocketConnection() async {
-    if (_recordingDevice == null) {
+    final primaryDevice = _audioDevice ?? _glassDevice;
+    if (primaryDevice == null) {
       return;
     }
-    BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+    BleAudioCodec codec = await _getAudioCodec(primaryDevice.id);
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
@@ -754,7 +775,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateDeviceAudioStreaming() async {
-    final device = _recordingDevice;
+    final device = _audioDevice;
     if (device == null) {
       return;
     }
@@ -781,8 +802,10 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
-    if (_recordingDevice == null) return;
-    final deviceId = _recordingDevice!.id;
+    final device = _glassDevice;
+    if (device == null) return;
+
+    final deviceId = device.id;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return;
 
@@ -792,13 +815,11 @@ class CaptureProvider extends ChangeNotifier
       final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
       final String base64Image = base64Encode(rotatedImageBytes);
 
-      // Add placeholder to UI for immediate feedback
       photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
       photos = List.from(photos);
       notifyListeners();
 
-      // Chunking Logic
-      const int chunkSize = 8192; // 8KB chunks
+      const int chunkSize = 8192;
       final totalChunks = (base64Image.length / chunkSize).ceil();
 
       for (int i = 0; i < totalChunks; i++) {
@@ -815,9 +836,9 @@ class CaptureProvider extends ChangeNotifier
         });
 
         if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(payload); // Send the JSON string
+          _socket?.send(payload);
         }
-        await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
+        await Future.delayed(const Duration(milliseconds: 20));
       }
     });
     notifyListeners();
@@ -890,9 +911,11 @@ class CaptureProvider extends ChangeNotifier
   Future _closeBleStream() async {
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
+    await _glassAudioStream?.cancel();
     _stopMetricsTracking();
-    if (_recordingDevice != null) {
-      var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+
+    if (_glassDevice != null) {
+      var connection = await ServiceManager.instance().device.ensureConnection(_glassDevice!.id);
       if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
         await connection.performCameraStopPhotoController();
       }
@@ -904,6 +927,7 @@ class CaptureProvider extends ChangeNotifier
   void dispose() {
     _bleBytesStream?.cancel();
     _blePhotoStream?.cancel();
+    _glassAudioStream?.cancel(); 
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _connectionStateListener?.cancel();
@@ -1338,8 +1362,14 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
 
-      if (_recordingDevice != null) {
-        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      if (_audioDevice != null) {
+        BleAudioCodec codec = await _getAudioCodec(_audioDevice!.id);
+        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
+        return;
+      }
+      
+      if (_glassDevice != null) {
+        BleAudioCodec codec = await _getAudioCodec(_glassDevice!.id);
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
@@ -1825,7 +1855,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> pauseDeviceRecording() async {
-    if (_recordingDevice == null) return;
+    if (_audioDevice == null) return;
 
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
@@ -1835,12 +1865,12 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> resumeDeviceRecording() async {
-    if (_recordingDevice == null) return;
+    if (_audioDevice == null) return;
     _isPaused = false;
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
 
-    final deviceId = _recordingDevice!.id;
+    final deviceId = _audioDevice!.id;
     BleAudioCodec codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
 
