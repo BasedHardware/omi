@@ -300,6 +300,18 @@ def remove_user_soniox_speech_profile(uid: str):
     r.delete(f'users:{uid}:has_soniox_speech_profile')
 
 
+def cache_user_time_zone(uid: str, time_zone: str, ttl: int = 60 * 60 * 24 * 7):
+    r.set(f'users:{uid}:time_zone', time_zone)
+    r.expire(f'users:{uid}:time_zone', ttl)
+
+
+def get_cached_user_time_zone(uid: str) -> str:
+    tz = r.get(f'users:{uid}:time_zone')
+    if not tz:
+        return ''
+    return tz.decode()
+
+
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7):
     r.set(f'users:{uid}:name', name)
     r.expire(f'users:{uid}:name', ttl)
