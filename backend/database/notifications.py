@@ -15,6 +15,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
+from database.redis_db import cache_user_time_zone, get_cached_user_time_zone
 
 
 def save_token(uid: str, data: dict):
@@ -72,6 +73,7 @@ def save_token(uid: str, data: dict):
     # Also update time_zone in main user document (for backward compatibility and efficient queries)
     if time_zone:
         user_ref.set({'time_zone': time_zone}, merge=True)
+        cache_user_time_zone(uid, time_zone)
 
 
 def get_user_time_zone(uid: str):
@@ -81,6 +83,17 @@ def get_user_time_zone(uid: str):
         user_data = user_ref.to_dict()
         return user_data.get('time_zone')
     return None
+
+
+def get_user_time_zone_cached(uid: str) -> str | None:
+    """Get timezone with Redis cache, falling back to Firestore."""
+    cached = get_cached_user_time_zone(uid)
+    if cached:
+        return cached
+    tz = get_user_time_zone(uid)
+    if tz:
+        cache_user_time_zone(uid, tz)
+    return tz
 
 
 # **************************************
