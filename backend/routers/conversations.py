@@ -35,7 +35,7 @@ from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
-from utils.other.storage import get_conversation_recording_if_exists
+from utils.other.storage import get_conversation_recording_if_exists, delete_conversation_audio_files, delete_conversation_recording
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
 
@@ -202,6 +202,11 @@ def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_curren
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
+    try:
+        delete_conversation_audio_files(uid, conversation_id)
+        delete_conversation_recording(uid, conversation_id)
+    except Exception as e:
+        print(f"Failed to delete audio files for conversation {conversation_id}: {e}")
     return {"status": "Ok"}
 
 
