@@ -79,11 +79,20 @@ class AppleRemindersService {
             }
 
             do {
-                try eventStore.save(reminder, commit: true)
+                try eventStore.save(reminder, commit: false)
                 syncedIds.insert(actionItemId)
                 exportedIds.append(actionItemId)
             } catch {
                 continue
+            }
+        }
+
+        // Single commit for all reminders
+        if !exportedIds.isEmpty {
+            do {
+                try eventStore.commit()
+            } catch {
+                return []
             }
         }
 
