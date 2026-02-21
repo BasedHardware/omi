@@ -129,7 +129,7 @@ env:
         name: dev-omi-backend-secrets
         key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
-    value: "10797"
+    value: "13151"
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -145,6 +145,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: WORKFLOW_API_KEY
+  - name: STT_SERVICE_MODELS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STT_SERVICE_MODELS
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
