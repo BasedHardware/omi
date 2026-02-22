@@ -228,7 +228,8 @@ function startAcpProcess(): void {
   const acpEntry = join(__dirname, "patched-acp-entry.mjs");
   const nodeBin = process.execPath;
 
-  logErr(`Starting ACP subprocess: ${nodeBin} ${acpEntry}`);
+  const mode = env.ANTHROPIC_API_KEY ? "Mode A (Omi API key)" : "Mode B (Your Claude Account / OAuth)";
+  logErr(`Starting ACP subprocess [${mode}]: ${nodeBin} ${acpEntry}`);
 
   acpProcess = spawn(nodeBin, [acpEntry], {
     env,
@@ -591,8 +592,9 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
             `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
           );
         } catch (err) {
-          // If pre-warm fails with auth error, start OAuth flow
-          if (err instanceof AcpError && (err.code === -32000 || err.code === -32603)) {
+          // If pre-warm fails with auth error, start OAuth flow.
+          // Only -32000 is AUTH_REQUIRED; -32603 is a generic error (credit balance, API error, etc.)
+          if (err instanceof AcpError && err.code === -32000) {
             logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
             await startAuthFlow();
             return; // After auth, warmup will happen on next query
@@ -702,6 +704,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         prompt: [{ type: "text", text: fullPrompt }],
       })) as {
         stopReason: string;
+        // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess
+        usage?: { inputTokens: number; outputTokens: number; cachedReadTokens?: number | null; cachedWriteTokens?: number | null; totalTokens: number };
+        _meta?: { costUsd?: number };
       };
 
       logErr(`Prompt completed: stopReason=${promptResult.stopReason}`);
@@ -712,9 +717,10 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       }
       pendingTools.length = 0;
 
-      const inputTokens = Math.ceil(fullPrompt.length / 4);
-      const outputTokens = Math.ceil(fullText.length / 4);
-      send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens });
+      const inputTokens = promptResult.usage?.inputTokens ?? Math.ceil(fullPrompt.length / 4);
+      const outputTokens = promptResult.usage?.outputTokens ?? Math.ceil(fullText.length / 4);
+      const costUsd = promptResult._meta?.costUsd ?? 0;
+      send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens });
     };
 
     try {
