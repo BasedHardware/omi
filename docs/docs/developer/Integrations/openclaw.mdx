@@ -1,0 +1,318 @@
+---
+title: "OpenClaw Integration"
+description: "Connect your Omi memories to OpenClaw agents for powerful AI automation"
+---
+
+# OpenClaw Integration
+
+OpenClaw is an AI agent automation platform that enables you to build and deploy autonomous agents. The OpenClaw plugin for Omi provides seamless integration between your Omi memories and OpenClaw agents, allowing your AI assistants to access conversations, memories, and action items.
+
+## What is OpenClaw?
+
+OpenClaw is a platform for building AI agents that can perform tasks autonomously. With the Omi integration, your agents can:
+
+- Search and retrieve your memories
+- Access conversation history and transcripts
+- Create and manage action items
+- Auto-inject recent context into agent sessions
+- Build automation workflows based on your Omi data
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+1. An active Omi account with some memories/conversations
+2. OpenClaw installed on your system ([openclaw.ai](https://openclaw.ai))
+3. A Developer API key from Omi (see below)
+
+### Getting Your Omi API Key
+
+1. Open the Omi mobile app
+2. Navigate to **Settings** → **Developer**
+3. Scroll to the **Developer API Keys** section
+4. Tap **Create Key**
+5. Give it a name (e.g., "OpenClaw Integration")
+6. Copy the generated API key (starts with `omi_dev_`)
+
+**Important:** Keep your API key secure! It grants full access to your Omi data.
+
+## Installation & Setup
+
+### Step 1: Install the OpenClaw Plugin
+
+Run the following command to install the Omi plugin:
+
+```bash
+openclaw plugins install @openclaw/omi
+```
+
+### Step 2: Configure the Plugin
+
+Set your Omi API key in the OpenClaw configuration:
+
+```bash
+openclaw config set plugins.entries.omi.config.apiKey "YOUR_OMI_API_KEY"
+```
+
+Replace `YOUR_OMI_API_KEY` with the API key you generated in the Prerequisites section.
+
+### Quick Setup (Combined Command)
+
+You can also copy the combined setup command from the Omi app:
+
+1. Open **Settings** → **Developer** → **OpenClaw**
+2. Tap **Copy Setup Command**
+3. Paste and run in your terminal
+
+### Step 3: Verify the Installation
+
+You can verify the plugin is installed and configured correctly:
+
+```bash
+openclaw plugins list
+```
+
+You should see `@openclaw/omi` in the list of active plugins.
+
+## Available Features
+
+The OpenClaw plugin provides your agents with the following capabilities:
+
+### Memory Management
+
+- **Search memories**: Find specific memories by keyword, category, or date range
+- **Create memories**: Let agents store new information as memories
+- **Batch operations**: Create multiple memories efficiently
+- **Category filtering**: Organize and filter by memory categories
+
+Example agent interaction:
+```
+You: "What did I talk about last Tuesday?"
+Agent: *searches memories from last Tuesday*
+```
+
+### Conversation Access
+
+- **List conversations**: Browse your conversation history
+- **Retrieve transcripts**: Get detailed conversation transcripts
+- **Date filtering**: Search conversations within specific time ranges
+- **Pagination support**: Handle large conversation histories efficiently
+
+Example:
+```
+You: "Show me conversations about work projects this month"
+Agent: *searches and displays relevant work conversations*
+```
+
+### Action Items
+
+- **List tasks**: View all your action items
+- **Create tasks**: Let agents create new action items
+- **Filter by status**: View completed or pending tasks
+- **Batch creation**: Create multiple action items at once
+
+Example:
+```
+You: "Create action items from my last meeting"
+Agent: *analyzes meeting transcript and creates relevant tasks*
+```
+
+### Auto-Context Injection
+
+When enabled, the plugin automatically injects relevant memories and recent conversations into agent sessions, giving your agents contextual awareness without explicit prompting.
+
+Enable in your OpenClaw config:
+```yaml
+plugins:
+  entries:
+    omi:
+      config:
+        autoInject: true
+```
+
+## Configuration Options
+
+### Basic Configuration
+
+```yaml
+plugins:
+  entries:
+    omi:
+      config:
+        apiKey: "omi_dev_your_key_here"
+```
+
+### Advanced Configuration
+
+```yaml
+plugins:
+  entries:
+    omi:
+      config:
+        apiKey: "omi_dev_your_key_here"
+        baseUrl: "https://api.omi.me"  # Custom API endpoint (optional)
+        cacheTtlMs: 300000              # Cache duration in ms (5 min default)
+        autoInject: false               # Auto-inject context on session start
+```
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `apiKey` | string | ✅ Yes | - | Your Omi Developer API key |
+| `baseUrl` | string | No | `https://api.omi.me` | API endpoint (for custom instances) |
+| `cacheTtlMs` | number | No | `300000` | Cache TTL in milliseconds |
+| `autoInject` | boolean | No | `false` | Auto-inject memories into context |
+
+## Available Tools
+
+The plugin registers the following tools that your agents can use:
+
+### `omi_memories_search`
+Search through stored memories.
+
+**Parameters:**
+- `limit` (number): Max results to return
+- `offset` (number): Pagination offset
+- `categories` (array): Filter by categories
+
+### `omi_memories_create`
+Create a new memory.
+
+**Parameters:**
+- `content` (string): Memory content
+- `category` (string): Memory category
+- `visibility` (string): Public or private
+
+### `omi_memories_batch`
+Create multiple memories at once.
+
+**Parameters:**
+- `memories` (array): Array of memory objects
+
+### `omi_conversations`
+List conversation history.
+
+**Parameters:**
+- `limit` (number): Max results
+- `offset` (number): Pagination offset
+- `start_date` (string): Filter from date
+- `end_date` (string): Filter to date
+- `include_transcript` (boolean): Include full transcripts
+
+### `omi_conversation_detail`
+Get detailed conversation information.
+
+**Parameters:**
+- `id` (string): Conversation ID
+- `include_transcript` (boolean): Include transcript
+
+### `omi_action_items`
+List action items.
+
+**Parameters:**
+- `limit` (number): Max results
+- `offset` (number): Pagination offset
+- `completed` (boolean): Filter by completion status
+- `start_date` (string): Filter from date
+- `end_date` (string): Filter to date
+
+### `omi_action_items_create`
+Create a new action item.
+
+**Parameters:**
+- `description` (string): Task description
+- `due_at` (string): Due date (ISO 8601)
+
+### `omi_action_items_batch`
+Create multiple action items.
+
+**Parameters:**
+- `action_items` (array): Array of action item objects
+
+## Usage Examples
+
+### Example 1: Memory Search
+```
+You: "What have I learned about machine learning recently?"
+Agent: *uses omi_memories_search with query "machine learning"*
+Agent: "Here are your recent ML memories: ..."
+```
+
+### Example 2: Create Action Items from Conversation
+```
+You: "Review my last meeting and create action items"
+Agent: *uses omi_conversations to get recent meeting*
+Agent: *analyzes transcript*
+Agent: *uses omi_action_items_batch to create tasks*
+Agent: "I've created 3 action items from your meeting..."
+```
+
+### Example 3: Weekly Summary
+```
+You: "Summarize my week"
+Agent: *uses omi_conversations with date range*
+Agent: *uses omi_memories_search for important events*
+Agent: "Here's your week: ..."
+```
+
+## Troubleshooting
+
+### Plugin not working
+
+**Check plugin status:**
+```bash
+openclaw plugins list
+```
+
+**Verify configuration:**
+```bash
+openclaw config get plugins.entries.omi
+```
+
+### API Key errors
+
+- Make sure your API key starts with `omi_dev_`
+- Verify it's correctly set in the config
+- Try regenerating the key in the Omi app
+
+### No data returned
+
+- Ensure you have memories/conversations in your Omi account
+- Check date range filters aren't excluding your data
+- Verify your API key has the correct permissions
+
+### Cache issues
+
+If you're seeing stale data, you can disable caching:
+
+```bash
+openclaw config set plugins.entries.omi.config.cacheTtlMs 0
+```
+
+Or restart OpenClaw to clear the cache.
+
+## Security & Privacy
+
+- Your API key is stored securely in the OpenClaw config file
+- API keys are never logged or transmitted to third parties
+- The plugin includes prompt injection protection
+- All API calls use HTTPS encryption
+- You can revoke API keys anytime in the Omi app
+
+## Source Code
+
+The OpenClaw plugin is open source and available at:
+
+**GitHub:** [BasedHardware/omi/plugins/openclaw](https://github.com/BasedHardware/omi/tree/main/plugins/openclaw)
+
+## Support
+
+- **OpenClaw Docs:** [docs.openclaw.ai](https://docs.openclaw.ai)
+- **Omi Docs:** [docs.omi.me](https://docs.omi.me)
+- **API Reference:** [api.omi.me/docs](https://api.omi.me/docs)
+- **Report Issues:** [GitHub Issues](https://github.com/BasedHardware/omi/issues)
+
+## Related
+
+- [Omi Developer API](/doc/developer/API)
+- [MCP Integration](/doc/developer/MCP)
+- [Webhooks](/doc/developer/apps/Introduction)

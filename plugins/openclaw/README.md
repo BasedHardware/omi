@@ -67,6 +67,18 @@ plugins:
 4. Generate a new API key
 5. Copy the key (starts with `omi_dev_`)
 
+### Setup via Omi Mobile App
+
+For a streamlined setup experience, you can use the Omi mobile app:
+
+1. Open the Omi app on your phone
+2. Navigate to **Settings → Developer → OpenClaw**
+3. Follow the Quick Setup instructions
+4. Tap **Copy Setup Command** to get the complete installation and configuration command
+5. Paste and run in your terminal
+
+This provides an easy way to get started with the OpenClaw integration directly from your mobile device.
+
 ## Available Tools
 
 The plugin registers the following tools for OpenClaw agents:

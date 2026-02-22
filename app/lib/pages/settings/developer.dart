@@ -1518,6 +1518,159 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   const SizedBox(height: 32),
 
+                  // OpenClaw Section
+                  _buildSectionHeader('OpenClaw', trailing: _buildDocsButton('https://docs.openclaw.ai', 'OpenClaw')),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.robot, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'OpenClaw Integration',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Connect your Omi memories to OpenClaw agents',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Enable AI agents to access your memories, conversations, and action items. Perfect for automation and personal AI assistants.',
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Quick Setup',
+                          style: TextStyle(
+                            color: Colors.grey.shade300,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0D0D0D),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
+                          ),
+                          child: const Text(
+                            'openclaw plugins install @openclaw/omi',
+                            style: TextStyle(
+                              fontFamily: 'Ubuntu Mono',
+                              fontSize: 12,
+                              height: 1.6,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0D0D0D),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
+                          ),
+                          child: const Text(
+                            'openclaw config set plugins.entries.omi.config.apiKey "YOUR_OMI_API_KEY"',
+                            style: TextStyle(
+                              fontFamily: 'Ubuntu Mono',
+                              fontSize: 12,
+                              height: 1.6,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: () {
+                            const config =
+                                'openclaw plugins install @openclaw/omi && openclaw config set plugins.entries.omi.config.apiKey "YOUR_OMI_API_KEY"';
+                            Clipboard.setData(const ClipboardData(text: config));
+                            AppSnackbar.showSnackbar('Setup command copied to clipboard');
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade300, size: 14),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Copy Setup Command',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade300,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Replace YOUR_OMI_API_KEY with a Developer API key from above',
+                          style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
                   // Webhooks Section
                   Padding(
                     padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
