@@ -6,7 +6,7 @@ import CoreAudio
 /// Uses CoreAudio IOProc directly on the default input device to avoid
 /// AVAudioEngine's implicit aggregate device creation, which degrades
 /// system audio output quality (especially Bluetooth A2DP → SCO switch).
-class AudioCaptureService {
+class AudioCaptureService: @unchecked Sendable {
 
     // MARK: - Types
 
@@ -105,7 +105,7 @@ class AudioCaptureService {
     /// - Parameters:
     ///   - onAudioChunk: Callback receiving 16-bit PCM audio data chunks at 16kHz
     ///   - onAudioLevel: Optional callback receiving normalized audio level (0.0 - 1.0)
-    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) throws {
+    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
         guard !isCapturing else {
             log("AudioCapture: Already capturing")
             return
@@ -114,6 +114,28 @@ class AudioCaptureService {
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
 
+        // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
+        // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
+        // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
+        // mirroring the pattern already used in stopCapture() and handleConfigurationChange().
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            audioQueue.async { [weak self] in
+                guard let self else {
+                    continuation.resume()
+                    return
+                }
+                do {
+                    try self.startCaptureOnQueue()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
+    private func startCaptureOnQueue() throws {
         // 1. Get default input device
         var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
