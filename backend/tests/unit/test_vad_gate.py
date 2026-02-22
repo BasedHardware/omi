@@ -11,28 +11,32 @@ import pytest
 _mock_is_speech = False
 
 
-def _mock_vad_call(chunk, return_seconds=False):
-    """Mock VAD iterator that returns based on global flag."""
-    if _mock_is_speech:
-        return {'start': 0}
-    return None
+class _MockVADModel:
+    """Mock Silero VAD model that returns speech probability directly.
 
+    Returns 0.9 for speech, 0.1 for silence — matching how the raw model
+    works (continuous probability per window, NOT event-based like VADIterator).
+    """
 
-class _MockVADIterator:
-    """Mock VADIterator that delegates to the global speech flag."""
+    def __call__(self, tensor, sample_rate):
+        return 0.9 if _mock_is_speech else 0.1
 
-    def __call__(self, chunk, return_seconds=False):
-        return _mock_vad_call(chunk, return_seconds)
+    def reset_states(self):
+        pass
 
 
 @pytest.fixture(autouse=True)
 def mock_silero():
-    """Mock Silero VAD model to avoid torch dependency in tests."""
-    mock_model = MagicMock()
+    """Mock Silero VAD model to avoid torch dependency in tests.
+
+    Patches the raw model (not VADIterator) and sets _vad_torch=None
+    so _run_vad passes numpy arrays directly to the mock.
+    """
+    mock_model = _MockVADModel()
     real_lock = threading.Lock()
-    with patch('utils.stt.vad_gate._vad_model', mock_model), patch(
-        'utils.stt.vad_gate._vad_utils', {'VADIterator': lambda m, sampling_rate: _MockVADIterator()}
-    ), patch('utils.stt.vad_gate._vad_model_lock', real_lock):
+    with patch('utils.stt.vad_gate._vad_model', mock_model), patch('utils.stt.vad_gate._vad_torch', None), patch(
+        'utils.stt.vad_gate._vad_model_lock', real_lock
+    ):
         global _mock_is_speech
         _mock_is_speech = False
         yield
@@ -162,6 +166,35 @@ class TestVADStreamingGate:
         assert out.state == GateState.SPEECH
         assert not out.should_finalize
         assert out.audio_to_send != b''
+
+    def test_continuous_speech_no_mid_utterance_drop(self):
+        """Continuous speech must never transition to SILENCE mid-utterance.
+
+        Regression test for P0: VADIterator returns None during ongoing speech
+        (only emits start/end events). Raw model returns probability per window,
+        so continuous speech should keep the gate in SPEECH state.
+        """
+        from utils.stt.vad_gate import GateState
+
+        gate = self._make_gate()
+        t = time.time()
+
+        # 50 chunks of continuous speech (~1.5s) — well past hangover window
+        _set_vad_speech(True)
+        entered_speech = False
+        for i in range(50):
+            out = gate.process_audio(_make_pcm(30), t + i * 0.03)
+            if out.state == GateState.SPEECH:
+                entered_speech = True
+            # Once in SPEECH, must never go to SILENCE during continuous speech
+            if entered_speech:
+                assert out.state in (
+                    GateState.SPEECH,
+                    GateState.HANGOVER,
+                ), f"Dropped to {out.state} at chunk {i} during continuous speech"
+                assert not out.should_finalize, f"Finalized at chunk {i} during continuous speech"
+
+        assert entered_speech, "Never entered SPEECH state during continuous speech"
 
     def test_8khz_speech_detection(self):
         """VAD should detect speech at 8kHz via resampling to 16kHz."""

@@ -54,8 +54,8 @@ def should_gate_session(uid: str) -> bool:
 # ---------------------------------------------------------------------------
 # Silero VAD model (shared, thread-safe via lock)
 # ---------------------------------------------------------------------------
-_vad_model = None
-_vad_utils = None
+_vad_model = None  # Set LAST during init (used as fast-path sentinel)
+_vad_torch = None  # torch module ref for tensor conversion (set before _vad_model)
 _vad_model_lock = threading.Lock()
 _vad_init_lock = threading.Lock()
 
@@ -63,9 +63,13 @@ _vad_init_lock = threading.Lock()
 def _ensure_vad_model():
     """Lazy-load Silero VAD model (reuses the one from vad.py if already loaded).
 
-    Double-checked locking to prevent concurrent initialization.
+    Uses the raw model for per-window speech probability (not VADIterator
+    which emits boundary events unsuitable for streaming gating).
+
+    Double-checked locking: _vad_model is set LAST so any thread that sees
+    it non-None also sees _vad_torch already set.
     """
-    global _vad_model, _vad_utils
+    global _vad_model, _vad_torch
     if _vad_model is not None:
         return
     with _vad_init_lock:
@@ -73,22 +77,19 @@ def _ensure_vad_model():
             return
         try:
             # Reuse model already loaded by vad.py
-            from utils.stt.vad import model as existing_model, VADIterator
+            from utils.stt.vad import model as existing_model
 
+            import torch
+
+            _vad_torch = torch  # Set BEFORE _vad_model
             _vad_model = existing_model
-            _vad_utils = {'VADIterator': VADIterator}
         except ImportError:
             import torch
 
             torch.set_num_threads(1)
-            _vad_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-            _vad_utils = {'VADIterator': utils[3]}
-
-
-def create_vad_iterator(sample_rate: int = 16000):
-    """Create a new per-session VADIterator from the shared model."""
-    _ensure_vad_model()
-    return _vad_utils['VADIterator'](_vad_model, sampling_rate=sample_rate)
+            model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+            _vad_torch = torch  # Set BEFORE _vad_model
+            _vad_model = model
 
 
 # ---------------------------------------------------------------------------
@@ -188,12 +189,13 @@ class VADStreamingGate:
         self.session_id = session_id
 
         # VAD setup — always resample to 16kHz for best accuracy
+        # Uses raw model probability (not VADIterator events) for continuous
+        # per-window speech classification suitable for streaming gating.
         self._vad_sample_rate = 16000
-        self._vad_iterator = create_vad_iterator(self._vad_sample_rate)
+        _ensure_vad_model()
         self._vad_window_samples = 512  # Silero recommended for 16kHz
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
         self._speech_threshold = 0.5  # Probability threshold for speech
-        self._ratecv_state = None  # for resampling
 
         # State machine
         self._state = GateState.SILENCE
@@ -240,9 +242,14 @@ class VADStreamingGate:
     def _run_vad(self, pcm_data: bytes) -> bool:
         """Run Silero VAD on audio chunk. Returns True if speech detected.
 
-        Uses the model's __call__ directly for per-chunk speech probability
-        instead of VADIterator's start/end event mode. This gives a continuous
-        speech/silence signal suitable for gating.
+        Calls the raw model directly for per-window speech probability.
+        VADIterator is NOT used because it emits boundary events (start/end)
+        and returns None during continuous speech, which would cause the gate
+        to drop audio mid-utterance.
+
+        Resets model hidden state before each batch so shared model state
+        doesn't leak between sessions. Within a batch, LSTM context carries
+        over naturally for better accuracy.
 
         Buffers samples across chunks to handle cases where chunk size < window size.
         """
@@ -253,13 +260,22 @@ class VADStreamingGate:
 
         speech_detected = False
         with _vad_model_lock:
+            _vad_model.reset_states()
             # Process all complete windows in buffer
             while len(self._vad_buffer) >= self._vad_window_samples:
                 window = self._vad_buffer[: self._vad_window_samples]
                 self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
 
-                result = self._vad_iterator(window, return_seconds=False)
-                if result:
+                # Convert to tensor for production Silero; mock accepts numpy
+                if _vad_torch is not None:
+                    tensor = _vad_torch.from_numpy(window.copy())
+                else:
+                    tensor = window
+                prob = _vad_model(tensor, self._vad_sample_rate)
+                # Silero returns tensor; mock returns float
+                if hasattr(prob, 'item'):
+                    prob = prob.item()
+                if prob > self._speech_threshold:
                     speech_detected = True
 
         # Keep buffer bounded (max 1 window of leftover)
