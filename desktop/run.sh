@@ -153,21 +153,6 @@ if [ -n "$SWIFTPM_PID" ]; then
     done
 fi
 
-step "Building agent-bridge (npm install + tsc)..."
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    cd "$AGENT_BRIDGE_DIR"
-    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
-        substep "Installing npm dependencies"
-        npm install --no-fund --no-audit 2>&1 | tail -1
-    fi
-    substep "Compiling TypeScript"
-    npx tsc
-    cd - > /dev/null
-else
-    echo "Warning: agent-bridge directory not found at $AGENT_BRIDGE_DIR"
-fi
-
 step "Building acp-bridge (npm install + tsc)..."
 ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR" ]; then
@@ -230,14 +215,6 @@ RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Comput
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
-fi
-
-substep "Copying agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
 fi
 
 substep "Copying acp-bridge"

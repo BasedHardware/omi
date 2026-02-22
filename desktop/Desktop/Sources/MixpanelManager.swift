@@ -707,6 +707,13 @@ extension MixpanelManager {
         ])
     }
 
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        track("Chat Bridge Mode Changed", properties: [
+            "from": oldMode,
+            "to": newMode
+        ])
+    }
+
     // MARK: - Settings State
 
     func settingsStateTracked(screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool) {
