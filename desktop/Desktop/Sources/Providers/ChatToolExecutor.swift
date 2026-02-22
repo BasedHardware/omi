@@ -91,7 +91,7 @@ class ChatToolExecutor {
             }
         } catch {
             logError("Tool execute_sql failed", error: error)
-            return "SQL Error: \(error.localizedDescription)"
+            return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
         }
     }
 
