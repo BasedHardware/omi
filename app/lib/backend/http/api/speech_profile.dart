@@ -90,7 +90,8 @@ Future<bool> deleteProfileSample(
   return false;
 }
 
-Future<bool> shareSpeechProfile(String targetUid) async {
+/// Returns {'status': 'ok'} on success, or {'error': 'detail message'} on failure.
+Future<Map<String, String>> shareSpeechProfile(String targetUid) async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/speech-profile/share',
     headers: {},
@@ -98,7 +99,16 @@ Future<bool> shareSpeechProfile(String targetUid) async {
     body: jsonEncode({'target_uid': targetUid}),
   );
   Logger.debug('shareSpeechProfile: ${response?.body}');
-  return response != null && response.statusCode == 200;
+  if (response != null && response.statusCode == 200) {
+    return {'status': 'ok'};
+  }
+  if (response != null) {
+    try {
+      final data = jsonDecode(response.body);
+      return {'error': data['detail'] ?? 'Unknown error'};
+    } catch (_) {}
+  }
+  return {'error': 'Failed to share speech profile'};
 }
 
 Future<bool> revokeSpeechProfile(String targetUid) async {
@@ -112,7 +122,34 @@ Future<bool> revokeSpeechProfile(String targetUid) async {
   return response != null && response.statusCode == 200;
 }
 
-Future<List<String>> getProfilesSharedWithMe() async {
+Future<bool> removeSharedProfile(String ownerUid) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/speech-profile/remove-shared',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'target_uid': ownerUid}),
+  );
+  Logger.debug('removeSharedProfile: ${response?.body}');
+  return response != null && response.statusCode == 200;
+}
+
+class SharedProfileInfo {
+  final String uid;
+  final String name;
+
+  SharedProfileInfo({required this.uid, required this.name});
+
+  factory SharedProfileInfo.fromJson(Map<String, dynamic> json) {
+    return SharedProfileInfo(
+      uid: json['uid'] ?? '',
+      name: json['name'] ?? '',
+    );
+  }
+
+  String get displayName => name.isNotEmpty ? name : uid;
+}
+
+Future<List<SharedProfileInfo>> getProfilesSharedWithMe() async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/speech-profile/shared-with-me',
     headers: {},
@@ -122,12 +159,18 @@ Future<List<String>> getProfilesSharedWithMe() async {
   Logger.debug('getProfilesSharedWithMe: ${response?.body}');
   if (response != null && response.statusCode == 200) {
     final data = jsonDecode(response.body);
-    return List<String>.from(data['shared_with_me'] ?? []);
+    final list = data['shared_with_me'] as List? ?? [];
+    return list.map((item) {
+      if (item is Map<String, dynamic>) {
+        return SharedProfileInfo.fromJson(item);
+      }
+      return SharedProfileInfo(uid: item.toString(), name: '');
+    }).toList();
   }
   return [];
 }
 
-Future<List<String>> getUsersIHaveSharedWith() async {
+Future<List<SharedProfileInfo>> getUsersIHaveSharedWith() async {
   final response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/speech-profile/i-have-shared',
     headers: {},
@@ -137,7 +180,13 @@ Future<List<String>> getUsersIHaveSharedWith() async {
   Logger.debug('getUsersIHaveSharedWith: ${response?.body}');
   if (response != null && response.statusCode == 200) {
     final data = jsonDecode(response.body);
-    return List<String>.from(data['i_have_shared_with'] ?? []);
+    final list = data['i_have_shared_with'] as List? ?? [];
+    return list.map((item) {
+      if (item is Map<String, dynamic>) {
+        return SharedProfileInfo.fromJson(item);
+      }
+      return SharedProfileInfo(uid: item.toString(), name: '');
+    }).toList();
   }
   return [];
 }

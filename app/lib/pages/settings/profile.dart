@@ -15,6 +15,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/widgets/dialog.dart';
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -28,8 +29,42 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  void _showSpeechProfileSharingDialog(BuildContext context) {
+  bool? _hasProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _prefetchProfileStatus();
+  }
+
+  void _prefetchProfileStatus() async {
+    final hasProfile = await userHasSpeakerProfile();
+    if (mounted) setState(() => _hasProfile = hasProfile);
+  }
+
+  void _showSpeechProfileSharingDialog(BuildContext context) async {
+    final hasProfile = _hasProfile ?? await userHasSpeakerProfile();
+    if (!context.mounted) return;
+    if (!hasProfile) {
+      final goRecord = await showDialog<bool>(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context, false),
+          () => Navigator.pop(context, true),
+          context.l10n.shareSpeechProfile,
+          context.l10n.noSpeechProfileRecorded,
+          okButtonText: context.l10n.recordNow,
+        ),
+      );
+      if (goRecord == true && context.mounted) {
+        routeToPage(context, const SpeechProfilePage());
+      }
+      return;
+    }
+
     final controller = TextEditingController();
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (ctx) {
@@ -64,17 +99,33 @@ class _ProfilePageState extends State<ProfilePage> {
                 final targetUid = controller.text.trim();
                 if (targetUid.isEmpty) return;
                 if (targetUid == SharedPreferencesUtil().uid) {
+                  Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.l10n.profileSharedFail)),
+                    SnackBar(content: Text(context.l10n.cannotShareWithSelf)),
                   );
                   return;
                 }
-                final ok = await shareSpeechProfile(targetUid);
+                final result = await shareSpeechProfile(targetUid);
                 if (!context.mounted) return;
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ok ? context.l10n.profileSharedSuccess : context.l10n.profileSharedFail)),
-                );
+                if (result['status'] == 'ok') {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.l10n.profileSharedSuccess)),
+                  );
+                } else {
+                  final error = result['error'] ?? '';
+                  String message;
+                  if (error.contains('not found')) {
+                    message = context.l10n.userNotFound;
+                  } else if (error.contains('yourself')) {
+                    message = context.l10n.cannotShareWithSelf;
+                  } else if (error.contains('No speech profile')) {
+                    message = context.l10n.noSpeechProfileRecorded;
+                  } else {
+                    message = context.l10n.profileSharedFail;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+                }
               },
               child: Text(context.l10n.share, style: const TextStyle(color: Colors.white)),
             ),
@@ -84,10 +135,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  @override
-  void initState() {
-    super.initState();
-  }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
@@ -299,8 +346,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: context.l10n.speechProfileSharingStatus,
-                  icon: const Icon(Icons.people, color: Color(0xFF8E8E93), size: 20),
+                  title: context.l10n.sharedProfiles,
+                  icon: const Icon(Icons.sync_alt, color: Color(0xFF8E8E93), size: 20),
                   onTap: () => routeToPage(context, const SpeechProfileSharingPage()),
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

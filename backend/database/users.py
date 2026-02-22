@@ -1061,8 +1061,40 @@ def get_profiles_shared_with_user(target_uid: str):
     return [share.reference.parent.parent.id for share in shares_query.stream()]
 
 
+def get_profiles_shared_with_user_details(target_uid: str):
+    """Return a list of {uid, name} dicts for users who have shared their speech profile with target_uid."""
+    owner_uids = get_profiles_shared_with_user(target_uid)
+    results = []
+    for uid in owner_uids:
+        profile = get_user_profile(uid)
+        name = profile.get('name', '') if profile else ''
+        results.append({'uid': uid, 'name': name})
+    return results
+
+
+def remove_shared_profile_from_me(owner_uid: str, target_uid: str):
+    """Allow the target user to remove/reject a speech profile shared with them by owner_uid."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    doc = shared_ref.get()
+    if doc.exists and doc.to_dict().get('revoked_at') is None:
+        shared_ref.update({'revoked_at': datetime.now(timezone.utc)})
+        return True
+    return False
+
+
 def get_users_shared_with(owner_uid: str):
     """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
     shares_query = shared_ref.where(filter=FieldFilter('revoked_at', '==', None))
     return [doc.to_dict()['shared_with_uid'] for doc in shares_query.stream()]
+
+
+def get_users_shared_with_details(owner_uid: str):
+    """Return a list of {uid, name} dicts for users with whom the owner has shared their speech profile."""
+    target_uids = get_users_shared_with(owner_uid)
+    results = []
+    for uid in target_uids:
+        profile = get_user_profile(uid)
+        name = profile.get('name', '') if profile else ''
+        results.append({'uid': uid, 'name': name})
+    return results

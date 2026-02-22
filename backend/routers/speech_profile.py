@@ -10,12 +10,14 @@ from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
 from database.users import (
     get_person,
+    get_user_profile,
     is_exists_user,
     set_user_speaker_embedding,
     share_speech_profile,
     revoke_speech_profile_share,
-    get_profiles_shared_with_user,
-    get_users_shared_with,
+    remove_shared_profile_from_me,
+    get_profiles_shared_with_user_details,
+    get_users_shared_with_details,
 )
 from models.conversation import Conversation
 from models.other import ShareSpeechProfileRequest, UploadProfile
@@ -129,6 +131,9 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
     """Share the current user's speech profile with another user"""
     if data.target_uid == uid:
         raise HTTPException(status_code=400, detail="Cannot share with yourself.")
+    profile = get_user_profile(uid)
+    if not profile or not profile.get('speaker_embedding'):
+        raise HTTPException(status_code=400, detail="No speech profile recorded.")
     if not is_exists_user(data.target_uid):
         raise HTTPException(status_code=404, detail="Target user not found.")
     share_speech_profile(uid, data.target_uid)
@@ -146,15 +151,24 @@ def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depend
     return {"status": "ok"}
 
 
+@router.post('/v1/speech-profile/remove-shared', tags=['v1'])
+def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Allow the current user to remove a speech profile that was shared with them"""
+    result = remove_shared_profile_from_me(data.target_uid, uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+
 @router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
 def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
-    """List user IDs who have shared their speech profile with the current user"""
-    owners = get_profiles_shared_with_user(uid)
+    """List users who have shared their speech profile with the current user"""
+    owners = get_profiles_shared_with_user_details(uid)
     return {"shared_with_me": owners}
 
 
 @router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
 def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
-    """List user IDs with whom the current user has shared their speech profile"""
-    shared = get_users_shared_with(uid)
+    """List users with whom the current user has shared their speech profile"""
+    shared = get_users_shared_with_details(uid)
     return {"i_have_shared_with": shared}

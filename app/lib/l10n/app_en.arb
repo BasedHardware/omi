@@ -10051,5 +10051,33 @@
   "@revokeShareConfirmation": {
     "description": "Confirmation message for revoking speech profile sharing"
   },
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "sharedProfiles": "Shared Profiles",
+  "@sharedProfiles": {
+    "description": "Short menu title for speech profile sharing status page"
+  },
+  "noSpeechProfileRecorded": "You need to record your speech profile before sharing",
+  "@noSpeechProfileRecorded": {
+    "description": "Message when user tries to share without a speech profile"
+  },
+  "recordNow": "Record Now",
+  "@recordNow": {
+    "description": "Button to navigate to speech profile recording page"
+  },
+  "cannotShareWithSelf": "Omi already knows your voice!",
+  "@cannotShareWithSelf": {
+    "description": "Error when user tries to share with themselves"
+  },
+  "userNotFound": "User not found. Please check the ID and try again.",
+  "@userNotFound": {
+    "description": "Error when target user ID does not exist"
+  },
+  "removeSharedProfile": "Remove",
+  "@removeSharedProfile": {
+    "description": "Button to remove a speech profile shared with you"
+  },
+  "removeSharedProfileConfirmation": "Remove this shared profile? Their voice will no longer be auto-identified.",
+  "@removeSharedProfileConfirmation": {
+    "description": "Confirmation message for removing a shared profile"
+  }
 }
