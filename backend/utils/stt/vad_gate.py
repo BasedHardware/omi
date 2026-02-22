@@ -11,10 +11,12 @@ Modes (VAD_GATE_MODE env var):
   active — VAD gates audio: silence skipped, KeepAlive sent instead
 """
 
+import audioop
 import hashlib
 import logging
 import os
 import threading
+import time
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
@@ -22,6 +24,12 @@ from enum import Enum
 from typing import List, Optional, Tuple
 
 import numpy as np
+import torch
+
+try:
+    from utils.stt.vad import model as _existing_vad_model
+except ImportError:
+    _existing_vad_model = None
 
 logger = logging.getLogger('vad_gate')
 
@@ -75,17 +83,11 @@ def _ensure_vad_model():
     with _vad_init_lock:
         if _vad_model is not None:
             return
-        try:
+        if _existing_vad_model is not None:
             # Reuse model already loaded by vad.py
-            from utils.stt.vad import model as existing_model
-
-            import torch
-
             _vad_torch = torch  # Set BEFORE _vad_model
-            _vad_model = existing_model
-        except ImportError:
-            import torch
-
+            _vad_model = _existing_vad_model
+        else:
             torch.set_num_threads(1)
             model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
             _vad_torch = torch  # Set BEFORE _vad_model
@@ -231,8 +233,6 @@ class VADStreamingGate:
         # Convert to mono if stereo
         data = pcm_data
         if self.channels == 2:
-            import audioop
-
             data = audioop.tomono(data, 2, 0.5, 0.5)
 
         data_int16 = np.frombuffer(data, dtype=np.int16)
@@ -478,9 +478,7 @@ class GatedDeepgramSocket:
         if self._gate is None:
             return self._conn.send(data)
 
-        import time as _time
-
-        gate_out = self._gate.process_audio(data, wall_time or _time.time())
+        gate_out = self._gate.process_audio(data, wall_time or time.time())
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
         if gate_out.should_finalize:
