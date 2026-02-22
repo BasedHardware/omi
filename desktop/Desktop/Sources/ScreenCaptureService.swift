@@ -8,6 +8,11 @@ final class ScreenCaptureService: Sendable {
     private let maxSize: CGFloat = 3000
     private let jpegQuality: CGFloat = 1.0
 
+    /// Tracks consecutive AX cannotComplete failures per bundle ID.
+    /// Apps that consistently fail (Qt, OpenGL, etc.) are skipped for AX after the threshold.
+    nonisolated(unsafe) private static var axFailureCountByBundleID: [String: Int] = [:]
+    private static let axSkipThreshold = 3
+
     init() {}
 
     /// Check if we have screen recording permission by actually testing capture
@@ -267,14 +272,17 @@ final class ScreenCaptureService: Sendable {
 
         let appName = frontApp.localizedName
         let activePID = frontApp.processIdentifier
+        let bundleID = frontApp.bundleIdentifier ?? ""
 
         // Get all on-screen windows
         guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return (appName, nil, nil)
         }
 
-        // Try Accessibility API first (most accurate - gets actual focused window)
-        if let axResult = getWindowInfoViaAccessibility(pid: activePID, windowList: windowList) {
+        // Try Accessibility API first (most accurate - gets actual focused window).
+        // Skip if this app has exceeded the cannotComplete failure threshold (e.g. Qt/OpenGL apps).
+        let skipAX = !bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold
+        if !skipAX, let axResult = getWindowInfoViaAccessibility(pid: activePID, bundleID: bundleID, windowList: windowList) {
             return (appName, axResult.title, axResult.windowID)
         }
 
@@ -305,7 +313,7 @@ final class ScreenCaptureService: Sendable {
     }
 
     /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
-    private static func getWindowInfoViaAccessibility(pid: pid_t, windowList: [[String: Any]]) -> (title: String?, windowID: CGWindowID)? {
+    private static func getWindowInfoViaAccessibility(pid: pid_t, bundleID: String, windowList: [[String: Any]]) -> (title: String?, windowID: CGWindowID)? {
         let appElement = AXUIElementCreateApplication(pid)
 
         // Get the focused window
@@ -313,10 +321,26 @@ final class ScreenCaptureService: Sendable {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
-            if focusResult == .apiDisabled || focusResult == .cannotComplete {
-                log("ACCESSIBILITY_AX: getWindowInfoViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck")
+            if focusResult == .apiDisabled {
+                // System-wide AX permission issue — always log
+                log("ACCESSIBILITY_AX: apiDisabled (\(focusResult.rawValue)) for \(bundleID) — system permission broken")
+            } else if focusResult == .cannotComplete {
+                // App-specific failure (Qt, OpenGL, Python-based apps often don't implement AX).
+                // Track per bundle ID and suppress logs after the threshold to avoid spam.
+                let count = (axFailureCountByBundleID[bundleID] ?? 0) + 1
+                axFailureCountByBundleID[bundleID] = count
+                if count == 1 {
+                    log("ACCESSIBILITY_AX: cannotComplete for \(bundleID) (1st failure, will suppress after \(axSkipThreshold))")
+                } else if count == axSkipThreshold {
+                    log("ACCESSIBILITY_AX: cannotComplete for \(bundleID) — \(axSkipThreshold) failures reached, skipping AX for this app going forward")
+                }
             }
             return nil
+        }
+
+        // On success, reset failure count in case the app's AX state recovered
+        if !bundleID.isEmpty {
+            axFailureCountByBundleID[bundleID] = 0
         }
 
         // Get window title from AX

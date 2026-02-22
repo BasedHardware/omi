@@ -27,10 +27,6 @@ DerivedData/
 .swiftpm/
 Package.resolved
 
-# Agent bridge build artifacts
-agent-bridge/node_modules/
-agent-bridge/dist/
-
 # Xcode
 *.pbxuser
 *.mode1v3
