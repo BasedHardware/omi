@@ -36,6 +36,8 @@ VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
 VAD_GATE_ROLLOUT_PCT = int(os.getenv('VAD_GATE_ROLLOUT_PCT', '100'))
 VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
 VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
+VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.5'))
+VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
 
 
 def is_gate_enabled() -> bool:
@@ -211,7 +213,7 @@ class VADStreamingGate:
         _ensure_vad_model()
         self._vad_window_samples = 512  # Silero recommended for 16kHz
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
-        self._speech_threshold = 0.5  # Probability threshold for speech
+        self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
 
         # State machine
         self._state = GateState.SILENCE
@@ -220,19 +222,43 @@ class VADStreamingGate:
         self._pre_roll_ms = VAD_GATE_PRE_ROLL_MS
         self._hangover_ms = VAD_GATE_HANGOVER_MS
 
-        # Pre-roll buffer: stores recent audio chunks for playback on speech onset
-        max_pre_roll_chunks = max(1, int(self._pre_roll_ms / 30) + 1)
-        self._pre_roll: deque = deque(maxlen=max_pre_roll_chunks)
+        # Pre-roll buffer: stores recent audio chunks for playback on speech onset.
+        # Tracks accumulated duration to respect _pre_roll_ms regardless of chunk size.
+        self._pre_roll: deque = deque()
+        self._pre_roll_total_ms: float = 0.0
 
         # Timestamp mapper
         self.dg_wall_mapper = DgWallMapper()
 
-        # Metrics (for shadow mode logging)
+        # Metrics
         self._chunks_total = 0
         self._chunks_speech = 0
         self._chunks_silence = 0
         self._finalize_count = 0
+        self._finalize_errors = 0
+        self._bytes_sent = 0
+        self._bytes_skipped = 0
         self._first_audio_wall_time: Optional[float] = None
+        self._last_send_wall_time: Optional[float] = None  # For keepalive timing
+        self._keepalive_count = 0
+
+    def activate(self) -> None:
+        """Switch from shadow to active mode (used after speech profile completes)."""
+        if self.mode == 'shadow':
+            self.mode = 'active'
+            # Reset state machine to start fresh in active mode
+            self._state = GateState.SILENCE
+            self._pre_roll.clear()
+            self._pre_roll_total_ms = 0.0
+            logger.info('VADGate activated shadow->active uid=%s session=%s', self.uid, self.session_id)
+
+    def needs_keepalive(self, wall_time: float) -> bool:
+        """Check if a keepalive should be sent to prevent DG timeout."""
+        if self.mode != 'active':
+            return False
+        if self._last_send_wall_time is None:
+            return False
+        return (wall_time - self._last_send_wall_time) >= VAD_GATE_KEEPALIVE_SEC
 
     def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray:
         """Convert audio to float32 at 16kHz mono for VAD."""
@@ -329,6 +355,8 @@ class VADStreamingGate:
 
         # Shadow mode: log but send everything
         if self.mode == 'shadow':
+            self._bytes_sent += len(pcm_data)
+            self._last_send_wall_time = wall_time
             return GateOutput(
                 audio_to_send=pcm_data,
                 should_finalize=False,
@@ -357,10 +385,16 @@ class VADStreamingGate:
         """State machine transition logic."""
         wall_rel = wall_time - self._first_audio_wall_time if self._first_audio_wall_time else 0.0
         chunk_duration_sec = len(pcm_data) / (2.0 * self.channels * self.sample_rate)
+        chunk_ms = chunk_duration_sec * 1000.0
 
         if self._state == GateState.SILENCE:
-            # Buffer for pre-roll
+            # Buffer for pre-roll (time-based eviction)
             self._pre_roll.append(pcm_data)
+            self._pre_roll_total_ms += chunk_ms
+            while self._pre_roll_total_ms > self._pre_roll_ms and len(self._pre_roll) > 1:
+                evicted = self._pre_roll.popleft()
+                evicted_ms = (len(evicted) / (2.0 * self.channels * self.sample_rate)) * 1000.0
+                self._pre_roll_total_ms -= evicted_ms
 
             if is_speech:
                 # Transition: SILENCE → SPEECH
@@ -368,11 +402,14 @@ class VADStreamingGate:
                 # Emit pre-roll + current chunk
                 pre_roll_audio = b''.join(self._pre_roll)
                 self._pre_roll.clear()
+                self._pre_roll_total_ms = 0.0
 
                 # Record mapper checkpoint for pre-roll start
                 pre_roll_duration = len(pre_roll_audio) / (2.0 * self.channels * self.sample_rate)
                 pre_roll_wall_rel = max(0.0, wall_rel - pre_roll_duration + chunk_duration_sec)
                 self.dg_wall_mapper.on_audio_sent(pre_roll_duration, pre_roll_wall_rel)
+                self._bytes_sent += len(pre_roll_audio)
+                self._last_send_wall_time = wall_time
 
                 return GateOutput(
                     audio_to_send=pre_roll_audio,
@@ -383,6 +420,7 @@ class VADStreamingGate:
             else:
                 # Stay in SILENCE: skip audio, mapper tracks gap
                 self.dg_wall_mapper.on_silence_skipped()
+                self._bytes_skipped += len(pcm_data)
                 return GateOutput(
                     audio_to_send=b'',
                     should_finalize=False,
@@ -393,6 +431,8 @@ class VADStreamingGate:
         elif self._state == GateState.SPEECH:
             # Send audio to DG
             self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+            self._bytes_sent += len(pcm_data)
+            self._last_send_wall_time = wall_time
 
             if not is_speech:
                 # Transition: SPEECH → HANGOVER
@@ -412,6 +452,8 @@ class VADStreamingGate:
                 # Speech resumed: HANGOVER → SPEECH (no finalize needed)
                 self._state = GateState.SPEECH
                 self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+                self._bytes_sent += len(pcm_data)
+                self._last_send_wall_time = wall_time
                 return GateOutput(
                     audio_to_send=pcm_data,
                     should_finalize=False,
@@ -424,7 +466,11 @@ class VADStreamingGate:
                 self._state = GateState.SILENCE
                 self._finalize_count += 1
                 self._pre_roll.clear()
+                self._pre_roll_total_ms = 0.0
                 self._pre_roll.append(pcm_data)
+                chunk_ms_local = (len(pcm_data) / (2.0 * self.channels * self.sample_rate)) * 1000.0
+                self._pre_roll_total_ms = chunk_ms_local
+                self._bytes_skipped += len(pcm_data)
                 self.dg_wall_mapper.on_silence_skipped()
                 return GateOutput(
                     audio_to_send=b'',
@@ -435,6 +481,8 @@ class VADStreamingGate:
 
             # Still in hangover: send audio
             self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+            self._bytes_sent += len(pcm_data)
+            self._last_send_wall_time = wall_time
             return GateOutput(
                 audio_to_send=pcm_data,
                 should_finalize=False,
@@ -448,12 +496,18 @@ class VADStreamingGate:
     def get_metrics(self) -> dict:
         """Return gate metrics for logging/monitoring."""
         total = self._chunks_total or 1
+        total_bytes = (self._bytes_sent + self._bytes_skipped) or 1
         return {
             'chunks_total': self._chunks_total,
             'chunks_speech': self._chunks_speech,
             'chunks_silence': self._chunks_silence,
             'silence_ratio': self._chunks_silence / total,
             'finalize_count': self._finalize_count,
+            'finalize_errors': self._finalize_errors,
+            'bytes_sent': self._bytes_sent,
+            'bytes_skipped': self._bytes_skipped,
+            'bytes_saved_ratio': self._bytes_skipped / total_bytes,
+            'keepalive_count': self._keepalive_count,
             'state': self._state.value,
             'mode': self.mode,
         }
@@ -484,14 +538,24 @@ class GatedDeepgramSocket:
         if self._gate is None:
             return self._conn.send(data)
 
-        gate_out = self._gate.process_audio(data, wall_time or time.time())
+        now = wall_time or time.time()
+        gate_out = self._gate.process_audio(data, now)
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
+        elif self._gate.needs_keepalive(now):
+            # Prevent DG 30s idle timeout during extended silence
+            try:
+                self._conn.keep_alive()
+                self._gate._keepalive_count += 1
+                self._gate._last_send_wall_time = now
+            except Exception:
+                logger.debug('keepalive failed uid=%s', self._gate.uid)
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
             except Exception:
-                pass
+                self._gate._finalize_errors += 1
+                logger.warning('finalize failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
 
     def finalize(self) -> None:
         """Flush pending transcript."""

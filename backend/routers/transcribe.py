@@ -723,22 +723,25 @@ async def _stream_handler(
             if not has_speech_profile:
                 speech_profile_complete.set()
 
-            # Initialize VAD gate only when actually usable (no speech profile)
+            # Initialize VAD gate for all eligible DG sessions.
+            # When speech profile is active (preseconds > 0), start in shadow mode
+            # so preseconds filtering uses uncompressed DG timestamps. After profile
+            # completes, switch to active mode to start saving cost.
             nonlocal vad_gate
-            if (
-                speech_profile_preseconds == 0
-                and is_gate_enabled()
-                and should_gate_session(uid)
-                and stt_service == STTService.deepgram
-            ):
+            if is_gate_enabled() and should_gate_session(uid) and stt_service == STTService.deepgram:
+                gate_mode = VAD_GATE_MODE
+                if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
+                    gate_mode = 'shadow'  # Shadow during profile, activate later
                 vad_gate = VADStreamingGate(
                     sample_rate=sample_rate,
                     channels=channels,
-                    mode=VAD_GATE_MODE,
+                    mode=gate_mode,
                     uid=uid,
                     session_id=session_id,
                 )
-                print(f'VAD gate initialized mode={VAD_GATE_MODE} uid={uid} session={session_id}')
+                print(
+                    f'VAD gate initialized mode={gate_mode} preseconds={speech_profile_preseconds} uid={uid} session={session_id}'
+                )
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
@@ -1777,6 +1780,11 @@ async def _stream_handler(
                         socket_to_close = deepgram_profile_socket
                         deepgram_profile_socket = None  # Stop sending immediately
 
+                        # Activate VAD gate now that speech profile phase is done
+                        if vad_gate is not None and VAD_GATE_MODE == 'active' and vad_gate.mode == 'shadow':
+                            vad_gate.activate()
+                            print(f'VAD gate activated after speech profile uid={uid} session={session_id}')
+
                         async def close_dg_profile():
                             await asyncio.sleep(5)
                             socket_to_close.finish()
@@ -1963,7 +1971,11 @@ async def _stream_handler(
                 print(
                     f'VAD gate metrics uid={uid} session={session_id} '
                     f'mode={metrics["mode"]} silence_ratio={metrics["silence_ratio"]:.2%} '
-                    f'chunks={metrics["chunks_total"]} finalizes={metrics["finalize_count"]}'
+                    f'chunks={metrics["chunks_total"]} finalizes={metrics["finalize_count"]} '
+                    f'finalize_errors={metrics["finalize_errors"]} '
+                    f'bytes_sent={metrics["bytes_sent"]} bytes_skipped={metrics["bytes_skipped"]} '
+                    f'bytes_saved={metrics["bytes_saved_ratio"]:.1%} '
+                    f'keepalives={metrics["keepalive_count"]}'
                 )
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:

@@ -674,3 +674,266 @@ class TestGatedDeepgramSocket:
         mock_conn = MagicMock()
         socket = GatedDeepgramSocket(mock_conn, gate=None)
         assert socket.get_metrics() is None
+
+    def test_keepalive_sent_during_extended_silence(self):
+        """Keepalive should be sent after VAD_GATE_KEEPALIVE_SEC of silence."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Feed enough speech to trigger detection (need >= 512 samples at 16kHz)
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # Silence to trigger hangover then SILENCE state
+        _set_vad_speech(False)
+        for i in range(30):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        # Now in SILENCE state. Set _last_send_wall_time directly for clarity
+        last_send = gate._last_send_wall_time
+        assert last_send is not None
+
+        # Send a chunk 25s later — should trigger keepalive
+        socket.send(_make_pcm(30), wall_time=last_send + 25.0)
+
+        mock_conn.keep_alive.assert_called()
+        assert gate._keepalive_count > 0
+
+    def test_keepalive_not_sent_in_shadow_mode(self):
+        """Keepalive should NOT be sent in shadow mode (all audio forwarded)."""
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='shadow')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        _set_vad_speech(False)
+        t = 1000.0
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+        # Skip 25 seconds
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+
+        mock_conn.keep_alive.assert_not_called()
+
+    def test_finalize_error_tracked_in_metrics(self):
+        """Finalize exceptions should increment finalize_errors counter."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError("connection closed")
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        _set_vad_speech(False)
+        for i in range(30):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        metrics = socket.get_metrics()
+        assert metrics['finalize_errors'] > 0
+
+
+class TestActivateMode:
+    """Tests for shadow→active mode switching (preseconds solution)."""
+
+    def _make_gate(self, mode='shadow'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_activate_switches_shadow_to_active(self):
+        """activate() should switch mode from shadow to active."""
+        gate = self._make_gate(mode='shadow')
+        assert gate.mode == 'shadow'
+        gate.activate()
+        assert gate.mode == 'active'
+
+    def test_activate_resets_state_to_silence(self):
+        """activate() should reset state machine to SILENCE regardless of prior state."""
+        gate = self._make_gate(mode='shadow')
+        # Shadow mode doesn't update _state via the state machine, so set it directly
+        gate._state = GateState.SPEECH
+
+        gate.activate()
+        assert gate._state == GateState.SILENCE
+        assert gate.mode == 'active'
+
+    def test_activate_noop_if_already_active(self):
+        """activate() should be a no-op if already in active mode."""
+        gate = self._make_gate(mode='active')
+        gate._state = GateState.SPEECH
+        gate.activate()
+        # State should NOT be reset since mode was already active
+        assert gate._state == GateState.SPEECH
+
+    def test_shadow_then_active_gates_silence(self):
+        """After activate(), silence should be gated (not forwarded)."""
+        gate = self._make_gate(mode='shadow')
+        t = 1000.0
+
+        # Shadow mode: silence is forwarded
+        _set_vad_speech(False)
+        out = gate.process_audio(_make_pcm(30), t)
+        assert out.audio_to_send != b''
+
+        # Activate
+        gate.activate()
+
+        # Active mode: silence should be gated
+        out = gate.process_audio(_make_pcm(30), t + 0.05)
+        assert out.audio_to_send == b''
+
+    def test_activate_clears_preroll(self):
+        """activate() should clear pre-roll buffer."""
+        gate = self._make_gate(mode='shadow')
+        _set_vad_speech(False)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), time.time())
+        assert gate._pre_roll_total_ms == 0.0  # Shadow mode doesn't use pre-roll
+
+        gate.activate()
+        assert len(gate._pre_roll) == 0
+        assert gate._pre_roll_total_ms == 0.0
+
+
+class TestCostMetrics:
+    """Tests for bytes_sent/bytes_skipped tracking."""
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_bytes_sent_tracked_on_speech(self):
+        """bytes_sent should accumulate when audio is forwarded."""
+        gate = self._make_gate()
+        _set_vad_speech(True)
+        t = time.time()
+        # Need multiple chunks to fill VAD buffer (512 samples at 16kHz, each 30ms chunk = 480 samples)
+        for i in range(3):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+        metrics = gate.get_metrics()
+        assert metrics['bytes_sent'] > 0
+
+    def test_bytes_skipped_tracked_on_silence(self):
+        """bytes_skipped should accumulate when audio is gated."""
+        gate = self._make_gate()
+        _set_vad_speech(False)
+        chunk = _make_pcm(30)
+        gate.process_audio(chunk, time.time())
+        metrics = gate.get_metrics()
+        assert metrics['bytes_skipped'] > 0
+
+    def test_bytes_saved_ratio(self):
+        """bytes_saved_ratio should reflect skipped/(sent+skipped)."""
+        gate = self._make_gate()
+        t = 1000.0
+
+        # 5 silence chunks
+        _set_vad_speech(False)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # 5 speech chunks
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+
+        metrics = gate.get_metrics()
+        assert metrics['bytes_saved_ratio'] > 0
+        assert metrics['bytes_saved_ratio'] < 1.0
+
+    def test_shadow_mode_tracks_bytes_sent(self):
+        """In shadow mode, all bytes should be counted as sent."""
+        gate = self._make_gate(mode='shadow')
+        _set_vad_speech(False)
+        chunk = _make_pcm(30)
+        gate.process_audio(chunk, time.time())
+        metrics = gate.get_metrics()
+        assert metrics['bytes_sent'] == len(chunk)
+        assert metrics['bytes_skipped'] == 0
+
+
+class TestSpeechThreshold:
+    """Tests for configurable speech threshold."""
+
+    def test_threshold_from_env(self):
+        """Speech threshold should be configurable via env var."""
+        with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.3):
+            gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+            assert gate._speech_threshold == 0.3
+
+    def test_threshold_from_env_high(self):
+        """High threshold should require stronger speech signal."""
+        with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.8):
+            gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+            assert gate._speech_threshold == 0.8
+
+
+class TestTimeBasedPreRoll:
+    """Tests for time-based pre-roll buffer eviction."""
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_preroll_respects_ms_limit(self):
+        """Pre-roll should evict oldest chunks when total exceeds pre_roll_ms."""
+        gate = self._make_gate()
+        t = 1000.0
+
+        # Default pre_roll_ms = 300ms. Feed 20 chunks of 30ms = 600ms total.
+        _set_vad_speech(False)
+        for i in range(20):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Pre-roll should be around 300ms, not 600ms
+        assert gate._pre_roll_total_ms <= gate._pre_roll_ms + 30  # Allow one chunk margin
+
+    def test_preroll_works_with_variable_chunk_sizes(self):
+        """Pre-roll should work correctly with 20ms and 40ms chunks."""
+        gate = self._make_gate()
+        t = 1000.0
+
+        _set_vad_speech(False)
+        # Mix of 20ms and 40ms chunks
+        for i in range(10):
+            if i % 2 == 0:
+                gate.process_audio(_make_pcm(20), t + i * 0.03)
+            else:
+                gate.process_audio(_make_pcm(40), t + i * 0.03)
+
+        assert gate._pre_roll_total_ms <= gate._pre_roll_ms + 40  # Allow one chunk margin
+
+    def test_preroll_emitted_on_speech_onset(self):
+        """All pre-roll audio should be sent when speech is detected."""
+        gate = self._make_gate()
+        t = 1000.0
+
+        # Fill pre-roll with silence
+        _set_vad_speech(False)
+        for i in range(15):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Speech detected — pre-roll should be emitted
+        _set_vad_speech(True)
+        out = gate.process_audio(_make_pcm(30), t + 15 * 0.03)
+        assert len(out.audio_to_send) > len(_make_pcm(30))  # More than just current chunk
+        assert gate._pre_roll_total_ms == 0.0  # Pre-roll should be cleared
