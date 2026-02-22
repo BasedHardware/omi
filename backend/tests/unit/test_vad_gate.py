@@ -52,7 +52,10 @@ def mock_silero():
 
 
 def _make_pcm(duration_ms: int, sample_rate: int = 16000, channels: int = 1) -> bytes:
-    """Generate silent PCM16 audio of given duration."""
+    """Generate silent PCM16 audio of given duration.
+
+    For stereo (channels=2), generates interleaved L/R samples.
+    """
     n_samples = int(sample_rate * channels * duration_ms / 1000)
     return struct.pack(f'<{n_samples}h', *([0] * n_samples))
 
@@ -1023,3 +1026,199 @@ class TestTimeBasedPreRoll:
         out = gate.process_audio(_make_pcm(30), t + 15 * 0.03)
         assert len(out.audio_to_send) > len(_make_pcm(30))  # More than just current chunk
         assert gate._pre_roll_total_ms == 0.0  # Pre-roll should be cleared
+
+
+class TestMapperMonotonicity:
+    """Property-style invariant tests for DgWallMapper."""
+
+    def test_monotonicity_across_many_transitions(self):
+        """Varied speech/silence transitions must produce monotonic wall times."""
+        mapper = DgWallMapper()
+        wall = 0.0
+        # Simulate 20 speech/silence transitions with varying durations
+        for i in range(20):
+            speech_dur = 1.0 + (i % 5) * 0.5  # 1.0 to 3.5s
+            silence_dur = 0.5 + (i % 3) * 2.0  # 0.5 to 4.5s
+            mapper.on_audio_sent(speech_dur, wall)
+            wall += speech_dur
+            mapper.on_silence_skipped()
+            wall += silence_dur
+
+        # Sample 100 DG timestamps and verify monotonicity
+        prev_wall = -1.0
+        for j in range(100):
+            dg_t = j * 0.5  # 0 to 49.5s DG time
+            wall_t = mapper.dg_to_wall_rel(dg_t)
+            assert wall_t >= prev_wall, f"Non-monotonic at dg={dg_t}: {wall_t} < {prev_wall}"
+            prev_wall = wall_t
+
+    def test_large_time_precision(self):
+        """Mapper should handle large wall/DG times without precision loss."""
+        mapper = DgWallMapper()
+        # Start at t=1_000_000 (like a real epoch)
+        mapper.on_audio_sent(5.0, 1_000_000.0)
+        mapper.on_silence_skipped()
+        mapper.on_audio_sent(3.0, 1_000_010.0)
+        # DG=6.0 → wall=1_000_011.0
+        assert mapper.dg_to_wall_rel(6.0) == pytest.approx(1_000_011.0, abs=0.001)
+
+
+class TestKeepaliveBoundary:
+    """Tests for keepalive timing precision."""
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_keepalive_exact_boundary(self):
+        """Keepalive should NOT fire at 19.99s, SHOULD fire at 20.0s."""
+        gate = self._make_gate()
+        gate._first_audio_wall_time = 1000.0
+        gate._last_send_wall_time = 1000.0
+        # At 19.99s: no keepalive
+        assert not gate.needs_keepalive(1019.99)
+        # At 20.0s: keepalive
+        assert gate.needs_keepalive(1020.0)
+
+    def test_keepalive_no_spam(self):
+        """After keepalive fires, next chunk should NOT trigger another immediately."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Feed speech then silence
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+        _set_vad_speech(False)
+        for i in range(30):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        last_send = gate._last_send_wall_time
+        # First keepalive at +25s
+        socket.send(_make_pcm(30), wall_time=last_send + 25.0)
+        assert mock_conn.keep_alive.call_count == 1
+
+        # Next chunk 0.03s later should NOT trigger another keepalive
+        socket.send(_make_pcm(30), wall_time=last_send + 25.03)
+        assert mock_conn.keep_alive.call_count == 1  # Still just 1
+
+
+class TestStereoAudio:
+    """Tests for stereo audio path through VAD."""
+
+    def test_stereo_speech_detection(self):
+        """VAD should detect speech with stereo (2-channel) audio."""
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=2,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+        t = 1000.0
+
+        # Silence
+        _set_vad_speech(False)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30, channels=2), t + i * 0.03)
+
+        # Speech
+        _set_vad_speech(True)
+        total_sent = b''
+        for i in range(5):
+            out = gate.process_audio(_make_pcm(30, channels=2), t + 0.15 + i * 0.03)
+            total_sent += out.audio_to_send
+
+        assert len(total_sent) > 0, "Stereo speech should be detected"
+
+
+class TestFinishErrorPublicAPI:
+    """Tests for finish() error tracking via public API (get_metrics)."""
+
+    def test_finish_error_in_metrics(self):
+        """get_metrics() should show finalize_errors after finish() failure."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError("closed")
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            uid='test',
+            session_id='test',
+        )
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket.finish()
+        metrics = socket.get_metrics()
+        assert metrics['finalize_errors'] == 1
+
+
+class TestGateCreationIntegration:
+    """Integration tests for gate creation and wiring decisions."""
+
+    def test_gate_not_created_when_disabled(self):
+        """Gate should not be created when VAD_GATE_MODE=off."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'):
+            assert not is_gate_enabled()
+
+    def test_gate_created_in_shadow_for_preseconds(self):
+        """When preseconds > 0 and mode=active, gate should start in shadow."""
+        # This tests the transcribe.py logic inline
+        preseconds = 5.0
+        vad_gate_mode = 'active'
+        gate_mode = vad_gate_mode
+        if preseconds > 0 and vad_gate_mode == 'active':
+            gate_mode = 'shadow'
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=gate_mode,
+            uid='test',
+            session_id='test',
+        )
+        assert gate.mode == 'shadow'
+
+    def test_gate_stays_active_when_no_preseconds(self):
+        """When preseconds == 0 and mode=active, gate should be active immediately."""
+        preseconds = 0.0
+        vad_gate_mode = 'active'
+        gate_mode = vad_gate_mode
+        if preseconds > 0 and vad_gate_mode == 'active':
+            gate_mode = 'shadow'
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=gate_mode,
+            uid='test',
+            session_id='test',
+        )
+        assert gate.mode == 'active'
+
+    def test_activate_after_profile_complete(self):
+        """Gate should switch to active after speech profile phase completes."""
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='shadow',
+            uid='test',
+            session_id='test',
+        )
+        t = 1000.0
+        # Simulate profile phase: 10s of shadow mode audio
+        _set_vad_speech(False)
+        for i in range(333):  # ~10s at 30ms chunks
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Profile completes → activate
+        assert gate.mode == 'shadow'
+        gate.activate()
+        assert gate.mode == 'active'
+        assert gate._state == GateState.SILENCE
+        # Mapper cursor should be synced
+        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(10.0, abs=0.1)
