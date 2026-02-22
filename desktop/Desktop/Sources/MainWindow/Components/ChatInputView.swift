@@ -23,6 +23,9 @@ struct ChatInputView: View {
     @Environment(\.fontScale) private var fontScale
     @Binding var inputText: String
 
+    /// Height driven by OmiTextEditor's onHeightChange — same pattern as AskAIInputView.
+    @State private var editorHeight: CGFloat = 44
+
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -31,24 +34,18 @@ struct ChatInputView: View {
     /// placeholder overlay — guaranteeing the cursor and placeholder align.
     private let inputPaddingH: CGFloat = 12
     private let inputPaddingV: CGFloat = 12
+    private let inputMaxHeight: CGFloat = 200
+
+    /// One line of text at the current font scale plus vertical insets.
+    private var inputMinHeight: CGFloat {
+        ceil(round(14.0 * fontScale) * 1.25) + inputPaddingV * 2
+    }
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             // Input field with floating toggle
             ZStack(alignment: .topTrailing) {
-                // Input field — NSTextView with auto-grow height
                 ZStack(alignment: .topLeading) {
-                    // Hidden text to calculate content height (drives ZStack size)
-                    Text(inputText.isEmpty ? " " : inputText + " ")
-                        .scaledFont(size: 14)
-                        .padding(.horizontal, inputPaddingH)
-                        .padding(.vertical, inputPaddingV)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .opacity(0)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-
                     // Placeholder text — padding matches textContainerInset exactly
                     if inputText.isEmpty {
                         Text(placeholder)
@@ -59,19 +56,22 @@ struct ChatInputView: View {
                             .allowsHitTesting(false)
                     }
 
-                    // NSTextView with lineFragmentPadding=0 and explicit textContainerInset
-                    // so cursor position is deterministic and matches placeholder exactly
+                    // NSTextView — height is explicitly controlled via onHeightChange
+                    // (same pattern as AskAIInputView in the floating bar)
                     OmiTextEditor(
                         text: $inputText,
                         fontSize: round(14 * fontScale),
                         textColor: NSColor(OmiColors.textPrimary),
                         textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
-                        onSubmit: handleSubmit
+                        onSubmit: handleSubmit,
+                        minHeight: inputMinHeight,
+                        maxHeight: inputMaxHeight,
+                        onHeightChange: { newHeight in
+                            editorHeight = newHeight
+                        }
                     )
-                    .frame(minHeight: 0, maxHeight: .infinity)
                 }
-                .frame(maxHeight: 200)
-                .clipped()
+                .frame(height: editorHeight)
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(12)
 
@@ -108,6 +108,7 @@ struct ChatInputView: View {
             }
         }
         .onAppear {
+            editorHeight = inputMinHeight
             // When ask mode is disabled, ensure we're always in act mode
             if !askModeEnabled {
                 mode = .act

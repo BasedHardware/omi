@@ -287,7 +287,7 @@ struct SidebarView: View {
                     if updaterViewModel.updateAvailable {
                         Spacer().frame(height: 12)
                         updateAvailableWidget
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(.opacity)
                     }
 
                     Spacer().frame(height: 16)

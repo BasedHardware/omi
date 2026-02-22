@@ -188,7 +188,7 @@ struct ChatPage: View {
                     chatProvider.isClaudeAuthRequired = false
                     // Switch back to Mode A if auth cancelled
                     Task {
-                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.agentSDK)
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
                     }
                 }
             )

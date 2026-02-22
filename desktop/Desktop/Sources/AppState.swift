@@ -870,19 +870,43 @@ class AppState: ObservableObject {
         let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         // .success or .noValue (app has no windows) both mean AX is working
-        // .cannotComplete or .apiDisabled mean the permission is stuck
         switch result {
         case .success, .noValue, .notImplemented, .attributeUnsupported:
             return true
         case .apiDisabled:
+            // System-wide AX is disabled — unambiguous, no confirmation needed
             log("ACCESSIBILITY_CHECK: AXError.apiDisabled — permission stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
             return false
         case .cannotComplete:
-            log("ACCESSIBILITY_CHECK: AXError.cannotComplete — permission may be stuck (tested against pid \(frontApp.processIdentifier), app: \(frontApp.localizedName ?? "unknown"))")
-            return false
+            // cannotComplete is ambiguous: it can mean our permission is broken, OR that the
+            // frontmost app doesn't implement AX (e.g. Qt, OpenGL, Python-based apps like PyMOL).
+            // Confirm against Finder before concluding the permission is truly broken.
+            return confirmAccessibilityBrokenViaFinder(suspectApp: frontApp.localizedName ?? "unknown")
         default:
             log("ACCESSIBILITY_CHECK: AXError code \(result.rawValue) from app \(frontApp.localizedName ?? "unknown") — not permission-related, treating as OK")
             return true
+        }
+    }
+
+    /// Secondary AX check against Finder to disambiguate cannotComplete errors.
+    /// If Finder (a known AX-compliant app) also fails, the permission is truly broken.
+    /// If Finder succeeds, the original failure was app-specific, not a permission issue.
+    private func confirmAccessibilityBrokenViaFinder(suspectApp: String) -> Bool {
+        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+            let finderElement = AXUIElementCreateApplication(finder.processIdentifier)
+            var finderWindow: CFTypeRef?
+            let finderResult = AXUIElementCopyAttributeValue(finderElement, kAXFocusedWindowAttribute as CFString, &finderWindow)
+            if finderResult == .cannotComplete || finderResult == .apiDisabled {
+                log("ACCESSIBILITY_CHECK: AXError.cannotComplete confirmed by Finder — permission is truly stuck (original app: \(suspectApp))")
+                return false
+            } else {
+                log("ACCESSIBILITY_CHECK: AXError.cannotComplete from \(suspectApp) but Finder OK — app-specific AX incompatibility, permission is fine")
+                return true
+            }
+        } else {
+            // Finder not running — fall back to event tap probe as tie-breaker
+            log("ACCESSIBILITY_CHECK: AXError.cannotComplete from \(suspectApp), Finder not running — using event tap probe")
+            return probeAccessibilityViaEventTap()
         }
     }
 
@@ -1106,6 +1130,7 @@ class AppState: ObservableObject {
             )
 
             isTranscribing = true
+            AssistantSettings.shared.transcriptionEnabled = true
             audioSource = effectiveSource
             currentTranscript = ""
             speakerSegments = []
@@ -1170,12 +1195,12 @@ class AppState: ObservableObject {
             await startBleAudioCapture()
         } else {
             // Use microphone (+ optional system audio)
-            startMicrophoneAudioCapture()
+            await startMicrophoneAudioCapture()
         }
     }
 
     /// Start microphone audio capture (original implementation)
-    private func startMicrophoneAudioCapture() {
+    private func startMicrophoneAudioCapture() async {
         guard let audioCaptureService = audioCaptureService,
               let audioMixer = audioMixer else { return }
 
@@ -1186,7 +1211,7 @@ class AppState: ObservableObject {
 
         do {
             // Start microphone capture - sends to mixer channel 0 (left/user)
-            try audioCaptureService.startCapture(
+            try await audioCaptureService.startCapture(
                 onAudioChunk: { [weak self] audioData in
                     self?.audioMixer?.setMicAudio(audioData)
                 },
@@ -1201,7 +1226,7 @@ class AppState: ObservableObject {
             if #available(macOS 14.4, *) {
                 if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
                     do {
-                        try systemService.startCapture(
+                        try await systemService.startCapture(
                             onAudioChunk: { [weak self] audioData in
                                 self?.audioMixer?.setSystemAudio(audioData)
                             },
@@ -1615,8 +1640,14 @@ class AppState: ObservableObject {
                 }
             }
         } catch {
-            // Silently ignore errors during auto-refresh — cached data stays visible
-            logError("Conversations: Auto-refresh failed", error: error)
+            // Silently ignore errors during auto-refresh — cached data stays visible.
+            // Auth errors (notSignedIn) are transient: token refresh may fail momentarily
+            // while the user is still signed in. Don't send these to Sentry.
+            if case AuthError.notSignedIn = error {
+                log("Conversations: Auto-refresh skipped (auth token temporarily unavailable)")
+            } else {
+                logError("Conversations: Auto-refresh failed", error: error)
+            }
         }
 
         // Update total count
@@ -2489,30 +2520,32 @@ class AppState: ObservableObject {
         // Create a test capture service
         let testService = SystemAudioCaptureService()
 
-        do {
-            // Try to start capture - this will fail if permission is not granted
-            try testService.startCapture { _ in
-                // We don't need the audio data, just testing if it works
-            }
+        Task {
+            do {
+                // Try to start capture - this will fail if permission is not granted
+                try await testService.startCapture { _ in
+                    // We don't need the audio data, just testing if it works
+                }
 
-            // If we get here, capture started successfully
-            log("System audio: Test capture started successfully")
+                // If we get here, capture started successfully
+                log("System audio: Test capture started successfully")
 
-            // Stop the test capture
-            testService.stopCapture()
-            log("System audio: Test capture stopped")
+                // Stop the test capture
+                testService.stopCapture()
+                log("System audio: Test capture stopped")
 
-            // Mark permission as granted
-            hasSystemAudioPermission = true
-            log("System audio: Permission verified")
+                // Mark permission as granted
+                hasSystemAudioPermission = true
+                log("System audio: Permission verified")
 
-        } catch {
-            logError("System audio: Test capture failed", error: error)
-            hasSystemAudioPermission = false
+            } catch {
+                logError("System audio: Test capture failed", error: error)
+                hasSystemAudioPermission = false
 
-            // Open System Settings to Screen Recording section
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-                NSWorkspace.shared.open(url)
+                // Open System Settings to Screen Recording section
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }
