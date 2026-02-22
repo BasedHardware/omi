@@ -1,0 +1,392 @@
+"""
+VAD Streaming Gate — Issue #4644
+
+Server-side VAD gate that skips sending silence to Deepgram,
+using KeepAlive to maintain the connection and Finalize to flush
+pending transcripts on speech→silence transitions.
+
+Modes (VAD_GATE_MODE env var):
+  off    — disabled, all audio forwarded (default)
+  shadow — VAD runs and logs decisions, but all audio still forwarded
+  active — VAD gates audio: silence skipped, KeepAlive sent instead
+"""
+
+import audioop
+import logging
+import os
+import threading
+import time
+from bisect import bisect_right
+from collections import deque
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional, Tuple
+
+import numpy as np
+
+logger = logging.getLogger('vad_gate')
+
+# ---------------------------------------------------------------------------
+# Configuration from environment
+# ---------------------------------------------------------------------------
+VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
+VAD_GATE_ROLLOUT_PCT = int(os.getenv('VAD_GATE_ROLLOUT_PCT', '100'))
+VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
+VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
+
+
+def is_gate_enabled() -> bool:
+    return VAD_GATE_MODE in ('shadow', 'active')
+
+
+def should_gate_session(uid: str) -> bool:
+    """Determine if this session should be gated based on rollout percentage."""
+    if not is_gate_enabled():
+        return False
+    if VAD_GATE_ROLLOUT_PCT >= 100:
+        return True
+    return (hash(uid) % 100) < VAD_GATE_ROLLOUT_PCT
+
+
+# ---------------------------------------------------------------------------
+# Silero VAD model (shared, thread-safe via lock)
+# ---------------------------------------------------------------------------
+_vad_model = None
+_vad_utils = None
+_vad_model_lock = threading.Lock()
+
+
+def _ensure_vad_model():
+    """Lazy-load Silero VAD model (reuses the one from vad.py if already loaded)."""
+    global _vad_model, _vad_utils
+    if _vad_model is not None:
+        return
+    try:
+        from utils.stt.vad import model as existing_model, VADIterator
+
+        _vad_model = existing_model
+        _vad_utils = {'VADIterator': VADIterator}
+    except ImportError:
+        import torch
+
+        torch.set_num_threads(1)
+        _vad_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+        _vad_utils = {'VADIterator': utils[3]}
+
+
+def create_vad_iterator(sample_rate: int = 16000):
+    """Create a new per-session VADIterator from the shared model."""
+    _ensure_vad_model()
+    return _vad_utils['VADIterator'](_vad_model, sampling_rate=sample_rate)
+
+
+# ---------------------------------------------------------------------------
+# Gate state machine
+# ---------------------------------------------------------------------------
+class GateState(str, Enum):
+    SILENCE = 'silence'
+    SPEECH = 'speech'
+    HANGOVER = 'hangover'
+
+
+@dataclass
+class GateOutput:
+    """Output from processing one audio chunk through the gate."""
+
+    audio_to_send: bytes  # PCM bytes to forward to DG (may be empty)
+    should_finalize: bool = False  # call dg_socket.finalize()
+    state: GateState = GateState.SILENCE
+    is_speech: bool = False  # raw VAD decision for this chunk
+
+
+# ---------------------------------------------------------------------------
+# DG ↔ Wall-clock timestamp mapper
+# ---------------------------------------------------------------------------
+class DgWallMapper:
+    """Maps DG audio-time timestamps to wall-clock-relative timestamps.
+
+    DG timestamps are continuous (only counting audio actually sent).
+    When we skip silence via KeepAlive, DG time compresses vs wall time.
+    This mapper tracks checkpoints at each silence→speech transition to
+    convert DG timestamps back to wall-clock-relative timestamps.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        # Each checkpoint: (dg_sec, wall_rel_sec) at silence→speech transition
+        self._checkpoints: List[Tuple[float, float]] = []
+        self._dg_cursor_sec: float = 0.0
+        self._sending: bool = False
+
+    def on_audio_sent(self, chunk_duration_sec: float, chunk_wall_rel_sec: float) -> None:
+        """Called when audio is actually sent to DG."""
+        with self._lock:
+            if not self._sending:
+                # New speech segment: record checkpoint
+                self._checkpoints.append((self._dg_cursor_sec, chunk_wall_rel_sec))
+                self._sending = True
+            self._dg_cursor_sec += chunk_duration_sec
+
+    def on_silence_skipped(self) -> None:
+        """Called when silence is skipped (not sent to DG)."""
+        with self._lock:
+            self._sending = False
+
+    def dg_to_wall_rel(self, dg_sec: float) -> float:
+        """Convert DG audio-time to wall-clock-relative time."""
+        with self._lock:
+            cps = self._checkpoints[:]
+        if not cps:
+            return dg_sec
+        dg_marks = [c[0] for c in cps]
+        i = max(bisect_right(dg_marks, dg_sec) - 1, 0)
+        cp_dg, cp_wall = cps[i]
+        return cp_wall + (dg_sec - cp_dg)
+
+
+# ---------------------------------------------------------------------------
+# VAD Streaming Gate (per-session)
+# ---------------------------------------------------------------------------
+class VADStreamingGate:
+    """Per-session VAD gate that decides whether to send audio to DG.
+
+    Args:
+        sample_rate: Input audio sample rate (Hz)
+        channels: Number of audio channels
+        mode: 'shadow' or 'active'
+        uid: User ID for logging
+        session_id: Session ID for logging
+    """
+
+    def __init__(
+        self,
+        sample_rate: int = 16000,
+        channels: int = 1,
+        mode: str = 'active',
+        uid: str = '',
+        session_id: str = '',
+    ):
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.mode = mode
+        self.uid = uid
+        self.session_id = session_id
+
+        # VAD setup
+        self._vad_sample_rate = 16000 if sample_rate not in (8000, 16000) else sample_rate
+        self._vad_iterator = create_vad_iterator(self._vad_sample_rate)
+        # Use 256 samples at 16kHz (16ms) to handle 30ms chunks (480 samples)
+        # Silero supports 256 and 512 sample windows
+        self._vad_window_samples = 256
+        self._ratecv_state = None  # for resampling
+
+        # State machine
+        self._state = GateState.SILENCE
+        self._audio_cursor_ms: float = 0.0
+        self._last_speech_ms: float = 0.0
+        self._pre_roll_ms = VAD_GATE_PRE_ROLL_MS
+        self._hangover_ms = VAD_GATE_HANGOVER_MS
+
+        # Pre-roll buffer: stores recent audio chunks for playback on speech onset
+        max_pre_roll_chunks = max(1, int(self._pre_roll_ms / 30) + 1)
+        self._pre_roll: deque = deque(maxlen=max_pre_roll_chunks)
+
+        # Timestamp mapper
+        self.dg_wall_mapper = DgWallMapper()
+
+        # Metrics (for shadow mode logging)
+        self._chunks_total = 0
+        self._chunks_speech = 0
+        self._chunks_silence = 0
+        self._finalize_count = 0
+        self._first_audio_wall_time: Optional[float] = None
+
+    def _convert_for_vad(self, pcm_data: bytes) -> bytes:
+        """Convert audio to format suitable for VAD (mono, correct sample rate)."""
+        data = pcm_data
+        if self.channels == 2:
+            data = audioop.tomono(data, 2, 0.5, 0.5)
+        if self.sample_rate != self._vad_sample_rate:
+            data, self._ratecv_state = audioop.ratecv(
+                data, 2, 1, self.sample_rate, self._vad_sample_rate, self._ratecv_state
+            )
+        return data
+
+    def _run_vad(self, pcm_data: bytes) -> bool:
+        """Run Silero VAD on audio chunk. Returns True if speech detected."""
+        vad_data = self._convert_for_vad(pcm_data)
+        data_int16 = np.frombuffer(vad_data, dtype=np.int16)
+        data_float32 = data_int16.astype(np.float32) / 32768.0
+
+        speech_detected = False
+        with _vad_model_lock:
+            for i in range(0, len(data_float32), self._vad_window_samples):
+                chunk = data_float32[i : i + self._vad_window_samples]
+                if len(chunk) < self._vad_window_samples:
+                    break
+                result = self._vad_iterator(chunk, return_seconds=False)
+                if result:
+                    speech_detected = True
+                    break
+
+        return speech_detected
+
+    def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
+        """Process an audio chunk through the VAD gate.
+
+        Args:
+            pcm_data: Raw PCM16 audio bytes
+            wall_time: Wall-clock timestamp of this chunk
+
+        Returns:
+            GateOutput with audio to send and control signals
+        """
+        if self._first_audio_wall_time is None:
+            self._first_audio_wall_time = wall_time
+
+        self._chunks_total += 1
+
+        # Track audio time
+        n_samples = len(pcm_data) // (2 * self.channels)
+        chunk_ms = (n_samples * 1000.0) / self.sample_rate
+        self._audio_cursor_ms += chunk_ms
+
+        # Run VAD
+        is_speech = self._run_vad(pcm_data)
+
+        if is_speech:
+            self._last_speech_ms = self._audio_cursor_ms
+            self._chunks_speech += 1
+        else:
+            self._chunks_silence += 1
+
+        # Shadow mode: log but send everything
+        if self.mode == 'shadow':
+            return GateOutput(
+                audio_to_send=pcm_data,
+                should_finalize=False,
+                state=self._state,
+                is_speech=is_speech,
+            )
+
+        # Active mode: state machine
+        prev_state = self._state
+        output = self._update_state(pcm_data, is_speech, wall_time)
+
+        if prev_state != self._state:
+            logger.info(
+                'VADGate state %s->%s uid=%s session=%s speech=%s cursor=%.1fms',
+                prev_state.value,
+                self._state.value,
+                self.uid,
+                self.session_id,
+                is_speech,
+                self._audio_cursor_ms,
+            )
+
+        return output
+
+    def _update_state(self, pcm_data: bytes, is_speech: bool, wall_time: float) -> GateOutput:
+        """State machine transition logic."""
+        wall_rel = wall_time - self._first_audio_wall_time if self._first_audio_wall_time else 0.0
+        chunk_duration_sec = len(pcm_data) / (2.0 * self.channels * self.sample_rate)
+
+        if self._state == GateState.SILENCE:
+            # Buffer for pre-roll
+            self._pre_roll.append(pcm_data)
+
+            if is_speech:
+                # Transition: SILENCE → SPEECH
+                self._state = GateState.SPEECH
+                # Emit pre-roll + current chunk
+                pre_roll_audio = b''.join(self._pre_roll)
+                self._pre_roll.clear()
+
+                # Record mapper checkpoint for pre-roll start
+                pre_roll_duration = len(pre_roll_audio) / (2.0 * self.channels * self.sample_rate)
+                pre_roll_wall_rel = max(0.0, wall_rel - pre_roll_duration + chunk_duration_sec)
+                self.dg_wall_mapper.on_audio_sent(pre_roll_duration, pre_roll_wall_rel)
+
+                return GateOutput(
+                    audio_to_send=pre_roll_audio,
+                    should_finalize=False,
+                    state=GateState.SPEECH,
+                    is_speech=True,
+                )
+            else:
+                # Stay in SILENCE: skip audio, mapper tracks gap
+                self.dg_wall_mapper.on_silence_skipped()
+                return GateOutput(
+                    audio_to_send=b'',
+                    should_finalize=False,
+                    state=GateState.SILENCE,
+                    is_speech=False,
+                )
+
+        elif self._state == GateState.SPEECH:
+            # Send audio to DG
+            self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+
+            if not is_speech:
+                # Transition: SPEECH → HANGOVER
+                self._state = GateState.HANGOVER
+
+            return GateOutput(
+                audio_to_send=pcm_data,
+                should_finalize=False,
+                state=self._state,
+                is_speech=is_speech,
+            )
+
+        elif self._state == GateState.HANGOVER:
+            time_since_speech_ms = self._audio_cursor_ms - self._last_speech_ms
+
+            if is_speech:
+                # Speech resumed: HANGOVER → SPEECH (no finalize needed)
+                self._state = GateState.SPEECH
+                self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+                return GateOutput(
+                    audio_to_send=pcm_data,
+                    should_finalize=False,
+                    state=GateState.SPEECH,
+                    is_speech=True,
+                )
+
+            if time_since_speech_ms > self._hangover_ms:
+                # Hangover expired: HANGOVER → SILENCE + finalize
+                self._state = GateState.SILENCE
+                self._finalize_count += 1
+                self._pre_roll.clear()
+                self._pre_roll.append(pcm_data)
+                self.dg_wall_mapper.on_silence_skipped()
+                return GateOutput(
+                    audio_to_send=b'',
+                    should_finalize=True,
+                    state=GateState.SILENCE,
+                    is_speech=False,
+                )
+
+            # Still in hangover: send audio
+            self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
+            return GateOutput(
+                audio_to_send=pcm_data,
+                should_finalize=False,
+                state=GateState.HANGOVER,
+                is_speech=False,
+            )
+
+        # Fallback: send everything
+        return GateOutput(audio_to_send=pcm_data, is_speech=is_speech)
+
+    def get_metrics(self) -> dict:
+        """Return gate metrics for logging/monitoring."""
+        total = self._chunks_total or 1
+        return {
+            'chunks_total': self._chunks_total,
+            'chunks_speech': self._chunks_speech,
+            'chunks_silence': self._chunks_silence,
+            'silence_ratio': self._chunks_silence / total,
+            'finalize_count': self._finalize_count,
+            'state': self._state.value,
+            'mode': self.mode,
+        }
