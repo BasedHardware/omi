@@ -818,6 +818,19 @@ function startServer() {
           }
 
           const cols = Object.keys(rows[0]);
+
+          // Auto-add any columns missing from the table (handles schema migrations
+          // where the VM has an older database than the desktop app).
+          const existingCols = new Set(
+            db.prepare(`PRAGMA table_info("${table}")`).all().map(r => r.name)
+          );
+          for (const col of cols) {
+            if (!existingCols.has(col)) {
+              log(`Sync: adding missing column "${col}" to ${table}`);
+              db.prepare(`ALTER TABLE "${table}" ADD COLUMN "${col}"`).run();
+            }
+          }
+
           const placeholders = cols.map(() => "?").join(", ");
           const sql = `INSERT OR REPLACE INTO "${table}" (${cols.map(c => `"${c}"`).join(", ")}) VALUES (${placeholders})`;
 

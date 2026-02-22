@@ -227,7 +227,7 @@ final class AudioSourceManager: ObservableObject {
         }
 
         // Start microphone capture
-        try audioCaptureService?.startCapture(
+        try await audioCaptureService?.startCapture(
             onAudioChunk: { [weak self] audioData in
                 self?.audioMixer?.setMicAudio(audioData)
             },
@@ -241,7 +241,7 @@ final class AudioSourceManager: ObservableObject {
 
         // Start system audio capture if available
         if #available(macOS 14.4, *), let systemCapture = systemAudioCaptureService as? SystemAudioCaptureService {
-            try systemCapture.startCapture(
+            try await systemCapture.startCapture(
                 onAudioChunk: { [weak self] audioData in
                     self?.audioMixer?.setSystemAudio(audioData)
                 },
