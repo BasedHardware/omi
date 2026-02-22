@@ -26,7 +26,7 @@ function looksLikePromptInjection(text: string): boolean {
 
 function formatOmiContext(
   memories: Array<{ content: string; category?: string }>,
-  conversations: Array<{ summary?: string; created_at: string }>,
+  conversations: Array<{ summary?: string; structured?: { overview?: string }; created_at: string }>,
 ): string {
   const parts: string[] = [];
 
@@ -45,10 +45,11 @@ function formatOmiContext(
 
   if (conversations.length > 0) {
     const convLines = conversations
-      .filter((c) => c.summary && !looksLikePromptInjection(c.summary))
+      .map((c) => ({ ...c, _text: c.summary || c.structured?.overview }))
+      .filter((c) => c._text && !looksLikePromptInjection(c._text))
       .map((c, i) => {
         const date = new Date(c.created_at).toLocaleDateString();
-        return `${i + 1}. [${date}] ${escapeForPrompt(c.summary!)}`;
+        return `${i + 1}. [${date}] ${escapeForPrompt(c._text!)}`;
       });
 
     if (convLines.length > 0) {
