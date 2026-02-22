@@ -912,11 +912,13 @@ class TestCostMetrics:
         assert metrics['bytes_sent'] > 0
 
     def test_bytes_skipped_tracked_on_silence(self):
-        """bytes_skipped should accumulate when audio is gated."""
+        """bytes_skipped should accumulate when pre-roll evicts chunks."""
         gate = self._make_gate()
         _set_vad_speech(False)
-        chunk = _make_pcm(30)
-        gate.process_audio(chunk, time.time())
+        t = 1000.0
+        # Feed 15 silence chunks (450ms) — exceeds 300ms pre-roll, causing eviction
+        for i in range(15):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
         metrics = gate.get_metrics()
         assert metrics['bytes_skipped'] > 0
 
@@ -925,15 +927,15 @@ class TestCostMetrics:
         gate = self._make_gate()
         t = 1000.0
 
-        # 5 silence chunks
+        # 20 silence chunks (600ms) — exceeds 300ms pre-roll, evicting ~300ms
         _set_vad_speech(False)
-        for i in range(5):
+        for i in range(20):
             gate.process_audio(_make_pcm(30), t + i * 0.03)
 
         # 5 speech chunks
         _set_vad_speech(True)
         for i in range(5):
-            gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+            gate.process_audio(_make_pcm(30), t + 0.60 + i * 0.03)
 
         metrics = gate.get_metrics()
         assert metrics['bytes_saved_ratio'] > 0

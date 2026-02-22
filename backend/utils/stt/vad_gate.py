@@ -408,6 +408,7 @@ class VADStreamingGate:
                 evicted = self._pre_roll.popleft()
                 evicted_ms = (len(evicted) / (2.0 * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms -= evicted_ms
+                self._bytes_skipped += len(evicted)  # Truly discarded from pre-roll
 
             if is_speech:
                 # Transition: SILENCE → SPEECH
@@ -431,9 +432,8 @@ class VADStreamingGate:
                     is_speech=True,
                 )
             else:
-                # Stay in SILENCE: skip audio, mapper tracks gap
+                # Stay in SILENCE: audio buffered in pre-roll (not yet skipped/sent)
                 self.dg_wall_mapper.on_silence_skipped()
-                self._bytes_skipped += len(pcm_data)
                 return GateOutput(
                     audio_to_send=b'',
                     should_finalize=False,
@@ -483,7 +483,7 @@ class VADStreamingGate:
                 self._pre_roll.append(pcm_data)
                 chunk_ms_local = (len(pcm_data) / (2.0 * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms = chunk_ms_local
-                self._bytes_skipped += len(pcm_data)
+                # pcm_data is in pre-roll (not yet skipped/sent); bytes_skipped on eviction
                 self.dg_wall_mapper.on_silence_skipped()
                 return GateOutput(
                     audio_to_send=b'',
