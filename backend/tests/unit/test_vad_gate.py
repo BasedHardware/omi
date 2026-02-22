@@ -1160,65 +1160,138 @@ class TestFinishErrorPublicAPI:
 
 
 class TestGateCreationIntegration:
-    """Integration tests for gate creation and wiring decisions."""
+    """Integration tests mirroring transcribe.py gate creation/activation wiring.
+
+    These tests exercise the exact branching logic from:
+    - routers/transcribe.py:742 (gate creation with preseconds → shadow)
+    - routers/transcribe.py:1801 (activation in flush_stt_buffer)
+    """
 
     def test_gate_not_created_when_disabled(self):
         """Gate should not be created when VAD_GATE_MODE=off."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'):
             assert not is_gate_enabled()
 
-    def test_gate_created_in_shadow_for_preseconds(self):
-        """When preseconds > 0 and mode=active, gate should start in shadow."""
-        # This tests the transcribe.py logic inline
-        preseconds = 5.0
-        vad_gate_mode = 'active'
-        gate_mode = vad_gate_mode
-        if preseconds > 0 and vad_gate_mode == 'active':
-            gate_mode = 'shadow'
-        gate = VADStreamingGate(
-            sample_rate=16000,
-            channels=1,
-            mode=gate_mode,
-            uid='test',
-            session_id='test',
-        )
-        assert gate.mode == 'shadow'
+    def test_transcribe_gate_creation_with_preseconds(self):
+        """Mirror transcribe.py:742 — active mode + preseconds > 0 → shadow gate."""
+        with (
+            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
+            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
+        ):
+            # Mirror transcribe.py:742-752
+            uid = 'test-uid'
+            speech_profile_preseconds = 8.0  # Has speech profile
+            assert is_gate_enabled() and should_gate_session(uid)
 
-    def test_gate_stays_active_when_no_preseconds(self):
-        """When preseconds == 0 and mode=active, gate should be active immediately."""
-        preseconds = 0.0
-        vad_gate_mode = 'active'
-        gate_mode = vad_gate_mode
-        if preseconds > 0 and vad_gate_mode == 'active':
-            gate_mode = 'shadow'
-        gate = VADStreamingGate(
-            sample_rate=16000,
-            channels=1,
-            mode=gate_mode,
-            uid='test',
-            session_id='test',
-        )
-        assert gate.mode == 'active'
+            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
 
-    def test_activate_after_profile_complete(self):
-        """Gate should switch to active after speech profile phase completes."""
+            gate_mode = _mode
+            if speech_profile_preseconds > 0 and _mode == 'active':
+                gate_mode = 'shadow'
+
+            vad_gate = VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode=gate_mode,
+                uid=uid,
+                session_id='sess',
+            )
+            assert vad_gate.mode == 'shadow'
+
+    def test_transcribe_gate_creation_without_preseconds(self):
+        """Mirror transcribe.py:742 — active mode + no preseconds → active gate."""
+        with (
+            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
+            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
+        ):
+            uid = 'test-uid'
+            speech_profile_preseconds = 0.0  # No speech profile
+            assert is_gate_enabled() and should_gate_session(uid)
+
+            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
+
+            gate_mode = _mode
+            if speech_profile_preseconds > 0 and _mode == 'active':
+                gate_mode = 'shadow'
+
+            vad_gate = VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode=gate_mode,
+                uid=uid,
+                session_id='sess',
+            )
+            assert vad_gate.mode == 'active'
+
+    def test_transcribe_flush_activation_path(self):
+        """Mirror transcribe.py:1801 — profile complete triggers shadow→active."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
+            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
+
+            # Setup: gate in shadow mode (preseconds > 0)
+            vad_gate = VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode='shadow',
+                uid='test',
+                session_id='sess',
+            )
+            t = 1000.0
+            # Simulate 8s of shadow mode audio (profile phase)
+            _set_vad_speech(False)
+            for i in range(267):
+                vad_gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+            # Mirror transcribe.py:1795-1802 activation condition
+            deepgram_profile_socket = MagicMock()  # Non-None = profile was active
+            profile_complete = True
+            if profile_complete and deepgram_profile_socket:
+                deepgram_profile_socket = None
+                # transcribe.py:1801
+                if vad_gate is not None and _mode == 'active' and vad_gate.mode == 'shadow':
+                    vad_gate.activate()
+
+            assert vad_gate.mode == 'active'
+            assert vad_gate._state == GateState.SILENCE
+            assert vad_gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(8.0, abs=0.1)
+
+    def test_transcribe_no_activation_without_profile_socket(self):
+        """No activation when there's no profile socket (preseconds == 0)."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
+            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
+
+            vad_gate = VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode='active',
+                uid='test',
+                session_id='sess',
+            )
+            deepgram_profile_socket = None  # No profile socket
+            profile_complete = True
+
+            # Mirror transcribe.py:1795-1802
+            if profile_complete and deepgram_profile_socket:
+                if vad_gate is not None and _mode == 'active' and vad_gate.mode == 'shadow':
+                    vad_gate.activate()
+
+            # Gate stays in active mode, never went through shadow
+            assert vad_gate.mode == 'active'
+
+    def test_gated_socket_wraps_main_not_profile(self):
+        """GatedDeepgramSocket wraps main DG socket; profile socket has no gate."""
+        main_conn = MagicMock()
+        profile_conn = MagicMock()
         gate = VADStreamingGate(
             sample_rate=16000,
             channels=1,
             mode='shadow',
             uid='test',
-            session_id='test',
+            session_id='sess',
         )
-        t = 1000.0
-        # Simulate profile phase: 10s of shadow mode audio
-        _set_vad_speech(False)
-        for i in range(333):  # ~10s at 30ms chunks
-            gate.process_audio(_make_pcm(30), t + i * 0.03)
+        # Mirror transcribe.py: main socket gets gated, profile doesn't
+        main_socket = GatedDeepgramSocket(main_conn, gate=gate)
+        profile_socket = GatedDeepgramSocket(profile_conn, gate=None)
 
-        # Profile completes → activate
-        assert gate.mode == 'shadow'
-        gate.activate()
-        assert gate.mode == 'active'
-        assert gate._state == GateState.SILENCE
-        # Mapper cursor should be synced
-        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(10.0, abs=0.1)
+        assert main_socket.is_gated
+        assert not profile_socket.is_gated
