@@ -14,16 +14,6 @@ echo "Building $APP_NAME..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$BUILD_DIR"
 
-# Build agent-bridge
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    echo "Building agent-bridge..."
-    cd "$AGENT_BRIDGE_DIR"
-    npm install --no-fund --no-audit
-    npx tsc
-    cd - > /dev/null
-fi
-
 # Build acp-bridge
 ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR" ]; then
@@ -34,7 +24,7 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
     cd - > /dev/null
 fi
 
-# Ensure bundled Node.js exists (for AI chat / Claude Agent Bridge)
+# Ensure bundled Node.js exists (for AI chat / ACP Bridge)
 NODE_RESOURCE="Desktop/Sources/Resources/node"
 if [ -x "$NODE_RESOURCE" ]; then
     echo "Node.js binary already exists, skipping download"
@@ -103,15 +93,6 @@ if [ -d "$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle" ]; then
     echo "Copied resource bundle"
 else
     echo "Warning: Resource bundle not found at $SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
-fi
-
-# Copy agent-bridge
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    echo "Copied agent-bridge to bundle"
 fi
 
 # Copy acp-bridge
