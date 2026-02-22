@@ -1,6 +1,29 @@
 {
   "releases": [
     {
+      "version": "0.10.5",
+      "date": "2026-02-22",
+      "changes": [
+        "Daily recurring tasks: create tasks that repeat every day from the dashboard widget",
+        "Live transcript panel: self-contained component that preserves transcript after recording stops",
+        "Task Agent toggle in Settings: enable/disable the Investigate button and task chat independently",
+        "Task working directory setting shared between terminal and chat agents",
+        "Token usage tracking for AI chat messages (input/output token estimates)",
+        "Smarter accessibility checks: confirms broken permissions via Finder before showing false alerts",
+        "Auto-restart on extreme memory (4GB+): prevents system from becoming unresponsive",
+        "Chat scroll fix: bottom anchor moved outside LazyVStack for reliable auto-scroll",
+        "Audio capture moved off main thread: CoreAudio setup no longer blocks UI after wake from sleep",
+        "ffmpeg watchdog: force-kills hung ffmpeg processes to prevent 7GB+ memory buildup",
+        "Fixed OAuth error handling: generic API errors no longer trigger unnecessary re-authentication",
+        "Fixed infinite retry loop when fresh AI chat sessions fail",
+        "Task chat state properly cleaned up on delete, unread indicators persist across restarts",
+        "Task editing improved: view mode shows static text, tap to edit, hover actions hidden while editing",
+        "Gemini content blocking errors now surface descriptive messages instead of generic failures",
+        "Sentry noise reduced: dev builds excluded, transient auth errors filtered",
+        "Demo: https://x.com/m13v_/status/2025370419415396366"
+      ]
+    },
+    {
       "version": "0.10.4",
       "date": "2026-02-21",
       "changes": [
