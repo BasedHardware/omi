@@ -518,19 +518,14 @@ actor FocusAssistant: ProactiveAssistant {
             required: ["status", "app_or_site", "description"]
         )
 
-        do {
-            let responseText = try await geminiClient.sendRequest(
-                prompt: prompt,
-                imageData: jpegData,
-                systemPrompt: currentSystemPrompt,
-                responseSchema: responseSchema
-            )
+        let responseText = try await geminiClient.sendRequest(
+            prompt: prompt,
+            imageData: jpegData,
+            systemPrompt: currentSystemPrompt,
+            responseSchema: responseSchema
+        )
 
-            return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
-        } catch {
-            logError("Focus analysis error", error: error)
-            return nil
-        }
+        return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
     }
 
     // MARK: - Storage

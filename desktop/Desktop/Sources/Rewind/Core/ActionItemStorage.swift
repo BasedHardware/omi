@@ -92,9 +92,9 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -234,9 +234,9 @@ actor ActionItemStorage {
                 }
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -289,9 +289,9 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -1396,6 +1396,23 @@ actor ActionItemStorage {
 
             rec.chatSessionId = sessionId
             try rec.update(database)
+        }
+    }
+
+    // MARK: - Recurring Tasks
+
+    /// Get incomplete recurring tasks that are due (dueAt <= now)
+    func getDueRecurringTasks() async throws -> [TaskActionItem] {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            let records = try ActionItemRecord
+                .filter(Column("completed") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("recurrenceRule") != nil && Column("recurrenceRule") != "")
+                .filter(Column("dueAt") != nil && Column("dueAt") <= Date())
+                .fetchAll(database)
+            return records.map { $0.toTaskActionItem() }
         }
     }
 

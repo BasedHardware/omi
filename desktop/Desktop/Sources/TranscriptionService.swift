@@ -394,6 +394,7 @@ class TranscriptionService {
                 self.receiveMessage()
 
             case .failure(let error):
+                guard self.isConnected else { return }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }

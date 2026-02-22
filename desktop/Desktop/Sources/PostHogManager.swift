@@ -673,6 +673,13 @@ extension PostHogManager {
         ])
     }
 
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        track("chat_bridge_mode_changed", properties: [
+            "from": oldMode,
+            "to": newMode
+        ])
+    }
+
     // MARK: - Settings State
 
     func settingsStateTracked(screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool) {

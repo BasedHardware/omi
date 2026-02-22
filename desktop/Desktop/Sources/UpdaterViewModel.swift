@@ -155,6 +155,7 @@ final class UpdaterViewModel: ObservableObject {
     @Published var updateChannel: UpdateChannel {
         didSet {
             UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
+            activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
             if isInitialized {
                 AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
             }
@@ -225,4 +226,14 @@ final class UpdaterViewModel: ObservableObject {
     var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
     }
+
+    /// The active channel label, including the hidden "staging" option
+    @Published var activeChannelLabel: String = {
+        let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        switch raw {
+        case "staging": return "Staging"
+        case "beta": return "Beta"
+        default: return ""
+        }
+    }()
 }
