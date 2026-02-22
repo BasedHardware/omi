@@ -579,6 +579,35 @@ class TestGatedDeepgramSocket:
 
         mock_conn.finalize.assert_called()
 
+    def test_finish_shadow_mode_no_finalize(self):
+        """finish() in shadow mode should NOT call finalize before finish."""
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='shadow')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket.finish()
+
+        mock_conn.finalize.assert_not_called()
+        mock_conn.finish.assert_called_once()
+
+    def test_remap_segments_noop_without_gate(self):
+        """remap_segments() should be a no-op when gate is None."""
+        mock_conn = MagicMock()
+        socket = GatedDeepgramSocket(mock_conn, gate=None)
+        segments = [{'start': 1.0, 'end': 2.0, 'text': 'hello'}]
+        socket.remap_segments(segments)
+        assert segments[0]['start'] == 1.0
+        assert segments[0]['end'] == 2.0
+
+    def test_remap_segments_noop_shadow_mode(self):
+        """remap_segments() should be a no-op in shadow mode."""
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='shadow')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        segments = [{'start': 1.0, 'end': 2.0, 'text': 'hello'}]
+        socket.remap_segments(segments)
+        assert segments[0]['start'] == 1.0
+        assert segments[0]['end'] == 2.0
+
     def test_finish_finalizes_when_gated(self):
         """finish() should call finalize before finish when gate is active."""
         mock_conn = MagicMock()
