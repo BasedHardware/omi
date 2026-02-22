@@ -212,9 +212,12 @@ class TaskChatCoordinator: ObservableObject {
             return
         }
 
+        // Mark chat session as started before sending so the scheduler
+        // doesn't re-fire this task every 60 seconds (dedup check is chatSessionId != nil)
+        try? await ActionItemStorage.shared.updateChatSessionId(taskId: task.id, sessionId: task.id)
+
         let prompt = buildInitialPrompt(for: task)
         await state.sendMessage(prompt)
-    }
 
     // MARK: - Helpers
 
