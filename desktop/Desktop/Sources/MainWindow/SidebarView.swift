@@ -36,15 +36,15 @@ enum SidebarNavItem: Int, CaseIterable {
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
+        case .dashboard: return "house.fill"
         case .conversations: return "text.bubble.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
-        case .memories: return "brain.head.profile"
-        case .tasks: return "checkmark.square.fill"
+        case .memories: return "brain"
+        case .tasks: return "checklist"
         case .focus: return "eye.fill"
         case .advice: return "lightbulb.fill"
         case .rewind: return "clock.arrow.circlepath"
-        case .apps: return "square.grid.2x2.fill"
+        case .apps: return "puzzlepiece.fill"
         case .settings: return "gearshape.fill"
         case .permissions: return "exclamationmark.triangle.fill"
         case .device: return "wave.3.right.circle.fill"
@@ -79,8 +79,8 @@ struct SidebarView: View {
     @ObservedObject private var adviceStorage = AdviceStorage.shared
     @ObservedObject private var focusStorage = FocusStorage.shared
     @ObservedObject private var deviceProvider = DeviceProvider.shared
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+    @ObservedObject private var crispManager = CrispManager.shared
 
     // State for Get Omi Widget (shown when no device is paired, dismissible)
     @AppStorage("showGetOmiWidget") private var showGetOmiWidget = true
@@ -161,7 +161,8 @@ struct SidebarView: View {
                         Group {
                             if item == .conversations {
                                 // Conversations - icon shows audio activity when recording
-                                NavItemWithStatusView(
+                                // Audio levels wrapped in a separate view to avoid re-rendering the entire sidebar
+                                AudioLevelNavItem(
                                     icon: item.icon,
                                     label: item.title,
                                     isSelected: selectedIndex == item.rawValue,
@@ -186,10 +187,7 @@ struct SidebarView: View {
                                     },
                                     onToggle: {
                                         toggleTranscription(enabled: !appState.isTranscribing)
-                                    },
-                                    micLevel: audioLevels.microphoneLevel,
-                                    systemLevel: audioLevels.systemLevel,
-                                    showAudioBars: true
+                                    }
                                 )
                             } else if item == .rewind {
                                 // Rewind - shows pulsing recording icon when both audio and screen are active
@@ -219,7 +217,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        toggleMonitoring(enabled: !isMonitoring)
+                                        // Use combined state so toggle matches what's displayed
+                                        let isFullyOn = isMonitoring && appState.isTranscribing
+                                        toggleMonitoring(enabled: !isFullyOn)
                                     },
                                     showRewindIcon: true
                                 )
@@ -326,8 +326,10 @@ struct SidebarView: View {
                         isSelected: selectedIndex == SidebarNavItem.help.rawValue,
                         isCollapsed: isCollapsed,
                         iconWidth: iconWidth,
+                        badge: crispManager.unreadCount,
                         onTap: {
                             selectedIndex = SidebarNavItem.help.rawValue
+                            crispManager.markAsRead()
                             AnalyticsManager.shared.tabChanged(tabName: SidebarNavItem.help.title)
                         }
                     )
@@ -560,8 +562,7 @@ struct SidebarView: View {
         }) {
             HStack(spacing: 12) {
                 // Omi device image
-                if let deviceUrl = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp"),
-                   let deviceImage = NSImage(contentsOf: deviceUrl) {
+                if let deviceImage = OmiDeviceImage.shared {
                     Image(nsImage: deviceImage)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -677,8 +678,7 @@ struct SidebarView: View {
                 // Device icon with status indicator
                 ZStack(alignment: .bottomTrailing) {
                     // Device image or icon
-                    if let deviceUrl = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp"),
-                       let deviceImage = NSImage(contentsOf: deviceUrl) {
+                    if let deviceImage = OmiDeviceImage.shared {
                         Image(nsImage: deviceImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -802,8 +802,8 @@ struct SidebarView: View {
                 notificationPermissionRow
             }
 
-            // Accessibility permission
-            if !appState.hasAccessibilityPermission {
+            // Accessibility permission (also show if broken: TCC says yes but AX calls fail)
+            if !appState.hasAccessibilityPermission || appState.isAccessibilityBroken {
                 accessibilityPermissionRow
             }
         }
@@ -963,8 +963,18 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    // Always open settings - user needs to configure notification style
-                    appState.openNotificationPreferences()
+                    if isBannerDisabled {
+                        // Banners are off — user needs to change notification style in System Settings
+                        appState.openNotificationPreferences()
+                    } else {
+                        // Auth is not authorized — try lsregister repair first, then fall back to System Settings
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "sidebar_fix_button",
+                            previousStatus: "not_authorized",
+                            currentStatus: "not_authorized"
+                        )
+                        appState.repairNotificationAndFallback()
+                    }
                 }) {
                     Text("Fix")
                         .scaledFont(size: 11, weight: .semibold)
@@ -994,17 +1004,19 @@ struct SidebarView: View {
 
     private var accessibilityPermissionRow: some View {
         let isDenied = appState.isAccessibilityPermissionDenied()
-        let color: Color = isDenied ? .red : OmiColors.warning
+        let isBroken = appState.isAccessibilityBroken  // TCC yes but AX calls fail
+        let needsReset = isBroken  // Show reset when broken
+        let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
-            Image(systemName: isDenied ? "hand.raised.slash.fill" : "hand.raised.fill")
+            Image(systemName: (isDenied || isBroken) ? "hand.raised.slash.fill" : "hand.raised.fill")
                 .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
-                .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
+                .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text("Accessibility")
+                Text(isBroken ? "Accessibility (Reset Required)" : "Accessibility")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -1012,10 +1024,15 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    // Trigger the permission request, which will also open settings
-                    appState.triggerAccessibilityPermission()
+                    if needsReset {
+                        // Reset and restart to fix broken accessibility state
+                        appState.resetAccessibilityPermissionAndRestart()
+                    } else {
+                        // Trigger the permission request, which will also open settings
+                        appState.triggerAccessibilityPermission()
+                    }
                 }) {
-                    Text(isDenied ? "Fix" : "Grant")
+                    Text(needsReset ? "Reset" : (isDenied ? "Fix" : "Grant"))
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -1032,13 +1049,13 @@ struct SidebarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(permissionPulse && isDenied ? 0.25 : 0.15))
+                .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(color.opacity(0.3), lineWidth: isDenied ? 2 : 1)
+                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
                 )
         )
-        .help(isCollapsed ? "Accessibility permission required" : "")
+        .help(isCollapsed ? (isBroken ? "Accessibility needs reset" : "Accessibility permission required") : "")
     }
 
     // MARK: - Toggle Handlers
@@ -1071,6 +1088,11 @@ struct SidebarView: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             // Request both traditional TCC and ScreenCaptureKit permissions
@@ -1090,13 +1112,22 @@ struct SidebarView: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription to match (Rewind bundles both)
+        if enabled && !appState.isTranscribing {
+            appState.startTranscription()
+        } else if !enabled && appState.isTranscribing {
+            appState.stopTranscription()
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
-                        // Revert on failure
+                        // Revert on failure including persistent setting
                         isMonitoring = false
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -1110,7 +1141,13 @@ struct SidebarView: View {
     }
 
     private func syncMonitoringState() {
-        isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+        isMonitoring = pluginState
+        // Keep persistent setting in sync when monitoring stops due to errors
+        if !pluginState && screenAnalysisEnabled {
+            screenAnalysisEnabled = false
+            AssistantSettings.shared.screenAnalysisEnabled = false
+        }
     }
 
     // MARK: - Page Loading Helpers
@@ -1201,12 +1238,22 @@ struct NavItemView: View {
                         .frame(width: iconWidth)
                 }
 
-                // Badge on icon when collapsed (hidden when locked)
-                if isCollapsed && badge > 0 && !isLocked {
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 8, height: 8)
-                        .offset(x: 4, y: -4)
+                // Badge on icon (collapsed = dot, expanded = count)
+                if badge > 0 && !isLocked {
+                    if isCollapsed {
+                        Circle()
+                            .fill(OmiColors.purplePrimary)
+                            .frame(width: 8, height: 8)
+                            .offset(x: 4, y: -4)
+                    } else {
+                        Text("\(badge)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(minWidth: 14, minHeight: 14)
+                            .background(OmiColors.purplePrimary)
+                            .clipShape(Circle())
+                            .offset(x: 6, y: -6)
+                    }
                 }
 
                 // Status indicator when collapsed (for Focus, hidden when locked)
@@ -1242,16 +1289,7 @@ struct NavItemView: View {
                             .frame(width: 8, height: 8)
                     }
 
-                    // Badge count when expanded
-                    if badge > 0 {
-                        Text("\(badge)")
-                            .scaledFont(size: 11, weight: .semibold)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(OmiColors.purplePrimary)
-                            .clipShape(Capsule())
-                    }
+                    // Badge count now shown on icon (see ZStack above)
                 }
             }
         }
@@ -1745,4 +1783,54 @@ struct BottomNavItemView: View {
         .padding(.bottom, 2)
         .help(isCollapsed ? label : "")
     }
+}
+
+// MARK: - Audio Level Nav Item Wrapper
+
+/// Isolates AudioLevelMonitor observation so audio level changes
+/// only re-render this small wrapper, not the entire SidebarView.
+private struct AudioLevelNavItem: View {
+    let icon: String
+    let label: String
+    let isSelected: Bool
+    let isCollapsed: Bool
+    let iconWidth: CGFloat
+    let isOn: Bool
+    let isToggling: Bool
+    var isPageLoading: Bool = false
+    let onTap: () -> Void
+    let onToggle: () -> Void
+
+    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
+
+    var body: some View {
+        NavItemWithStatusView(
+            icon: icon,
+            label: label,
+            isSelected: isSelected,
+            isCollapsed: isCollapsed,
+            iconWidth: iconWidth,
+            isOn: isOn,
+            isToggling: isToggling,
+            isPageLoading: isPageLoading,
+            onTap: onTap,
+            onToggle: onToggle,
+            micLevel: audioLevels.microphoneLevel,
+            systemLevel: audioLevels.systemLevel,
+            showAudioBars: true
+        )
+    }
+}
+
+// MARK: - Cached Omi Device Image
+
+/// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
+/// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
+enum OmiDeviceImage {
+    static let shared: NSImage? = {
+        guard let url = Bundle.resourceBundle.url(forResource: "omi-with-rope-no-padding", withExtension: "webp") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }()
 }

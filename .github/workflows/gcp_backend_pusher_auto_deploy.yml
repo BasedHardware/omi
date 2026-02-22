@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'backend/pusher/**'
+      - 'backend/charts/pusher/**'
 
 env:
   SERVICE: pusher

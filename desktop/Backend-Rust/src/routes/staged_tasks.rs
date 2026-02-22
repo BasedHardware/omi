@@ -158,11 +158,11 @@ async fn batch_update_staged_scores(
 
 /// POST /v1/staged-tasks/promote - Promote top staged task to action_items
 ///
-/// 1. Get active AI action_items (source contains "screenshot", !completed, !deleted)
+/// 1. Get active AI action_items (from_staged=true, !completed, !deleted)
 /// 2. If >= 5, return { promoted: false }
 /// 3. Get top-ranked staged tasks (batch of 10 for dedup)
 /// 4. Skip any whose description already exists in active action_items
-/// 5. Create in action_items with [screen] suffix
+/// 5. Create in action_items with from_staged=true
 /// 6. Hard-delete from staged_tasks (including skipped duplicates)
 /// 7. Return { promoted: true, promoted_task }
 async fn promote_staged_task(
@@ -285,31 +285,21 @@ async fn promote_staged_task(
         }
     };
 
-    // Step 4: Create in action_items with [screen] suffix
-    let tagged_description = if top_task.description.ends_with(" [screen]")
-        || top_task.description.starts_with("[screen] ")
-    {
-        // Already tagged — normalize to suffix form
-        let base = top_task
-            .description
-            .trim_start_matches("[screen] ")
-            .trim_end_matches(" [screen]");
-        format!("{} [screen]", base)
-    } else {
-        format!("{} [screen]", top_task.description)
-    };
-
+    // Step 4: Create in action_items (from_staged=true marks it as promoted)
     let promoted_item = match state
         .firestore
         .create_action_item(
             &user.uid,
-            &tagged_description,
+            &top_task.description,
             top_task.due_at,
             top_task.source.as_deref(),
             top_task.priority.as_deref(),
             top_task.metadata.as_deref(),
             top_task.category.as_deref(),
             top_task.relevance_score,
+            Some(true), // from_staged: promoted from staged_tasks
+            None, // recurrence_rule
+            None, // recurrence_parent_id
         )
         .await
     {
@@ -447,6 +437,7 @@ async fn migrate_ai_tasks(
                     None,
                     None,
                     None,
+                    None, // recurrence_rule
                 )
                 .await
             {
@@ -489,6 +480,31 @@ async fn migrate_ai_tasks(
     }))
 }
 
+/// POST /v1/staged-tasks/migrate-conversation-items
+/// Migrates action items created by the old conversation extraction path
+/// (have conversation_id but no source) to staged_tasks.
+/// Idempotent — safe to call multiple times.
+async fn migrate_conversation_items(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match state
+        .firestore
+        .migrate_conversation_action_items_to_staged(&user.uid)
+        .await
+    {
+        Ok((migrated, deleted)) => Ok(Json(serde_json::json!({
+            "status": "ok",
+            "migrated": migrated,
+            "deleted": deleted
+        }))),
+        Err(e) => {
+            tracing::error!("Failed to migrate conversation items: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 pub fn staged_tasks_routes() -> Router<AppState> {
     Router::new()
         .route(
@@ -498,5 +514,6 @@ pub fn staged_tasks_routes() -> Router<AppState> {
         .route("/v1/staged-tasks/batch-scores", patch(batch_update_staged_scores))
         .route("/v1/staged-tasks/promote", post(promote_staged_task))
         .route("/v1/staged-tasks/migrate", post(migrate_ai_tasks))
+        .route("/v1/staged-tasks/migrate-conversation-items", post(migrate_conversation_items))
         .route("/v1/staged-tasks/:id", axum::routing::delete(delete_staged_task))
 }

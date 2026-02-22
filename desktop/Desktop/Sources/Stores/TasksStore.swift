@@ -50,13 +50,19 @@ class TasksStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isRetryingUnsynced = false
 
+    /// Timestamp of last full reconciliation (paginated API check for absent tasks)
+    private var lastReconciliationDate: Date?
+
     /// Whether the tasks page (or dashboard) is currently visible.
     /// Auto-refresh only runs when active to avoid unnecessary API calls.
     var isActive = false {
         didSet {
             if isActive && !oldValue && hasLoadedIncomplete {
                 // Refresh immediately when becoming active
-                Task { await refreshTasksIfNeeded() }
+                Task {
+                    await refreshTasksIfNeeded()
+                    await reconcileWithAPIIfNeeded()
+                }
             }
         }
     }
@@ -79,64 +85,65 @@ class TasksStore: ObservableObject {
         }
     }
 
-    /// Standard sort: sortOrder first (if set), then due date ascending, then manual > AI-generated, then newest first
+    /// Standard sort matching Python backend: due_at ASC (nulls last), created_at DESC (newest first)
     private static func sortByDueDateThenSource(_ a: TaskActionItem, _ b: TaskActionItem) -> Bool {
-        // If both have sortOrder, use it
-        let aSort = a.sortOrder ?? 0
-        let bSort = b.sortOrder ?? 0
-        if aSort > 0 && bSort > 0 {
-            return aSort < bSort
-        }
-        // Tasks with sortOrder precede unsorted tasks
-        if aSort > 0 && bSort == 0 { return true }
-        if aSort == 0 && bSort > 0 { return false }
-
         let aDue = a.dueAt ?? .distantFuture
         let bDue = b.dueAt ?? .distantFuture
         if aDue != bDue {
             return aDue < bDue
         }
-        let aWeight = sourceWeight(for: a.source)
-        let bWeight = sourceWeight(for: b.source)
-        if aWeight != bWeight {
-            return aWeight < bWeight
-        }
+        // Tie-breaker: created_at descending (newest first) — matches Python backend
         return a.createdAt > b.createdAt
     }
 
-    /// Overdue tasks (due date in the past but within 7 days)
-    var overdueTasks: [TaskActionItem] {
-        let startOfToday = Calendar.current.startOfDay(for: Date())
-        return incompleteTasks
-            .filter { task in
-                guard let dueAt = task.dueAt else { return false }
-                // Must be overdue (before today) but within 7 days (not too old)
-                return dueAt < startOfToday && dueAt >= sevenDaysAgo
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
-    }
+    /// Overdue tasks (due date in the past but within 7 days) — loaded from SQLite
+    @Published var overdueTasks: [TaskActionItem] = []
 
-    /// Today's tasks (due today)
-    var todaysTasks: [TaskActionItem] {
+    /// Today's tasks (due today) — loaded from SQLite
+    @Published var todaysTasks: [TaskActionItem] = []
+
+    /// Tasks without due date (created within last 7 days) — loaded from SQLite
+    @Published var tasksWithoutDueDate: [TaskActionItem] = []
+
+    /// Load dashboard task lists directly from SQLite (avoids pagination issues)
+    func loadDashboardTasks() async {
         let calendar = Calendar.current
         let startOfToday = calendar.startOfDay(for: Date())
         let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
-        return incompleteTasks
-            .filter { task in
-                guard let dueAt = task.dueAt else { return false }
-                return dueAt >= startOfToday && dueAt < endOfToday
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
-    }
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
 
-    /// Tasks without due date (created within last 7 days)
-    var tasksWithoutDueDate: [TaskActionItem] {
-        incompleteTasks
-            .filter { task in
-                // No due date, but created within 7 days
-                task.dueAt == nil && task.createdAt >= sevenDaysAgo
-            }
-            .sorted(by: Self.sortByDueDateThenSource)
+        do {
+            async let overdueResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateAfter: sevenDaysAgo,
+                dueDateBefore: startOfToday
+            )
+            async let todayResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateAfter: startOfToday,
+                dueDateBefore: endOfToday
+            )
+            async let noDueDateResult = ActionItemStorage.shared.getFilteredActionItems(
+                limit: 50,
+                completedStates: [false],
+                dueDateIsNull: true,
+                createdAfter: sevenDaysAgo
+            )
+
+            let (overdue, today, noDueDate) = try await (overdueResult, todayResult, noDueDateResult)
+            let sortedOverdue = overdue.sorted(by: Self.sortByDueDateThenSource)
+            let sortedToday = today.sorted(by: Self.sortByDueDateThenSource)
+            let sortedNoDueDate = noDueDate.sorted(by: Self.sortByDueDateThenSource)
+            // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
+            if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
+            if todaysTasks != sortedToday { todaysTasks = sortedToday }
+            if tasksWithoutDueDate != sortedNoDueDate { tasksWithoutDueDate = sortedNoDueDate }
+            log("TasksStore: Dashboard loaded from SQLite - overdue: \(overdue.count), today: \(today.count), noDeadline: \(noDueDate.count)")
+        } catch {
+            logError("TasksStore: Failed to load dashboard tasks from SQLite", error: error)
+        }
     }
 
     var todoCount: Int {
@@ -192,6 +199,16 @@ class TasksStore: ObservableObject {
             // Sync API results to local cache
             try await ActionItemStorage.shared.syncTaskActionItems(response.items)
 
+            // Reconcile: if we got the full set, hard-delete local tasks absent from API
+            // (completed/deleted on mobile). Safe: only deletes synced records.
+            if response.items.count < reloadLimit {
+                let apiIds = Set(response.items.map { $0.id })
+                let reconciled = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: apiIds)
+                if reconciled > 0 {
+                    log("TasksStore: Reconciled: hard-deleted \(reconciled) absent tasks during auto-refresh")
+                }
+            }
+
             // Reload from local cache (respects local changes like completions/deletions)
             let mergedTasks = try await ActionItemStorage.shared.getLocalActionItems(
                 limit: reloadLimit,
@@ -202,12 +219,28 @@ class TasksStore: ObservableObject {
             // Merge without triggering @Published unless something actually changed
             let merged = mergeWithoutAdding(source: mergedTasks, current: incompleteTasks)
             if merged != incompleteTasks {
+                // Log what actually changed
+                let currentIds = Set(incompleteTasks.map { $0.id })
+                let mergedIds = Set(merged.map { $0.id })
+                let removed = currentIds.subtracting(mergedIds)
+                let added = mergedIds.subtracting(currentIds)
+                let updated = merged.filter { m in
+                    if let c = incompleteTasks.first(where: { $0.id == m.id }), c != m { return true }
+                    return false
+                }
+                log("RENDER: Auto-refresh diff: \(incompleteTasks.count)->\(merged.count) items, removed=\(removed.count), added=\(added.count), updated=\(updated.count) properties changed")
+                if !removed.isEmpty { log("RENDER: Removed IDs: \(removed.prefix(5).joined(separator: ", "))") }
+                if !updated.isEmpty { log("RENDER: Updated IDs: \(updated.prefix(3).map { $0.id.prefix(8) }.joined(separator: ", "))") }
+
                 incompleteTasks = merged
                 incompleteOffset = merged.count
                 log("TasksStore: Auto-refresh updated incomplete tasks (\(merged.count) items)")
+            } else {
+                log("RENDER: Auto-refresh: no changes detected, skipping update")
             }
             let newHasMore = mergedTasks.count >= reloadLimit
             if hasMoreIncompleteTasks != newHasMore { hasMoreIncompleteTasks = newHasMore }
+            await loadDashboardTasks()
         } catch {
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
@@ -272,6 +305,56 @@ class TasksStore: ObservableObject {
             } catch {
                 logError("TasksStore: Auto-refresh deleted tasks failed", error: error)
             }
+        }
+    }
+
+    /// Full reconciliation: paginate ALL incomplete task IDs from API, then hard-delete
+    /// local tasks not present. Throttled to run at most every 5 minutes.
+    /// Catches cases where the user has more tasks than one page of auto-refresh can cover.
+    private func reconcileWithAPIIfNeeded() async {
+        guard AuthService.shared.isSignedIn else { return }
+
+        // Throttle: skip if last reconciliation was < 5 minutes ago
+        if let last = lastReconciliationDate, Date().timeIntervalSince(last) < 300 {
+            return
+        }
+
+        let batchSize = 500
+        var allApiIds = Set<String>()
+        var offset = 0
+
+        do {
+            while true {
+                let response = try await APIClient.shared.getActionItems(
+                    limit: batchSize,
+                    offset: offset,
+                    completed: false
+                )
+                allApiIds.formUnion(response.items.map { $0.id })
+                offset += response.items.count
+                if response.items.count < batchSize { break }
+            }
+
+            let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
+            lastReconciliationDate = Date()
+
+            if deleted > 0 {
+                log("TasksStore: Full reconciliation: hard-deleted \(deleted) absent tasks")
+                // Reload from cache to reflect deletions in UI
+                let reloadLimit = max(pageSize, incompleteTasks.count)
+                let refreshed = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: reloadLimit,
+                    offset: 0,
+                    completed: false
+                )
+                if refreshed != incompleteTasks {
+                    incompleteTasks = refreshed
+                    incompleteOffset = refreshed.count
+                }
+                await loadDashboardTasks()
+            }
+        } catch {
+            logError("TasksStore: Full reconciliation failed", error: error)
         }
     }
 
@@ -346,6 +429,7 @@ class TasksStore: ObservableObject {
     func loadTasksIfNeeded() async {
         guard !hasLoadedIncomplete else { return }
         await loadIncompleteTasks()
+        await loadDashboardTasks()
         // Also load deleted tasks in background so the filter count is ready
         if !hasLoadedDeleted {
             await loadDeletedTasks()
@@ -355,6 +439,7 @@ class TasksStore: ObservableObject {
     /// Legacy method - loads incomplete tasks
     func loadTasks() async {
         await loadIncompleteTasks()
+        await loadDashboardTasks()
         // Also load deleted tasks so the "Removed by AI" filter count is ready
         if !hasLoadedDeleted {
             await loadDeletedTasks()
@@ -364,6 +449,7 @@ class TasksStore: ObservableObject {
         Task {
             await performFullSyncIfNeeded()
             await migrateAITasksToStagedIfNeeded()
+            await migrateConversationItemsToStagedIfNeeded()
             await retryUnsyncedItems()
         }
         // Backfill relevance scores for unscored tasks (independent of full sync)
@@ -588,7 +674,7 @@ class TasksStore: ObservableObject {
     /// Ensures filter/search queries have the full dataset. Keyed per user so it runs once per account.
     private func performFullSyncIfNeeded() async {
         let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let syncKey = "tasksFullSyncCompleted_v4_\(userId)"
+        let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
 
         guard !UserDefaults.standard.bool(forKey: syncKey) else {
             log("TasksStore: Full sync already completed for user \(userId)")
@@ -641,20 +727,10 @@ class TasksStore: ObservableObject {
                 if response.items.count < batchSize { break }
             }
 
-            // Sync all deleted tasks
-            offset = 0
-            while true {
-                let response = try await APIClient.shared.getActionItems(
-                    limit: batchSize,
-                    offset: offset,
-                    deleted: true
-                )
-                if response.items.isEmpty { break }
-                try await ActionItemStorage.shared.syncTaskActionItems(response.items)
-                totalSynced += response.items.count
-                offset += response.items.count
-                log("TasksStore: Full sync progress - \(totalSynced) tasks synced (deleted)")
-                if response.items.count < batchSize { break }
+            // Purge any soft-deleted rows from local SQLite (one-time cleanup)
+            let purged = try await ActionItemStorage.shared.purgeAllSoftDeletedItems()
+            if purged > 0 {
+                log("TasksStore: Purged \(purged) soft-deleted items from local SQLite")
             }
 
             UserDefaults.standard.set(true, forKey: syncKey)
@@ -671,12 +747,11 @@ class TasksStore: ObservableObject {
                 incompleteOffset = refreshed.count
                 hasMoreIncompleteTasks = refreshed.count >= pageSize
                 log("TasksStore: Refreshed UI after full sync - \(refreshed.count) incomplete tasks")
+                await loadDashboardTasks()
             } catch {
                 logError("TasksStore: Failed to refresh UI after full sync", error: error)
             }
 
-            // Backfill due dates on backend for tasks that have none
-            await backfillDueDatesOnBackendIfNeeded(userId: userId)
         } catch {
             logError("TasksStore: Full sync failed (will retry next launch)", error: error)
         }
@@ -717,6 +792,32 @@ class TasksStore: ObservableObject {
             log("TasksStore: Staged tasks backend migration fired (may complete in background): \(error.localizedDescription)")
         }
         Self.isMigrating = false
+    }
+
+    /// One-time migration of conversation-extracted action items (no source field) to staged_tasks.
+    /// These were created by the old save_action_items path that bypassed the staging pipeline.
+    private func migrateConversationItemsToStagedIfNeeded() async {
+        let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+        let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
+
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        log("TasksStore: Starting conversation items migration for user \(userId)")
+
+        do {
+            try await APIClient.shared.migrateConversationItemsToStaged()
+            log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
+
+            // Reset full sync flag so it re-runs and marks migrated items as staged locally
+            let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
+            UserDefaults.standard.set(false, forKey: syncKey)
+
+            // Run full sync now to clean up local SQLite
+            await performFullSyncIfNeeded()
+        } catch {
+            log("TasksStore: Conversation items migration fired (may complete in background): \(error.localizedDescription)")
+        }
     }
 
     /// Retry syncing locally-created tasks that failed to push to the backend.
@@ -778,45 +879,6 @@ class TasksStore: ObservableObject {
         log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
 
-    /// One-time backfill: patch backend tasks that have no dueAt.
-    /// Sets dueAt to end of the day the task was created.
-    private func backfillDueDatesOnBackendIfNeeded(userId: String) async {
-        let backfillKey = "tasksDueDateBackfill_v1_\(userId)"
-        guard !UserDefaults.standard.bool(forKey: backfillKey) else { return }
-
-        log("TasksStore: Starting due date backfill for backend tasks")
-        var patchedCount = 0
-
-        do {
-            // Fetch all incomplete tasks from local cache that have no dueAt
-            let tasksWithoutDueDate = try await ActionItemStorage.shared.getLocalActionItems(
-                limit: 500,
-                completed: false
-            ).filter { $0.dueAt == nil }
-
-            for task in tasksWithoutDueDate {
-                // Set dueAt to end of the day the task was created (11:59 PM local)
-                let calendar = Calendar.current
-                let endOfCreatedDay = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: task.createdAt)
-                    ?? task.createdAt
-
-                do {
-                    _ = try await APIClient.shared.updateActionItem(
-                        id: task.id,
-                        dueAt: endOfCreatedDay
-                    )
-                    patchedCount += 1
-                } catch {
-                    logError("TasksStore: Failed to backfill dueAt for task \(task.id)", error: error)
-                }
-            }
-
-            UserDefaults.standard.set(true, forKey: backfillKey)
-            log("TasksStore: Due date backfill complete - patched \(patchedCount) tasks")
-        } catch {
-            logError("TasksStore: Due date backfill failed", error: error)
-        }
-    }
 
     /// One-time backfill: assign relevance scores to all unscored active tasks.
     /// Each unscored task gets max+1 sequentially so they appear at the bottom
@@ -930,6 +992,40 @@ class TasksStore: ObservableObject {
         }
     }
 
+    // MARK: - Recurrence Helpers
+
+    /// Compute the next due date for a recurring task, skipping past dates.
+    private func nextFutureDueDate(from dueDate: Date, rule: String) -> Date? {
+        let calendar = Calendar.current
+        func nextDate(from date: Date) -> Date? {
+            switch rule {
+            case "daily":
+                return calendar.date(byAdding: .day, value: 1, to: date)
+            case "weekdays":
+                var next = calendar.date(byAdding: .day, value: 1, to: date)!
+                while calendar.isDateInWeekend(next) {
+                    next = calendar.date(byAdding: .day, value: 1, to: next)!
+                }
+                return next
+            case "weekly":
+                return calendar.date(byAdding: .weekOfYear, value: 1, to: date)
+            case "biweekly":
+                return calendar.date(byAdding: .weekOfYear, value: 2, to: date)
+            case "monthly":
+                return calendar.date(byAdding: .month, value: 1, to: date)
+            default:
+                return nil
+            }
+        }
+        guard var next = nextDate(from: dueDate) else { return nil }
+        // Skip past dates to avoid pile-up when completing late
+        while next < Date() {
+            guard let n = nextDate(from: next) else { return nil }
+            next = n
+        }
+        return next
+    }
+
     // MARK: - Task Actions
 
     func toggleTask(_ task: TaskActionItem) async {
@@ -986,6 +1082,29 @@ class TasksStore: ObservableObject {
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+
+            // Spawn next recurring instance when completing a recurring task
+            if newCompleted, let rule = task.recurrenceRule, !rule.isEmpty {
+                let baseDueDate = task.dueAt ?? Date()
+                if let nextDue = nextFutureDueDate(from: baseDueDate, rule: rule) {
+                    let parentId = task.recurrenceParentId ?? task.id
+                    if let spawned = try? await APIClient.shared.createActionItem(
+                        description: task.description,
+                        dueAt: nextDue,
+                        source: "recurring",
+                        priority: task.priority,
+                        category: task.category,
+                        recurrenceRule: rule,
+                        recurrenceParentId: parentId
+                    ) {
+                        try? await ActionItemStorage.shared.syncTaskActionItems([spawned])
+                        incompleteTasks.insert(spawned, at: 0)
+                        log("TasksStore: Spawned recurring task \(spawned.id) due \(nextDue)")
+                    }
+                }
+            }
+
+            await loadDashboardTasks()
         } catch {
             logError("TasksStore: Failed to toggle task on backend, reverting", error: error)
             // Revert SQLite
@@ -1005,7 +1124,7 @@ class TasksStore: ObservableObject {
     }
 
     @discardableResult
-    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil) async -> TaskActionItem? {
+    func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil, recurrenceRule: String? = nil) async -> TaskActionItem? {
         do {
             var metadata: [String: Any]? = nil
             if let tags = tags, !tags.isEmpty {
@@ -1018,7 +1137,8 @@ class TasksStore: ObservableObject {
                 source: "manual",
                 priority: priority,
                 category: tags?.first,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
 
             // Sync to local SQLite cache
@@ -1066,43 +1186,48 @@ class TasksStore: ObservableObject {
             }
         }
 
-        // Soft-delete on backend in background
+        // Hard-delete on backend in background
         do {
-            _ = try await APIClient.shared.softDeleteActionItem(id: task.id, deletedBy: "user")
+            try await APIClient.shared.deleteActionItem(id: task.id)
         } catch {
-            logError("TasksStore: Failed to soft-delete task on backend (local delete preserved)", error: error)
+            logError("TasksStore: Failed to hard-delete task on backend (local delete preserved)", error: error)
         }
     }
 
-    /// Restore a previously soft-deleted task (for undo)
-    /// Uses local-first: un-soft-deletes in SQLite (with fresh updatedAt to prevent
-    /// auto-refresh from reverting) and re-inserts into in-memory arrays.
+    /// Restore a previously deleted task (for undo)
+    /// Re-inserts the task into SQLite and re-creates on backend (since both were hard-deleted).
     func restoreTask(_ task: TaskActionItem) async {
-        // 1. Un-soft-delete in SQLite
+        // 1. Re-insert into SQLite from the in-memory task object
         do {
-            try await ActionItemStorage.shared.undeleteActionItemByBackendId(task.id)
+            try await ActionItemStorage.shared.syncTaskActionItems([task])
         } catch {
-            logError("TasksStore: Failed to undelete task locally", error: error)
+            logError("TasksStore: Failed to re-insert task locally for undo", error: error)
             return
         }
 
-        // 2. Read back from SQLite to get fresh state
-        guard let restoredTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) else {
-            logError("TasksStore: Failed to read back restored task", error: nil)
-            return
-        }
-
-        // 3. Re-insert into the appropriate in-memory array
-        if restoredTask.completed {
-            completedTasks.insert(restoredTask, at: 0)
+        // 2. Re-insert into the appropriate in-memory array
+        if task.completed {
+            completedTasks.insert(task, at: 0)
         } else {
-            incompleteTasks.insert(restoredTask, at: 0)
+            incompleteTasks.insert(task, at: 0)
         }
 
-        log("TasksStore: Restored task \(task.id) via undo")
+        // 3. Re-create on backend (hard-delete already removed it)
+        do {
+            let created = try await APIClient.shared.createActionItem(
+                description: task.description,
+                dueAt: task.dueAt,
+                priority: task.priority
+            )
+            // Update local record with new backend ID
+            try await ActionItemStorage.shared.syncTaskActionItems([created])
+            log("TasksStore: Restored task via undo (new backend ID: \(created.id))")
+        } catch {
+            logError("TasksStore: Failed to re-create task on backend (local restore preserved)", error: error)
+        }
     }
 
-    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
+    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
         // Track manual edits: if description is changed, mark as manually edited
         var metadata: [String: Any]? = nil
         if description != nil {
@@ -1120,7 +1245,8 @@ class TasksStore: ObservableObject {
                 description: description,
                 dueAt: dueAt,
                 priority: priority,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
         } catch {
             logError("TasksStore: Failed to update task locally", error: error)
@@ -1148,7 +1274,8 @@ class TasksStore: ObservableObject {
                 description: description,
                 dueAt: dueAt,
                 priority: priority,
-                metadata: metadata
+                metadata: metadata,
+                recurrenceRule: recurrenceRule
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
@@ -1196,12 +1323,12 @@ class TasksStore: ObservableObject {
             Task { await self.syncScoresToBackend() }
         }
 
-        // Soft-delete on backend in background
+        // Hard-delete on backend in background
         for id in ids {
             do {
-                _ = try await APIClient.shared.softDeleteActionItem(id: id, deletedBy: "user")
+                try await APIClient.shared.deleteActionItem(id: id)
             } catch {
-                logError("TasksStore: Failed to soft-delete task \(id) on backend (local delete preserved)", error: error)
+                logError("TasksStore: Failed to hard-delete task \(id) on backend (local delete preserved)", error: error)
             }
         }
     }

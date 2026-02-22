@@ -15,6 +15,9 @@ actor EmbeddingService {
     private var index: [Int64: [Float]] = [:]
     private var isIndexLoaded = false
 
+    /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
+    private let maxIndexSize = 5000
+
     private init() {
         self.geminiApiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"]
     }
@@ -107,35 +110,45 @@ actor EmbeddingService {
 
     // MARK: - In-Memory Index
 
-    /// Load all embeddings from SQLite into memory (action_items + staged_tasks)
+    /// Load embeddings from SQLite into memory (action_items + staged_tasks, capped)
     func loadIndex() async {
         do {
             let rows = try await ActionItemStorage.shared.getAllEmbeddings()
             index.removeAll(keepingCapacity: true)
-            for (id, data) in rows {
+            // Only keep the most recent embeddings (suffix = highest IDs = newest)
+            for (id, data) in rows.suffix(maxIndexSize) {
                 if let floats = dataToFloats(data) {
                     index[id] = floats
                 }
             }
             let actionCount = index.count
 
-            // Also load staged task embeddings
-            let stagedRows = try await StagedTaskStorage.shared.getAllEmbeddings()
-            for (id, data) in stagedRows {
-                if let floats = dataToFloats(data) {
-                    index[id] = floats
+            // Also load staged task embeddings (fill remaining capacity)
+            let remaining = maxIndexSize - index.count
+            if remaining > 0 {
+                let stagedRows = try await StagedTaskStorage.shared.getAllEmbeddings()
+                for (id, data) in stagedRows.suffix(remaining) {
+                    if let floats = dataToFloats(data) {
+                        index[id] = floats
+                    }
                 }
             }
 
             isIndexLoaded = true
-            log("EmbeddingService: Loaded \(index.count) embeddings into memory (\(actionCount) action_items, \(index.count - actionCount) staged_tasks)")
+            log("EmbeddingService: Loaded \(index.count) embeddings into memory (\(actionCount) action_items, \(index.count - actionCount) staged_tasks, cap=\(maxIndexSize))")
         } catch {
             logError("EmbeddingService: Failed to load index", error: error)
         }
     }
 
-    /// Add a single embedding to the in-memory index
+    /// Add a single embedding to the in-memory index (respects maxIndexSize)
     func addToIndex(id: Int64, embedding: [Float]) {
+        // If at capacity and this is a new key, evict the oldest (lowest ID)
+        if index[id] == nil && index.count >= maxIndexSize {
+            if let oldestKey = index.keys.min() {
+                index.removeValue(forKey: oldestKey)
+            }
+        }
         index[id] = embedding
     }
 

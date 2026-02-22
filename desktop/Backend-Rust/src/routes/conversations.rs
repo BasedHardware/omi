@@ -169,45 +169,80 @@ async fn create_conversation_from_segments(
         request.transcript_segments.len()
     );
 
-    // Get LLM client (Gemini)
-    let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
-        LlmClient::new(api_key.clone())
+    // Only process desktop-originated conversations with LLM.
+    // Non-desktop sources (omi, bee, etc.) are fully handled by the Python backend.
+    let is_desktop = request.source == ConversationSource::Desktop;
+
+    let processed = if is_desktop {
+        // Get LLM client (Gemini)
+        let llm_client = if let Some(api_key) = &state.config.gemini_api_key {
+            LlmClient::new(api_key.clone())
+        } else {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GEMINI_API_KEY not configured".to_string(),
+            ));
+        };
+
+        // Get existing data for deduplication
+        let existing_memories = state
+            .firestore
+            .get_memories(&user.uid, 500)
+            .await
+            .unwrap_or_default();
+
+        // Fetch recent action items + staged tasks for dedup context
+        let two_days_ago = (chrono::Utc::now() - chrono::Duration::days(2)).to_rfc3339();
+        let mut existing_action_items: Vec<crate::models::ActionItem> = state
+            .firestore
+            .get_action_items(&user.uid, 50, 0, None, None, Some(&two_days_ago), None, None, None, None, None)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|db_item| crate::models::ActionItem {
+                description: db_item.description,
+                completed: db_item.completed,
+                due_at: db_item.due_at,
+                confidence: None,
+                priority: db_item.priority,
+            })
+            .collect();
+
+        // Also include staged tasks (recent extractions not yet promoted)
+        if let Ok(staged) = state.firestore.get_staged_tasks(&user.uid, 50, 0).await {
+            existing_action_items.extend(staged.into_iter().map(|s| crate::models::ActionItem {
+                description: s.description,
+                completed: false,
+                due_at: s.due_at,
+                confidence: None,
+                priority: s.priority,
+            }));
+        }
+
+        // Format timestamps
+        let started_at = request.started_at.to_rfc3339();
+        let user_name = user.name.as_deref().unwrap_or("User");
+
+        llm_client
+            .process_conversation(
+                &request.transcript_segments,
+                &started_at,
+                &request.timezone,
+                &request.language,
+                user_name,
+                &existing_action_items,
+                &existing_memories,
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to process conversation: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+            })?
     } else {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "GEMINI_API_KEY not configured".to_string(),
-        ));
+        // Non-desktop: skip all LLM extraction (Python backend handles it)
+        tracing::info!("Skipping LLM extraction for non-desktop source {:?}", request.source);
+        LlmClient::skip_extraction()
     };
-
-    // Get existing data for deduplication
-    let existing_memories = state
-        .firestore
-        .get_memories(&user.uid, 500)
-        .await
-        .unwrap_or_default();
-
-    let existing_action_items = vec![]; // TODO: Fetch from Firestore
-
-    // Format timestamps
-    let started_at = request.started_at.to_rfc3339();
-    let user_name = "User"; // TODO: Get from user profile
-
-    // Process conversation with LLM
-    let processed = llm_client
-        .process_conversation(
-            &request.transcript_segments,
-            &started_at,
-            &request.timezone,
-            &request.language,
-            user_name,
-            &existing_action_items,
-            &existing_memories,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to process conversation: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
-        })?;
 
     // Generate conversation ID
     let conversation_id = uuid::Uuid::new_v4().to_string();
@@ -259,7 +294,7 @@ async fn create_conversation_from_segments(
                     &item.description,
                     item.due_at,
                     Some(&source_str),
-                    None, // priority - LLM doesn't extract this
+                    item.priority.as_deref(),
                     None, // metadata
                     None, // category
                     None, // relevance_score - will be ranked by prioritization service
@@ -404,7 +439,7 @@ async fn reprocess_conversation(
         .transcript_segments
         .iter()
         .map(|s| {
-            let speaker = if s.is_user { "User".to_string() } else { format!("Speaker {}", s.speaker_id) };
+            let speaker = if s.is_user { user.name.clone().unwrap_or_else(|| "User".to_string()) } else { format!("Speaker {}", s.speaker_id) };
             format!("{}: {}", speaker, s.text)
         })
         .collect::<Vec<_>>()
@@ -810,7 +845,7 @@ async fn merge_conversations(
                     &started_at_str,
                     "UTC",
                     &merged_conversation.language,
-                    "User",
+                    user.name.as_deref().unwrap_or("User"),
                     &[],
                     &existing_memories,
                 )
@@ -833,7 +868,7 @@ async fn merge_conversations(
                                     &item.description,
                                     item.due_at,
                                     Some(&source_str),
-                                    None,
+                                    item.priority.as_deref(),
                                     None,
                                     None,
                                     None,

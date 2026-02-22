@@ -83,9 +83,6 @@ async fn provision_agent_vm(
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
-    let anthropic_key = state.config.agent_anthropic_api_key.clone();
-    let gemini_key = state.config.gemini_api_key.clone();
-
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -93,8 +90,6 @@ async fn provision_agent_vm(
             &firestore,
             &vm_name_clone,
             &auth_token_clone,
-            anthropic_key.as_deref(),
-            gemini_key.as_deref(),
         )
         .await
         {
@@ -148,6 +143,7 @@ async fn provision_agent_vm(
 
 /// GET /v2/agent/status
 /// Returns the current agent VM status for the authenticated user.
+/// If the VM self-stopped (idle timeout), detects it via GCE API and restarts it.
 async fn get_agent_status(
     State(state): State<AppState>,
     user: AuthUser,
@@ -155,15 +151,170 @@ async fn get_agent_status(
     tracing::info!("Agent VM status request for user {}", user.uid);
 
     match state.firestore.get_agent_vm(&user.uid).await {
-        Ok(Some(vm)) => Ok(Json(Some(AgentStatusResponse {
-            vm_name: vm.vm_name,
-            zone: vm.zone,
-            ip: vm.ip,
-            status: vm.status,
-            auth_token: vm.auth_token,
-            created_at: vm.created_at,
-            last_query_at: vm.last_query_at,
-        }))),
+        Ok(Some(vm)) => {
+            // If Firestore says "ready", "error", or "stopped", verify the VM is actually running.
+            // The VM may have self-stopped due to idle timeout and be restartable.
+            if vm.status == AgentVmStatus::Ready
+                || vm.status == AgentVmStatus::Error
+                || vm.status == AgentVmStatus::Stopped
+            {
+                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone).await {
+                    Ok(gce_status) if gce_status == "TERMINATED" || gce_status == "STOPPED" => {
+                        tracing::info!(
+                            "VM {} is {} (idle auto-stop), restarting...",
+                            vm.vm_name,
+                            gce_status
+                        );
+                        // Update Firestore to reflect stopped state
+                        let now = chrono::Utc::now().to_rfc3339();
+                        let _ = state
+                            .firestore
+                            .set_agent_vm(
+                                &user.uid,
+                                &vm.vm_name,
+                                &vm.zone,
+                                None,
+                                AgentVmStatus::Provisioning,
+                                &vm.auth_token,
+                                &now,
+                            )
+                            .await;
+
+                        // Start the VM in the background
+                        let firestore = state.firestore.clone();
+                        let uid = user.uid.clone();
+                        let vm_name = vm.vm_name.clone();
+                        let zone = vm.zone.clone();
+                        let auth_token = vm.auth_token.clone();
+
+                        tokio::spawn(async move {
+                            match start_stopped_vm(&firestore, &vm_name, &zone).await {
+                                Ok(ip) => {
+                                    tracing::info!("VM {} restarted with IP {}", vm_name, ip);
+                                    let now = chrono::Utc::now().to_rfc3339();
+                                    let _ = firestore
+                                        .set_agent_vm(
+                                            &uid,
+                                            &vm_name,
+                                            &zone,
+                                            Some(&ip),
+                                            AgentVmStatus::Ready,
+                                            &auth_token,
+                                            &now,
+                                        )
+                                        .await;
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to restart VM {}: {}", vm_name, e);
+                                    let now = chrono::Utc::now().to_rfc3339();
+                                    let _ = firestore
+                                        .set_agent_vm(
+                                            &uid,
+                                            &vm_name,
+                                            &zone,
+                                            None,
+                                            AgentVmStatus::Error,
+                                            &auth_token,
+                                            &now,
+                                        )
+                                        .await;
+                                }
+                            }
+                        });
+
+                        // Return "provisioning" so the client polls
+                        return Ok(Json(Some(AgentStatusResponse {
+                            vm_name: vm.vm_name,
+                            zone: vm.zone,
+                            ip: None,
+                            status: AgentVmStatus::Provisioning,
+                            auth_token: vm.auth_token,
+                            created_at: vm.created_at,
+                            last_query_at: vm.last_query_at,
+                        })));
+                    }
+                    Ok(gce_status) if gce_status == "RUNNING"
+                        && (vm.status == AgentVmStatus::Error
+                            || vm.status == AgentVmStatus::Stopped) =>
+                    {
+                        // VM is actually running but Firestore is stale — recover
+                        tracing::info!(
+                            "VM {} is RUNNING but Firestore says {:?}, recovering...",
+                            vm.vm_name,
+                            vm.status
+                        );
+                        // Get fresh IP and update Firestore
+                        let firestore = state.firestore.clone();
+                        let uid = user.uid.clone();
+                        let vm_name = vm.vm_name.clone();
+                        let zone = vm.zone.clone();
+                        let auth_token = vm.auth_token.clone();
+
+                        tokio::spawn(async move {
+                            let project = "based-hardware";
+                            let instance_url = format!(
+                                "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+                                project, zone, vm_name
+                            );
+                            if let Ok(resp) = firestore
+                                .build_compute_request(reqwest::Method::GET, &instance_url)
+                                .await
+                            {
+                                if let Ok(resp) = resp.send().await {
+                                    if let Ok(instance) = resp.json::<serde_json::Value>().await {
+                                        let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                                            .as_str()
+                                            .unwrap_or("unknown")
+                                            .to_string();
+                                        let now = chrono::Utc::now().to_rfc3339();
+                                        let _ = firestore
+                                            .set_agent_vm(
+                                                &uid, &vm_name, &zone,
+                                                Some(&ip), AgentVmStatus::Ready,
+                                                &auth_token, &now,
+                                            )
+                                            .await;
+                                        tracing::info!("VM {} recovered — ip={}", vm_name, ip);
+                                    }
+                                }
+                            }
+                        });
+
+                        // Return provisioning so client polls
+                        return Ok(Json(Some(AgentStatusResponse {
+                            vm_name: vm.vm_name,
+                            zone: vm.zone,
+                            ip: None,
+                            status: AgentVmStatus::Provisioning,
+                            auth_token: vm.auth_token,
+                            created_at: vm.created_at,
+                            last_query_at: vm.last_query_at,
+                        })));
+                    }
+                    Ok(gce_status) => {
+                        tracing::debug!("VM {} GCE status: {}", vm.vm_name, gce_status);
+                    }
+                    Err(e) => {
+                        // If we can't reach GCE, return Firestore data as-is
+                        tracing::warn!(
+                            "Could not check GCE status for {}: {}",
+                            vm.vm_name,
+                            e
+                        );
+                    }
+                }
+            }
+
+            Ok(Json(Some(AgentStatusResponse {
+                vm_name: vm.vm_name,
+                zone: vm.zone,
+                ip: vm.ip,
+                status: vm.status,
+                auth_token: vm.auth_token,
+                created_at: vm.created_at,
+                last_query_at: vm.last_query_at,
+            })))
+        }
         Ok(None) => Ok(Json(None)),
         Err(e) => {
             tracing::error!("Failed to get agent VM status: {}", e);
@@ -172,34 +323,163 @@ async fn get_agent_status(
     }
 }
 
+/// Check the actual GCE instance status (RUNNING, TERMINATED, STOPPED, etc.)
+async fn check_gce_instance_status(
+    firestore: &crate::services::FirestoreService,
+    vm_name: &str,
+    zone: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let project = "based-hardware";
+    let url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+        project, zone, vm_name
+    );
+
+    let resp = firestore
+        .build_compute_request(reqwest::Method::GET, &url)
+        .await?
+        .send()
+        .await?;
+
+    let instance: serde_json::Value = resp.json().await?;
+    let status = instance["status"]
+        .as_str()
+        .unwrap_or("UNKNOWN")
+        .to_string();
+    Ok(status)
+}
+
+/// Start a stopped/terminated GCE VM and wait for it to get an IP.
+async fn start_stopped_vm(
+    firestore: &crate::services::FirestoreService,
+    vm_name: &str,
+    zone: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let project = "based-hardware";
+
+    // Call GCE start API
+    let start_url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}/start",
+        project, zone, vm_name
+    );
+
+    let response = firestore
+        .build_compute_request(reqwest::Method::POST, &start_url)
+        .await?
+        .header("Content-Length", "0")
+        .send()
+        .await?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await?;
+        return Err(format!("GCE start failed: {}", error_text).into());
+    }
+
+    let op: serde_json::Value = response.json().await?;
+    let op_name = op["name"]
+        .as_str()
+        .ok_or("Missing operation name in GCE start response")?;
+
+    // Poll operation until done (max ~2 minutes)
+    let op_url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/operations/{}",
+        project, zone, op_name
+    );
+
+    for _ in 0..24 {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        let status_resp = firestore
+            .build_compute_request(reqwest::Method::GET, &op_url)
+            .await?
+            .send()
+            .await?;
+
+        let status: serde_json::Value = status_resp.json().await?;
+        if status["status"].as_str() == Some("DONE") {
+            if let Some(error) = status.get("error") {
+                return Err(format!("GCE start operation failed: {}", error).into());
+            }
+            break;
+        }
+    }
+
+    // Get the VM's (possibly new) external IP
+    let instance_url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
+        project, zone, vm_name
+    );
+
+    let instance_resp = firestore
+        .build_compute_request(reqwest::Method::GET, &instance_url)
+        .await?
+        .send()
+        .await?;
+
+    let instance: serde_json::Value = instance_resp.json().await?;
+    let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+
+    Ok(ip)
+}
+
 /// Create a GCE VM from the omi-agent image family.
 /// Returns the external IP of the created VM.
 async fn create_gce_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     auth_token: &str,
-    anthropic_key: Option<&str>,
-    gemini_key: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let project = "based-hardware";
     let zone = "us-central1-a";
 
     // Build startup script that starts the agent server
-    let mut startup_script = format!(
-        r#"#!/bin/bash
+    // Uses stdbuf for line-buffered output, writes env to file so restarts work
+    let startup_script = r#"#!/bin/bash
 cd /home/matthewdi/omi-agent
-export AUTH_TOKEN='{}'
-export DB_PATH='data/omi.db'
-"#,
-        auth_token
-    );
-    if let Some(key) = anthropic_key {
-        startup_script.push_str(&format!("export ANTHROPIC_API_KEY='{}'\n", key));
-    }
-    if let Some(key) = gemini_key {
-        startup_script.push_str(&format!("export GEMINI_API_KEY='{}'\n", key));
-    }
-    startup_script.push_str("nohup node agent.mjs --serve > /tmp/agent-server.log 2>&1 &\n");
+
+# Pull shared env vars from GCS (API keys, URLs — updated centrally)
+curl -sf -o .env-shared.sh https://storage.googleapis.com/based-hardware-agent/env-shared.sh || echo 'GCS env pull failed'
+
+# Pull latest agent.mjs from GCS
+curl -sf -o agent.mjs.tmp https://storage.googleapis.com/based-hardware-agent/agent.mjs && mv agent.mjs.tmp agent.mjs || echo 'GCS agent pull failed'
+
+chown matthewdi:matthewdi .env-shared.sh agent.mjs 2>/dev/null
+
+# Read shared env vars
+ANTHROPIC=$(grep ANTHROPIC_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+GEMINI=$(grep GEMINI_API_KEY .env-shared.sh 2>/dev/null | cut -d\' -f2)
+BACKEND=$(grep BACKEND_URL .env-shared.sh 2>/dev/null | cut -d\' -f2)
+
+# Get AUTH_TOKEN from GCE instance metadata
+META_HEADERS="Metadata-Flavor: Google"
+AUTH=$(curl -sf -H "$META_HEADERS" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/auth-token" 2>/dev/null)
+[ -z "$AUTH" ] && AUTH=$(grep AUTH_TOKEN .env-vm.sh 2>/dev/null | head -1 | sed "s/.*['\"]\\(.*\\)['\"].*/\\1/")
+
+if [ -z "$AUTH" ]; then
+  echo "ERROR: No AUTH_TOKEN found in metadata or env files"
+  exit 1
+fi
+
+# Kill any existing agent
+systemctl stop omi-agent 2>/dev/null
+pkill -x node 2>/dev/null || true
+sleep 1
+
+# Start agent as matthewdi via systemd (proper process management)
+systemd-run --uid=matthewdi --gid=matthewdi \
+  --setenv=HOME=/home/matthewdi \
+  --setenv=AUTH_TOKEN="$AUTH" \
+  --setenv=DB_PATH=data/omi.db \
+  --setenv=ANTHROPIC_API_KEY="$ANTHROPIC" \
+  --setenv=GEMINI_API_KEY="$GEMINI" \
+  --setenv=BACKEND_URL="${BACKEND:-https://api.omi.me}" \
+  --working-directory=/home/matthewdi/omi-agent \
+  --unit=omi-agent \
+  stdbuf -oL node agent.mjs --serve
+"#.to_string();
 
     // GCE instances.insert REST API
     let url = format!(
@@ -233,6 +513,9 @@ export DB_PATH='data/omi.db'
             "items": [{
                 "key": "startup-script",
                 "value": startup_script
+            }, {
+                "key": "auth-token",
+                "value": auth_token
             }]
         }
     });

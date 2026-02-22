@@ -2597,5 +2597,17 @@
   "wifiConfigurationSubtitle": "أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.",
   "networkNameSsid": "اسم الشبكة (SSID)",
   "enterWifiNetworkName": "أدخل اسم شبكة الواي فاي",
-  "enterWifiPassword": "أدخل كلمة مرور الواي فاي"
+  "enterWifiPassword": "أدخل كلمة مرور الواي فاي",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "جارٍ التنزيل من الجهاز",
+  "reconnectingToInternet": "جارٍ إعادة الاتصال بالإنترنت...",
+  "uploadingToCloud": "جارٍ رفع {current} من {total}",
+  "processedStatus": "تمت المعالجة",
+  "corruptedStatus": "تالف",
+  "nPending": "{count} قيد الانتظار",
+  "nProcessed": "{count} تمت معالجتها",
+  "synced": "تمت المزامنة",
+  "noPendingRecordings": "لا توجد تسجيلات قيد الانتظار",
+  "noProcessedRecordings": "لا توجد تسجيلات معالجة بعد",
+  "pending": "قيد الانتظار"
 }

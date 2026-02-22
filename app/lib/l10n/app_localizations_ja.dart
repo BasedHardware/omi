@@ -8008,6 +8008,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pairingDescNeoOne => '電源ボタンをLEDが点滅するまで長押ししてください。デバイスが検出可能になります。';
 
   @override
+  String get downloadingFromDevice => 'デバイスからダウンロード中';
+
+  @override
+  String get reconnectingToInternet => 'インターネットに再接続中...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$totalをアップロード中';
+  }
+
+  @override
+  String get processedStatus => '処理済み';
+
+  @override
+  String get corruptedStatus => '破損';
+
+  @override
+  String nPending(int count) {
+    return '$count件が保留中';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count件が処理済み';
+  }
+
+  @override
+  String get synced => '同期済み';
+
+  @override
+  String get noPendingRecordings => '保留中の録音はありません';
+
+  @override
+  String get noProcessedRecordings => '処理済みの録音はまだありません';
+
+  @override
+  String get pending => '保留中';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version の新機能';
   }
@@ -8038,4 +8077,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'WiFiパスワードを入力';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

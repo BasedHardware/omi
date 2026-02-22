@@ -143,6 +143,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var toggleBarObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
+        // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
+        signal(SIGPIPE, SIG_IGN)
+
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
@@ -174,9 +178,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.debug = false
             options.enableAutoSessionTracking = true
             options.environment = isDev ? "development" : "production"
+            // Disable automatic HTTP client error capture — the SDK creates noisy events
+            // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
+            // App code already handles HTTP errors and reports meaningful ones explicitly.
+            options.enableCaptureFailedRequests = false
+            options.maxBreadcrumbs = 100
             options.beforeSend = { event in
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
+                    return nil
+                }
+                // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
+                // (e.g. proactive assistants cancelling in-flight Gemini requests on context switch)
+                if let exceptions = event.exceptions, exceptions.contains(where: { exc in
+                    exc.type == "NSURLErrorDomain" && exc.value.contains("Code=-999") ||
+                    exc.type == "NSURLErrorDomain" && exc.value.contains("Code: -999")
+                }) {
                     return nil
                 }
                 return event
@@ -201,13 +218,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Tier gating: migrate old boolean key to new 6-tier system
         TierManager.migrateExistingUsersIfNeeded()
 
-        // New users start at tier 1 (Conversations + Rewind only)
+        // All users get all features (tier 0 = show all)
         // Note: hasLaunchedBefore is also set by trackFirstLaunchIfNeeded(), but that
         // skips dev builds. Set it here too so tier doesn't reset on every dev launch.
         if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
             UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-            UserDefaults.standard.set(1, forKey: "currentTierLevel")
-            UserDefaults.standard.set(1, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(0, forKey: "currentTierLevel")
+            UserDefaults.standard.set(0, forKey: "lastSeenTierLevel")
+            UserDefaults.standard.set(true, forKey: "userShowAllFeatures")
         }
 
         AnalyticsManager.shared.trackFirstLaunchIfNeeded()
@@ -246,6 +264,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
             // Report comprehensive settings state (at most once per day)
             AnalyticsManager.shared.reportAllSettingsIfNeeded()
+
+            // File indexing now runs through FileIndexingView UI (user consent required)
+            // No background scan — prevents race condition where scan finishes before UI listens
         }
 
         // One-time migration: Enable launch at login for existing users who haven't set it
@@ -372,32 +393,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return event
         }
 
-        // Shared handler for Cmd+Enter (Ask AI) — works globally without activating main window
-        let cmdEnterHandler: (NSEvent) -> Bool = { event in
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if mods.contains(.command) && event.keyCode == 36 { // 36 = Return
-                Task { @MainActor in
-                    FloatingControlBarManager.shared.openAIInput()
-                }
-                return true
-            }
-            return false
-        }
+        // Ask Omi shortcut is registered via Carbon RegisterEventHotKey in
+        // GlobalShortcutManager (works regardless of accessibility permission state).
 
-        // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
+        // Global monitor - for when OTHER apps are focused (Ctrl+Option+R only)
         globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            if cmdEnterHandler(event) { return }
             _ = hotkeyHandler(event)
         }
 
-        // Local monitor - for when THIS app is focused
+        // Local monitor - for when THIS app is focused (Ctrl+Option+R only)
         localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if cmdEnterHandler(event) { return nil }
             return hotkeyHandler(event)
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Cmd+Enter (Ask AI), Cmd+\\ (Toggle bar)")
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
     }
 
     /// Set up observers to show/hide dock icon when main window appears/disappears
@@ -474,6 +484,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !hasVisibleOmiWindow && NSApp.activationPolicy() != .accessory {
             NSApp.setActivationPolicy(.accessory)
             log("AppDelegate: Dock icon hidden (no visible Omi windows)")
+            // Workaround for macOS Sequoia bug: switching to .accessory can cause
+            // NSStatusBar items to disappear. Force-refresh the status bar item.
+            refreshMenuBarIcon()
+        }
+    }
+
+    /// Force-refresh the menu bar icon after activation policy changes.
+    /// Works around a macOS Sequoia bug where NSStatusBar items vanish
+    /// when switching to .accessory activation policy.
+    private func refreshMenuBarIcon() {
+        guard let statusBarItem = statusBarItem else { return }
+        statusBarItem.isVisible = false
+        DispatchQueue.main.async {
+            statusBarItem.isVisible = true
+            log("AppDelegate: [MENUBAR] Refreshed status bar item after policy change")
         }
     }
 
@@ -594,11 +619,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @MainActor @objc private func openOmiFromMenu() {
         AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
         NSApp.activate(ignoringOtherApps: true)
+        var foundWindow = false
         for window in NSApp.windows {
             if window.title.hasPrefix("Omi") {
+                foundWindow = true
                 window.makeKeyAndOrderFront(nil)
                 window.appearance = NSAppearance(named: .darkAqua)
             }
+        }
+        // Restore dock icon when opening from menu bar
+        showDockIcon()
+        if !foundWindow {
+            log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
         }
     }
 
@@ -632,6 +664,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         log("AppDelegate: [MENUBAR] Menu opened by user")
         AnalyticsManager.shared.menuBarOpened()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Keep app running in menu bar when all windows are closed
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -747,22 +784,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
                 log("App rename migration: moved to \(newPath)")
 
-                // Re-register with Launch Services
-                let lsregister = Process()
-                lsregister.executableURL = URL(fileURLWithPath:
-                    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-                lsregister.arguments = ["-f", newPath]
-                try? lsregister.run()
-                lsregister.waitUntilExit()
+                // Re-register with Launch Services and relaunch from new path (off main thread)
+                DispatchQueue.global(qos: .utility).async {
+                    let lsregister = Process()
+                    lsregister.executableURL = URL(fileURLWithPath:
+                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
+                    lsregister.arguments = ["-f", newPath]
+                    try? lsregister.run()
+                    lsregister.waitUntilExit()
 
-                // Relaunch from new path
-                let relaunch = Process()
-                relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                relaunch.arguments = [newPath]
-                try? relaunch.run()
+                    // Relaunch from new path
+                    let relaunch = Process()
+                    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                    relaunch.arguments = [newPath]
+                    try? relaunch.run()
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    NSApp.terminate(nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NSApp.terminate(nil)
+                    }
                 }
             } catch {
                 log("App rename migration failed: \(error.localizedDescription)")

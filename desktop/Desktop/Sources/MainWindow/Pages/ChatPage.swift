@@ -109,6 +109,7 @@ struct ChatPage: View {
     @State private var selectedCitation: Citation?
     @State private var citedConversation: ServerConversation?
     @State private var isLoadingCitation = false
+    @State private var copied = false
 
     var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -127,6 +128,30 @@ struct ChatPage: View {
             // Messages area
             messagesView
 
+            // Error banner
+            if let error = chatProvider.errorMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(OmiColors.warning)
+                        .scaledFont(size: 14)
+                    Text(error)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textSecondary)
+                    Spacer()
+                    Button {
+                        chatProvider.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(OmiColors.backgroundSecondary)
+            }
+
             // Input area
             inputArea
                 .padding()
@@ -141,6 +166,32 @@ struct ChatPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
+        }
+        .sheet(isPresented: $chatProvider.needsBrowserExtensionSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    chatProvider.needsBrowserExtensionSetup = false
+                },
+                onDismiss: {
+                    chatProvider.needsBrowserExtensionSetup = false
+                },
+                chatProvider: chatProvider
+            )
+            .fixedSize()
+        }
+        .sheet(isPresented: $chatProvider.isClaudeAuthRequired) {
+            ClaudeAuthSheet(
+                onConnect: {
+                    chatProvider.startClaudeAuth()
+                },
+                onCancel: {
+                    chatProvider.isClaudeAuthRequired = false
+                    // Switch back to Mode A if auth cancelled
+                    Task {
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.agentSDK)
+                    }
+                }
+            )
         }
         .overlay {
             // Loading overlay when fetching citation
@@ -301,20 +352,39 @@ struct ChatPage: View {
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(8)
 
-            // Clear chat button
+            // Copy conversation button
             if !chatProvider.messages.isEmpty {
+                Button(action: {
+                    copyConversation()
+                }) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 14)
+                        .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy conversation")
+            }
+
+            // Clear chat button
+            if !chatProvider.messages.isEmpty || chatProvider.isClearing {
                 Button(action: {
                     Task {
                         await chatProvider.clearChat()
                     }
                 }) {
-                    Image(systemName: "trash")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
+                    if chatProvider.isClearing {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "trash")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("Clear chat history")
-                .disabled(chatProvider.isLoading)
+                .disabled(chatProvider.isLoading || chatProvider.isClearing)
             }
 
             // History button (only in multi-chat mode)
@@ -333,6 +403,17 @@ struct ChatPage: View {
                     )
                 }
             }
+
+            // AI Chat settings button
+            Button(action: {
+                NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
+            }) {
+                Image(systemName: "gear")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("AI Chat settings")
         }
     }
 
@@ -344,7 +425,7 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             hasMoreMessages: chatProvider.hasMoreMessages,
             isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-            isLoadingInitial: chatProvider.isLoading || chatProvider.isLoadingSessions,
+            isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions) && !chatProvider.isClearing,
             app: selectedApp,
             onLoadMore: { await chatProvider.loadMoreMessages() },
             onRate: { messageId, rating in
@@ -353,6 +434,8 @@ struct ChatPage: View {
             onCitationTap: { citation in
                 handleCitationTap(citation)
             },
+            sessionsLoadError: chatProvider.sessionsLoadError,
+            onRetry: { Task { await chatProvider.retryLoad() } },
             welcomeContent: { welcomeMessage }
         )
     }
@@ -414,7 +497,7 @@ struct ChatPage: View {
     private var inputArea: some View {
         ChatInputView(
             onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil)
+                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
                 Task { await chatProvider.sendMessage(text) }
             },
             onFollowUp: { text in
@@ -424,8 +507,26 @@ struct ChatPage: View {
                 chatProvider.stopAgent()
             },
             isSending: chatProvider.isSending,
-            mode: $chatProvider.chatMode
+            isStopping: chatProvider.isStopping,
+            mode: $chatProvider.chatMode,
+            inputText: $chatProvider.draftText
         )
+    }
+
+    /// Copy the entire conversation to clipboard
+    private func copyConversation() {
+        let text: String = chatProvider.messages.map { message in
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            return "\(sender): \(message.text)"
+        }.joined(separator: "\n\n")
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copied = false
+        }
     }
 
     /// Handle tapping on a citation card
@@ -465,8 +566,27 @@ struct ChatBubble: View {
     let app: OmiApp?
     let onRate: (Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var isDuplicate: Bool = false
 
     @State private var isHovering = false
+    @State private var isExpanded = false
+    @State private var showCopied = false
+
+    /// Messages longer than this are truncated with a "Show more" button
+    private static let truncationThreshold = 500
+
+    /// Whether this message should be truncated
+    private var shouldTruncate: Bool {
+        !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    }
+
+    /// The text to display (truncated or full) — shows the END of the message
+    private var displayText: String {
+        if shouldTruncate {
+            return "…" + String(message.text.suffix(Self.truncationThreshold))
+        }
+        return message.text
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -505,44 +625,74 @@ struct ChatBubble: View {
                     // Show typing indicator for empty streaming message
                     TypingIndicator()
                 } else if message.sender == .ai && !message.contentBlocks.isEmpty {
-                    // Render structured content blocks (text interspersed with tool calls)
-                    ForEach(message.contentBlocks) { block in
-                        switch block {
+                    // Render structured content blocks, grouping consecutive tool calls
+                    let groupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+                    ForEach(groupedBlocks) { group in
+                        switch group {
                         case .text(_, let text):
                             if !text.isEmpty {
-                                Markdown(text)
-                                    .scaledMarkdownTheme(.ai)
-                                    .textSelection(.enabled)
-                                    .if_available_writingToolsNone()
+                                SelectableMarkdown(text: text, sender: .ai)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
                                     .background(OmiColors.backgroundSecondary)
                                     .cornerRadius(18)
                             }
-                        case .toolCall(_, let name, let status, _, let input, let output):
-                            ToolCallCard(name: name, status: status, input: input, output: output)
+                        case .toolCalls(_, let calls):
+                            ToolCallsGroup(calls: calls)
                         case .thinking(_, let text):
                             ThinkingBlock(text: text)
                         }
                     }
                     // Show typing indicator at end if still streaming
+                    // (skip only when last group is tool calls with a running tool — it already has a spinner)
                     if message.isStreaming {
-                        if case .toolCall(_, _, .running, _, _, _) = message.contentBlocks.last {
-                            // Tool is running — indicator already shows spinner
-                        } else if case .text(_, let lastText) = message.contentBlocks.last, lastText.isEmpty {
+                        if case .toolCalls(_, let calls) = groupedBlocks.last,
+                           calls.contains(where: { block in
+                               if case .toolCall(_, _, .running, _, _, _) = block { return true }
+                               return false
+                           }) {
+                            // Tool group has a running tool — its card already shows a spinner
+                        } else {
                             TypingIndicator()
                         }
                     }
+                } else if isDuplicate && !isExpanded {
+                    // Collapsed duplicate message
+                    Button(action: { isExpanded = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc")
+                                .scaledFont(size: 11)
+                            Text("Duplicate message")
+                                .scaledFont(size: 12)
+                            Image(systemName: "chevron.down")
+                                .scaledFont(size: 9)
+                        }
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .cornerRadius(18)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     // User messages or AI messages without content blocks (loaded from Firestore)
-                    Markdown(message.text)
-                        .scaledMarkdownTheme(message.sender)
-                        .textSelection(.enabled)
-                        .if_available_writingToolsNone()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                        .cornerRadius(18)
+                    VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+                        SelectableMarkdown(text: displayText, sender: message.sender)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                            .cornerRadius(18)
+
+                        // Show more / Show less toggle for long messages
+                        if message.text.count > Self.truncationThreshold {
+                            Button(action: { isExpanded.toggle() }) {
+                                Text(isExpanded ? "Show less" : "Show more")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 // Citation cards for AI messages with citations
@@ -553,10 +703,19 @@ struct ChatBubble: View {
                     .frame(maxWidth: 280)
                 }
 
-                // Rating buttons and timestamp row for AI messages (only when synced with backend)
+                // Rating buttons, copy button, and timestamp row for AI messages
                 if message.sender == .ai && !message.isStreaming && message.isSynced {
                     HStack(spacing: 8) {
                         ratingButtons
+                        copyButton
+
+                        Text(message.createdAt, style: .time)
+                            .scaledFont(size: 10)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                } else if message.sender == .ai && !message.isStreaming && !message.text.isEmpty {
+                    HStack(spacing: 8) {
+                        copyButton
 
                         Text(message.createdAt, style: .time)
                             .scaledFont(size: 10)
@@ -612,6 +771,171 @@ struct ChatBubble: View {
             .buttonStyle(.plain)
             .help("Not helpful")
         }
+    }
+
+    @ViewBuilder
+    private var copyButton: some View {
+        Button(action: {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(message.text, forType: .string)
+            showCopied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                showCopied = false
+            }
+        }) {
+            Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                .scaledFont(size: 11)
+                .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help("Copy message")
+    }
+}
+
+// MARK: - Content Block Grouping
+
+/// Groups consecutive tool call blocks into a single collapsible group
+enum ContentBlockGroup: Identifiable {
+    case text(id: String, text: String)
+    case toolCalls(id: String, calls: [ChatContentBlock])
+    case thinking(id: String, text: String)
+
+    var id: String {
+        switch self {
+        case .text(let id, _): return id
+        case .toolCalls(let id, _): return id
+        case .thinking(let id, _): return id
+        }
+    }
+
+    /// Groups consecutive `.toolCall` blocks together; passes `.text` and `.thinking` through
+    static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
+        var groups: [ContentBlockGroup] = []
+        var pendingToolCalls: [ChatContentBlock] = []
+
+        func flushToolCalls() {
+            guard !pendingToolCalls.isEmpty else { return }
+            let groupId = "toolgroup_\(pendingToolCalls.first!.id)"
+            groups.append(.toolCalls(id: groupId, calls: pendingToolCalls))
+            pendingToolCalls = []
+        }
+
+        for block in blocks {
+            switch block {
+            case .text(let id, let text):
+                flushToolCalls()
+                groups.append(.text(id: id, text: text))
+            case .toolCall:
+                pendingToolCalls.append(block)
+            case .thinking(let id, let text):
+                flushToolCalls()
+                groups.append(.thinking(id: id, text: text))
+            }
+        }
+        flushToolCalls()
+        return groups
+    }
+}
+
+// MARK: - Tool Calls Group
+
+/// Renders a group of consecutive tool calls as a single collapsed summary line
+struct ToolCallsGroup: View {
+    let calls: [ChatContentBlock]
+
+    @State private var isExpanded = false
+
+    /// Whether any tool in the group is still running
+    private var hasRunningTool: Bool {
+        calls.contains { block in
+            if case .toolCall(_, _, .running, _, _, _) = block { return true }
+            return false
+        }
+    }
+
+    /// Display name of the currently running tool (last running one), or last tool if all done
+    private var currentToolName: String {
+        // Find the last running tool
+        if let lastRunning = calls.last(where: { block in
+            if case .toolCall(_, _, .running, _, _, _) = block { return true }
+            return false
+        }) {
+            if case .toolCall(_, let name, _, _, _, _) = lastRunning {
+                return ChatContentBlock.displayName(for: name)
+            }
+        }
+        // All done — show last tool name
+        if case .toolCall(_, let name, _, _, _, _) = calls.last {
+            return ChatContentBlock.displayName(for: name)
+        }
+        return "Working"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Summary header
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    // Status indicator
+                    if hasRunningTool {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .scaledFont(size: 12)
+                            .foregroundColor(.green)
+                    }
+
+                    // Current/last tool action
+                    Text(currentToolName)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textSecondary)
+
+                    // Step count (only show when > 1)
+                    if calls.count > 1 {
+                        Text("·")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                        Text("\(calls.count) steps")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    // Expand chevron
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 9)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded: show individual tool call cards
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(calls) { block in
+                        if case .toolCall(_, let name, let status, _, let input, let output) = block {
+                            ToolCallCard(name: name, status: status, input: input, output: output)
+                        }
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 6)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(8)
     }
 }
 
@@ -700,7 +1024,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(10)
-                                .textSelection(.enabled)
                         }
                     }
 
@@ -715,7 +1038,6 @@ struct ToolCallCard: View {
                                 .scaledFont(size: 11, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .lineLimit(15)
-                                .textSelection(.enabled)
                         }
                     }
                 }
@@ -773,7 +1095,6 @@ struct ThinkingBlock: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .italic()
-                    .textSelection(.enabled)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 8)
                     .lineLimit(30)
@@ -1081,6 +1402,7 @@ struct ChatHistoryPopover: View {
                                 HistorySessionRow(
                                     session: session,
                                     isSelected: chatProvider.currentSession?.id == session.id,
+                                    isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                                     onSelect: {
                                         Task {
                                             await chatProvider.selectSession(session)
@@ -1151,6 +1473,7 @@ struct ChatHistoryPopover: View {
 struct HistorySessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -1209,8 +1532,14 @@ struct HistorySessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Action buttons on hover
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 6) {
                         // Rename button
                         Button(action: startEditing) {

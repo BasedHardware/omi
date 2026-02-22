@@ -12,12 +12,21 @@ Look up user activity, errors, and analytics across Sentry and PostHog.
 
 **Default email:** `i@m13v.com` (use unless user specifies otherwise)
 
+## Version Filtering (IMPORTANT)
+
+**By default, always filter Sentry queries to the latest released version** unless the user explicitly asks for all versions or a specific older version. This avoids noise from users on old versions with known/fixed issues.
+
+- The latest version is in `CHANGELOG.json` (first entry in `releases` array)
+- The Sentry release format is: `com.omi.computer-macos@{VERSION}+{BUILD}` (e.g., `com.omi.computer-macos@0.8.6+8006`)
+- Use wildcard to avoid needing the build number: `release:com.omi.computer-macos@0.8.6*`
+- The `sentry-logs.sh` script auto-detects the latest version and filters by default
+
 ## Prerequisites
 
 Ensure `.env` has these keys:
 ```bash
 SENTRY_AUTH_TOKEN=<token>
-SENTRY_ORG=based-hardware
+SENTRY_ORG=mediar-n5
 SENTRY_PROJECT=omi-computer
 
 POSTHOG_PERSONAL_API_KEY=phx_<key>
@@ -30,16 +39,30 @@ POSTHOG_PROJECT_ID=302298
 
 **Use the existing script:**
 ```bash
-./scripts/sentry-logs.sh <email>
-# Example: ./scripts/sentry-logs.sh kodjima33@gmail.com
+./scripts/sentry-logs.sh <email>                      # defaults to latest version
+./scripts/sentry-logs.sh <email> --version 0.8.3      # specific version
+./scripts/sentry-logs.sh <email> --all-versions        # no version filter
 ```
 
 Output saved to: `local/sentry-logs/<email>_<timestamp>.log`
 
-**Direct API query for issues:**
+**Direct API query for issues (filtered by version):**
 ```bash
+# Get latest version
+VERSION=$(python3 -c "import json; print(json.load(open('CHANGELOG.json'))['releases'][0]['version'])")
+
+# Query issues for the latest version only
 source .env && curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=user.email:<email>&limit=20" | python3 -c "
+  "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=release:com.omi.computer-macos%40${VERSION}*+is:unresolved&sort=freq&limit=25" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for issue in data[:25]:
+    print(f\"[{issue.get('shortId')}] {issue.get('count', 'N/A')} events, {issue.get('userCount', 'N/A')} users - {issue.get('title', '')[:60]}\")
+"
+
+# Query issues for a specific user on the latest version
+source .env && curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+  "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=release:com.omi.computer-macos%40${VERSION}*+user.email:<email>&limit=20" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 for issue in data[:20]:
@@ -154,10 +177,11 @@ WHERE person.properties.email = 'user@example.com'
   AND timestamp > now() - INTERVAL 7 DAY
 ```
 
-### Find users with specific errors (Sentry)
+### Find users with specific errors (Sentry, latest version)
 ```bash
+VERSION=$(python3 -c "import json; print(json.load(open('CHANGELOG.json'))['releases'][0]['version'])")
 source .env && curl -s -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-  "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=ScreenCaptureKit&statsPeriod=24h"
+  "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=release:com.omi.computer-macos%40${VERSION}*+ScreenCaptureKit&statsPeriod=24h"
 ```
 
 ### Get user's feature status (PostHog)

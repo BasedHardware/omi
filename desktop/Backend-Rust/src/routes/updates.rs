@@ -7,7 +7,7 @@ use axum::{
     extract::{Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -37,9 +37,15 @@ pub struct ReleaseInfo {
     pub changelog: Vec<String>,
     pub is_live: bool,
     pub is_critical: bool,
+    /// Release channel: None = stable, Some("beta"), Some("staging")
+    pub channel: Option<String>,
 }
 
 /// Generate Sparkle 2.0 appcast XML
+///
+/// Picks the latest live release per channel (stable, beta, staging).
+/// Releases arrive sorted by build_number desc, so first live hit per channel wins.
+/// Items without a channel tag are "stable" (Sparkle default).
 fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
     let mut xml = String::from(r#"<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
@@ -49,9 +55,15 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
     <language>en</language>
 "#);
 
+    // Deduplicate: pick the latest live release per channel
+    let mut seen_channels = std::collections::HashSet::new();
     for release in releases {
         if !release.is_live {
             continue;
+        }
+        let ch_key = release.channel.clone().unwrap_or_default();
+        if !seen_channels.insert(ch_key) {
+            continue; // already emitted an item for this channel
         }
 
         // Build changelog HTML from release items
@@ -87,6 +99,13 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
             release.ed_signature,
         ));
 
+        // Emit channel tag for non-stable releases
+        if let Some(ref ch) = release.channel {
+            if !ch.is_empty() {
+                xml.push_str(&format!("      <sparkle:channel>{}</sparkle:channel>\n", ch));
+            }
+        }
+
         if release.is_critical {
             xml.push_str("      <sparkle:criticalUpdate />\n");
         }
@@ -111,9 +130,9 @@ async fn get_appcast(
     State(state): State<AppState>,
     Query(query): Query<AppcastQuery>,
 ) -> Response {
-    // Try to fetch releases from Firestore (only serve the latest live release)
+    // Fetch all releases — generate_appcast_xml handles filtering and per-channel dedup
     let releases = match state.firestore.get_desktop_releases().await {
-        Ok(releases) => releases.into_iter().filter(|r| r.is_live).take(1).collect(),
+        Ok(releases) => releases,
         Err(e) => {
             tracing::warn!("Failed to fetch releases from Firestore: {}, using fallback", e);
             // Return empty appcast if no releases found
@@ -145,7 +164,8 @@ struct LatestVersionResponse {
 async fn get_latest_version(State(state): State<AppState>) -> impl IntoResponse {
     match state.firestore.get_desktop_releases().await {
         Ok(releases) => {
-            if let Some(latest) = releases.into_iter().filter(|r| r.is_live).next() {
+            // Return the latest live stable release (no channel = stable)
+            if let Some(latest) = releases.into_iter().filter(|r| r.is_live && r.channel.as_deref().unwrap_or("").is_empty()).next() {
                 axum::Json(LatestVersionResponse {
                     version: latest.version,
                     build_number: latest.build_number,
@@ -173,16 +193,20 @@ async fn get_latest_version(State(state): State<AppState>) -> impl IntoResponse 
 }
 
 /// GET /download - Redirect to latest DMG download
-/// This derives the DMG URL from the ZIP URL stored in Firestore
+/// Redirects to GCS-hosted DMG for faster downloads and better browser trust
+/// (fewer redirect hops = fewer Chrome Safe Browsing warnings)
 async fn download_redirect(State(state): State<AppState>) -> impl IntoResponse {
     match state.firestore.get_desktop_releases().await {
         Ok(releases) => {
-            if let Some(latest) = releases.into_iter().filter(|r| r.is_live).next() {
-                // Convert ZIP URL to DMG URL
-                // e.g., .../Omi.zip -> .../Omi.Beta.dmg
-                let dmg_url = latest.download_url.replace("Omi.zip", "Omi.Beta.dmg");
-                tracing::info!("Redirecting download to: {}", dmg_url);
-                axum::response::Redirect::temporary(&dmg_url).into_response()
+            // Return the latest live stable release for download
+            if let Some(latest) = releases.into_iter().filter(|r| r.is_live && r.channel.as_deref().unwrap_or("").is_empty()).next() {
+                // Serve from GCS bucket for direct download (avoids multi-hop GitHub redirects)
+                let gcs_url = format!(
+                    "https://storage.googleapis.com/omi_macos_updates/releases/v{}/Omi.Beta.dmg",
+                    latest.version
+                );
+                tracing::info!("Redirecting download to GCS: {}", gcs_url);
+                axum::response::Redirect::temporary(&gcs_url).into_response()
             } else {
                 (
                     StatusCode::NOT_FOUND,
@@ -211,14 +235,12 @@ pub struct CreateReleaseRequest {
     pub ed_signature: String,
     #[serde(default)]
     pub changelog: Vec<String>,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub is_live: bool,
     #[serde(default)]
     pub is_critical: bool,
-}
-
-fn default_true() -> bool {
-    true
+    /// Release channel: None/null = stable, "beta", "staging"
+    pub channel: Option<String>,
 }
 
 /// Response for create release
@@ -264,6 +286,7 @@ async fn create_release(
         changelog: request.changelog,
         is_live: request.is_live,
         is_critical: request.is_critical,
+        channel: request.channel,
     };
 
     // Save to Firestore
@@ -293,10 +316,88 @@ async fn create_release(
     }
 }
 
+/// Request body for promoting a release to the next channel
+#[derive(Debug, Deserialize)]
+struct PromoteReleaseRequest {
+    /// Firestore doc ID, e.g. "v0.9.6+9006"
+    doc_id: String,
+}
+
+/// Response for promote release
+#[derive(Serialize)]
+struct PromoteReleaseResponse {
+    success: bool,
+    doc_id: String,
+    old_channel: String,
+    new_channel: String,
+    message: String,
+}
+
+/// PATCH /updates/releases/promote - Promote a release to the next channel
+/// staging → beta → stable
+async fn promote_release(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PromoteReleaseRequest>,
+) -> impl IntoResponse {
+    // Check for release secret
+    let expected_secret = std::env::var("RELEASE_SECRET").unwrap_or_default();
+    let provided_secret = headers
+        .get("X-Release-Secret")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if expected_secret.is_empty() || provided_secret != expected_secret {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(PromoteReleaseResponse {
+                success: false,
+                doc_id: request.doc_id,
+                old_channel: String::new(),
+                new_channel: String::new(),
+                message: "Invalid or missing X-Release-Secret header".to_string(),
+            }),
+        );
+    }
+
+    match state.firestore.promote_desktop_release(&request.doc_id).await {
+        Ok((old_channel, new_channel)) => {
+            let old_display = if old_channel.is_empty() { "stable".to_string() } else { old_channel.clone() };
+            let new_display = if new_channel.is_empty() { "stable".to_string() } else { new_channel.clone() };
+            tracing::info!("Promoted release {}: {} → {}", request.doc_id, old_display, new_display);
+            let message = format!("Release promoted from {} to {}", old_display, new_display);
+            (
+                StatusCode::OK,
+                Json(PromoteReleaseResponse {
+                    success: true,
+                    doc_id: request.doc_id,
+                    old_channel: old_display,
+                    new_channel: new_display,
+                    message,
+                }),
+            )
+        }
+        Err(e) => {
+            tracing::error!("Failed to promote release {}: {}", request.doc_id, e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(PromoteReleaseResponse {
+                    success: false,
+                    doc_id: request.doc_id,
+                    old_channel: String::new(),
+                    new_channel: String::new(),
+                    message: format!("Failed to promote: {}", e),
+                }),
+            )
+        }
+    }
+}
+
 pub fn updates_routes() -> Router<AppState> {
     Router::new()
         .route("/appcast.xml", get(get_appcast))
         .route("/updates/latest", get(get_latest_version))
         .route("/updates/releases", post(create_release))
+        .route("/updates/releases/promote", patch(promote_release))
         .route("/download", get(download_redirect))
 }

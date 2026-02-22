@@ -8150,6 +8150,45 @@ class AppLocalizationsVi extends AppLocalizations {
       'Nhấn và giữ nút nguồn cho đến khi đèn LED nhấp nháy. Thiết bị sẽ có thể được phát hiện.';
 
   @override
+  String get downloadingFromDevice => 'Đang tải xuống từ thiết bị';
+
+  @override
+  String get reconnectingToInternet => 'Đang kết nối lại internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Đang tải lên $current/$total';
+  }
+
+  @override
+  String get processedStatus => 'Đã xử lý';
+
+  @override
+  String get corruptedStatus => 'Bị hỏng';
+
+  @override
+  String nPending(int count) {
+    return '$count đang chờ';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count đã xử lý';
+  }
+
+  @override
+  String get synced => 'Đã đồng bộ';
+
+  @override
+  String get noPendingRecordings => 'Không có bản ghi đang chờ';
+
+  @override
+  String get noProcessedRecordings => 'Chưa có bản ghi nào được xử lý';
+
+  @override
+  String get pending => 'Đang chờ';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Có gì mới trong $version';
   }
@@ -8180,4 +8219,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Nhập mật khẩu WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

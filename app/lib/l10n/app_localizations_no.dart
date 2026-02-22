@@ -8141,6 +8141,45 @@ class AppLocalizationsNo extends AppLocalizations {
   String get pairingDescNeoOne => 'Trykk og hold strømknappen til LED-en blinker. Enheten vil være synlig.';
 
   @override
+  String get downloadingFromDevice => 'Laster ned fra enhet';
+
+  @override
+  String get reconnectingToInternet => 'Kobler til internett på nytt...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laster opp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Behandlet';
+
+  @override
+  String get corruptedStatus => 'Ødelagt';
+
+  @override
+  String nPending(int count) {
+    return '$count ventende';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count behandlet';
+  }
+
+  @override
+  String get synced => 'Synkronisert';
+
+  @override
+  String get noPendingRecordings => 'Ingen ventende opptak';
+
+  @override
+  String get noProcessedRecordings => 'Ingen behandlede opptak ennå';
+
+  @override
+  String get pending => 'Ventende';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Nyheter i $version';
   }
@@ -8171,4 +8210,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Skriv inn WiFi-passord';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

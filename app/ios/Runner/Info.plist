@@ -136,6 +136,8 @@
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>We need access to your reminders to export action items from Omi conversations.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Omi uses your health data to answer questions about your fitness, sleep, and activity through chat.</string>
 	<key>NSHealthUpdateUsageDescription</key>

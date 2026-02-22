@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use crate::encryption;
 
 use crate::models::{
-    ActionItem, ActionItemDB, AdviceCategory, AdviceDB, App, AppReview, AppSummary, Category,
+    ActionItemDB, AdviceCategory, AdviceDB, App, AppReview, AppSummary, Category,
     ChatSessionDB, Conversation, DailySummarySettings, DistractionEntry, Folder, FocusSessionDB,
     FocusStats, FocusStatus, GoalDB, GoalHistoryEntry, GoalType, Memory, MemoryCategory, MemoryDB, MessageDB,
     NotificationSettings, PersonaDB, Structured, TranscriptSegment, TranscriptionPreferences,
@@ -1931,21 +1931,17 @@ impl FirestoreService {
         // Enrich action items that have conversation_id but no source
         self.enrich_action_items_with_source(uid, &mut action_items).await;
 
-        // Post-query sort to match Python backend behavior:
+        // Post-query sort matching Python backend behavior (used by iOS/Flutter app):
         // 1. Items WITH due_at come first (sorted by due_at ascending)
         // 2. Items WITHOUT due_at come last
         // 3. Tie-breaker: created_at descending (newest first)
         action_items.sort_by(|a, b| {
             match (&a.due_at, &b.due_at) {
-                // Both have due_at: sort by due_at ascending, then created_at descending
                 (Some(due_a), Some(due_b)) => {
                     due_a.cmp(due_b).then_with(|| b.created_at.cmp(&a.created_at))
                 }
-                // a has due_at, b doesn't: a comes first
                 (Some(_), None) => std::cmp::Ordering::Less,
-                // a doesn't have due_at, b does: b comes first
                 (None, Some(_)) => std::cmp::Ordering::Greater,
-                // Neither has due_at: sort by created_at descending
                 (None, None) => b.created_at.cmp(&a.created_at),
             }
         });
@@ -2068,6 +2064,7 @@ impl FirestoreService {
         relevance_score: Option<i32>,
         sort_order: Option<i32>,
         indent_level: Option<i32>,
+        recurrence_rule: Option<&str>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         // Build update mask and fields
         let mut field_paths: Vec<&str> = vec!["updated_at"];
@@ -2127,6 +2124,15 @@ impl FirestoreService {
         if let Some(indent) = indent_level {
             field_paths.push("indent_level");
             fields["indent_level"] = json!({"integerValue": indent.to_string()});
+        }
+
+        if let Some(rule) = recurrence_rule {
+            field_paths.push("recurrence_rule");
+            if rule.is_empty() {
+                fields["recurrence_rule"] = json!({"nullValue": null});
+            } else {
+                fields["recurrence_rule"] = json!({"stringValue": rule});
+            }
         }
 
         let update_mask = field_paths
@@ -2266,64 +2272,6 @@ impl FirestoreService {
     }
 
     /// Save action items to Firestore
-    /// Copied from Python save_action_items
-    pub async fn save_action_items(
-        &self,
-        uid: &str,
-        conversation_id: &str,
-        action_items: &[ActionItem],
-    ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut saved_ids = Vec::new();
-        let now = Utc::now();
-
-        for item in action_items {
-            let item_id = uuid::Uuid::new_v4().to_string();
-
-            let url = format!(
-                "{}/{}/{}/{}/{}",
-                self.base_url(),
-                USERS_COLLECTION,
-                uid,
-                ACTION_ITEMS_SUBCOLLECTION,
-                item_id
-            );
-
-            let mut fields = json!({
-                "description": {"stringValue": item.description},
-                "completed": {"booleanValue": item.completed},
-                "conversation_id": {"stringValue": conversation_id},
-                "created_at": {"timestampValue": now.to_rfc3339()},
-                "updated_at": {"timestampValue": now.to_rfc3339()}
-            });
-
-            if let Some(due_at) = &item.due_at {
-                fields["due_at"] = json!({"timestampValue": due_at.to_rfc3339()});
-            }
-
-            let doc = json!({"fields": fields});
-
-            let response = self
-                .build_request(reqwest::Method::PATCH, &url)
-                .await?
-                .json(&doc)
-                .send()
-                .await?;
-
-            if response.status().is_success() {
-                saved_ids.push(item_id);
-            } else {
-                tracing::warn!("Failed to save action item: {}", response.text().await?);
-            }
-        }
-
-        tracing::info!(
-            "Saved {} action items for conversation {}",
-            saved_ids.len(),
-            conversation_id
-        );
-        Ok(saved_ids)
-    }
-
     /// Create a single action item (for API/desktop creation)
     pub async fn create_action_item(
         &self,
@@ -2335,6 +2283,9 @@ impl FirestoreService {
         metadata: Option<&str>,
         category: Option<&str>,
         relevance_score: Option<i32>,
+        from_staged: Option<bool>,
+        recurrence_rule: Option<&str>,
+        recurrence_parent_id: Option<&str>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -2377,6 +2328,18 @@ impl FirestoreService {
 
         if let Some(score) = relevance_score {
             fields["relevance_score"] = json!({"integerValue": score.to_string()});
+        }
+
+        if let Some(staged) = from_staged {
+            fields["from_staged"] = json!({"booleanValue": staged});
+        }
+
+        if let Some(rule) = recurrence_rule {
+            fields["recurrence_rule"] = json!({"stringValue": rule});
+        }
+
+        if let Some(pid) = recurrence_parent_id {
+            fields["recurrence_parent_id"] = json!({"stringValue": pid});
         }
 
         let doc = json!({"fields": fields});
@@ -2543,6 +2506,29 @@ impl FirestoreService {
         category: Option<&str>,
         relevance_score: Option<i32>,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
+        // Reject empty descriptions
+        let description = description.trim();
+        if description.is_empty() {
+            return Err("Cannot create staged task with empty description".into());
+        }
+
+        // Check for exact-match duplicate (case-insensitive)
+        let existing = self.get_staged_tasks(uid, 200, 0).await.unwrap_or_default();
+        let desc_lower = description.to_lowercase();
+        if existing.iter().any(|t| t.description.trim().to_lowercase() == desc_lower) {
+            tracing::info!(
+                "Skipping duplicate staged task for user {}: {}",
+                uid,
+                &description[..description.len().min(80)]
+            );
+            // Return the existing item instead of creating a duplicate
+            let existing_item = existing
+                .into_iter()
+                .find(|t| t.description.trim().to_lowercase() == desc_lower)
+                .unwrap();
+            return Ok(existing_item);
+        }
+
         let item_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
@@ -2605,6 +2591,53 @@ impl FirestoreService {
             source
         );
         Ok(item)
+    }
+
+    /// Migrate action items that were created by the old conversation extraction path
+    /// (have conversation_id but no source field) to staged_tasks.
+    /// Returns (migrated_count, deleted_count).
+    pub async fn migrate_conversation_action_items_to_staged(
+        &self,
+        uid: &str,
+    ) -> Result<(usize, usize), Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch all incomplete, non-deleted action items.
+        // NOTE: get_action_items runs enrich_action_items_with_source which populates
+        // the source field from the conversation. So we can't check source.is_none()
+        // after that. Instead, we filter by conversation_id.is_some() — all items with
+        // a conversation_id were created by the old save_action_items path (confirmed
+        // 0 false positives: no items have both conversation_id AND a real source in Firestore).
+        let all_items = self
+            .get_action_items(uid, 10000, 0, Some(false), None, None, None, None, None, None, None)
+            .await?;
+
+        // Filter: has conversation_id → created by old save_action_items path
+        let bad_items: Vec<ActionItemDB> = all_items
+            .into_iter()
+            .filter(|item| item.conversation_id.is_some())
+            .collect();
+
+        if bad_items.is_empty() {
+            tracing::info!("No conversation action items to migrate for user {}", uid);
+            return Ok((0, 0));
+        }
+
+        tracing::info!(
+            "Found {} conversation action items to migrate for user {}",
+            bad_items.len(),
+            uid
+        );
+
+        // Use batch_migrate_to_staged for fast batch commits (250 items per batch)
+        let migrated = self.batch_migrate_to_staged(uid, &bad_items).await?;
+
+        tracing::info!(
+            "Migration complete for user {}: {} migrated out of {} candidates",
+            uid,
+            migrated,
+            bad_items.len()
+        );
+
+        Ok((migrated, migrated))
     }
 
     /// Get staged tasks ordered by relevance_score ASC (best ranked first).
@@ -2855,7 +2888,7 @@ impl FirestoreService {
         Ok(migrated_count)
     }
 
-    /// Count active AI action items (source contains "screenshot", not completed, not deleted).
+    /// Count active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Used by the promotion system to determine if more tasks should be promoted.
     pub async fn count_active_ai_action_items(
         &self,
@@ -2863,7 +2896,7 @@ impl FirestoreService {
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        // Composite filter: source="screenshot" AND completed=false at Firestore level
+        // Composite filter: from_staged=true AND completed=false at Firestore level
         // so we don't miss items when users have thousands of action_items
         let query = json!({
             "structuredQuery": {
@@ -2881,9 +2914,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2913,19 +2946,16 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .count();
 
         Ok(count)
     }
 
-    /// Get active AI action items (source = "screenshot", not completed, not deleted).
+    /// Get active AI action items promoted from staged_tasks (from_staged=true, not completed, not deleted).
     /// Returns the actual items for dedup comparison during promotion.
-    /// Uses a composite filter to query source="screenshot" AND completed=false at the Firestore level.
+    /// Uses a composite filter to query from_staged=true AND completed=false at the Firestore level.
     pub async fn get_active_ai_action_items(
         &self,
         uid: &str,
@@ -2948,9 +2978,9 @@ impl FirestoreService {
                             },
                             {
                                 "fieldFilter": {
-                                    "field": {"fieldPath": "source"},
+                                    "field": {"fieldPath": "from_staged"},
                                     "op": "EQUAL",
-                                    "value": {"stringValue": "screenshot"}
+                                    "value": {"booleanValue": true}
                                 }
                             }
                         ]
@@ -2980,10 +3010,7 @@ impl FirestoreService {
             .filter_map(|doc| self.parse_action_item(doc).ok())
             .filter(|item| {
                 item.deleted != Some(true)
-                    && item
-                        .source
-                        .as_ref()
-                        .map_or(false, |s| s.contains("screenshot"))
+                    && item.from_staged == Some(true)
             })
             .collect();
 
@@ -3851,6 +3878,9 @@ impl FirestoreService {
             relevance_score: self.parse_int(fields, "relevance_score"),
             sort_order: self.parse_int(fields, "sort_order"),
             indent_level: self.parse_int(fields, "indent_level"),
+            from_staged: self.parse_bool(fields, "from_staged").ok(),
+            recurrence_rule: self.parse_string(fields, "recurrence_rule"),
+            recurrence_parent_id: self.parse_string(fields, "recurrence_parent_id"),
         })
     }
 
@@ -3967,7 +3997,7 @@ impl FirestoreService {
             let description = self.parse_string(map_fields, "description").unwrap_or_default();
             let completed = self.parse_bool(map_fields, "completed").unwrap_or(false);
             let due_at = self.parse_timestamp_optional(map_fields, "due_at");
-            Some(crate::models::ActionItem { description, completed, due_at })
+            Some(crate::models::ActionItem { description, completed, due_at, confidence: None, priority: None })
         }).collect()
     }
 
@@ -4899,6 +4929,17 @@ impl FirestoreService {
         self.get_assistant_settings(uid).await
     }
 
+    /// Get user email from Firestore profile
+    pub async fn get_user_email(
+        &self,
+        uid: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let empty = json!({});
+        let fields = doc.get("fields").unwrap_or(&empty);
+        Ok(self.parse_string(fields, "email"))
+    }
+
     /// Get user language preference
     pub async fn get_user_language(
         &self,
@@ -5467,6 +5508,9 @@ impl FirestoreService {
         );
 
         let mut fields = json!({
+            // CRITICAL: id field required - Python ChatSession model requires it
+            // and chat.py accesses chat_session['id'] directly
+            "id": {"stringValue": &session_id},
             "title": {"stringValue": title.unwrap_or("New Chat")},
             "created_at": {"timestampValue": now.to_rfc3339()},
             "updated_at": {"timestampValue": now.to_rfc3339()},
@@ -6324,6 +6368,9 @@ impl FirestoreService {
             vec![]
         };
 
+        // channel: None means stable (missing field or null in Firestore)
+        let channel = self.parse_string(fields, "channel");
+
         Ok(crate::routes::updates::ReleaseInfo {
             version: self.parse_string(fields, "version").unwrap_or_default(),
             build_number: self.parse_int(fields, "build_number").unwrap_or(0) as u32,
@@ -6333,6 +6380,7 @@ impl FirestoreService {
             changelog,
             is_live: self.parse_bool(fields, "is_live").unwrap_or(false),
             is_critical: self.parse_bool(fields, "is_critical").unwrap_or(false),
+            channel,
         })
     }
 
@@ -6355,6 +6403,12 @@ impl FirestoreService {
             .map(|s| json!({"stringValue": s}))
             .collect();
 
+        // Channel field: stringValue for non-stable, nullValue for stable
+        let channel_value = match &release.channel {
+            Some(ch) if !ch.is_empty() => json!({"stringValue": ch}),
+            _ => json!({"nullValue": null}),
+        };
+
         let doc = json!({
             "fields": {
                 "version": {"stringValue": release.version},
@@ -6364,7 +6418,8 @@ impl FirestoreService {
                 "published_at": {"stringValue": release.published_at},
                 "changelog": {"arrayValue": {"values": changelog_values}},
                 "is_live": {"booleanValue": release.is_live},
-                "is_critical": {"booleanValue": release.is_critical}
+                "is_critical": {"booleanValue": release.is_critical},
+                "channel": channel_value
             }
         });
 
@@ -6384,9 +6439,266 @@ impl FirestoreService {
         Ok(doc_id)
     }
 
+    /// Promote a desktop release to the next channel: staging → beta → stable
+    /// Returns (old_channel, new_channel) where empty string = stable
+    pub async fn promote_desktop_release(
+        &self,
+        doc_id: &str,
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
+        // Fetch the current document
+        let url = format!(
+            "{}/desktop_releases/{}",
+            self.base_url(),
+            doc_id
+        );
+
+        let response = self
+            .build_request(reqwest::Method::GET, &url)
+            .await?
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Release not found: {}", error_text).into());
+        }
+
+        let doc: Value = response.json().await?;
+        let fields = doc.get("fields").ok_or("Missing fields in document")?;
+        let current_channel = self.parse_string(fields, "channel").unwrap_or_default();
+
+        // Determine next channel
+        let (old_channel, new_channel_value) = match current_channel.as_str() {
+            "staging" => ("staging".to_string(), json!({"stringValue": "beta"})),
+            "beta" => ("beta".to_string(), json!({"nullValue": null})),
+            "" => return Err("Release is already on stable channel, cannot promote further".into()),
+            other => return Err(format!("Unknown channel '{}', cannot promote", other).into()),
+        };
+
+        let new_channel = match new_channel_value.get("stringValue").and_then(|v| v.as_str()) {
+            Some(ch) => ch.to_string(),
+            None => String::new(), // stable
+        };
+
+        // PATCH only the channel field
+        let patch_url = format!(
+            "{}/desktop_releases/{}?updateMask.fieldPaths=channel",
+            self.base_url(),
+            doc_id
+        );
+
+        let patch_doc = json!({
+            "fields": {
+                "channel": new_channel_value
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::PATCH, &patch_url)
+            .await?
+            .json(&patch_doc)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Failed to update channel: {}", error_text).into());
+        }
+
+        tracing::info!("Promoted release {}: {} → {}", doc_id,
+            if old_channel.is_empty() { "stable" } else { &old_channel },
+            if new_channel.is_empty() { "stable" } else { &new_channel },
+        );
+
+        Ok((old_channel, new_channel))
+    }
+
     // =========================================================================
     // MESSAGES (Chat Persistence)
     // =========================================================================
+
+    /// Get or create a chat session for the given app_id (None = main default chat).
+    /// Mirrors Python's `acquire_chat_session()`:
+    ///   1. List all chat_sessions, find one matching plugin_id
+    ///   2. If none exists, create one with {id, created_at, plugin_id}
+    /// Returns the session ID.
+    pub async fn acquire_chat_session(
+        &self,
+        uid: &str,
+        app_id: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        // Step 1: Fetch all chat sessions and find a matching one client-side.
+        // We can't use `WHERE plugin_id == null` via REST API — it doesn't match
+        // documents where the field is absent or was set to null by the Python SDK.
+        let list_url = format!(
+            "{}/{}/{}/{}",
+            self.base_url(),
+            USERS_COLLECTION,
+            uid,
+            CHAT_SESSIONS_SUBCOLLECTION
+        );
+
+        let response = self
+            .build_request(reqwest::Method::GET, &list_url)
+            .await?
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            let body: Value = response.json().await?;
+            if let Some(documents) = body.get("documents").and_then(|d| d.as_array()) {
+                for doc in documents {
+                    let fields = match doc.get("fields") {
+                        Some(f) => f,
+                        None => continue,
+                    };
+
+                    let matches = match app_id {
+                        Some(target_app) => {
+                            // Looking for a session with this specific plugin_id
+                            fields
+                                .get("plugin_id")
+                                .and_then(|v| v.get("stringValue"))
+                                .and_then(|v| v.as_str())
+                                == Some(target_app)
+                        }
+                        None => {
+                            // Looking for main chat: plugin_id is null, absent, or empty
+                            match fields.get("plugin_id") {
+                                None => true,
+                                Some(val) => {
+                                    val.get("nullValue").is_some()
+                                        || val
+                                            .get("stringValue")
+                                            .and_then(|v| v.as_str())
+                                            .map_or(false, |s| s.is_empty())
+                                }
+                            }
+                        }
+                    };
+
+                    if matches {
+                        if let Some(doc_id) = doc
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .and_then(|name| name.split('/').last())
+                        {
+                            tracing::info!(
+                                "Found existing chat session {} for user {} (app_id={:?})",
+                                doc_id,
+                                uid,
+                                app_id
+                            );
+                            return Ok(doc_id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 2: No matching session found — create one (mirrors Python's ChatSession model)
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let create_url = format!(
+            "{}/{}/{}/{}/{}",
+            self.base_url(),
+            USERS_COLLECTION,
+            uid,
+            CHAT_SESSIONS_SUBCOLLECTION,
+            session_id
+        );
+
+        let mut session_fields = json!({
+            "id": {"stringValue": &session_id},
+            "created_at": {"timestampValue": now.to_rfc3339()},
+            "message_ids": {"arrayValue": {"values": []}},
+            "file_ids": {"arrayValue": {"values": []}}
+        });
+
+        if let Some(app) = app_id {
+            session_fields["plugin_id"] = json!({"stringValue": app});
+            session_fields["app_id"] = json!({"stringValue": app});
+        } else {
+            session_fields["plugin_id"] = json!({"nullValue": null});
+            session_fields["app_id"] = json!({"nullValue": null});
+        }
+
+        let doc = json!({"fields": session_fields});
+
+        let response = self
+            .build_request(reqwest::Method::PATCH, &create_url)
+            .await?
+            .json(&doc)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Failed to create chat session: {}", error_text).into());
+        }
+
+        tracing::info!(
+            "Created new chat session {} for user {} (app_id={:?})",
+            session_id,
+            uid,
+            app_id
+        );
+        Ok(session_id)
+    }
+
+    /// Append a message ID to a chat session's message_ids array.
+    /// Mirrors Python's `add_message_to_chat_session()`.
+    async fn add_message_to_chat_session(
+        &self,
+        uid: &str,
+        chat_session_id: &str,
+        message_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Firestore REST API: use fieldTransforms with appendMissingElements
+        // to atomically append to the array (equivalent to Python's ArrayUnion)
+        let update = json!({
+            "writes": [{
+                "transform": {
+                    "document": format!(
+                        "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+                        self.project_id, USERS_COLLECTION, uid,
+                        CHAT_SESSIONS_SUBCOLLECTION, chat_session_id
+                    ),
+                    "fieldTransforms": [{
+                        "fieldPath": "message_ids",
+                        "appendMissingElements": {
+                            "values": [{"stringValue": message_id}]
+                        }
+                    }]
+                }
+            }]
+        });
+
+        let commit_url = format!(
+            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            self.project_id
+        );
+
+        let response = self
+            .build_request(reqwest::Method::POST, &commit_url)
+            .await?
+            .json(&update)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            tracing::warn!(
+                "Failed to add message {} to chat session {}: {}",
+                message_id,
+                chat_session_id,
+                error_text
+            );
+        }
+
+        Ok(())
+    }
 
     /// Save a chat message to Firestore
     /// Used for chat history persistence
@@ -6397,6 +6709,7 @@ impl FirestoreService {
         sender: &str,
         app_id: Option<&str>,
         session_id: Option<&str>,
+        metadata: Option<&str>,
     ) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
         let message_id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -6436,10 +6749,27 @@ impl FirestoreService {
             fields["plugin_id"] = json!({"nullValue": null});
         }
 
-        if let Some(session) = session_id {
+        // Acquire (get or create) a chat session — mirrors Python's acquire_chat_session().
+        // This ensures desktop messages have a chat_session_id so they're visible on mobile.
+        let effective_session_id: Option<String> = if let Some(session) = session_id {
+            Some(session.to_string())
+        } else {
+            match self.acquire_chat_session(uid, app_id).await {
+                Ok(session) => Some(session),
+                Err(e) => {
+                    tracing::warn!("Failed to acquire chat session: {}", e);
+                    None
+                }
+            }
+        };
+
+        if let Some(ref session) = effective_session_id {
             fields["session_id"] = json!({"stringValue": session});
-            // Also set chat_session_id for Python compatibility
             fields["chat_session_id"] = json!({"stringValue": session});
+        }
+
+        if let Some(meta) = metadata {
+            fields["metadata"] = json!({"stringValue": meta});
         }
 
         let doc = json!({"fields": fields});
@@ -6456,15 +6786,28 @@ impl FirestoreService {
             return Err(format!("Firestore create error: {}", error_text).into());
         }
 
+        // Track message in the chat session's message_ids array
+        // (mirrors Python's add_message_to_chat_session)
+        if let Some(ref session) = effective_session_id {
+            if let Err(e) = self
+                .add_message_to_chat_session(uid, session, &message_id)
+                .await
+            {
+                tracing::warn!("Failed to track message in chat session: {}", e);
+                // Non-fatal — message is already saved
+            }
+        }
+
         let message = MessageDB {
             id: message_id.clone(),
             text: text.to_string(),
             created_at: now,
             sender: sender.to_string(),
             app_id: app_id.map(|s| s.to_string()),
-            session_id: session_id.map(|s| s.to_string()),
+            session_id: effective_session_id,
             rating: None,
             reported: false,
+            metadata: metadata.map(|s| s.to_string()),
         };
 
         tracing::info!(
@@ -6777,6 +7120,12 @@ impl FirestoreService {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        let metadata = fields
+            .get("metadata")
+            .and_then(|v| v.get("stringValue"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(MessageDB {
             id,
             text,
@@ -6786,6 +7135,7 @@ impl FirestoreService {
             session_id,
             rating,
             reported,
+            metadata,
         })
     }
 
@@ -7158,6 +7508,7 @@ impl FirestoreService {
         min_value: f64,
         max_value: f64,
         unit: Option<&str>,
+        source: Option<&str>,
     ) -> Result<GoalDB, Box<dyn std::error::Error + Send + Sync>> {
         // Check existing active goals
         let existing_goals = self.get_user_goals(uid, 10).await?;
@@ -7213,6 +7564,13 @@ impl FirestoreService {
             );
         }
 
+        if let Some(s) = source {
+            fields.as_object_mut().unwrap().insert(
+                "source".to_string(),
+                json!({"stringValue": s}),
+            );
+        }
+
         let doc = json!({"fields": fields});
 
         let response = self
@@ -7241,6 +7599,7 @@ impl FirestoreService {
             created_at: now,
             updated_at: now,
             completed_at: None,
+            source: source.map(|s| s.to_string()),
         };
 
         tracing::info!("Created goal {} for user {}", goal.id, uid);
@@ -7861,6 +8220,7 @@ impl FirestoreService {
                     None
                 }
             },
+            source: self.parse_string(fields, "source"),
         })
     }
 

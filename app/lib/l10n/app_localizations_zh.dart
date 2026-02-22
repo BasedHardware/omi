@@ -7998,6 +7998,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingDescNeoOne => '按住电源按钮直到LED闪烁。设备将变为可发现状态。';
 
   @override
+  String get downloadingFromDevice => '正在从设备下载';
+
+  @override
+  String get reconnectingToInternet => '正在重新连接互联网...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '正在上传 $current/$total';
+  }
+
+  @override
+  String get processedStatus => '已处理';
+
+  @override
+  String get corruptedStatus => '已损坏';
+
+  @override
+  String nPending(int count) {
+    return '$count 个待处理';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count 个已处理';
+  }
+
+  @override
+  String get synced => '已同步';
+
+  @override
+  String get noPendingRecordings => '没有待处理的录音';
+
+  @override
+  String get noProcessedRecordings => '暂无已处理的录音';
+
+  @override
+  String get pending => '待处理';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version 的新功能';
   }
@@ -8028,4 +8067,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enterWifiPassword => '输入WiFi密码';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

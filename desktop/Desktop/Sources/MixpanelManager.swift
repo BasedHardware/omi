@@ -326,6 +326,14 @@ extension MixpanelManager {
         ])
     }
 
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        track("Notification Repair Triggered", properties: [
+            "reason": reason,
+            "previous_status": previousStatus,
+            "current_status": currentStatus
+        ])
+    }
+
     func notificationSettingsChecked(
         authStatus: String,
         alertStyle: String,
@@ -413,10 +421,11 @@ extension MixpanelManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
         track("Chat Message Sent", properties: [
             "message_length": messageLength,
-            "has_context": hasContext
+            "has_context": hasContext,
+            "source": source
         ])
     }
 
@@ -567,6 +576,12 @@ extension MixpanelManager {
 
     func taskExtracted(taskCount: Int) {
         track("Task Extracted", properties: [
+            "task_count": taskCount
+        ])
+    }
+
+    func taskPromoted(taskCount: Int) {
+        track("Task Promoted", properties: [
             "task_count": taskCount
         ])
     }

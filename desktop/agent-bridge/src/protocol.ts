@@ -9,6 +9,8 @@ export interface QueryMessage {
   systemPrompt: string;
   cwd?: string;
   mode?: "ask" | "act";
+  model?: string;
+  resume?: string;
 }
 
 export interface ToolResultMessage {

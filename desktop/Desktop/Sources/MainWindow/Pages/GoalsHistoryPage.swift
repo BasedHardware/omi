@@ -74,7 +74,7 @@ struct GoalsHistoryPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(spacing: 8) {
+                    LazyVStack(spacing: 8) {
                         ForEach(completedGoals) { goal in
                             CompletedGoalRow(goal: goal)
                         }

@@ -442,7 +442,7 @@ struct ChatPrompts {
     <user_context>
     Current date/time in {user_name}'s timezone ({tz}): {current_datetime_str}
     {memories_section}
-    {goal_section}{ai_profile_section}
+    {goal_section}{tasks_section}{ai_profile_section}
     </user_context>
 
     <mentor_behavior>
@@ -473,36 +473,56 @@ struct ChatPrompts {
 
     <critical_accuracy_rules>
     NEVER MAKE UP INFORMATION - THIS IS CRITICAL:
-    1. If you don't have information about something, give a SHORT 1-2 line response saying you don't know.
+    1. If you don't have information about something, USE YOUR TOOLS to look it up before saying you don't know.
     2. Do NOT generate plausible-sounding details even if they seem helpful.
     3. Sound like a human: "I don't have that" not "no data available"
-    4. If you don't know something, say "I don't know" in 1-2 lines max.
+    4. Only say "I don't know" AFTER you've checked the database. 1-2 lines max.
     </critical_accuracy_rules>
 
     <tools>
-    You have 2 tools. Use them — don't guess when you can look it up.
+    You have 2 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
     - SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-    - Use for: app usage stats, time queries, task management, aggregations, anything structured.
+    - Use for: personal facts, app usage stats, time queries, task management, aggregations, anything structured.
 
     **semantic_search**: Vector similarity search on screen history.
     - Use for: fuzzy conceptual queries where exact SQL keywords won't work.
     - e.g. "reading about machine learning", "working on design mockups"
     - Parameters: query (required), days (default 7), app_filter (optional)
 
-    **When to use which:**
+    **CRITICAL — When to use tools proactively:**
+    The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
+    For ANY personal question (age, preferences, relationships, habits, past events, "what do you know about me", etc.):
+    1. FIRST check <user_facts> — if the answer is there, use it directly.
+    2. If NOT in <user_facts>, ALWAYS query the memories table before saying you don't know.
+    3. For questions about past events or conversations, query transcription_sessions/transcription_segments.
+    NEVER say "I don't know" or "I don't have that info" without checking the database first.
+
+    **When to use which tool:**
+    - "how old am I?" / "what's my name?" / personal facts → execute_sql (query memories table)
     - "what did I do yesterday?" → execute_sql (query screenshots by timestamp)
     - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
     - "find where I was reading about AI" → semantic_search (conceptual)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
     - "what are my tasks?" → execute_sql (SELECT FROM action_items)
     - "show my conversations" → execute_sql (SELECT FROM transcription_sessions)
+    - "what did I talk about with John?" → execute_sql (search transcription_segments)
 
     {database_schema}
 
     **Common SQL patterns:**
+
+    -- Look up personal facts/preferences (ALWAYS try this for personal questions):
+    SELECT content FROM memories WHERE deleted = 0 AND isDismissed = 0
+    ORDER BY createdAt DESC LIMIT 50
+
+    -- Search memories by keyword:
+    SELECT content, category, createdAt FROM memories
+    WHERE deleted = 0 AND isDismissed = 0 AND content LIKE '%keyword%'
+    ORDER BY createdAt DESC
+
     -- What did I do today (app breakdown):
     SELECT appName, COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
     FROM screenshots WHERE timestamp >= datetime('now', 'start of day', 'localtime')
@@ -528,6 +548,12 @@ struct ChatPrompts {
     -- Conversation transcript:
     SELECT ts.text, ts.speaker, ts.startTime FROM transcription_segments ts
     WHERE ts.sessionId = ? ORDER BY ts.segmentOrder
+
+    -- Search conversation content:
+    SELECT s.id, s.title, s.overview, s.startedAt FROM transcription_sessions s
+    JOIN transcription_segments seg ON seg.sessionId = s.id
+    WHERE s.deleted = 0 AND seg.text LIKE '%keyword%'
+    GROUP BY s.id ORDER BY s.startedAt DESC LIMIT 10
 
     -- Time in user's timezone: use datetime('now', 'localtime') or datetime('now', '-N hours', 'localtime')
     -- "yesterday": datetime('now', 'start of day', '-1 day', 'localtime') to datetime('now', 'start of day', 'localtime')
@@ -562,8 +588,9 @@ struct ChatPrompts {
         "proactive_extractions": "memories, advice, tasks extracted from screenshots",
         "focus_sessions": "focus tracking",
         "live_notes": "AI-generated notes during recording",
-        "memories": "user facts and extracted knowledge (bidirectional sync with backend)",
+        "memories": "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
         "ai_user_profiles": "daily AI-generated user profile summaries",
+        "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
     ]
 
     /// Tables to exclude from the schema prompt (internal/GRDB tables)
@@ -818,6 +845,7 @@ struct ChatPromptBuilder {
         userName: String,
         memoriesSection: String = "",
         goalSection: String = "",
+        tasksSection: String = "",
         aiProfileSection: String = "",
         databaseSchema: String = ""
     ) -> String {
@@ -827,6 +855,7 @@ struct ChatPromptBuilder {
             memoriesSection: memoriesSection,
             goalSection: goalSection
         )
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: tasksSection)
         prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: aiProfileSection)
         prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
         return prompt

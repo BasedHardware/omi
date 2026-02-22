@@ -8185,6 +8185,45 @@ class AppLocalizationsHu extends AppLocalizations {
       'Tartsa nyomva a bekapcsoló gombot, amíg a LED villogni nem kezd. Az eszköz felfedezhető lesz.';
 
   @override
+  String get downloadingFromDevice => 'Letöltés az eszközről';
+
+  @override
+  String get reconnectingToInternet => 'Újracsatlakozás az internethez...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total feltöltése';
+  }
+
+  @override
+  String get processedStatus => 'Feldolgozva';
+
+  @override
+  String get corruptedStatus => 'Sérült';
+
+  @override
+  String nPending(int count) {
+    return '$count függőben';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count feldolgozva';
+  }
+
+  @override
+  String get synced => 'Szinkronizálva';
+
+  @override
+  String get noPendingRecordings => 'Nincsenek függőben lévő felvételek';
+
+  @override
+  String get noProcessedRecordings => 'Még nincsenek feldolgozott felvételek';
+
+  @override
+  String get pending => 'Függőben';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Újdonságok a $version verzióban';
   }
@@ -8215,4 +8254,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Adja meg a WiFi jelszót';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

@@ -8159,6 +8159,45 @@ class AppLocalizationsId extends AppLocalizations {
   String get pairingDescNeoOne => 'Tekan dan tahan tombol daya hingga LED berkedip. Perangkat akan dapat ditemukan.';
 
   @override
+  String get downloadingFromDevice => 'Mengunduh dari perangkat';
+
+  @override
+  String get reconnectingToInternet => 'Menyambung kembali ke internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Mengunggah $current dari $total';
+  }
+
+  @override
+  String get processedStatus => 'Diproses';
+
+  @override
+  String get corruptedStatus => 'Rusak';
+
+  @override
+  String nPending(int count) {
+    return '$count tertunda';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count diproses';
+  }
+
+  @override
+  String get synced => 'Tersinkronisasi';
+
+  @override
+  String get noPendingRecordings => 'Tidak ada rekaman tertunda';
+
+  @override
+  String get noProcessedRecordings => 'Belum ada rekaman yang diproses';
+
+  @override
+  String get pending => 'Tertunda';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'Yang Baru di $version';
   }
@@ -8189,4 +8228,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'Masukkan kata sandi WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

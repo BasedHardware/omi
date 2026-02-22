@@ -1,6 +1,290 @@
 {
   "releases": [
     {
+      "version": "0.10.1",
+      "date": "2026-02-20",
+      "changes": [
+        "Claude Code mode: use your own Claude Pro/Max account for AI chat via ACP bridge",
+        "Dual bridge architecture: switch between Agent SDK and Claude Code in Settings",
+        "Task chat persistence: conversations saved locally and resume across app restarts",
+        "Claude authentication sheet for signing in with your Claude account",
+        "Staged release pipeline: updates progress through staging, beta, and stable channels",
+        "Update channel picker in Settings to opt into beta releases",
+        "Task chat uses independent bridge processes per task",
+        "Onboarding loading animation during file indexing",
+        "Resource monitor and agent sync reliability improvements",
+        "Fixed staging releases incorrectly updating the public download link"
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "date": "2026-02-19",
+      "changes": [
+        "Claude Code mode: use your own Claude Pro/Max account for AI chat via ACP bridge",
+        "Dual bridge architecture: switch between Agent SDK and Claude Code in Settings",
+        "Task chat persistence: conversations saved locally and resume across app restarts",
+        "Claude authentication sheet for signing in with your Claude account",
+        "Staged release pipeline: updates progress through staging, beta, and stable channels",
+        "Update channel picker in Settings to opt into beta releases",
+        "Task chat uses independent bridge processes per task",
+        "Onboarding loading animation during file indexing",
+        "Resource monitor and agent sync reliability improvements"
+      ]
+    },
+    {
+      "version": "0.9.9",
+      "date": "2026-02-19",
+      "changes": [
+        "Fixed AI agent crash: bundled Node.js now signed with JIT entitlements for V8 under Hardened Runtime",
+        "Bundled Node.js: AI chat works out of the box on any Mac without Node.js installed",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "AI chat error messages shown in a banner instead of silently failing",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing with incremental scans that skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Sparkle update logs now persist even when the app terminates during an update",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.8",
+      "date": "2026-02-19",
+      "changes": [
+        "Fixed AI agent crash caused by JIT conflicts with code-signed Node.js binary",
+        "Bundled Node.js: AI chat works out of the box on any Mac without Node.js installed",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "AI chat error messages shown in a banner instead of silently failing",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing with incremental scans that skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.7",
+      "date": "2026-02-19",
+      "changes": [
+        "Rolled back due to agent crash"
+      ]
+    },
+    {
+      "version": "0.9.6",
+      "date": "2026-02-19",
+      "changes": [
+        "Bundled Node.js: AI chat now works out of the box on any Mac without Node.js installed",
+        "AI chat error messages: errors are now shown in a banner instead of silently failing",
+        "Fixed AI chat crash on macOS VMs and low-memory machines",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing: incremental scans skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo now works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.3",
+      "date": "2026-02-18",
+      "changes": [
+        "Browser extension setup: auto-detects Chrome installation and extension with live polling, clearer step-by-step flow",
+        "Grouped tool calls in chat: multi-step AI actions collapse into a single summary with progress indicator",
+        "Fixed chat scroll: messages now reliably stay pinned to bottom during streaming",
+        "Sleeker floating control bar: thinner, more minimal default appearance",
+        "Simplified onboarding: Bluetooth permission no longer required during setup",
+        "Screen analysis toggle fix: setting now stays in sync with actual monitoring state across restarts",
+        "AI profile save retries: file indexing insights saved reliably with automatic retry on failure",
+        "Rewind database session safety: prevents stale sign-out tasks from closing freshly opened databases",
+        "Stop button shows spinner while processing stop request",
+        "Settings analytics: tracking added to all major settings sections for usage insights"
+      ]
+    },
+    {
+      "version": "0.9.2",
+      "date": "2026-02-18",
+      "changes": [
+        "File indexing onboarding: Omi scans your folders to understand what you work on, then opens an AI chat to explore your files",
+        "Transcription auto-restart: audio monitoring resumes automatically after your Mac wakes from sleep",
+        "Notification self-repair: detects and fixes silently revoked notification permissions on macOS 26+",
+        "Reliable task sync: deleted tasks now properly disappear, reconciliation runs when switching to Tasks tab",
+        "Task sort order matches mobile: consistent due_at/created_at ordering across platforms",
+        "Old tasks hidden: incomplete tasks older than 7 days are excluded from the task list",
+        "Goals widget improvements: tooltips on buttons, drag clamping fix, manual goals never auto-removed, AI generation opt-in",
+        "Chat input rewritten: fixed cursor misalignment with native NSTextView, typing indicator works during tool calls",
+        "Refreshed sidebar icons and fixed Rewind toggle to control both screen and audio together",
+        "User names loaded from backend profile, fixing blank names for Apple Sign-In users",
+        "Rewind arrow key navigation corrected: left=newer, right=older",
+        "Floating control bar hover flicker fix",
+        "Compact view is now the default for Conversations",
+        "Reduced Crisp support chat polling from 30s to 2min with session caching",
+        "AI profile generation uses fewer tokens (5 recent profiles instead of 50)",
+        "Proactive assistant backpressure: drops frames during slow analysis instead of queuing"
+      ]
+    },
+    {
+      "version": "0.9.1",
+      "date": "2026-02-17",
+      "changes": [
+        "Redesigned Memories page: compact horizontal layout with hover info popovers for details",
+        "Unified Rewind toggle: single switch controls both screen capture and audio recording",
+        "Smarter AI chat: proactively searches your local database before saying 'I don't know'",
+        "Floating bar visual refresh: new OMI text logo, better contrast, smoother hover animations",
+        "Draggable floating bar is now opt-in via Settings > Shortcuts",
+        "Fixed crash when backend is unreachable: sync now uses exponential backoff instead of hammering every 3 seconds",
+        "Fixed potential crash from unsafe URL construction in sync service",
+        "Fixed click-through handler that could permanently block clicks if deallocated mid-operation",
+        "Chrome extension auto-installs when browser mode is enabled",
+        "Simplified dashboard: weekly score view, full-width tasks widget",
+        "Rewind storage stats now shown in Settings",
+        "Settings search supports multi-word queries"
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "date": "2026-02-17",
+      "changes": [
+        "Browser extension support: AI agent can use your logged-in Chrome sessions instead of an isolated browser",
+        "Cloud agent VMs auto-stop after 30 min idle and auto-restart when needed, saving resources",
+        "Fixed 2+ second hangs when opening large conversations with lazy-loading transcript segments",
+        "Hardware-accelerated screen recording (hevc_videotoolbox) for lower CPU usage",
+        "Auto-detects video calls (Zoom, Teams, Meet) and reduces capture frequency to avoid slowdowns",
+        "Floating bar shows OMI logo and no longer drifts across the screen or off-screen on monitor disconnect",
+        "AI agent turn limit removed — tasks can run as many steps as needed",
+        "Capped in-memory embeddings to 5,000 entries to prevent unbounded memory growth",
+        "Fixed database crashes from concurrent sync operations during memory and action item writes",
+        "Reduced error noise: cleaner Sentry logs, quieter Crisp polling, slower recovery retries"
+      ]
+    },
+    {
+      "version": "0.8.9",
+      "date": "2026-02-16",
+      "changes": [
+        "Compact floating bar: minimizes to a small circle icon, expands on hover for a less intrusive experience",
+        "Native Apple Sign In on macOS with automatic fallback to web-based OAuth",
+        "Real-time agent sync: local data continuously pushed to cloud agent every 3 seconds",
+        "Smarter task extraction: detects your commitments in messaging apps (e.g. 'Sure, I'll do it')",
+        "AI model selector moved from floating bar to Settings for a cleaner in-bar experience",
+        "Chat sessions retry up to 3 times with error state and Retry button on failure",
+        "Goal generation now triggers daily instead of every 100 conversations",
+        "Support chat unread badge on Help tab in sidebar",
+        "Agent sync flushes pending data before system sleep to prevent data loss",
+        "Accessibility permission prompt now opens System Settings directly on macOS Sequoia+"
+      ]
+    },
+    {
+      "version": "0.8.8",
+      "date": "2026-02-16",
+      "changes": [
+        "Accessibility permission reset: detects broken state after macOS updates and offers one-click fix",
+        "Database upgraded to connection pool for better performance during concurrent reads",
+        "Automation permission check now handles System Events not running (fixes -600 error)",
+        "Onboarding no longer blocks on permissions — grant them later from Settings",
+        "Hiding the floating bar now persists across app restarts",
+        "Native notifications when support replies in Help chat",
+        "Faster conversation sync by skipping unchanged sessions"
+      ]
+    },
+    {
+      "version": "0.8.7",
+      "date": "2026-02-16",
+      "changes": [
+        "Multi-turn conversations in floating bar: ask follow-ups and see full chat history with auto-scroll",
+        "Model picker: switch between Sonnet and Opus directly from the floating bar",
+        "Voice follow-up: use push-to-talk while viewing an AI response to continue the conversation",
+        "Batch transcription mode: record first, transcribe after for better accuracy (Settings > Shortcuts)",
+        "Customizable Ask Omi shortcut: choose ⌘Enter, ⌘⇧Enter, ⌘J, or ⌘O (Settings > Shortcuts)",
+        "Push-to-talk sounds can now be toggled off in settings",
+        "AI chat now includes your tasks for more context-aware responses",
+        "Long chat messages are auto-truncated with Show more/less toggle",
+        "Duplicate messages in chat are collapsed automatically",
+        "AI Chat settings gear button added to chat page for quick access",
+        "Shared chat provider between floating bar and sidebar for faster responses",
+        "Fixed constraint loop crash on macOS Tahoe (macOS 26+)"
+      ]
+    },
+    {
+      "version": "0.8.6",
+      "date": "2026-02-15",
+      "changes": [
+        "Ask Omi floating bar now has a follow-up input field for continuing conversations",
+        "Added settings gear icon on the floating bar for quick access to configuration",
+        "New solid background option for the floating bar (Settings > Advanced > Ask Omi Floating Bar)",
+        "Copy entire conversation to clipboard with one click in AI Chat",
+        "Text selection now works across the entire chat area",
+        "Conversations auto-refresh silently without flickering or scroll jumps",
+        "Added auto-install updates option in Settings",
+        "Improved settings search with more keywords and subsections",
+        "Agent bridge now supports read-only Playwright tools in Ask mode"
+      ]
+    },
+    {
+      "version": "0.8.5",
+      "date": "2026-02-15",
+      "changes": [
+        "AI-suggested tasks now clearly marked with a promotion indicator",
+        "Dashboard loads faster by querying tasks directly from local database",
+        "Fixed transcription sessions getting stuck in 'uploading' state after app crashes",
+        "Fixed duplicate conversations when recovering failed uploads",
+        "Improved sidebar performance during audio recording",
+        "Agent sessions now properly detect when coding tasks are complete",
+        "Fixed completed tasks taking up to 60 seconds to refresh in dashboard",
+        "Fixed cursor jumping bug when dismissing modals"
+      ]
+    },
+    {
+      "version": "0.8.4",
+      "date": "2026-02-15",
+      "changes": [
+        "Fixed audio recording quality on Bluetooth headphones (no more automatic switch to low-quality call mode)",
+        "All users now have access to all features",
+        "Improved app startup speed with optimized database checks",
+        "Simplified Rewind page controls",
+        "Fixed database corruption during user data migration",
+        "Fixed memory leaks in Focus Assistant and Live Notes",
+        "Fixed app not staying in menu bar when all windows closed",
+        "Fixed floating control bar auto-showing on startup",
+        "Improved screen capture permission reset reliability",
+        "Added memory diagnostics for performance troubleshooting"
+      ]
+    },
+    {
+      "version": "0.8.3",
+      "date": "2026-02-14",
+      "changes": [
+        "Notifications for promoted tasks so you know when AI discovers new action items",
+        "Fixed tooltip crash in sidebar",
+        "Faster, safer downloads served from Google Cloud Storage"
+      ]
+    },
+    {
+      "version": "0.8.2",
+      "date": "2026-02-14",
+      "changes": [
+        "Smarter action items: confidence scoring filters out low-quality tasks, priority classification added",
+        "Conversation action items now saved as staged tasks with automatic migration",
+        "Conversation source tracking for better platform-aware processing",
+        "Split finish/stop button in Rewind for clearer recording controls",
+        "Unread chat indicators and streaming status on task rows",
+        "Analysis throttle and troubleshooting settings in Advanced preferences",
+        "Fixed capture timer handling for sleep/wake and special system modes",
+        "Fixed memory duplication from orphaned records and sync races",
+        "Fixed token refresh clearing on non-definitive failures",
+        "Prevented empty or duplicate staged tasks from being created",
+        "Performance: lazy task rendering, background log writes, goal caching, deduplicated fetches",
+        "Prevented settings sync and task refresh when not signed in"
+      ]
+    },
+    {
       "version": "0.8.1",
       "date": "2026-02-13",
       "changes": [

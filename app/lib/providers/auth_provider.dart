@@ -110,7 +110,9 @@ class AuthenticationProvider extends BaseProvider {
           AppSnackbar.showSnackbarError(MyApp.navigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
               'Failed to sign in with Google, please try again.');
         }
-      } catch (e) {
+      } catch (e, stackTrace) {
+        print('DEBUG_AUTH: OAuth Google sign in error: $e');
+        print('DEBUG_AUTH: Stack trace: $stackTrace');
         Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError(
             MyApp.navigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.');

@@ -38,6 +38,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     'memories:write': false,
     'action_items:read': false,
     'action_items:write': false,
+    'goals:read': false,
+    'goals:write': false,
   };
 
   List<String> get _selectedScopes {
@@ -56,6 +58,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
       _scopes['conversations:read'] = true;
       _scopes['memories:read'] = true;
       _scopes['action_items:read'] = true;
+      _scopes['goals:read'] = true;
     });
   }
 
@@ -105,9 +108,11 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
     return _scopes['conversations:read'] == true &&
         _scopes['memories:read'] == true &&
         _scopes['action_items:read'] == true &&
+        _scopes['goals:read'] == true &&
         _scopes['conversations:write'] == false &&
         _scopes['memories:write'] == false &&
-        _scopes['action_items:write'] == false;
+        _scopes['action_items:write'] == false &&
+        _scopes['goals:write'] == false;
   }
 
   bool get _isFullAccess {
@@ -421,11 +426,13 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
+                      _buildPermissionTile(context.l10n.conversations, 'conversations:read', 'conversations:write',
+                          Icons.chat_bubble_outline),
                       _buildPermissionTile(
-                          context.l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
-                      _buildPermissionTile(context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
+                          context.l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
                       _buildPermissionTile(
                           context.l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
+                      _buildPermissionTile(context.l10n.goals, 'goals:read', 'goals:write', Icons.flag_outlined),
                     ],
                   ),
                 ),

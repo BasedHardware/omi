@@ -24,8 +24,11 @@ actor VideoChunkEncoder {
     private let aspectRatioChangeThreshold: CGFloat = 0.2
 
     /// Maximum frames to buffer before forcing a flush (memory safety)
-    /// At ~24MB per CGImage (3000px), 120 frames = ~2.9GB max
-    private let maxBufferFrames = 120
+    /// Calculated from chunk duration + frame rate + padding so the normal
+    /// duration-based finalization always fires before this safety limit.
+    private var maxBufferFrames: Int {
+        Int(chunkDuration * frameRate) + 20
+    }
 
     /// Maximum consecutive ffmpeg failures before emergency reset
     private let maxConsecutiveFailures = 5
@@ -47,6 +50,9 @@ actor VideoChunkEncoder {
     private var ffmpegStdin: FileHandle?
     private var currentOutputSize: CGSize?
     private var currentChunkInputSize: CGSize?  // Track input size for aspect ratio comparison
+
+    /// Timer to finalize stale chunks when frames stop arriving
+    private var stalenessCheckTask: Task<Void, Never>?
 
     private var videosDirectory: URL?
     private var isInitialized = false
@@ -144,6 +150,7 @@ actor VideoChunkEncoder {
         do {
             try await writeFrame(image: image)
             consecutiveWriteFailures = 0 // Reset on successful write
+            resetStalenessTimer()
         } catch {
             consecutiveWriteFailures += 1
             logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
@@ -216,10 +223,12 @@ actor VideoChunkEncoder {
             "-r", String(frameRate),
             "-i", "-",
             "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", // Ensure even dimensions
-            "-vcodec", "libx265",
+            "-vcodec", "hevc_videotoolbox",
             "-tag:v", "hvc1",
-            "-preset", "ultrafast",
-            "-crf", "15",  // Visually lossless quality
+            "-q:v", "65",  // Quality scale 1-100 (65 ≈ CRF 15 equivalent)
+            "-allow_sw", "true",  // Fall back to software if HW encoder busy
+            "-realtime", "true",  // Hint: real-time capture, don't block
+            "-prio_speed", "true",  // Prioritize speed over compression
             // Fragmented MP4 - allows reading while writing
             "-movflags", "frag_keyframe+empty_moov+default_base_moof",
             "-pix_fmt", "yuv420p",
@@ -249,7 +258,8 @@ actor VideoChunkEncoder {
             "input_height": Int(imageSize.height),
             "output_width": Int(outputSize.width),
             "output_height": Int(outputSize.height),
-            "crf": 15,
+            "quality": 65,
+            "encoder": "hevc_videotoolbox",
             "max_resolution": Int(maxResolution)
         ]
         SentrySDK.addBreadcrumb(breadcrumb)
@@ -262,10 +272,16 @@ actor VideoChunkEncoder {
             throw RewindError.storageError("FFmpeg not ready")
         }
 
-        // Scale image if needed and convert to PNG data
-        let scaledImage = scaleImage(image, to: outputSize)
-        guard let pngData = createPNGData(from: scaledImage) else {
-            throw RewindError.storageError("Failed to create PNG data")
+        // Wrap image scaling + PNG encoding in autoreleasepool to prevent
+        // CGContext/NSBitmapImageRep accumulation in async actor contexts.
+        // Without this, temporary Obj-C objects from each frame pile up
+        // because Swift concurrency doesn't drain autorelease pools between tasks.
+        let pngData: Data = try autoreleasepool {
+            let scaledImage = scaleImage(image, to: outputSize)
+            guard let data = createPNGData(from: scaledImage) else {
+                throw RewindError.storageError("Failed to create PNG data")
+            }
+            return data
         }
 
         // Write to ffmpeg stdin
@@ -277,6 +293,9 @@ actor VideoChunkEncoder {
     }
 
     private func finalizeCurrentChunk() async throws {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         // Close stdin to signal end of input to ffmpeg
         if let stdin = ffmpegStdin {
             try? stdin.close()
@@ -304,6 +323,42 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+    }
+
+    // MARK: - Staleness Detection
+
+    /// Reset the staleness timer after each successful frame write.
+    /// If no new frame arrives within chunkDuration + 10s, finalize the chunk
+    /// to release the ffmpeg process and H.265 hardware encoder context.
+    private func resetStalenessTimer() {
+        stalenessCheckTask?.cancel()
+        let timeout = chunkDuration + 10.0
+        stalenessCheckTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self?.finalizeStaleChunkIfNeeded()
+        }
+    }
+
+    /// Finalize a chunk that has gone stale (no new frames for longer than chunk duration).
+    private func finalizeStaleChunkIfNeeded() async {
+        guard let startTime = currentChunkStartTime else { return }
+
+        let age = Date().timeIntervalSince(startTime)
+        guard age >= chunkDuration else { return }
+
+        log("VideoChunkEncoder: Stale chunk detected (age: \(String(format: "%.0f", age))s, no new frames) — finalizing to release encoder resources")
+
+        let breadcrumb = Breadcrumb(level: .warning, category: "video_encoder")
+        breadcrumb.message = "Stale chunk finalized"
+        breadcrumb.data = [
+            "age_seconds": Int(age),
+            "frame_count": frameTimestamps.count,
+            "chunk_path": currentChunkPath ?? "none"
+        ]
+        SentrySDK.addBreadcrumb(breadcrumb)
+
+        try? await finalizeCurrentChunk()
     }
 
     // MARK: - Helpers
@@ -420,6 +475,9 @@ actor VideoChunkEncoder {
 
     /// Cancel any in-progress encoding and clean up
     func cancel() async {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         // Close stdin first
         if let stdin = ffmpegStdin {
             try? stdin.close()
@@ -444,6 +502,9 @@ actor VideoChunkEncoder {
     /// Emergency reset when ffmpeg fails repeatedly or buffer overflows
     /// Clears all state and allows fresh start on next frame
     private func emergencyReset() async throws {
+        stalenessCheckTask?.cancel()
+        stalenessCheckTask = nil
+
         let droppedFrames = frameTimestamps.count
 
         // Report to Sentry for monitoring

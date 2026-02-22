@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "Εισαγάγετε τα στοιχεία WiFi για να επιτρέψετε στη συσκευή να κατεβάσει το firmware.",
   "networkNameSsid": "Όνομα δικτύου (SSID)",
   "enterWifiNetworkName": "Εισαγάγετε το όνομα δικτύου WiFi",
-  "enterWifiPassword": "Εισαγάγετε τον κωδικό WiFi"
+  "enterWifiPassword": "Εισαγάγετε τον κωδικό WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Λήψη από τη συσκευή",
+  "reconnectingToInternet": "Επανασύνδεση στο διαδίκτυο...",
+  "uploadingToCloud": "Μεταφόρτωση {current} από {total}",
+  "processedStatus": "Επεξεργασμένο",
+  "corruptedStatus": "Κατεστραμμένο",
+  "nPending": "{count} σε αναμονή",
+  "nProcessed": "{count} επεξεργασμένα",
+  "synced": "Συγχρονισμένο",
+  "noPendingRecordings": "Δεν υπάρχουν εκκρεμείς εγγραφές",
+  "noProcessedRecordings": "Δεν υπάρχουν επεξεργασμένες εγγραφές ακόμα",
+  "pending": "Εκκρεμεί"
 }

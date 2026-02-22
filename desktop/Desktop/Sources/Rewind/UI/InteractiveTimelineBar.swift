@@ -433,25 +433,36 @@ class TimeBasedTimelineNSView: NSView {
     private func showTooltip(for screenshot: Screenshot, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
-        tooltipView.frame.size = tooltipView.fittingSize
+        // CRITICAL: Wrap NSHostingView in a container NSView instead of setting it as contentView
+        // directly. When NSHostingView IS the contentView of a borderless window, it negotiates
+        // window sizing through updateAnimatedWindowSize, causing re-entrant constraint updates
+        // that crash in _postWindowNeedsUpdateConstraints on macOS 26+ (OMI-COMPUTER-1G / 1J).
+        let hostingView = NSHostingView(rootView: TooltipView(screenshot: screenshot).withFontScaling())
+        hostingView.sizingOptions = [.minSize, .maxSize]
+        let size = hostingView.fittingSize
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
 
         let windowPoint = convert(point, to: nil)
         guard let screenPoint = window?.convertPoint(toScreen: windowPoint) else { return }
 
         let tooltipWindow = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - tooltipView.frame.width / 2,
+            contentRect: NSRect(x: screenPoint.x - size.width / 2,
                               y: screenPoint.y + 20,
-                              width: tooltipView.frame.width,
-                              height: tooltipView.frame.height),
+                              width: size.width,
+                              height: size.height),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+        tooltipWindow.animationBehavior = .none
         tooltipWindow.backgroundColor = .clear
         tooltipWindow.isOpaque = false
         tooltipWindow.level = .floating
-        tooltipWindow.contentView = tooltipView
+        tooltipWindow.contentView = container
         tooltipWindow.orderFront(nil)
         self.tooltipWindow = tooltipWindow
     }
@@ -459,25 +470,33 @@ class TimeBasedTimelineNSView: NSView {
     private func showGapTooltip(for segment: TimelineSegment, at point: CGPoint) {
         hideTooltip()
 
-        let tooltipView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
-        tooltipView.frame.size = tooltipView.fittingSize
+        // Same container-view pattern as showTooltip to prevent constraint crash (OMI-COMPUTER-1G / 1J)
+        let hostingView = NSHostingView(rootView: GapTooltipView(duration: segment.gapDuration).withFontScaling())
+        hostingView.sizingOptions = [.minSize, .maxSize]
+        let size = hostingView.fittingSize
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.width, .height]
+        container.addSubview(hostingView)
 
         let windowPoint = convert(point, to: nil)
         guard let screenPoint = window?.convertPoint(toScreen: windowPoint) else { return }
 
         let tooltipWindow = NSWindow(
-            contentRect: NSRect(x: screenPoint.x - tooltipView.frame.width / 2,
+            contentRect: NSRect(x: screenPoint.x - size.width / 2,
                               y: screenPoint.y + 20,
-                              width: tooltipView.frame.width,
-                              height: tooltipView.frame.height),
+                              width: size.width,
+                              height: size.height),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
+        tooltipWindow.animationBehavior = .none
         tooltipWindow.backgroundColor = .clear
         tooltipWindow.isOpaque = false
         tooltipWindow.level = .floating
-        tooltipWindow.contentView = tooltipView
+        tooltipWindow.contentView = container
         tooltipWindow.orderFront(nil)
         self.tooltipWindow = tooltipWindow
     }

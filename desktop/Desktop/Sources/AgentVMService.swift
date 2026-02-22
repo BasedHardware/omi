@@ -30,14 +30,19 @@ actor AgentVMService {
                     } else {
                         log("AgentVMService: VM already has database, skipping upload")
                     }
+                    await startIncrementalSync(vmIP: ip, authToken: status.authToken)
                     return
                 }
-                if let status = status, status.status == "provisioning" {
-                    log("AgentVMService: VM is provisioning, polling...")
+                if let status = status,
+                   status.status == "provisioning" || status.status == "stopped" {
+                    log("AgentVMService: VM is \(status.status), polling until ready...")
                     if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
                        let ip = result.ip {
                         log("AgentVMService: VM became ready — ip=\(ip)")
-                        await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
+                            await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        }
+                        await startIncrementalSync(vmIP: ip, authToken: result.authToken)
                     }
                     return
                 }
@@ -101,6 +106,9 @@ actor AgentVMService {
 
         // Step 3: Check if DB exists and upload it
         await uploadDatabase(vmIP: ip, authToken: authToken)
+
+        // Step 4: Start incremental sync
+        await startIncrementalSync(vmIP: ip, authToken: authToken)
     }
 
     /// Poll GET /v2/agent/status until status is "ready" and IP is available.
@@ -144,7 +152,10 @@ actor AgentVMService {
     }
 
     /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
+    /// Pauses AgentSync during upload to prevent competing for memory and network.
     private func uploadDatabase(vmIP: String, authToken: String) async {
+        await AgentSyncService.shared.pause()
+        defer { Task { await AgentSyncService.shared.resume() } }
         // Find the local database path
         let dbPath = await MainActor.run {
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -171,31 +182,57 @@ actor AgentVMService {
             return
         }
 
-        log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB)...")
+        log("AgentVMService: Compressing database (\(originalSize / 1024 / 1024) MB) via streaming gzip...")
 
-        // Gzip compress the database
-        let compressedData: Data
+        // Stream-compress to a temp file using shell gzip (uses ~0 MB memory vs loading entire DB)
+        let tempGzPath = dbPath.appendingPathExtension("upload.gz")
         do {
-            let rawData = try Data(contentsOf: dbPath)
-            compressedData = try gzipCompress(rawData)
-            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedData.count / 1024 / 1024) MB (\(compressedData.count * 100 / Int(originalSize))%)")
+            // Remove any stale temp file
+            try? FileManager.default.removeItem(at: tempGzPath)
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            process.arguments = ["-c", dbPath.path]
+
+            FileManager.default.createFile(atPath: tempGzPath.path, contents: nil)
+            guard let outHandle = FileHandle(forWritingAtPath: tempGzPath.path) else {
+                log("AgentVMService: Failed to create temp gzip file")
+                return
+            }
+            process.standardOutput = outHandle
+            try process.run()
+            process.waitUntilExit()
+            try outHandle.close()
+
+            guard process.terminationStatus == 0 else {
+                log("AgentVMService: gzip failed with exit code \(process.terminationStatus)")
+                try? FileManager.default.removeItem(at: tempGzPath)
+                return
+            }
+
+            let compressedAttrs = try FileManager.default.attributesOfItem(atPath: tempGzPath.path)
+            let compressedSize = compressedAttrs[.size] as? UInt64 ?? 0
+            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedSize / 1024 / 1024) MB (\(compressedSize * 100 / originalSize)%)")
         } catch {
             log("AgentVMService: Compression failed — \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: tempGzPath)
             return
         }
 
-        log("AgentVMService: Uploading compressed database (\(compressedData.count / 1024 / 1024) MB) to \(vmIP)...")
+        log("AgentVMService: Uploading compressed database to \(vmIP)...")
 
         let uploadURL = URL(string: "http://\(vmIP):8080/upload?token=\(authToken)")!
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         request.setValue("deflate", forHTTPHeaderField: "Content-Encoding")
-        request.setValue(String(compressedData.count), forHTTPHeaderField: "Content-Length")
         request.timeoutInterval = 600
 
         do {
-            let (data, response) = try await URLSession.shared.upload(for: request, from: compressedData)
+            // Upload from file — streams from disk, doesn't load into memory
+            let (data, response) = try await URLSession.shared.upload(for: request, fromFile: tempGzPath)
+            try? FileManager.default.removeItem(at: tempGzPath)
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 log("AgentVMService: Upload failed — invalid response")
                 return
@@ -213,17 +250,48 @@ actor AgentVMService {
                 log("AgentVMService: Upload failed — HTTP \(httpResponse.statusCode): \(body)")
             }
         } catch {
+            try? FileManager.default.removeItem(at: tempGzPath)
             log("AgentVMService: Upload failed — \(error.localizedDescription)")
         }
     }
 
-    /// Gzip compress data using Apple's Compression framework.
-    private func gzipCompress(_ data: Data) throws -> Data {
-        // Use NSData's built-in compressed method (available macOS 10.15+)
-        let nsData = data as NSData
-        guard let compressed = try? nsData.compressed(using: .zlib) else {
-            throw NSError(domain: "AgentVMService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Compression failed"])
-        }
-        return compressed as Data
+    /// Start incremental sync after VM is confirmed ready.
+    private func startIncrementalSync(vmIP: String, authToken: String) async {
+        await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+        // Send Firebase token so the VM can call backend tools
+        await sendFirebaseToken(vmIP: vmIP, authToken: authToken)
     }
+
+    /// Send the user's Firebase ID token to the VM so it can call Python backend tools.
+    private func sendFirebaseToken(vmIP: String, authToken: String) async {
+        do {
+            let idToken = try await AuthService.shared.getIdToken()
+            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 15
+
+            let body: [String: String] = ["firebaseToken": idToken]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+
+            if httpResponse.statusCode == 200 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let toolCount = json["toolsRegistered"] as? Int {
+                    log("AgentVMService: Firebase token sent to VM (\(toolCount) backend tools registered)")
+                } else {
+                    log("AgentVMService: Firebase token sent to VM")
+                }
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                log("AgentVMService: Failed to send Firebase token — HTTP \(httpResponse.statusCode): \(body)")
+            }
+        } catch {
+            log("AgentVMService: Failed to send Firebase token — \(error.localizedDescription)")
+        }
+    }
+
 }

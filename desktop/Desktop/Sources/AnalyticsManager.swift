@@ -183,6 +183,12 @@ class AnalyticsManager {
         PostHogManager.shared.screenCaptureResetCompleted(success: success)
     }
 
+    /// Track when notification repair is triggered (auto-repair or error-triggered)
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        MixpanelManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+        PostHogManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+    }
+
     /// Track notification settings status (auth, alertStyle, sound, badge)
     func notificationSettingsChecked(
         authStatus: String,
@@ -212,6 +218,18 @@ class AnalyticsManager {
     func appLaunched() {
         MixpanelManager.shared.appLaunched()
         PostHogManager.shared.appLaunched()
+    }
+
+    func trackStartupTiming(dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool, databaseInitFailed: Bool) {
+        guard !Self.isDevBuild else { return }
+        let properties: [String: Any] = [
+            "db_init_ms": round(dbInitMs),
+            "time_to_interactive_ms": round(timeToInteractiveMs),
+            "had_unclean_shutdown": hadUncleanShutdown,
+            "database_init_failed": databaseInitFailed
+        ]
+        PostHogManager.shared.track("App Startup Timing", properties: properties)
+        MixpanelManager.shared.track("App Startup Timing", properties: properties.compactMapValues { $0 as? MixpanelType })
     }
 
     /// Track first launch with comprehensive system diagnostics
@@ -338,9 +356,9 @@ class AnalyticsManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
-        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
-        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
+        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
     }
 
     // MARK: - Search Events
@@ -573,6 +591,11 @@ class AnalyticsManager {
         PostHogManager.shared.taskExtracted(taskCount: taskCount)
     }
 
+    func taskPromoted(taskCount: Int) {
+        MixpanelManager.shared.taskPromoted(taskCount: taskCount)
+        PostHogManager.shared.taskPromoted(taskCount: taskCount)
+    }
+
     func memoryExtracted(memoryCount: Int) {
         MixpanelManager.shared.memoryExtracted(memoryCount: memoryCount)
         PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
@@ -791,6 +814,10 @@ class AnalyticsManager {
 
         // -- Launch at Login --
         props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
+
+        // -- Floating Bar (AskOmi) --
+        props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
+        props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
 
         return props
     }

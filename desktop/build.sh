@@ -10,8 +10,8 @@ APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 
 echo "Building $APP_NAME..."
 
-# Clean and create build directory
-rm -rf "$BUILD_DIR"
+# Clean only the release app bundle (preserve other bundles like Omi Dev.app from run.sh)
+rm -rf "$APP_BUNDLE"
 mkdir -p "$BUILD_DIR"
 
 # Build agent-bridge
@@ -22,6 +22,46 @@ if [ -d "$AGENT_BRIDGE_DIR" ]; then
     npm install --no-fund --no-audit
     npx tsc
     cd - > /dev/null
+fi
+
+# Build acp-bridge
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    echo "Building acp-bridge..."
+    cd "$ACP_BRIDGE_DIR"
+    npm install --no-fund --no-audit
+    npx tsc
+    cd - > /dev/null
+fi
+
+# Ensure bundled Node.js exists (for AI chat / Claude Agent Bridge)
+NODE_RESOURCE="Desktop/Sources/Resources/node"
+if [ -x "$NODE_RESOURCE" ]; then
+    echo "Node.js binary already exists, skipping download"
+else
+    echo "Downloading Node.js binary for dev build..."
+    NODE_VERSION="v22.14.0"
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "arm64" ]; then
+        NODE_ARCH="arm64"
+    else
+        NODE_ARCH="x64"
+    fi
+    NODE_TEMP_DIR="/tmp/node-dev-$$"
+    mkdir -p "$NODE_TEMP_DIR"
+    curl -L -o "$NODE_TEMP_DIR/node.tar.gz" \
+        "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-$NODE_ARCH.tar.gz"
+    tar -xzf "$NODE_TEMP_DIR/node.tar.gz" -C "$NODE_TEMP_DIR" --strip-components=1 --include="*/bin/node" 2>/dev/null || \
+    tar -xzf "$NODE_TEMP_DIR/node.tar.gz" -C "$NODE_TEMP_DIR"
+    NODE_BIN=$(find "$NODE_TEMP_DIR" -name "node" -type f | head -1)
+    if [ -n "$NODE_BIN" ]; then
+        cp "$NODE_BIN" "$NODE_RESOURCE"
+        chmod +x "$NODE_RESOURCE"
+        echo "Downloaded Node.js $NODE_VERSION ($NODE_ARCH) to $NODE_RESOURCE"
+    else
+        echo "Warning: Could not extract Node.js binary. AI chat may not work without system Node.js."
+    fi
+    rm -rf "$NODE_TEMP_DIR"
 fi
 
 # Build release binary
@@ -72,6 +112,15 @@ if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
     cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
     cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
     echo "Copied agent-bridge to bundle"
+fi
+
+# Copy acp-bridge
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "Copied acp-bridge to bundle"
 fi
 
 # Copy .env.app file (app runtime secrets only)

@@ -1,3 +1,4 @@
+import Cocoa
 import SwiftUI
 
 /// Reusable chat input field with send button, extracted from ChatPage.
@@ -12,102 +13,119 @@ struct ChatInputView: View {
     var onFollowUp: ((String) -> Void)? = nil
     var onStop: (() -> Void)? = nil
     let isSending: Bool
+    var isStopping: Bool = false
     var placeholder: String = "Type a message..."
     @Binding var mode: ChatMode
     /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
     var pendingText: Binding<String>?
 
-    @State private var inputText = ""
-    @FocusState private var isInputFocused: Bool
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
+    @Environment(\.fontScale) private var fontScale
+    @Binding var inputText: String
 
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Padding used for both the NSTextView (via textContainerInset) and the
+    /// placeholder overlay — guaranteeing the cursor and placeholder align.
+    private let inputPaddingH: CGFloat = 12
+    private let inputPaddingV: CGFloat = 12
+
     var body: some View {
-        VStack(spacing: 6) {
-            // Controls row: Ask/Act toggle + Send/Stop button, right-aligned
-            HStack(spacing: 8) {
-                Spacer()
+        HStack(alignment: .bottom, spacing: 8) {
+            // Input field with floating toggle
+            ZStack(alignment: .topTrailing) {
+                // Input field — NSTextView with auto-grow height
+                ZStack(alignment: .topLeading) {
+                    // Hidden text to calculate content height (drives ZStack size)
+                    Text(inputText.isEmpty ? " " : inputText + " ")
+                        .scaledFont(size: 14)
+                        .padding(.horizontal, inputPaddingH)
+                        .padding(.vertical, inputPaddingV)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
 
-                ChatModeToggle(mode: $mode)
+                    // Placeholder text — padding matches textContainerInset exactly
+                    if inputText.isEmpty {
+                        Text(placeholder)
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .padding(.horizontal, inputPaddingH)
+                            .padding(.vertical, inputPaddingV)
+                            .allowsHitTesting(false)
+                    }
 
-                if isSending && !hasText {
+                    // NSTextView with lineFragmentPadding=0 and explicit textContainerInset
+                    // so cursor position is deterministic and matches placeholder exactly
+                    OmiTextEditor(
+                        text: $inputText,
+                        fontSize: round(14 * fontScale),
+                        textColor: NSColor(OmiColors.textPrimary),
+                        textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
+                        onSubmit: handleSubmit
+                    )
+                    .frame(minHeight: 0, maxHeight: .infinity)
+                }
+                .frame(maxHeight: 200)
+                .clipped()
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(12)
+
+                // Floating Ask/Act toggle (top-right, inside the input area)
+                if askModeEnabled {
+                    ChatModeToggle(mode: $mode)
+                        .padding(.top, 8)
+                        .padding(.trailing, 8)
+                }
+            }
+
+            // Send/Stop button — inline to the right of the input
+            if isSending && !hasText {
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                } else {
                     Button(action: { onStop?() }) {
                         Image(systemName: "stop.circle.fill")
                             .scaledFont(size: 24)
                             .foregroundColor(.red.opacity(0.8))
                     }
                     .buttonStyle(.plain)
-                } else {
-                    Button(action: handleSubmit) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .scaledFont(size: 24)
-                            .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasText)
                 }
-            }
-
-            // Input field — TextEditor with auto-grow height
-            ZStack(alignment: .topLeading) {
-                // Hidden text to calculate content height (drives ZStack size)
-                Text(inputText.isEmpty ? " " : inputText + " ")
-                    .scaledFont(size: 14)
-                    .padding(.horizontal, 17)
-                    .padding(.vertical, 12)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-
-                // Placeholder text
-                if inputText.isEmpty {
-                    Text(placeholder)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .allowsHitTesting(false)
+            } else {
+                Button(action: handleSubmit) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(size: 24)
+                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
                 }
-
-                TextEditor(text: $inputText)
-                    .scaledFont(size: 14)
-                    .foregroundColor(OmiColors.textPrimary)
-                    .focused($isInputFocused)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 0, maxHeight: .infinity)
-                    .onKeyPress(keys: [.return], phases: .down) { keyPress in
-                        if keyPress.modifiers.contains(.shift) {
-                            return .ignored // Shift+Enter: newline
-                        }
-                        handleSubmit()
-                        return .handled // Enter: send
-                    }
+                .buttonStyle(.plain)
+                .disabled(!hasText)
             }
-            .frame(maxHeight: 200)
-            .fixedSize(horizontal: false, vertical: true)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(12)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                isInputFocused = true
+        }
+        .onAppear {
+            // When ask mode is disabled, ensure we're always in act mode
+            if !askModeEnabled {
+                mode = .act
             }
-            .onAppear {
-                isInputFocused = true
-                if let pending = pendingText?.wrappedValue, !pending.isEmpty {
-                    inputText = pending
-                    pendingText?.wrappedValue = ""
-                }
+            if let pending = pendingText?.wrappedValue, !pending.isEmpty {
+                inputText = pending
+                pendingText?.wrappedValue = ""
             }
-            .onChange(of: pendingText?.wrappedValue ?? "") { _, newValue in
-                if !newValue.isEmpty {
-                    inputText = newValue
-                    pendingText?.wrappedValue = ""
-                }
+        }
+        .onChange(of: pendingText?.wrappedValue ?? "") { _, newValue in
+            if !newValue.isEmpty {
+                inputText = newValue
+                pendingText?.wrappedValue = ""
+            }
+        }
+        .onChange(of: askModeEnabled) { _, enabled in
+            if !enabled {
+                mode = .act
             }
         }
     }

@@ -386,7 +386,8 @@ class _AppShellState extends State<AppShell> {
       builder: (context, constraints) {
         // Route to appropriate app tree based on screen width
         if (constraints.maxWidth >= 1100) {
-          return const DesktopApp(); // Desktop app tree
+          // DEPRECATED: Flutter desktop is deprecated. See /desktop/ for the native Swift macOS app.
+          return const DesktopApp();
         } else {
           return const MobileApp(); // Mobile app tree
         }

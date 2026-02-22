@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.",
   "networkNameSsid": "네트워크 이름 (SSID)",
   "enterWifiNetworkName": "WiFi 네트워크 이름을 입력하세요",
-  "enterWifiPassword": "WiFi 비밀번호를 입력하세요"
+  "enterWifiPassword": "WiFi 비밀번호를 입력하세요",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "기기에서 다운로드 중",
+  "reconnectingToInternet": "인터넷에 다시 연결 중...",
+  "uploadingToCloud": "{current}/{total} 업로드 중",
+  "processedStatus": "처리됨",
+  "corruptedStatus": "손상됨",
+  "nPending": "{count}개 대기 중",
+  "nProcessed": "{count}개 처리됨",
+  "synced": "동기화됨",
+  "noPendingRecordings": "대기 중인 녹음이 없습니다",
+  "noProcessedRecordings": "아직 처리된 녹음이 없습니다",
+  "pending": "대기 중"
 }

@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "Syötä WiFi-tunnuksesi, jotta laite voi ladata laiteohjelmiston.",
   "networkNameSsid": "Verkon nimi (SSID)",
   "enterWifiNetworkName": "Syötä WiFi-verkon nimi",
-  "enterWifiPassword": "Syötä WiFi-salasana"
+  "enterWifiPassword": "Syötä WiFi-salasana",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Ladataan laitteesta",
+  "reconnectingToInternet": "Yhdistetään uudelleen internetiin...",
+  "uploadingToCloud": "Ladataan {current}/{total}",
+  "processedStatus": "Käsitelty",
+  "corruptedStatus": "Vioittunut",
+  "nPending": "{count} odottaa",
+  "nProcessed": "{count} käsiteltyä",
+  "synced": "Synkronoitu",
+  "noPendingRecordings": "Ei odottavia tallenteita",
+  "noProcessedRecordings": "Ei vielä käsiteltyjä tallenteita",
+  "pending": "Odottaa"
 }

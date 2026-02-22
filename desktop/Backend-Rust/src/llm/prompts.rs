@@ -76,9 +76,12 @@ WORKFLOW:
    - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
    - Would missing this have real consequences? If not obvious, SKIP IT
    - Better to extract 0 implicit tasks than flood the user with noise
-4. FOURTH: Extract timing information separately and put it in the due_at field
-5. FIFTH: Clean the description - remove ALL time references and vague words
-6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+4. FOURTH: FORGETTABILITY CHECK - Ask: "Will the user forget this after the conversation ends?"
+   - YES → extract (that's why we exist)
+   - NO (it's their active focus, or tracked in a tool) → skip
+5. FIFTH: Extract timing information separately and put it in the due_at field
+6. SIXTH: Clean the description - remove ALL time references and vague words
+7. SEVENTH: Final check - description should be timeless, specific, and name a person/project/artifact
 
 CRITICAL CONTEXT:
 • These action items are primarily for the PRIMARY USER who is having/recording this conversation
@@ -160,11 +163,33 @@ EXCLUDE these types of items (be aggressive about exclusion):
 • Things that are obvious or don't need a reminder
 • Updates or status reports about ongoing work
 
-FORMAT REQUIREMENTS:
-• Keep each action item SHORT and concise (maximum 15 words, strict limit)
-• Use clear, direct language
-• Start with a verb when possible (e.g., "Call", "Send", "Review", "Pay", "Open", "Submit", "Finish", "Complete")
-• Include only essential details
+TITLE SPECIFICITY REQUIREMENTS (CRITICAL):
+• Each description MUST be 6–15 words
+• MUST start with a verb (Call, Send, Review, Pay, Submit, Follow up, etc.)
+• MUST name a specific person, project, or artifact — if you cannot name one, DO NOT extract
+• NEVER use generic titles — if the title could apply to any project/person, it's too vague
+
+GOOD TITLE EXAMPLES (follow this level of specificity):
+✅ "Reply to Stan about 'Where's the developer section?'"
+✅ "Send Nik list of 10 recommended advisors"
+✅ "Review Sasza's cofounder alignment example document"
+✅ "Submit quarterly metrics to LG Technology Ventures"
+✅ "Follow up with Sarah about Q2 budget proposal"
+✅ "Pay electricity bill for the office by Friday"
+✅ "Schedule dentist appointment at Dr. Chen's office"
+✅ "Buy birthday gift for Mom before Saturday"
+
+BAD TITLE EXAMPLES (NEVER produce these):
+❌ "Investigate" — single word, completely useless
+❌ "Check logs" — no context whatsoever
+❌ "Clean up the data" — what data? where?
+❌ "Look into the issue" — what issue? be specific
+❌ "Fix the bug" — which bug? in what?
+❌ "Update the document" — which document?
+❌ "Follow up on that" — on what? with whom?
+❌ "Send the email" — to whom? about what?
+❌ "Review the code" — whose code? what PR?
+❌ "Check the status" — of what?
 
 • CRITICAL - Resolve ALL vague references:
   - Read the ENTIRE conversation to understand what is being discussed
@@ -179,28 +204,32 @@ FORMAT REQUIREMENTS:
     * User says: "planning Sarah's birthday party" then later "buy decorations for it"
       → Extract: "Buy decorations for Sarah's birthday party"
     * User says: "car making weird noise" then later "take it to mechanic"
-      → Extract: "Take car to mechanic"
+      → Extract: "Take car to mechanic for weird noise diagnosis"
     * User says: "quarterly sales report" then later "send it to the team"
-      → Extract: "Send quarterly sales report to team"
+      → Extract: "Send quarterly sales report to the team"
 
 • CRITICAL - Remove time references from description (they go in due_at field):
   - NEVER include timing words in the action item description itself
   - Remove: "by tomorrow", "by evening", "today", "next week", "by Friday", etc.
   - The timing information is captured in the due_at field separately
   - Focus ONLY on the action and what needs to be done
-  - Examples:
-    * "buy groceries by tomorrow" → "Buy groceries"
-    * "call dentist by next Monday" → "Call dentist"
-    * "pay electricity bill by Friday" → "Pay electricity bill"
-    * "submit insurance claim today" → "Submit insurance claim"
-    * "book flight tickets by evening" → "Book flight tickets"
 
 • Remove filler words and unnecessary context
 • Merge duplicates
 • Order by: due date → urgency → alphabetical
 
+CONFIDENCE SCORING (required for every item):
+• 0.9–1.0: Explicit request ("Remind me to...", "Add task...", "Don't forget...")
+• 0.7–0.89: Clear implicit task with timing signal and real importance
+• 0.5–0.69: Ambiguous — mentioned but unclear if user wants to track it
+• Below 0.5: Do not extract
+
+PRIORITY CLASSIFICATION (required for every item):
+• "high": Urgent, due today, or has hard deadline within 24 hours
+• "medium": Due this week, important but not urgent
+• "low": No deadline, nice-to-have, or can be done anytime
+
 DUE DATE EXTRACTION (CRITICAL):
-IMPORTANT: EVERY action item MUST have a due_at value. Never return null for due_at.
 IMPORTANT: All due dates must be in the FUTURE and in UTC format with 'Z' suffix.
 IMPORTANT: When parsing dates, FIRST determine the DATE (today/tomorrow/specific date), THEN apply the TIME.
 
@@ -211,7 +240,6 @@ Step-by-step date parsing process:
    - "Monday", "Tuesday", etc. → next occurrence of that weekday
    - "next week" → same day next week
    - Specific date (e.g., "March 15") → that date
-   - NO DATE MENTIONED → default to current date from {started_at} (the task is relevant now)
 
 2. IDENTIFY THE TIME (if mentioned):
    - "before 10am", "by 10am", "at 10am" → 10:00 AM
@@ -226,17 +254,15 @@ Step-by-step date parsing process:
 3. COMBINE DATE + TIME in user's timezone ({tz}), then convert to UTC with 'Z' suffix
 
 Examples of CORRECT date parsing:
-If started_at is "2025-10-03T13:25:00Z" (Oct 3) and tz is "America/New_York":
-- "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 ET" → Convert to UTC → "2025-10-04T14:00:00Z"
-- "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 ET" → Convert to UTC → "2025-10-03T22:00:00Z"
-- "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 ET" → Convert to UTC → "2025-10-05T03:59:00Z"
-- "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 ET" → Convert to UTC → "2025-10-06T18:00:00Z"
-- "urgent" or "ASAP" → 2 hours from started_at → "2025-10-03T15:25:00Z"
-- No date or time mentioned at all → end of conversation day: "2025-10-03 23:59 ET" → Convert to UTC → "2025-10-04T03:59:00Z"
+If {started_at} is "2025-10-03T13:25:00Z" (Oct 3, 6:55 PM IST) and {tz} is "Asia/Kolkata":
+- "tomorrow before 10am" → DATE: Oct 4, TIME: 10:00 AM → "2025-10-04 10:00 IST" → Convert to UTC → "2025-10-04T04:30:00Z"
+- "today by evening" → DATE: Oct 3, TIME: 6:00 PM → "2025-10-03 18:00 IST" → Convert to UTC → "2025-10-03T12:30:00Z"
+- "tomorrow" → DATE: Oct 4, TIME: 11:59 PM (default) → "2025-10-04 23:59 IST" → Convert to UTC → "2025-10-04T18:29:00Z"
+- "by Monday at 2pm" → DATE: next Monday (Oct 6), TIME: 2:00 PM → "2025-10-06 14:00 IST" → Convert to UTC → "2025-10-06T08:30:00Z"
+- "urgent" or "ASAP" → 2 hours from {started_at} → "2025-10-03T15:25:00Z"
 
 CRITICAL FORMAT: All due_at timestamps MUST be in UTC with 'Z' suffix (e.g., "2025-10-04T04:30:00Z")
 DO NOT include timezone offsets like "+05:30". Always convert to UTC and use 'Z' suffix.
-CRITICAL: due_at must NEVER be null. Always provide a date.
 
 Reference time: {started_at}
 User timezone: {tz}
@@ -244,7 +270,7 @@ User timezone: {tz}
 Content:
 ```{transcript_text}```
 
-Respond with JSON: {"action_items": [{"description": "...", "due_at": "..."}]}"#;
+Respond with JSON: {"action_items": [{"description": "...", "due_at": "...", "confidence": 0.0, "priority": "medium"}]}"#;
 
 /// Calendar context section for action items prompt (when calendar meeting context is available)
 /// Placeholders: {calendar_context_str}

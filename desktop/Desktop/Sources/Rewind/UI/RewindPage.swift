@@ -20,6 +20,7 @@ struct RewindPage: View {
     @State private var searchViewMode: SearchViewMode? = nil
     @State private var selectedGroupIndex: Int = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isPageFocused: Bool
 
     // Monitoring toggle state
     @State private var isMonitoring = false
@@ -34,6 +35,16 @@ struct RewindPage: View {
     @State private var isTranscriptExpanded = false
     @State private var savedTranscriptSegments: [SpeakerSegment] = []
 
+    // Finish conversation button state
+    @State private var isFinishing = false
+    @State private var showSavedSuccess = false
+    @State private var showDiscarded = false
+    @State private var showError = false
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
     // Rewind intro video (first-time experience)
     @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
 
@@ -45,6 +56,40 @@ struct RewindPage: View {
     /// Whether we're in search mode (has query or active search)
     private var isInSearchMode: Bool {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
+    }
+
+    private var finishButtonText: String {
+        if isFinishing { return "Saving..." }
+        if showSavedSuccess { return "Saved!" }
+        if showDiscarded { return "Too Short" }
+        if showError { return "Failed" }
+        return "Finish Conversation"
+    }
+
+    private var finishButtonForeground: Color {
+        if showSavedSuccess { return .white }
+        if showDiscarded { return .white }
+        if showError { return .white }
+        return .black
+    }
+
+    private var finishButtonBackground: Color {
+        if showSavedSuccess { return OmiColors.success }
+        if showDiscarded { return OmiColors.warning }
+        if showError { return OmiColors.error }
+        return .white
+    }
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        guard let appState = appState else { return [:] }
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
     }
 
     var body: some View {
@@ -100,14 +145,28 @@ struct RewindPage: View {
                 rewindIntroOverlay
             }
         }
+        .focusable()
+        .focused($isPageFocused)
         .task {
             await viewModel.loadInitialData()
         }
         .onAppear {
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
-            isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+            isMonitoring = pluginState
+            // Keep persistent setting in sync when monitoring stops due to errors
+            if !pluginState && screenAnalysisEnabled {
+                screenAnalysisEnabled = false
+                AssistantSettings.shared.screenAnalysisEnabled = false
+            }
+        }
+        .onChange(of: isSearchFocused) { _, focused in
+            if !focused {
+                isPageFocused = true
+            }
         }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
@@ -173,14 +232,14 @@ struct RewindPage: View {
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored
@@ -295,6 +354,11 @@ struct RewindPage: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             ScreenCaptureService.requestAllScreenCapturePermissions()
@@ -310,12 +374,24 @@ struct RewindPage: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription
+        if let appState = appState {
+            if enabled && !appState.isTranscribing {
+                appState.startTranscription()
+            } else if !enabled && appState.isTranscribing {
+                appState.stopTranscription()
+            }
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
                         isMonitoring = false
+                        // Revert persistent setting so UI and auto-start stay in sync
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -346,9 +422,9 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Screen title
+                // Rewind title
                 HStack(spacing: 8) {
-                    Text("Screen")
+                    Text("Rewind")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.white)
 
@@ -413,14 +489,6 @@ struct RewindPage: View {
                 .padding(2)
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(6)
-            } else {
-                // Timeline mode controls
-                // Stats
-                if let stats = viewModel.stats {
-                    Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                        .scaledFont(size: 11)
-                        .foregroundColor(.white.opacity(0.5))
-                }
             }
 
             Spacer()
@@ -437,44 +505,10 @@ struct RewindPage: View {
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
-            .help("Screen Settings")
+            .help("Rewind Settings")
 
-            // Screen recording start/stop
-            if isMonitoring {
-                Button {
-                    toggleMonitoring(enabled: false)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 12)
-                        Text("Stop Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    toggleMonitoring(enabled: true)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-            }
+            // Rewind on/off toggle (controls both screen + audio)
+            rewindToggle
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -1179,7 +1213,14 @@ struct RewindPage: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(32)
                         } else {
-                            LiveTranscriptView(segments: displaySegments)
+                            LiveTranscriptView(
+                                segments: displaySegments,
+                                speakerNames: speakerNames,
+                                onSpeakerTapped: { segment in
+                                    selectedSpeakerSegment = segment
+                                    showNameSpeakerSheet = true
+                                }
+                            )
                         }
                     }
                     .frame(width: transcriptWidth)
@@ -1197,18 +1238,36 @@ struct RewindPage: View {
             }
         }
         .background(OmiColors.backgroundPrimary)
+        .task {
+            await appState?.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment, let appState = appState {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Recording Bar
 
     private func rewindRecordingBar(appState: AppState) -> some View {
         HStack(spacing: 12) {
-            // Left: always show "Audio" label
-            Text("Audio")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(.white)
-
-            // Middle content depends on state
+            // Content depends on state
             if appState.isTranscribing {
                 // Transcript text + chevron (clickable to expand/collapse)
                 Button {
@@ -1306,46 +1365,106 @@ struct RewindPage: View {
 
             Spacer()
 
-            // Right: Start/Stop button (always present)
+            // Right: Finish Conversation button (when recording)
             if appState.isTranscribing {
                 Button(action: {
-                    appState.stopTranscription()
+                    handleFinish(appState: appState)
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .scaledFont(size: 12)
-                        Text("Stop Recording")
+                        if isFinishing {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else if showSavedSuccess {
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showDiscarded {
+                            Image(systemName: "xmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showError {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .scaledFont(size: 12)
+                        }
+                        Text(finishButtonText)
                             .scaledFont(size: 13, weight: .medium)
                     }
-                    .foregroundColor(.black)
+                    .foregroundColor(finishButtonForeground)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
+                    .background(Capsule().fill(finishButtonBackground))
                     .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-            } else if !appState.isSavingConversation {
-                Button(action: {
-                    appState.startTranscription()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "record.circle")
-                            .scaledFont(size: 12)
-                        Text("Start Recording")
-                            .scaledFont(size: 13, weight: .medium)
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
-                }
-                .buttonStyle(.plain)
+                .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+                .help("Saves current conversation and starts a new one")
             }
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Audio Toggle
+
+    private func audioToggle(appState: AppState) -> some View {
+        ZStack {
+            Capsule()
+                .fill(appState.isTranscribing ? OmiColors.purplePrimary : Color.red)
+                .frame(width: 36, height: 20)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: 16, height: 16)
+                .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+                .offset(x: appState.isTranscribing ? 8 : -8)
+                .animation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
+        }
+        .onTapGesture {
+            if appState.isTranscribing {
+                appState.stopTranscription()
+            } else {
+                appState.startTranscription()
+            }
+        }
+        .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
+    }
+
+    // MARK: - Finish Conversation
+
+    private func handleFinish(appState: AppState) {
+        guard !isFinishing else { return }
+        isFinishing = true
+        Task {
+            let result = await appState.finishConversation()
+            isFinishing = false
+            switch result {
+            case .saved:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = false
+                }
+            case .discarded:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = false
+                }
+            case .error:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = false
+                }
+            }
+        }
     }
 }
 

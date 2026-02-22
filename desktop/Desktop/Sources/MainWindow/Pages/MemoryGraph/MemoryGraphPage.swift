@@ -9,215 +9,68 @@ struct MemoryGraphPage: View {
 
     var body: some View {
         ZStack {
-            // Background
-            Color.black.ignoresSafeArea()
+            // Full-bleed background + 3D scene
+            OmiColors.backgroundSecondary.ignoresSafeArea()
 
-            // 3D Scene
             if !viewModel.isEmpty {
                 MemoryGraphSceneView(viewModel: viewModel)
                     .ignoresSafeArea()
             }
 
-            // Overlay UI
+            // Minimal floating controls — no boxes, no backgrounds
             VStack {
-                // Header
-                headerView
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                HStack {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(.white.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    if viewModel.isRebuilding {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .tint(.white.opacity(0.5))
+                    } else {
+                        Button {
+                            Task { await viewModel.rebuildGraph() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .scaledFont(size: 13)
+                                .foregroundColor(.white.opacity(0.5))
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Rebuild graph")
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
                 Spacer()
-
-                // Legend
-                if !viewModel.isEmpty {
-                    legendView
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 20)
-                }
             }
 
-            // Loading overlay
-            if viewModel.isLoading {
-                loadingOverlay
-            }
-
-            // Empty state
-            if viewModel.isEmpty && !viewModel.isLoading {
-                emptyStateView
-            }
-
-            // Rebuilding progress
-            if viewModel.isRebuilding {
-                rebuildingOverlay
+            // Loading / empty state — centered spinner, no extra chrome
+            if viewModel.isLoading || (viewModel.isEmpty && !viewModel.isRebuilding) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .tint(.white.opacity(0.4))
             }
         }
         .task {
             await viewModel.loadGraph()
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerView: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                        .scaledFont(size: 14, weight: .semibold)
-                    Text("Back")
-                        .scaledFont(size: 14, weight: .medium)
-                }
-                .foregroundColor(.white.opacity(0.8))
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text("Memory Graph")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(.white)
-
-            Spacer()
-
-            HStack(spacing: 12) {
-                // Rebuild button
-                Button {
-                    Task {
-                        await viewModel.rebuildGraph()
-                    }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .scaledFont(size: 14)
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                .buttonStyle(.plain)
-                .help("Rebuild graph from memories")
-                .disabled(viewModel.isRebuilding)
-
-                // Share button
-                Button {
-                    viewModel.shareGraph()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .scaledFont(size: 14)
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                .buttonStyle(.plain)
-                .help("Share graph")
-                .disabled(viewModel.isEmpty)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.ultraThinMaterial.opacity(0.5))
-        )
-    }
-
-    // MARK: - Legend
-
-    private var legendView: some View {
-        HStack(spacing: 16) {
-            ForEach(KnowledgeGraphNodeType.allCases, id: \.self) { type in
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(type.color)
-                        .frame(width: 10, height: 10)
-                    Text(type.displayName)
-                        .scaledFont(size: 11, weight: .medium)
-                        .foregroundColor(.white.opacity(0.7))
+            if viewModel.isEmpty {
+                await viewModel.rebuildGraph()
+                for _ in 1...10 {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    await viewModel.loadGraph()
+                    if !viewModel.isEmpty { break }
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(.ultraThinMaterial.opacity(0.5))
-        )
-    }
-
-    // MARK: - Loading Overlay
-
-    private var loadingOverlay: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.white)
-
-            Text("Loading graph...")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.7))
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.opacity(0.5))
-    }
-
-    // MARK: - Rebuilding Overlay
-
-    private var rebuildingOverlay: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.white)
-
-            Text("Building knowledge graph...")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.7))
-
-            Text("Extracting entities from your memories")
-                .scaledFont(size: 12)
-                .foregroundColor(.white.opacity(0.5))
-        }
-        .padding(32)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-        )
-    }
-
-    // MARK: - Empty State
-
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "brain")
-                .scaledFont(size: 64)
-                .foregroundColor(.white.opacity(0.3))
-
-            Text("No Knowledge Graph Yet")
-                .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(.white)
-
-            Text("Build your knowledge graph from your memories\nto see connections between people, places, and concepts.")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.6))
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-
-            Button {
-                Task {
-                    await viewModel.rebuildGraph()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles")
-                    Text("Build Graph")
-                }
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.purple)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isRebuilding)
-        }
-        .padding(40)
     }
 }
 
@@ -231,9 +84,10 @@ struct MemoryGraphSceneView: NSViewRepresentable {
         scnView.scene = viewModel.scene
         scnView.pointOfView = viewModel.cameraNode
         scnView.allowsCameraControl = true
-        scnView.autoenablesDefaultLighting = true
-        scnView.backgroundColor = .black
-        scnView.antialiasingMode = .multisampling4X
+        scnView.autoenablesDefaultLighting = false // We set up our own lights
+        scnView.backgroundColor = NSColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x1A/255.0, alpha: 1.0) // Match OmiColors.backgroundSecondary
+        scnView.antialiasingMode = .multisampling2X // Lighter AA
+        scnView.preferredFramesPerSecond = 30 // Cap render rate
 
         // Set up delegate for animation
         scnView.delegate = context.coordinator
@@ -251,13 +105,16 @@ struct MemoryGraphSceneView: NSViewRepresentable {
 
     class Coordinator: NSObject, SCNSceneRendererDelegate {
         let viewModel: MemoryGraphViewModel
+        private var lastUpdateTime: TimeInterval = 0
 
         init(viewModel: MemoryGraphViewModel) {
             self.viewModel = viewModel
         }
 
         func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
-            // Run physics simulation on main actor
+            // Throttle to ~30fps for physics updates
+            guard time - lastUpdateTime > 0.033 else { return }
+            lastUpdateTime = time
             Task { @MainActor in
                 viewModel.updateSimulation()
             }
@@ -293,7 +150,7 @@ class MemoryGraphViewModel: ObservableObject {
         camera.zFar = 20000
         camera.fieldOfView = 60
         cameraNode.camera = camera
-        cameraNode.position = SCNVector3(0, 0, 4000)
+        cameraNode.position = SCNVector3(0, 0, 2000) // Initial default, auto-adjusted after layout
         scene.rootNode.addChildNode(cameraNode)
     }
 
@@ -326,21 +183,31 @@ class MemoryGraphViewModel: ObservableObject {
 
         do {
             let response = try await APIClient.shared.getKnowledgeGraph()
+            log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
             isEmpty = response.nodes.isEmpty
 
             guard !isEmpty else { return }
 
-            // Populate simulation
-            simulation.populate(graphResponse: response, userNodeLabel: nil)
+            // Populate simulation with user node at center
+            let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
+            log("User name for center node: \(userName ?? "nil")")
+            simulation.populate(graphResponse: response, userNodeLabel: userName)
+            log("Simulation populated: \(simulation.nodes.count) nodes (including user), \(simulation.edges.count) edges")
 
-            // Run initial layout
-            simulation.runSync(ticks: 200)
+            // Run initial layout off main thread for responsiveness
+            await Task.detached(priority: .userInitiated) { [simulation] in
+                simulation.runSync(ticks: 800)
+            }.value
 
             // Create scene nodes
             createSceneNodes()
 
-            // Start animation
+            // Brief animation to settle, then stop
             isAnimating = true
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3s of live physics
+                await MainActor.run { isAnimating = false }
+            }
         } catch {
             log("Failed to load knowledge graph: \(error.localizedDescription)")
         }
@@ -367,64 +234,159 @@ class MemoryGraphViewModel: ObservableObject {
 
     // MARK: - Scene Nodes
 
+    /// Compute node radius based on connection count (more connections = bigger)
+    private func nodeRadius(for node: GraphNode3D) -> CGFloat {
+        if node.isFixed { return 35 } // User node is largest
+        let base: CGFloat = 14
+        let connectionBonus = CGFloat(min(node.connectionCount, 10)) * 2.5
+        return base + connectionBonus
+    }
+
     private func createSceneNodes() {
         // Clear existing nodes
-        for (_, node) in nodeSceneNodes {
-            node.removeFromParentNode()
-        }
-        for (_, node) in edgeSceneNodes {
-            node.removeFromParentNode()
-        }
+        for (_, node) in nodeSceneNodes { node.removeFromParentNode() }
+        for (_, node) in edgeSceneNodes { node.removeFromParentNode() }
         nodeSceneNodes.removeAll()
         edgeSceneNodes.removeAll()
 
-        // Create node spheres
-        for node in simulation.nodes {
-            let sphere = SCNSphere(radius: 15)
-            let material = SCNMaterial()
-            material.diffuse.contents = node.nodeType.nsColor
-            material.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.3)
-            sphere.materials = [material]
+        // Billboard constraint for labels (always face camera)
+        let billboardConstraint = SCNBillboardConstraint()
+        billboardConstraint.freeAxes = [.X, .Y]
 
-            let scnNode = SCNNode(geometry: sphere)
-            scnNode.position = SCNVector3(node.position)
-            scnNode.name = node.id
-
-            // Add label
-            let text = SCNText(string: node.label, extrusionDepth: 1)
-            text.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-            text.flatness = 0.1
-            let textMaterial = SCNMaterial()
-            textMaterial.diffuse.contents = NSColor.white
-            text.materials = [textMaterial]
-
-            let textNode = SCNNode(geometry: text)
-            textNode.scale = SCNVector3(1.5, 1.5, 1.5)
-
-            // Center the text
-            let (min, max) = text.boundingBox
-            let dx = (max.x - min.x) / 2
-            textNode.position = SCNVector3(-dx * 1.5, 25, 0)
-            textNode.constraints = [SCNBillboardConstraint()]
-
-            scnNode.addChildNode(textNode)
-            scene.rootNode.addChildNode(scnNode)
-            nodeSceneNodes[node.id] = scnNode
-        }
-
-        // Create edges
+        // Create edges first (behind nodes)
         for edge in simulation.edges {
             guard let source = simulation.nodeMap[edge.sourceId],
                   let target = simulation.nodeMap[edge.targetId] else { continue }
 
-            let edgeNode = createEdgeNode(from: source.position, to: target.position)
+            let edgeColor = blendColors(source.nodeType.nsColor, target.nodeType.nsColor, alpha: 0.25)
+            let edgeMaterial = SCNMaterial()
+            edgeMaterial.diffuse.contents = edgeColor
+            edgeMaterial.emission.contents = edgeColor.withAlphaComponent(0.15)
+            edgeMaterial.lightingModel = .constant
+
+            let edgeNode = createEdgeNode(from: source.position, to: target.position, material: edgeMaterial)
             edgeNode.name = edge.id
             scene.rootNode.addChildNode(edgeNode)
             edgeSceneNodes[edge.id] = edgeNode
         }
+
+        // Create node spheres with labels and glow halos
+        for node in simulation.nodes {
+            let radius = nodeRadius(for: node)
+            let containerNode = SCNNode()
+            containerNode.position = SCNVector3(node.position)
+            containerNode.name = node.id
+
+            // Core sphere
+            let sphere = SCNSphere(radius: radius)
+            sphere.segmentCount = node.isFixed ? 24 : 16
+            let mat = SCNMaterial()
+            if node.isFixed {
+                mat.diffuse.contents = NSColor.white
+                mat.emission.contents = NSColor.white.withAlphaComponent(0.8)
+            } else {
+                mat.diffuse.contents = node.nodeType.nsColor
+                mat.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.5)
+            }
+            mat.lightingModel = .constant
+            sphere.materials = [mat]
+            let sphereNode = SCNNode(geometry: sphere)
+            containerNode.addChildNode(sphereNode)
+
+            // Glow halo (larger semi-transparent sphere around node)
+            let glowRadius = radius * 2.5
+            let glowSphere = SCNSphere(radius: glowRadius)
+            glowSphere.segmentCount = 48
+            let glowMat = SCNMaterial()
+            let glowColor = node.isFixed ? NSColor.white : node.nodeType.nsColor
+            glowMat.diffuse.contents = glowColor.withAlphaComponent(0.03)
+            glowMat.emission.contents = glowColor.withAlphaComponent(0.025)
+            glowMat.lightingModel = .constant
+            glowMat.isDoubleSided = true
+            glowMat.blendMode = .add
+            glowSphere.materials = [glowMat]
+            let glowNode = SCNNode(geometry: glowSphere)
+            containerNode.addChildNode(glowNode)
+
+            // Text label (billboard — always faces camera)
+            let labelNode = createLabelNode(text: node.label, nodeRadius: radius, isFixed: node.isFixed)
+            labelNode.constraints = [billboardConstraint]
+            containerNode.addChildNode(labelNode)
+
+            scene.rootNode.addChildNode(containerNode)
+            nodeSceneNodes[node.id] = containerNode
+        }
+
+        // Auto-fit camera to graph bounds
+        autoFitCamera()
     }
 
-    private func createEdgeNode(from: SIMD3<Float>, to: SIMD3<Float>) -> SCNNode {
+    /// Create a text label below a node
+    private func createLabelNode(text: String, nodeRadius: CGFloat, isFixed: Bool) -> SCNNode {
+        let truncated = text.count > 18 ? String(text.prefix(16)) + "..." : text
+        let fontSize: CGFloat = isFixed ? 22 : 16
+        let scnText = SCNText(string: truncated, extrusionDepth: 0.5)
+        scnText.font = NSFont.systemFont(ofSize: fontSize, weight: isFixed ? .bold : .medium)
+        scnText.flatness = 0.3
+        scnText.alignmentMode = CATextLayerAlignmentMode.center.rawValue
+
+        let textMat = SCNMaterial()
+        textMat.diffuse.contents = NSColor.white
+        textMat.emission.contents = NSColor.white.withAlphaComponent(0.9)
+        textMat.lightingModel = .constant
+        scnText.materials = [textMat]
+
+        let textNode = SCNNode(geometry: scnText)
+
+        // Center the text horizontally
+        let (min, max) = scnText.boundingBox
+        let textWidth = CGFloat(max.x - min.x)
+        let textHeight = CGFloat(max.y - min.y)
+        textNode.position = SCNVector3(
+            -textWidth / 2,
+            -(nodeRadius + textHeight + 12),
+            0
+        )
+
+        // Scale text down to world-appropriate size
+        let scale: Float = isFixed ? 1.2 : 0.9
+        textNode.scale = SCNVector3(scale, scale, scale)
+
+        return textNode
+    }
+
+    /// Blend two NSColors
+    private func blendColors(_ a: NSColor, _ b: NSColor, alpha: CGFloat) -> NSColor {
+        let aRGB = a.usingColorSpace(.sRGB) ?? a
+        let bRGB = b.usingColorSpace(.sRGB) ?? b
+        return NSColor(
+            red: (aRGB.redComponent + bRGB.redComponent) / 2,
+            green: (aRGB.greenComponent + bRGB.greenComponent) / 2,
+            blue: (aRGB.blueComponent + bRGB.blueComponent) / 2,
+            alpha: alpha
+        )
+    }
+
+    /// Auto-fit camera distance to contain all nodes
+    private func autoFitCamera() {
+        guard !simulation.nodes.isEmpty else { return }
+
+        var maxDist: Float = 0
+        for node in simulation.nodes {
+            let dist = simd_length(node.position)
+            if dist > maxDist { maxDist = dist }
+        }
+
+        // Camera needs to be far enough to see the outermost node
+        // Account for field of view (60deg) — distance = maxDist / tan(fov/2) + padding
+        let fovRadians: Float = 60.0 * Float.pi / 180.0
+        let minDistance = maxDist / tan(fovRadians / 2) * 1.3 // 30% padding
+        let cameraZ = max(minDistance, 1200) // minimum distance for very small graphs
+
+        cameraNode.position = SCNVector3(0, 0, cameraZ)
+    }
+
+    private func createEdgeNode(from: SIMD3<Float>, to: SIMD3<Float>, material: SCNMaterial) -> SCNNode {
         let fromVec = SCNVector3(from)
         let toVec = SCNVector3(to)
 
@@ -434,21 +396,16 @@ class MemoryGraphViewModel: ObservableObject {
             pow(toVec.z - fromVec.z, 2)
         )
 
-        let cylinder = SCNCylinder(radius: 1, height: CGFloat(distance))
-        let material = SCNMaterial()
-        material.diffuse.contents = NSColor.white.withAlphaComponent(0.3)
+        let cylinder = SCNCylinder(radius: 0.8, height: CGFloat(distance))
+        cylinder.radialSegmentCount = 6
         cylinder.materials = [material]
 
         let node = SCNNode(geometry: cylinder)
-
-        // Position at midpoint
         node.position = SCNVector3(
             (fromVec.x + toVec.x) / 2,
             (fromVec.y + toVec.y) / 2,
             (fromVec.z + toVec.z) / 2
         )
-
-        // Rotate to align with direction
         node.look(at: toVec, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 1, 0))
 
         return node
@@ -461,49 +418,41 @@ class MemoryGraphViewModel: ObservableObject {
 
         simulation.tick()
 
-        // Update node positions
+        // Batch all position updates without animation
+        SCNTransaction.begin()
+        SCNTransaction.disableActions = true
+
         for node in simulation.nodes {
-            if let scnNode = nodeSceneNodes[node.id] {
-                SCNTransaction.begin()
-                SCNTransaction.animationDuration = 0.016
-                scnNode.position = SCNVector3(node.position)
-                SCNTransaction.commit()
-            }
+            nodeSceneNodes[node.id]?.position = SCNVector3(node.position)
         }
 
-        // Update edge positions
         for edge in simulation.edges {
             guard let source = simulation.nodeMap[edge.sourceId],
                   let target = simulation.nodeMap[edge.targetId],
                   let edgeNode = edgeSceneNodes[edge.id] else { continue }
-
             updateEdgeNode(edgeNode, from: source.position, to: target.position)
         }
+
+        SCNTransaction.commit()
     }
 
     private func updateEdgeNode(_ node: SCNNode, from: SIMD3<Float>, to: SIMD3<Float>) {
         let fromVec = SCNVector3(from)
         let toVec = SCNVector3(to)
 
-        let distance = sqrt(
-            pow(toVec.x - fromVec.x, 2) +
-            pow(toVec.y - fromVec.y, 2) +
-            pow(toVec.z - fromVec.z, 2)
-        )
+        let dx = toVec.x - fromVec.x
+        let dy = toVec.y - fromVec.y
+        let dz = toVec.z - fromVec.z
+        let distance = sqrt(dx * dx + dy * dy + dz * dz)
 
-        // Update cylinder height
         if let cylinder = node.geometry as? SCNCylinder {
             cylinder.height = CGFloat(distance)
         }
-
-        // Update position
         node.position = SCNVector3(
             (fromVec.x + toVec.x) / 2,
             (fromVec.y + toVec.y) / 2,
             (fromVec.z + toVec.z) / 2
         )
-
-        // Update rotation
         node.look(at: toVec, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 1, 0))
     }
 

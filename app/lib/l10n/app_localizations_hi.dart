@@ -8127,6 +8127,45 @@ class AppLocalizationsHi extends AppLocalizations {
   String get pairingDescNeoOne => 'पावर बटन को तब तक दबाकर रखें जब तक LED ब्लिंक न करे। डिवाइस खोजने योग्य होगा।';
 
   @override
+  String get downloadingFromDevice => 'डिवाइस से डाउनलोड हो रहा है';
+
+  @override
+  String get reconnectingToInternet => 'इंटरनेट से पुनः कनेक्ट हो रहा है...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$total में से $current अपलोड हो रहा है';
+  }
+
+  @override
+  String get processedStatus => 'संसाधित';
+
+  @override
+  String get corruptedStatus => 'दूषित';
+
+  @override
+  String nPending(int count) {
+    return '$count लंबित';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count संसाधित';
+  }
+
+  @override
+  String get synced => 'सिंक हो गया';
+
+  @override
+  String get noPendingRecordings => 'कोई लंबित रिकॉर्डिंग नहीं';
+
+  @override
+  String get noProcessedRecordings => 'अभी तक कोई संसाधित रिकॉर्डिंग नहीं';
+
+  @override
+  String get pending => 'लंबित';
+
+  @override
   String whatsNewInVersion(String version) {
     return '$version में नया क्या है';
   }
@@ -8158,4 +8197,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'वाईफाई पासवर्ड दर्ज करें';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

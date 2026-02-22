@@ -10,11 +10,14 @@ class GlobalShortcutManager {
     static let toggleFloatingBarNotification = Notification.Name("com.omi.desktop.toggleFloatingBar")
     static let askAINotification = Notification.Name("com.omi.desktop.askAI")
 
-    private var hotKeyRefs: [EventHotKeyRef?] = []
+    private var hotKeyRefs: [HotKeyID: EventHotKeyRef] = [:]
 
     private enum HotKeyID: UInt32 {
         case toggleBar = 1
+        case askOmi = 2
     }
+
+    private var shortcutObserver: NSObjectProtocol?
 
     private init() {
         var eventType = EventTypeSpec(
@@ -28,12 +31,33 @@ class GlobalShortcutManager {
             },
             1, &eventType, nil, nil
         )
+
+        // Re-register Ask Omi shortcut when user changes it in settings
+        shortcutObserver = NotificationCenter.default.addObserver(
+            forName: ShortcutSettings.askOmiShortcutChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.registerAskOmi()
+        }
     }
 
     func registerShortcuts() {
         unregisterShortcuts()
         // Register Cmd+\ for toggle bar (keycode 42 = backslash)
         registerHotKey(keyCode: 42, modifiers: Int(cmdKey), id: .toggleBar)
+        // Register Ask Omi shortcut from user settings
+        registerAskOmi()
+    }
+
+    private func registerAskOmi() {
+        // Unregister previous Ask Omi hotkey if any
+        if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
+            UnregisterEventHotKey(ref)
+        }
+        let askOmiKey = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiKey }
+        registerHotKey(keyCode: Int(askOmiKey.keyCode), modifiers: askOmiKey.carbonModifiers, id: .askOmi)
+        NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiKey.rawValue)")
     }
 
     private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {
@@ -46,7 +70,7 @@ class GlobalShortcutManager {
         )
 
         if status == noErr, let ref = hotKeyRef {
-            hotKeyRefs.append(ref)
+            hotKeyRefs[id] = ref
         } else {
             NSLog("GlobalShortcutManager: Failed to register hotkey (keycode \(keyCode)), error: \(status)")
         }
@@ -72,16 +96,19 @@ class GlobalShortcutManager {
         case .toggleBar:
             NSLog("GlobalShortcutManager: Cmd+\\ detected, toggling floating bar")
             NotificationCenter.default.post(name: GlobalShortcutManager.toggleFloatingBarNotification, object: nil)
+        case .askOmi:
+            NSLog("GlobalShortcutManager: Ask Omi shortcut detected")
+            DispatchQueue.main.async {
+                FloatingControlBarManager.shared.openAIInput()
+            }
         }
 
         return noErr
     }
 
     func unregisterShortcuts() {
-        for ref in hotKeyRefs {
-            if let validRef = ref {
-                UnregisterEventHotKey(validRef)
-            }
+        for (_, ref) in hotKeyRefs {
+            UnregisterEventHotKey(ref)
         }
         hotKeyRefs.removeAll()
     }

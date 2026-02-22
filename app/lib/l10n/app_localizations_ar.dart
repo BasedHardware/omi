@@ -8089,6 +8089,45 @@ class AppLocalizationsAr extends AppLocalizations {
   String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
 
   @override
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
+
+  @override
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'جارٍ رفع $current من $total';
+  }
+
+  @override
+  String get processedStatus => 'تمت المعالجة';
+
+  @override
+  String get corruptedStatus => 'تالف';
+
+  @override
+  String nPending(int count) {
+    return '$count قيد الانتظار';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count تمت معالجتها';
+  }
+
+  @override
+  String get synced => 'تمت المزامنة';
+
+  @override
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
+
+  @override
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
+
+  @override
+  String get pending => 'قيد الانتظار';
+
+  @override
   String whatsNewInVersion(String version) {
     return 'ما الجديد في $version';
   }
@@ -8119,4 +8158,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
 }

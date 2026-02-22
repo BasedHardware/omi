@@ -2630,5 +2630,17 @@
   "wifiConfigurationSubtitle": "Skriv inn WiFi-legitimasjonen din slik at enheten kan laste ned fastvaren.",
   "networkNameSsid": "Nettverksnavn (SSID)",
   "enterWifiNetworkName": "Skriv inn WiFi-nettverksnavn",
-  "enterWifiPassword": "Skriv inn WiFi-passord"
+  "enterWifiPassword": "Skriv inn WiFi-passord",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Laster ned fra enhet",
+  "reconnectingToInternet": "Kobler til internett på nytt...",
+  "uploadingToCloud": "Laster opp {current} av {total}",
+  "processedStatus": "Behandlet",
+  "corruptedStatus": "Ødelagt",
+  "nPending": "{count} ventende",
+  "nProcessed": "{count} behandlet",
+  "synced": "Synkronisert",
+  "noPendingRecordings": "Ingen ventende opptak",
+  "noProcessedRecordings": "Ingen behandlede opptak ennå",
+  "pending": "Ventende"
 }

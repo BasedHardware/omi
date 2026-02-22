@@ -384,6 +384,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
+    language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
     # Extract memories based on conversation source
@@ -391,10 +392,10 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         text_content = conversation.external_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source)
+            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments)
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
 
     is_locked = conversation.is_locked
     parsed_memories = []
@@ -419,7 +420,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                 )
 
         if similar_memories:
-            resolution = resolve_memory_conflict(memory.content, similar_memories)
+            resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
 
             if resolution.action == 'keep_existing':
                 continue

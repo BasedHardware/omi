@@ -23,6 +23,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var tagsJson: String?               // JSON array: ["work", "code"]
     var deletedBy: String?              // "user", "ai_dedup"
     var dueAt: Date?
+    var recurrenceRule: String?          // "daily", "weekdays", "weekly", "biweekly", "monthly"
+    var recurrenceParentId: String?      // ID of original parent task in recurrence chain
 
     // Desktop extraction fields
     var screenshotId: Int64?
@@ -54,6 +56,9 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     // Chat session (local-only, not synced to backend)
     var chatSessionId: String?           // Firestore chat session ID for task-scoped chat
 
+    // Promotion tracking
+    var fromStaged: Bool                 // Whether this task was promoted from staged_tasks
+
     // Timestamps
     var createdAt: Date
     var updatedAt: Date
@@ -76,6 +81,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         tagsJson: String? = nil,
         deletedBy: String? = nil,
         dueAt: Date? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil,
         screenshotId: Int64? = nil,
         confidence: Double? = nil,
         sourceApp: String? = nil,
@@ -96,6 +103,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         agentCompletedAt: Date? = nil,
         agentEditedFilesJson: String? = nil,
         chatSessionId: String? = nil,
+        fromStaged: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -112,6 +120,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.tagsJson = tagsJson
         self.deletedBy = deletedBy
         self.dueAt = dueAt
+        self.recurrenceRule = recurrenceRule
+        self.recurrenceParentId = recurrenceParentId
         self.screenshotId = screenshotId
         self.confidence = confidence
         self.sourceApp = sourceApp
@@ -132,6 +142,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.agentCompletedAt = agentCompletedAt
         self.agentEditedFilesJson = agentEditedFilesJson
         self.chatSessionId = chatSessionId
+        self.fromStaged = fromStaged
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -285,6 +296,8 @@ extension ActionItemRecord {
             tagsJson: tagsJson,
             deletedBy: item.deletedBy,
             dueAt: item.dueAt,
+            recurrenceRule: item.recurrenceRule,
+            recurrenceParentId: item.recurrenceParentId,
             screenshotId: nil,
             confidence: nil,
             sourceApp: item.sourceApp,
@@ -295,6 +308,7 @@ extension ActionItemRecord {
             sortOrder: item.sortOrder,
             indentLevel: item.indentLevel,
             relevanceScore: item.relevanceScore,
+            fromStaged: item.fromStaged ?? false,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt ?? item.createdAt
         )
@@ -325,7 +339,12 @@ extension ActionItemRecord {
         self.priority = item.priority
         self.category = item.category
         self.dueAt = item.dueAt
+        self.recurrenceRule = item.recurrenceRule
+        self.recurrenceParentId = item.recurrenceParentId
         self.metadataJson = item.metadata
+        if let staged = item.fromStaged {
+            self.fromStaged = staged
+        }
 
         // Only update updatedAt if the incoming timestamp is newer than local
         // This prevents sync from resetting local timestamps when backend data hasn't changed
@@ -409,6 +428,9 @@ extension ActionItemRecord {
             deletedAt: nil,  // Not stored locally
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
+            fromStaged: fromStaged,
+            recurrenceRule: recurrenceRule,
+            recurrenceParentId: recurrenceParentId,
             sortOrder: sortOrder,
             indentLevel: indentLevel,
             relevanceScore: relevanceScore,

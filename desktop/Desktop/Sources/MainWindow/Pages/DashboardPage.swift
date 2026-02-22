@@ -50,7 +50,7 @@ class DashboardViewModel: ObservableObject {
 
         // Load all data in parallel
         async let scoreTask: Void = loadScores()
-        async let tasksTask: Void = tasksStore.loadTasks()  // Use shared store
+        async let tasksTask: Void = tasksStore.loadTasksIfNeeded()  // Don't re-fetch if ViewModelContainer already loaded
         async let goalsTask: Void = loadGoals()
 
         let _ = await (scoreTask, tasksTask, goalsTask)
@@ -115,7 +115,8 @@ class DashboardViewModel: ObservableObject {
                 title: title,
                 goalType: goalType,
                 targetValue: targetValue,
-                unit: unit
+                unit: unit,
+                source: "user"
             )
             _ = try? await GoalStorage.shared.syncServerGoal(goal)
             goals = try await GoalStorage.shared.getLocalGoals()
@@ -202,33 +203,11 @@ struct DashboardPage: View {
 
     private var dashboardWidgets: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // 4 Widgets in 2x2 grid
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
-                // Top row: Score + Focus
+                // Top row: Score + Goals
                 GridRow {
                     ScoreWidget(scoreResponse: viewModel.scoreResponse)
                         .frame(minWidth: 0, maxWidth: .infinity)
-
-                    FocusSummaryWidget(
-                        todayStats: FocusStorage.shared.todayStats,
-                        totalStats: FocusStorage.shared.allTimeStats
-                    )
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                }
-
-                // Bottom row: Tasks + Goals
-                GridRow {
-                    TasksWidget(
-                        overdueTasks: viewModel.overdueTasks,
-                        todaysTasks: viewModel.todaysTasks,
-                        recentTasks: viewModel.recentTasks,
-                        onToggleCompletion: { task in
-                            Task {
-                                await viewModel.toggleTaskCompletion(task)
-                            }
-                        }
-                    )
-                    .frame(minWidth: 0, maxWidth: .infinity)
 
                     GoalsWidget(
                         goals: viewModel.goals,
@@ -253,6 +232,22 @@ struct DashboardPage: View {
                             }
                         }
                     )
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                }
+
+                // Bottom row: Tasks (full width)
+                GridRow {
+                    TasksWidget(
+                        overdueTasks: viewModel.overdueTasks,
+                        todaysTasks: viewModel.todaysTasks,
+                        recentTasks: viewModel.recentTasks,
+                        onToggleCompletion: { task in
+                            Task {
+                                await viewModel.toggleTaskCompletion(task)
+                            }
+                        }
+                    )
+                    .gridCellColumns(2)
                     .frame(minWidth: 0, maxWidth: .infinity)
                 }
             }

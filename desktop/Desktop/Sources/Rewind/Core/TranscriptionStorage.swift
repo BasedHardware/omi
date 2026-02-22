@@ -6,7 +6,7 @@ import GRDB
 actor TranscriptionStorage {
     static let shared = TranscriptionStorage()
 
-    private var _dbQueue: DatabaseQueue?
+    private var _dbQueue: DatabasePool?
     private var isInitialized = false
 
     private init() {}
@@ -18,7 +18,7 @@ actor TranscriptionStorage {
     }
 
     /// Ensure database is initialized before use
-    private func ensureInitialized() async throws -> DatabaseQueue {
+    private func ensureInitialized() async throws -> DatabasePool {
         if let db = _dbQueue {
             return db
         }
@@ -357,6 +357,21 @@ actor TranscriptionStorage {
         }
     }
 
+    /// Get sessions stuck in 'uploading' status for longer than the given threshold (in seconds)
+    /// These are sessions where the app quit/crashed during upload or markSessionCompleted failed silently
+    func getStuckUploadingSessions(olderThan seconds: TimeInterval) async throws -> [TranscriptionSessionRecord] {
+        let db = try await ensureInitialized()
+        let cutoff = Date().addingTimeInterval(-seconds)
+
+        return try await db.read { database in
+            try TranscriptionSessionRecord
+                .filter(Column("status") == TranscriptionSessionStatus.uploading.rawValue)
+                .filter(Column("updatedAt") < cutoff)
+                .order(Column("createdAt").asc)
+                .fetchAll(database)
+        }
+    }
+
     /// Get a session with its segments
     func getSessionWithSegments(id: Int64) async throws -> TranscriptionSessionWithSegments? {
         let db = try await ensureInitialized()
@@ -433,10 +448,10 @@ actor TranscriptionStorage {
     /// Upsert a session from a ServerConversation (insert if not exists, update if exists)
     /// Returns the local session ID
     @discardableResult
-    func upsertFromServerConversation(_ conversation: ServerConversation) async throws -> Int64 {
+    func upsertFromServerConversation(_ conversation: ServerConversation) async throws -> (sessionId: Int64, changed: Bool) {
         let db = try await ensureInitialized()
 
-        return try await db.write { database -> Int64 in
+        return try await db.write { database -> (Int64, Bool) in
             // Check if session already exists by backendId
             if var existingSession = try TranscriptionSessionRecord
                 .filter(Column("backendId") == conversation.id)
@@ -444,11 +459,11 @@ actor TranscriptionStorage {
                 // Skip if local record is newer than the conversation's latest timestamp.
                 // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.)
                 let serverTimestamp = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
-                if existingSession.updatedAt > serverTimestamp {
+                if existingSession.updatedAt >= serverTimestamp {
                     guard let sessionId = existingSession.id else {
                         throw TranscriptionStorageError.invalidState("Session ID is nil")
                     }
-                    return sessionId
+                    return (sessionId, false)
                 }
 
                 // Update existing session
@@ -458,7 +473,7 @@ actor TranscriptionStorage {
                     throw TranscriptionStorageError.invalidState("Session ID is nil after update")
                 }
                 log("TranscriptionStorage: Updated session \(sessionId) from backend \(conversation.id)")
-                return sessionId
+                return (sessionId, true)
             } else {
                 // Insert new session - use inserted() to get record with ID
                 let newSession = TranscriptionSessionRecord.from(conversation)
@@ -467,7 +482,7 @@ actor TranscriptionStorage {
                     throw TranscriptionStorageError.invalidState("Session ID is nil after insert")
                 }
                 log("TranscriptionStorage: Inserted new session \(sessionId) from backend \(conversation.id)")
-                return sessionId
+                return (sessionId, true)
             }
         }
     }
@@ -498,10 +513,12 @@ actor TranscriptionStorage {
     @discardableResult
     func syncServerConversation(_ conversation: ServerConversation) async throws -> Int64 {
         // First upsert the session
-        let sessionId = try await upsertFromServerConversation(conversation)
+        let (sessionId, changed) = try await upsertFromServerConversation(conversation)
 
-        // Then upsert the segments
-        try await upsertSegmentsFromServerConversation(conversation, sessionId: sessionId)
+        // Only re-sync segments if the session was actually inserted or updated
+        if changed {
+            try await upsertSegmentsFromServerConversation(conversation, sessionId: sessionId)
+        }
 
         return sessionId
     }

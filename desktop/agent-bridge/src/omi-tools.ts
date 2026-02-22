@@ -23,7 +23,11 @@ function nextCallId(): string {
 
 /** Send a JSON line to stdout (back to Swift) */
 function sendToSwift(msg: ToolUseMessage): void {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+  try {
+    process.stdout.write(JSON.stringify(msg) + "\n");
+  } catch (err) {
+    process.stderr.write(`[agent-bridge] Failed to write to stdout: ${err}\n`);
+  }
 }
 
 /**

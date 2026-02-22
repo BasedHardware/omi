@@ -2665,5 +2665,17 @@
   "wifiConfigurationSubtitle": "Введите данные WiFi, чтобы устройство могло загрузить прошивку.",
   "networkNameSsid": "Имя сети (SSID)",
   "enterWifiNetworkName": "Введите имя сети WiFi",
-  "enterWifiPassword": "Введите пароль WiFi"
+  "enterWifiPassword": "Введите пароль WiFi",
+  "appIconLabel": "App Icon",
+  "downloadingFromDevice": "Загрузка с устройства",
+  "reconnectingToInternet": "Повторное подключение к интернету...",
+  "uploadingToCloud": "Загрузка {current} из {total}",
+  "processedStatus": "Обработано",
+  "corruptedStatus": "Повреждено",
+  "nPending": "{count} ожидающих",
+  "nProcessed": "{count} обработано",
+  "synced": "Синхронизировано",
+  "noPendingRecordings": "Нет ожидающих записей",
+  "noProcessedRecordings": "Пока нет обработанных записей",
+  "pending": "Ожидание"
 }
