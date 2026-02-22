@@ -1,0 +1,32 @@
+{
+  "name": "@openclaw/omi",
+  "version": "1.0.0",
+  "description": "OpenClaw plugin for Omi integration - access memories, conversations, and action items",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "openclaw",
+    "omi",
+    "memory",
+    "ai",
+    "plugin"
+  ],
+  "author": "Omi Team",
+  "license": "MIT",
+  "peerDependencies": {
+    "openclaw": ">=0.1.0"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.36.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
