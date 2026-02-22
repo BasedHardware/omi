@@ -591,8 +591,9 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
             `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
           );
         } catch (err) {
-          // If pre-warm fails with auth error, start OAuth flow
-          if (err instanceof AcpError && (err.code === -32000 || err.code === -32603)) {
+          // If pre-warm fails with auth error, start OAuth flow.
+          // Only -32000 is AUTH_REQUIRED; -32603 is a generic error (credit balance, API error, etc.)
+          if (err instanceof AcpError && err.code === -32000) {
             logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
             await startAuthFlow();
             return; // After auth, warmup will happen on next query
