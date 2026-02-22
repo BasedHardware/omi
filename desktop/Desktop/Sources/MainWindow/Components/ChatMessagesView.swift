@@ -209,28 +209,58 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                 )
                                 .id(message.id)
                             }
-
-                            // Invisible anchor for reliable scroll-to-bottom
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom-anchor")
                         }
                     }
                     .padding()
                     .textSelection(.enabled)
                     .background(
-                        ScrollPositionDetector { atBottom in
-                            isUserAtBottom = atBottom
-                            if atBottom {
-                                shouldFollowContent = true
-                            } else if !isProgrammaticScroll && !isSettlingAfterAppear {
-                                // Only stop following when the user actively scrolls up,
-                                // not when content grows past the viewport, we're mid-scroll,
-                                // or the view is still settling after (re-)appearing.
+                        // Both detectors share the same .background so their NSViews land
+                        // inside NSScrollView.documentView — the superview walk in each
+                        // coordinator then correctly finds the enclosing NSScrollView.
+                        // UserScrollDetector must be here (not on the outer ScrollView)
+                        // because a SwiftUI .background on the ScrollView itself is a
+                        // sibling in the AppKit hierarchy, not a child — so the walk
+                        // never reaches NSScrollView and targetScrollView stays nil.
+                        ZStack {
+                            ScrollPositionDetector { atBottom in
+                                isUserAtBottom = atBottom
+                                if atBottom {
+                                    shouldFollowContent = true
+                                } else if !isProgrammaticScroll && !isSettlingAfterAppear {
+                                    // Only stop following when the user actively scrolls up,
+                                    // not when content grows past the viewport, we're mid-scroll,
+                                    // or the view is still settling after (re-)appearing.
+                                    shouldFollowContent = false
+                                }
+                            }
+                            UserScrollDetector {
+                                guard !isSettlingAfterAppear else { return }
+                                // Immediately break out of follow mode — no delay
                                 shouldFollowContent = false
+                                userIsScrolling = true
+                                // Cancel any pending programmatic scroll
+                                scrollThrottleWorkItem?.cancel()
+                                scrollThrottleWorkItem = nil
+                                // Clear the scrolling flag after a short idle period
+                                userScrollEndWorkItem?.cancel()
+                                let endWork = DispatchWorkItem {
+                                    userIsScrolling = false
+                                }
+                                userScrollEndWorkItem = endWork
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
                             }
                         }
                     )
+
+                    // Invisible anchor lives OUTSIDE the LazyVStack so it is always
+                    // eagerly rendered. Inside LazyVStack it may not exist in the view
+                    // hierarchy when scrollTo is first called (lazy evaluation), causing
+                    // the scroll to jump to an estimated — often empty — position.
+                    if !messages.isEmpty {
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom-anchor")
+                    }
                 }
                 .onChange(of: messages.count) { oldCount, newCount in
                     if newCount > oldCount || oldCount == 0 {
@@ -261,24 +291,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         shouldFollowContent = true
                     }
                 }
-                .background(
-                    UserScrollDetector {
-                        guard !isSettlingAfterAppear else { return }
-                        // Immediately break out of follow mode — no delay
-                        shouldFollowContent = false
-                        userIsScrolling = true
-                        // Cancel any pending programmatic scroll
-                        scrollThrottleWorkItem?.cancel()
-                        scrollThrottleWorkItem = nil
-                        // Clear the scrolling flag after a short idle period
-                        userScrollEndWorkItem?.cancel()
-                        let endWork = DispatchWorkItem {
-                            userIsScrolling = false
-                        }
-                        userScrollEndWorkItem = endWork
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
-                    }
-                )
                 .onAppear {
                     // Suppress scroll-detection false positives while content settles
                     isSettlingAfterAppear = true

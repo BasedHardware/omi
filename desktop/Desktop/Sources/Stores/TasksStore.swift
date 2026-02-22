@@ -1124,32 +1124,92 @@ class TasksStore: ObservableObject {
     }
 
     @discardableResult
+    func createDailyRecurringTask(description: String, priority: String? = "medium", tags: [String]? = nil) async -> TaskActionItem? {
+        // Set due date to start of next day if it's past 6 PM, otherwise today
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: now)
+        let dueDate: Date
+
+        if hour >= 18 { // After 6 PM, schedule for next day
+            dueDate = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: now) ?? now)
+        } else {
+            dueDate = calendar.startOfDay(for: now)
+        }
+
+        return await createTask(
+            description: description,
+            dueAt: dueDate,
+            priority: priority,
+            tags: (tags ?? []) + ["daily"],
+            recurrenceRule: "daily"
+        )
+    }
+
+    @discardableResult
     func createTask(description: String, dueAt: Date?, priority: String?, tags: [String]? = nil, recurrenceRule: String? = nil) async -> TaskActionItem? {
+        // Local-first: insert into SQLite immediately, then sync to backend in background
         do {
-            var metadata: [String: Any]? = nil
+            var metadataJson: String? = nil
             if let tags = tags, !tags.isEmpty {
-                metadata = ["tags": tags]
+                let metaDict: [String: Any] = ["tags": tags]
+                if let data = try? JSONSerialization.data(withJSONObject: metaDict),
+                   let str = String(data: data, encoding: .utf8) {
+                    metadataJson = str
+                }
             }
 
-            let created = try await APIClient.shared.createActionItem(
+            let record = ActionItemRecord(
                 description: description,
-                dueAt: dueAt,
                 source: "manual",
                 priority: priority,
                 category: tags?.first,
-                metadata: metadata,
-                recurrenceRule: recurrenceRule
+                dueAt: dueAt,
+                recurrenceRule: recurrenceRule,
+                metadataJson: metadataJson
             )
 
-            // Sync to local SQLite cache
-            try await ActionItemStorage.shared.syncTaskActionItems([created])
+            let inserted = try await ActionItemStorage.shared.insertLocalActionItem(record)
+            let localTask = inserted.toTaskActionItem()
+            let localId = inserted.id!
 
-            // New tasks are incomplete, add to incomplete list
-            incompleteTasks.insert(created, at: 0)
-            return created
+            // Instant UI update
+            incompleteTasks.insert(localTask, at: 0)
+
+            // Sync to backend in background
+            Task {
+                do {
+                    var metadata: [String: Any]? = nil
+                    if let tags = tags, !tags.isEmpty {
+                        metadata = ["tags": tags]
+                    }
+
+                    let created = try await APIClient.shared.createActionItem(
+                        description: description,
+                        dueAt: dueAt,
+                        source: "manual",
+                        priority: priority,
+                        category: tags?.first,
+                        metadata: metadata,
+                        recurrenceRule: recurrenceRule
+                    )
+
+                    try await ActionItemStorage.shared.markSynced(id: localId, backendId: created.id)
+
+                    // Replace local_ entry with real backend-synced task
+                    if let idx = self.incompleteTasks.firstIndex(where: { $0.id == localTask.id }) {
+                        self.incompleteTasks[idx] = created
+                    }
+                    log("TasksStore: Task synced to backend (local \(localId) → \(created.id))")
+                } catch {
+                    logError("TasksStore: Failed to sync new task to backend (will retry on next launch)", error: error)
+                }
+            }
+
+            return localTask
         } catch {
             self.error = error.localizedDescription
-            logError("TasksStore: Failed to create task", error: error)
+            logError("TasksStore: Failed to create task locally", error: error)
             return nil
         }
     }
@@ -1283,6 +1343,55 @@ class TasksStore: ObservableObject {
             // Local change persists; next successful sync will reconcile
             self.error = error.localizedDescription
             logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
+        }
+    }
+
+    /// Update tags for a task, preserving other metadata keys
+    func updateTaskTags(_ task: TaskActionItem, tags: [String]) async {
+        // Build metadata that preserves existing keys and updates tags
+        var metaDict: [String: Any] = [:]
+        if let existingMeta = task.metadata,
+           let data = existingMeta.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            metaDict = json
+        }
+        metaDict["tags"] = tags
+
+        // 1. Local-first: update SQLite
+        do {
+            try await ActionItemStorage.shared.updateActionItemFields(
+                backendId: task.id,
+                metadata: metaDict
+            )
+        } catch {
+            logError("TasksStore: Failed to update task tags locally", error: error)
+            self.error = error.localizedDescription
+            return
+        }
+
+        // 2. Read back and update in-memory
+        if let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
+            if task.completed {
+                if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
+                    completedTasks[index] = updatedTask
+                }
+            } else {
+                if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
+                    incompleteTasks[index] = updatedTask
+                }
+            }
+        }
+
+        // 3. Call API in background
+        do {
+            let apiResult = try await APIClient.shared.updateActionItem(
+                id: task.id,
+                metadata: metaDict
+            )
+            try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+        } catch {
+            self.error = error.localizedDescription
+            logError("TasksStore: Failed to update task tags on backend (local update preserved)", error: error)
         }
     }
 
