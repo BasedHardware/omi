@@ -1,4 +1,5 @@
-FROM python:3.11 AS builder
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -24,21 +25,23 @@ RUN git clone https://github.com/google/liblc3.git && \
     cd /tmp/liblc3 && \
     python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
+# Get uv for fast package installation
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install Python requirements
 WORKDIR /opt/venv
 COPY requirements.txt /tmp/requirements.txt
 
-# Install heavy NVIDIA/torch packages first (allows Docker layer caching if one fails)
-RUN pip install --no-cache-dir --timeout=600 torch==2.4.0 || \
-    pip install --no-cache-dir --timeout=600 torch==2.4.0 || \
-    pip install --no-cache-dir --timeout=600 torch==2.4.0
+# Install CPU-only torch (pusher backend only uses Silero VAD, no CUDA needed)
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --index-url ${TORCH_INDEX_URL} \
+    torch==2.4.0+cpu torchaudio==2.4.0+cpu torchvision==0.19.0+cpu
 
-RUN pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0 || \
-    pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0
-
-# Install remaining requirements (exclude lc3py - it's built from source above)
-RUN grep -v lc3py /tmp/requirements.txt > /tmp/requirements_filtered.txt && \
-    pip install --no-cache-dir --upgrade --timeout=600 --retries 5 -r /tmp/requirements_filtered.txt
+# Install remaining requirements (exclude lc3py and torch - built separately)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    grep -vE 'lc3py|^torch==|^torchaudio==|^torchvision==' /tmp/requirements.txt > /tmp/requirements_filtered.txt && \
+    uv pip install --upgrade -r /tmp/requirements_filtered.txt
 
 FROM python:3.11-slim
 
