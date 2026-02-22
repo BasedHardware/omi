@@ -176,6 +176,32 @@ class TestVADStreamingGate:
         out = gate.process_audio(_make_pcm(30), t + 0.15 + 23 * 0.03)
         assert out.should_finalize or out.state == GateState.SILENCE
 
+    def test_hangover_exact_boundary_stays_in_hangover(self):
+        """At exactly hangover_ms, gate should still be in HANGOVER (uses > not >=)."""
+        gate = self._make_gate()
+        t = time.time()
+
+        # Speech for 5 chunks (150ms), last speech at cursor=150ms
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Silence: feed chunks until exactly 700ms since last speech
+        # Last speech at 150ms cursor, hangover=700ms, so 700/30 = 23.33 chunks
+        # 23 silence chunks = 690ms since last speech → still HANGOVER
+        # 24th chunk pushes cursor to 720ms → should finalize
+        _set_vad_speech(False)
+        for i in range(23):
+            out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+        # At 23 silence chunks (690ms since last speech), still in HANGOVER
+        assert out.state == GateState.HANGOVER
+        assert not out.should_finalize
+
+        # 24th chunk: 720ms since last speech > 700ms → finalize
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 23 * 0.03)
+        assert out.should_finalize
+        assert out.state == GateState.SILENCE
+
     def test_hangover_cancelled_by_speech(self):
         """If speech resumes during hangover, no finalize should happen."""
         gate = self._make_gate()
@@ -441,6 +467,16 @@ class TestGateConfig:
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
             assert not should_gate_session('any-user')
 
+    def test_rollout_negative_never_gates(self):
+        """Negative rollout percentage should never gate any session."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', -1):
+            assert not should_gate_session('any-user')
+
+    def test_rollout_over_100_always_gates(self):
+        """Rollout > 100 should gate all sessions (same as 100)."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 200):
+            assert should_gate_session('any-user')
+
 
 class TestGatedDeepgramSocket:
     """Tests for the GatedDeepgramSocket wrapper."""
@@ -555,3 +591,20 @@ class TestGatedDeepgramSocket:
         socket.finish()
         mock_conn.finalize.assert_called_once()
         mock_conn.finish.assert_called_once()
+
+    def test_get_metrics_returns_dict_when_gated(self):
+        """get_metrics() should return gate metrics when gate is present."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        metrics = socket.get_metrics()
+        assert metrics is not None
+        assert 'chunks_total' in metrics
+        assert 'mode' in metrics
+        assert metrics['mode'] == 'active'
+
+    def test_get_metrics_returns_none_without_gate(self):
+        """get_metrics() should return None when no gate is present."""
+        mock_conn = MagicMock()
+        socket = GatedDeepgramSocket(mock_conn, gate=None)
+        assert socket.get_metrics() is None
