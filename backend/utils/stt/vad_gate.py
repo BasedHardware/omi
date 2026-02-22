@@ -15,6 +15,7 @@ import audioop
 import hashlib
 import logging
 import os
+import sys
 import threading
 import time
 from bisect import bisect_right
@@ -69,6 +70,10 @@ def _ensure_vad_model():
     Uses the raw model for per-window speech probability (not VADIterator
     which emits boundary events unsuitable for streaming gating).
 
+    Checks sys.modules for an already-loaded vad.py model to avoid loading
+    a duplicate Silero instance (~2MB). Falls back to torch.hub.load if
+    vad.py hasn't been imported yet.
+
     Double-checked locking: _vad_model is set LAST so any thread that sees
     it non-None also sees _vad_torch already set.
     """
@@ -78,10 +83,16 @@ def _ensure_vad_model():
     with _vad_init_lock:
         if _vad_model is not None:
             return
-        torch.set_num_threads(1)
-        model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-        _vad_torch = torch  # Set BEFORE _vad_model
-        _vad_model = model
+        # Reuse model from vad.py if already loaded (avoids duplicate in memory)
+        vad_mod = sys.modules.get('utils.stt.vad')
+        if vad_mod is not None and hasattr(vad_mod, 'model'):
+            _vad_torch = torch  # Set BEFORE _vad_model
+            _vad_model = vad_mod.model
+        else:
+            torch.set_num_threads(1)
+            model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+            _vad_torch = torch  # Set BEFORE _vad_model
+            _vad_model = model
 
 
 # ---------------------------------------------------------------------------

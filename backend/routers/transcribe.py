@@ -688,17 +688,7 @@ async def _stream_handler(
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
-    # Initialize VAD gate before DG socket creation so it can be passed to wrapper
     vad_gate = None
-    if is_gate_enabled() and should_gate_session(uid) and stt_service == STTService.deepgram:
-        vad_gate = VADStreamingGate(
-            sample_rate=sample_rate,
-            channels=channels,
-            mode=VAD_GATE_MODE,
-            uid=uid,
-            session_id=session_id,
-        )
-        print(f'VAD gate initialized mode={VAD_GATE_MODE} uid={uid} session={session_id}')
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
@@ -733,6 +723,23 @@ async def _stream_handler(
             if not has_speech_profile:
                 speech_profile_complete.set()
 
+            # Initialize VAD gate only when actually usable (no speech profile)
+            nonlocal vad_gate
+            if (
+                speech_profile_preseconds == 0
+                and is_gate_enabled()
+                and should_gate_session(uid)
+                and stt_service == STTService.deepgram
+            ):
+                vad_gate = VADStreamingGate(
+                    sample_rate=sample_rate,
+                    channels=channels,
+                    mode=VAD_GATE_MODE,
+                    uid=uid,
+                    session_id=session_id,
+                )
+                print(f'VAD gate initialized mode={VAD_GATE_MODE} uid={uid} session={session_id}')
+
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
@@ -743,11 +750,7 @@ async def _stream_handler(
                     preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
-                    # Disable VAD gate when speech profile is active: preseconds
-                    # filtering uses raw DG time, which is compressed when gating
-                    # skips silence — causing real user words to be incorrectly
-                    # filtered as profile audio.
-                    vad_gate=vad_gate if speech_profile_preseconds == 0 else None,
+                    vad_gate=vad_gate,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
