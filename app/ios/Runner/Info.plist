@@ -113,9 +113,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<string>Bluetooth permission is required to connect with your Nooto.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Bluetooth permission is required to connect with your Omi.</string>
+	<string>Bluetooth permission is required to connect with your Nooto.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Access most functions for calendar viewing and editing.</string>
 	<key>NSCalendarsUsageDescription</key>
@@ -135,11 +135,11 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>We need access to your reminders to export action items from Omi conversations.</string>
+	<string>We need access to your reminders to export action items from Nooto conversations.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Omi uses your health data to answer questions about your fitness, sleep, and activity through chat.</string>
+	<string>Nooto uses your health data to answer questions about your fitness, sleep, and activity through chat.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Omi needs permission to access your health data.</string>
+	<string>Nooto needs permission to access your health data.</string>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>NSCameraUsageDescription</key>
