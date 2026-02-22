@@ -301,7 +301,12 @@ class ChatProvider: ObservableObject {
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
 
     // MARK: - Bridge (ACP-only, passApiKey controls OMI vs user's account)
-    private var acpBridge = ACPBridge(passApiKey: true)
+    // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
+    // not always defaulting to Omi mode on cold start.
+    private lazy var acpBridge: ACPBridge = {
+        let isOmi = (UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue) != BridgeMode.userClaude.rawValue
+        return ACPBridge(passApiKey: isOmi)
+    }()
     private var acpBridgeStarted = false
 
     enum BridgeMode: String {
