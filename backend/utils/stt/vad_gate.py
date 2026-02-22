@@ -443,3 +443,67 @@ class VADStreamingGate:
             'state': self._state.value,
             'mode': self.mode,
         }
+
+
+# ---------------------------------------------------------------------------
+# Gated Deepgram Socket — wraps raw DG connection with VAD gate
+# ---------------------------------------------------------------------------
+class GatedDeepgramSocket:
+    """Wraps a Deepgram LiveConnection with built-in VAD gate.
+
+    When gate is active:
+      - send() runs VAD internally, only forwards speech audio to DG
+      - Automatically calls finalize() on speech→silence transitions
+      - finish() flushes pending transcript before closing
+    When gate is None or mode='shadow':
+      - Acts as transparent pass-through
+
+    This keeps all VAD logic out of transcribe.py.
+    """
+
+    def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
+        self._conn = dg_connection
+        self._gate = gate
+
+    def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
+        """Send audio through VAD gate (if active), then to DG."""
+        if self._gate is None:
+            return self._conn.send(data)
+
+        import time as _time
+
+        gate_out = self._gate.process_audio(data, wall_time or _time.time())
+        if gate_out.audio_to_send:
+            self._conn.send(gate_out.audio_to_send)
+        if gate_out.should_finalize:
+            self._conn.finalize()
+
+    def finalize(self) -> None:
+        """Flush pending transcript."""
+        self._conn.finalize()
+
+    def finish(self) -> None:
+        """Close DG connection. Flushes first if gate is active."""
+        if self._gate is not None and self._gate.mode == 'active':
+            try:
+                self._conn.finalize()
+            except Exception:
+                pass
+        self._conn.finish()
+
+    def remap_segments(self, segments: list) -> None:
+        """Remap DG timestamps from audio-time to wall-clock-relative time."""
+        if self._gate is not None and self._gate.mode == 'active':
+            for seg in segments:
+                seg['start'] = self._gate.dg_wall_mapper.dg_to_wall_rel(seg['start'])
+                seg['end'] = self._gate.dg_wall_mapper.dg_to_wall_rel(seg['end'])
+
+    def get_metrics(self) -> Optional[dict]:
+        """Return gate metrics, or None if no gate."""
+        if self._gate is not None:
+            return self._gate.get_metrics()
+        return None
+
+    @property
+    def is_gated(self) -> bool:
+        return self._gate is not None

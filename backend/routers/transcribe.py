@@ -688,15 +688,21 @@ async def _stream_handler(
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
-    vad_gate = None  # Initialized in receive_data if gate is enabled
+    # Initialize VAD gate before DG socket creation so it can be passed to wrapper
+    vad_gate = None
+    if is_gate_enabled() and should_gate_session(uid) and stt_service == STTService.deepgram:
+        vad_gate = VADStreamingGate(
+            sample_rate=sample_rate,
+            channels=channels,
+            mode=VAD_GATE_MODE,
+            uid=uid,
+            session_id=session_id,
+        )
+        print(f'VAD gate initialized mode={VAD_GATE_MODE} uid={uid} session={session_id}')
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
-        # Remap DG timestamps from audio-time to wall-clock-relative time
-        if vad_gate is not None and vad_gate.mode == 'active' and stt_service == STTService.deepgram:
-            for seg in segments:
-                seg['start'] = vad_gate.dg_wall_mapper.dg_to_wall_rel(seg['start'])
-                seg['end'] = vad_gate.dg_wall_mapper.dg_to_wall_rel(seg['end'])
+        # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
 
     async def _process_stt():
@@ -737,6 +743,7 @@ async def _stream_handler(
                     preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
+                    vad_gate=vad_gate,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
@@ -1733,22 +1740,9 @@ async def _stream_handler(
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
-        nonlocal vad_gate
-
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
-
-        # Initialize VAD gate if enabled for this session
-        if is_gate_enabled() and should_gate_session(uid) and stt_service == STTService.deepgram:
-            vad_gate = VADStreamingGate(
-                sample_rate=sample_rate,
-                channels=channels,
-                mode=VAD_GATE_MODE,
-                uid=uid,
-                session_id=session_id,
-            )
-            print(f'VAD gate initialized mode={VAD_GATE_MODE} uid={uid} session={session_id}')
 
         # STT audio buffer - accumulate 30ms before sending for better transcription quality
         stt_audio_buffer = bytearray()
@@ -1872,16 +1866,9 @@ async def _stream_handler(
                         audio_ring_buffer.write(data, last_audio_received_time)
 
                     if not use_custom_stt:
-                        if vad_gate is not None:
-                            gate_out = vad_gate.process_audio(data, last_audio_received_time)
-                            if gate_out.audio_to_send:
-                                stt_audio_buffer.extend(gate_out.audio_to_send)
-                                await flush_stt_buffer()
-                            if gate_out.should_finalize and dg_socket is not None:
-                                dg_socket.finalize()
-                        else:
-                            stt_audio_buffer.extend(data)
-                            await flush_stt_buffer()
+                        # VAD gating is handled inside GatedDeepgramSocket.send()
+                        stt_audio_buffer.extend(data)
+                        await flush_stt_buffer()
 
                     if audio_bytes_send is not None:
                         audio_bytes_send(data, last_audio_received_time)
@@ -2057,8 +2044,7 @@ async def _stream_handler(
         # STT sockets
         try:
             if deepgram_socket:
-                if vad_gate is not None and vad_gate.mode == 'active':
-                    deepgram_socket.finalize()
+                # GatedDeepgramSocket.finish() handles finalize automatically
                 deepgram_socket.finish()
             if deepgram_profile_socket:
                 deepgram_profile_socket.finish()

@@ -433,3 +433,116 @@ class TestGateConfig:
             from utils.stt.vad_gate import should_gate_session
 
             assert not should_gate_session('any-user')
+
+
+class TestGatedDeepgramSocket:
+    """Tests for the GatedDeepgramSocket wrapper."""
+
+    def _make_gate(self, mode='active'):
+        from utils.stt.vad_gate import VADStreamingGate
+
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_passthrough_without_gate(self):
+        """Without gate, send() passes audio directly to connection."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        socket = GatedDeepgramSocket(mock_conn, gate=None)
+        socket.send(b'\x00' * 960)
+        mock_conn.send.assert_called_once_with(b'\x00' * 960)
+
+    def test_gated_silence_not_forwarded(self):
+        """With active gate, silence should not be forwarded to connection."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        _set_vad_speech(False)
+        # Feed enough silence to fill VAD buffer
+        for _ in range(5):
+            socket.send(_make_pcm(30), wall_time=time.time())
+
+        mock_conn.send.assert_not_called()
+
+    def test_gated_speech_forwarded(self):
+        """With active gate, speech should be forwarded to connection."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        _set_vad_speech(True)
+        t = time.time()
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        assert mock_conn.send.call_count > 0
+
+    def test_finalize_called_on_speech_end(self):
+        """Wrapper should call finalize on speech→silence transition."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = time.time()
+        # Speech
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # Silence past hangover
+        _set_vad_speech(False)
+        for i in range(30):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        mock_conn.finalize.assert_called()
+
+    def test_finish_finalizes_when_gated(self):
+        """finish() should call finalize before finish when gate is active."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='active')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        socket.finish()
+
+        mock_conn.finalize.assert_called_once()
+        mock_conn.finish.assert_called_once()
+
+    def test_remap_segments(self):
+        """remap_segments should adjust DG timestamps to wall-clock."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        # Simulate a silence gap via mapper directly
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello'}]
+        socket.remap_segments(segments)
+        assert segments[0]['start'] == 16.0
+        assert segments[0]['end'] == 17.0
+
+    def test_is_gated_property(self):
+        """is_gated should reflect whether gate is present."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        assert not GatedDeepgramSocket(mock_conn, gate=None).is_gated
+        assert GatedDeepgramSocket(mock_conn, gate=self._make_gate()).is_gated
