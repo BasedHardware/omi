@@ -43,7 +43,7 @@ class ActionItemNotificationHandler {
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? 'Omi Reminder'}',
+          title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? '${Env.appName} Reminder'}',
           body: description,
           payload: {
             'action_item_id': actionItemId,
