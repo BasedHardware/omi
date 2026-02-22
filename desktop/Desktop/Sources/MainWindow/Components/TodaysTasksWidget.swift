@@ -6,6 +6,8 @@ struct TasksWidget: View {
     let recentTasks: [TaskActionItem]
     let onToggleCompletion: (TaskActionItem) -> Void
 
+    @State private var showDailyTaskCreation = false
+
     private var totalTaskCount: Int {
         overdueTasks.count + todaysTasks.count + recentTasks.count
     }
@@ -23,9 +25,32 @@ struct TasksWidget: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
-            Text("Tasks")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+            HStack {
+                Text("Tasks")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button(action: {
+                    showDailyTaskCreation = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "repeat.circle")
+                            .scaledFont(size: 12)
+                        Text("Daily")
+                            .scaledFont(size: 11, weight: .medium)
+                    }
+                    .foregroundColor(OmiColors.purplePrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(OmiColors.purplePrimary.opacity(0.1))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
 
             if totalTaskCount == 0 {
                 // Empty state
@@ -84,6 +109,16 @@ struct TasksWidget: View {
                         .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
                 )
         )
+        .sheet(isPresented: $showDailyTaskCreation) {
+            DailyTaskCreationSheet { description, priority in
+                Task {
+                    await TasksStore.shared.createDailyRecurringTask(
+                        description: description,
+                        priority: priority
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -114,11 +149,33 @@ struct TaskRowView: View {
             .disabled(isToggling)
             .opacity(isToggling ? 0.5 : 1)
 
-            Text(task.description)
-                .scaledFont(size: 13)
-                .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                .strikethrough(task.completed)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(task.description)
+                        .scaledFont(size: 13)
+                        .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                        .strikethrough(task.completed)
+                        .lineLimit(2)
+
+                    if task.recurrenceRule == "daily" {
+                        Image(systemName: "repeat")
+                            .scaledFont(size: 10)
+                            .foregroundColor(OmiColors.purplePrimary.opacity(0.7))
+                    }
+                }
+
+                if task.recurrenceRule == "daily" {
+                    Text("Daily")
+                        .scaledFont(size: 10, weight: .medium)
+                        .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(OmiColors.purplePrimary.opacity(0.1))
+                        )
+                }
+            }
 
             Spacer()
         }

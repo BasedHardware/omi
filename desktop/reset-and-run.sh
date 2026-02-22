@@ -294,11 +294,11 @@ for i in {1..30}; do
     sleep 0.5
 done
 
-# Build agent-bridge
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    echo "Building agent-bridge..."
-    cd "$AGENT_BRIDGE_DIR"
+# Build acp-bridge
+echo "Building acp-bridge..."
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
     if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
         npm install --no-fund --no-audit 2>&1 | tail -1
     fi
@@ -339,6 +339,15 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     echo "  Copied resource bundle"
 fi
 
+# Copy acp-bridge
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "  Copied acp-bridge to bundle"
+fi
+
 # Copy and fix Info.plist
 cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
@@ -359,15 +368,6 @@ fi
 # Set API URL to tunnel for development (overrides production default)
 echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 echo "Using backend: $TUNNEL_URL"
-
-# Copy agent-bridge
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    echo "  Copying agent-bridge"
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-fi
 
 # Copy app icon
 cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true

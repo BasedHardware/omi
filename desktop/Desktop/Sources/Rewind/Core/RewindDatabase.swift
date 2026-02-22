@@ -54,6 +54,7 @@ actor RewindDatabase {
     /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
+        guard dbQueue != nil else { return }  // DB already closed, nothing to do
         guard let dbError = error as? DatabaseError else { return }
         let code = dbError.resultCode
         let extendedCode = dbError.extendedResultCode.rawValue

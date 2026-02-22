@@ -18,10 +18,17 @@ class TaskChatCoordinator: ObservableObject {
 
     // MARK: - Chat Status Tracking
 
+    private static let unreadTaskIdsKey = "taskChat.unreadTaskIds"
+
     /// Tasks that currently have an active AI stream (supports parallel agents)
     @Published var streamingTaskIds: Set<String> = []
-    /// Tasks with unseen AI responses (finished while user wasn't viewing)
-    @Published var unreadTaskIds: Set<String> = []
+    /// Tasks with unseen AI responses (finished while user wasn't viewing).
+    /// Persisted to UserDefaults so the "New reply" indicator survives app restarts.
+    @Published var unreadTaskIds: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(unreadTaskIds), forKey: Self.unreadTaskIdsKey)
+        }
+    }
     /// Per-task human-readable status text for active streams
     @Published var streamingStatuses: [String: String] = [:]
 
@@ -38,6 +45,10 @@ class TaskChatCoordinator: ObservableObject {
 
     init(chatProvider: ChatProvider) {
         self.chatProvider = chatProvider
+        // Restore persisted unread indicators so the "New reply" dot survives app restarts
+        if let saved = UserDefaults.standard.array(forKey: Self.unreadTaskIdsKey) as? [String] {
+            unreadTaskIds = Set(saved)
+        }
     }
 
     // MARK: - Status Observation (per-task)
@@ -101,6 +112,21 @@ class TaskChatCoordinator: ObservableObject {
         unreadTaskIds.remove(taskId)
     }
 
+    /// Release memory held by a task's chat state.
+    /// Call when a task is permanently deleted to prevent unbounded memory growth.
+    func purgeState(for taskId: String) {
+        taskCancellables[taskId]?.removeAll()
+        taskCancellables.removeValue(forKey: taskId)
+        taskStates.removeValue(forKey: taskId)
+        if activeTaskId == taskId {
+            closeChat()
+        }
+        streamingTaskIds.remove(taskId)
+        streamingStatuses.removeValue(forKey: taskId)
+        unreadTaskIds.remove(taskId)
+        log("TaskChatCoordinator: Purged state for task \(taskId)")
+    }
+
     // MARK: - Open / Close
 
     /// Open (or resume) a chat panel for a task.
@@ -126,8 +152,7 @@ class TaskChatCoordinator: ObservableObject {
         } else {
             let configuredPath = TaskAgentSettings.shared.workingDirectory
             let ws = configuredPath.isEmpty ? (FileManager.default.homeDirectoryForCurrentUser.path) : configuredPath
-            let useACP = UserDefaults.standard.string(forKey: "chatBridgeMode") == "claudeCode"
-            state = TaskChatState(taskId: task.id, workspacePath: ws, useACPMode: useACP)
+            state = TaskChatState(taskId: task.id, workspacePath: ws)
             // Wire system prompt builder to use ChatProvider's cached context (without history)
             state.systemPromptBuilder = { [weak self] in
                 self?.chatProvider.buildTaskChatSystemPrompt() ?? ""
@@ -141,12 +166,7 @@ class TaskChatCoordinator: ObservableObject {
 
         activeTaskState = state
 
-        // Pre-fill initial prompt if chat has no messages yet
-        if state.messages.isEmpty {
-            pendingInputText = buildInitialPrompt(for: task)
-        } else {
-            pendingInputText = ""
-        }
+        pendingInputText = ""
 
         isPanelOpen = true
     }
@@ -163,6 +183,37 @@ class TaskChatCoordinator: ObservableObject {
         activeTaskId = nil
         activeTaskState = nil
         pendingInputText = ""
+    }
+
+    // MARK: - Background Investigation
+
+    /// Run an AI investigation for a task without opening the panel.
+    /// Uses the ACP bridge via TaskChatState. Skips tasks already sending.
+    func investigateInBackground(for task: TaskActionItem) async {
+        log("TaskChatCoordinator: investigateInBackground for \(task.id)")
+
+        let state: TaskChatState
+        if let existing = taskStates[task.id] {
+            state = existing
+        } else {
+            let configuredPath = TaskAgentSettings.shared.workingDirectory
+            let ws = configuredPath.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.path : configuredPath
+            state = TaskChatState(taskId: task.id, workspacePath: ws)
+            state.systemPromptBuilder = { [weak self] in
+                self?.chatProvider.buildTaskChatSystemPrompt() ?? ""
+            }
+            taskStates[task.id] = state
+            observeTaskState(state)
+            await state.loadPersistedMessages()
+        }
+
+        guard !state.isSending else {
+            log("TaskChatCoordinator: task \(task.id) already sending, skipping investigate")
+            return
+        }
+
+        let prompt = buildInitialPrompt(for: task)
+        await state.sendMessage(prompt)
     }
 
     // MARK: - Helpers
