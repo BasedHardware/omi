@@ -97,12 +97,7 @@ struct DesktopHomeView: View {
                                     if success {
                                         log("DesktopHomeView: Screen analysis started")
                                     } else {
-                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown")")
-                                        // Revert persistent setting so UI reflects actual state
-                                        DispatchQueue.main.async {
-                                            AssistantSettings.shared.screenAnalysisEnabled = false
-                                            UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
-                                        }
+                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch")
                                     }
                                 }
                             } else {
@@ -253,6 +248,24 @@ struct DesktopHomeView: View {
     }
 
     /// Update store auto-refresh based on which page is visible
+    /// On launch, if the user quit with the task chat panel open, macOS restores the
+    /// expanded window frame but the chat panel itself is not shown. Shrink the window
+    /// back to its pre-chat width so the layout isn't unexpectedly wide.
+    private func restorePreChatWindowWidth() {
+        let key = "tasksPreChatWindowWidth"
+        let saved = UserDefaults.standard.double(forKey: key)
+        guard saved > 0 else { return }
+        // Reset the persisted value immediately so TasksPage won't double-shrink
+        UserDefaults.standard.set(Double(0), forKey: key)
+        // Delay slightly so the window is fully visible
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+            var frame = window.frame
+            frame.size.width = saved
+            window.setFrame(frame, display: true)
+        }
+    }
+
     private func updateStoreActivity(for index: Int) {
         viewModelContainer.tasksStore.isActive =
             index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
@@ -274,7 +287,7 @@ struct DesktopHomeView: View {
                         isCollapsed: $isSidebarCollapsed,
                         appState: appState
                     )
-                    .clickThrough()
+                    .clickThrough(enabled: !isInSettings)
                     .opacity(isInSettings ? 0 : 1)
                     .allowsHitTesting(!isInSettings)
                 }
@@ -390,6 +403,10 @@ struct DesktopHomeView: View {
         }
         .onAppear {
             updateStoreActivity(for: selectedIndex)
+            // Restore window width if the user quit with task chat panel open.
+            // The chat panel is never open on startup (showChatPanel defaults to false),
+            // but macOS restores the expanded window frame from the previous session.
+            restorePreChatWindowWidth()
         }
     }
 }
