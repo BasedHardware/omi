@@ -508,7 +508,7 @@ async def search_conversations_via_integration(
     tags=['integration', 'notifications'],
 )
 async def send_notification_via_integration(
-    request: Request, app_id: str, message: str, uid: str, authorization: Optional[str] = Header(None)
+    request: Request, app_id: str, message: str, uid: str, sound: Optional[str] = None, authorization: Optional[str] = Header(None)
 ):
     # Verify API key from Authorization header
     if not authorization or not authorization.startswith('Bearer '):
@@ -548,7 +548,7 @@ async def send_notification_via_integration(
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    send_app_notification(uid, app.name, app.id, message)
+    send_app_notification(uid, app.name, app.id, message, sound=sound)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
 
 
