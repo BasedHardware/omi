@@ -743,7 +743,11 @@ async def _stream_handler(
                     preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
-                    vad_gate=vad_gate,
+                    # Disable VAD gate when speech profile is active: preseconds
+                    # filtering uses raw DG time, which is compressed when gating
+                    # skips silence — causing real user words to be incorrectly
+                    # filtered as profile audio.
+                    vad_gate=vad_gate if speech_profile_preseconds == 0 else None,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(

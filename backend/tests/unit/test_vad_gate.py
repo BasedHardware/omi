@@ -428,6 +428,23 @@ class TestDgWallMapper:
         # Monotonicity: earlier DG time maps to earlier wall time
         assert result_seg2 < result_seg3, "Timestamps must be monotonically increasing"
 
+    def test_checkpoint_compaction(self):
+        """Checkpoints should be capped to _MAX_CHECKPOINTS to bound memory."""
+        mapper = DgWallMapper()
+        # Override cap to small value for testing
+        mapper._MAX_CHECKPOINTS = 5
+
+        for i in range(10):
+            mapper.on_audio_sent(1.0, float(i * 2))
+            mapper.on_silence_skipped()
+
+        # Should have at most 5 checkpoints
+        assert len(mapper._checkpoints) <= 5
+        # Most recent checkpoint should still work for remap
+        last_dg = mapper._checkpoints[-1][0]
+        result = mapper.dg_to_wall_rel(last_dg + 0.5)
+        assert result == mapper._checkpoints[-1][1] + 0.5
+
 
 class TestGateConfig:
     def test_gate_disabled_by_default(self):
@@ -536,6 +553,26 @@ class TestGatedDeepgramSocket:
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
         # Silence past hangover
+        _set_vad_speech(False)
+        for i in range(30):
+            socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
+
+        mock_conn.finalize.assert_called()
+
+    def test_send_finalize_exception_swallowed(self):
+        """If finalize() throws during speech->silence in send(), it should be swallowed."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError("connection closed")
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = time.time()
+        # Speech
+        _set_vad_speech(True)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # Silence past hangover — should not raise despite finalize error
         _set_vad_speech(False)
         for i in range(30):
             socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)

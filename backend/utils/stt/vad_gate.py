@@ -115,6 +115,8 @@ class DgWallMapper:
     convert DG timestamps back to wall-clock-relative timestamps.
     """
 
+    _MAX_CHECKPOINTS = 500  # Cap to bound memory for long sessions
+
     def __init__(self):
         self._lock = threading.Lock()
         # Each checkpoint: (dg_sec, wall_rel_sec) at silence→speech transition
@@ -136,6 +138,9 @@ class DgWallMapper:
                     min_wall = prev_wall + (self._dg_cursor_sec - prev_dg)
                     chunk_wall_rel_sec = max(chunk_wall_rel_sec, min_wall)
                 self._checkpoints.append((self._dg_cursor_sec, chunk_wall_rel_sec))
+                # Compact: keep only recent checkpoints to bound memory
+                if len(self._checkpoints) > self._MAX_CHECKPOINTS:
+                    self._checkpoints = self._checkpoints[-self._MAX_CHECKPOINTS :]
                 self._sending = True
             self._dg_cursor_sec += chunk_duration_sec
 
@@ -472,7 +477,10 @@ class GatedDeepgramSocket:
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
         if gate_out.should_finalize:
-            self._conn.finalize()
+            try:
+                self._conn.finalize()
+            except Exception:
+                pass
 
     def finalize(self) -> None:
         """Flush pending transcript."""
