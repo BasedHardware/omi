@@ -121,9 +121,25 @@ class AppDelegate: FlutterAppDelegate {
     }
     
     // MARK: - Check for Updates
-    
+
     @IBAction func checkForUpdates(_ sender: Any) {
-        updateChannel?.invokeMethod("checkForUpdates", arguments: nil)
-        NSLog("DEBUG: Triggered check for updates via menu")
+        // Lazily initialize channel if needed (in case it wasn't ready at app launch)
+        if updateChannel == nil {
+            if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
+               let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
+                updateChannel = FlutterMethodChannel(
+                    name: "com.omi/updates",
+                    binaryMessenger: flutterViewController.engine.binaryMessenger
+                )
+                NSLog("DEBUG: Lazily initialized updates method channel")
+            }
+        }
+
+        if let channel = updateChannel {
+            channel.invokeMethod("checkForUpdates", arguments: nil)
+            NSLog("DEBUG: Triggered check for updates via menu")
+        } else {
+            NSLog("ERROR: Could not initialize updates method channel - Flutter not ready")
+        }
     }
 }
