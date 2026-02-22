@@ -1,6 +1,37 @@
 {
   "releases": [
     {
+      "version": "0.10.4",
+      "date": "2026-02-21",
+      "changes": [
+        "Fixed staging channel Option+click gesture being immediately overwritten by beta",
+        "Verification script no longer kills running Dev and Production app instances"
+      ]
+    },
+    {
+      "version": "0.10.3",
+      "date": "2026-02-21",
+      "changes": [
+        "ACP bridge bundled in release builds: AI chat now works reliably without external dependencies",
+        "Update channel label shown in Settings so you can see if you're on Beta or Staging",
+        "Native binaries in ACP bridge node_modules are now properly code-signed"
+      ]
+    },
+    {
+      "version": "0.10.2",
+      "date": "2026-02-20",
+      "changes": [
+        "Recurring task scheduler: AI automatically investigates recurring tasks when they're due",
+        "Parallel task agents: multiple tasks can be investigated by AI simultaneously",
+        "Claude OAuth browser login: sign in to your Claude account via browser instead of token paste",
+        "Separate screen capture and audio recording toggles in Settings for independent control",
+        "Improved task drag-and-drop with cross-category moves and visual drop indicators",
+        "Unified AI bridge: removed legacy Agent SDK, all chat uses the faster ACP bridge",
+        "Session pre-warming for both Opus and Sonnet models for faster first responses",
+        "Fixed stale message desync that could cause AI chat to hang after interruptions"
+      ]
+    },
+    {
       "version": "0.10.1",
       "date": "2026-02-20",
       "changes": [
