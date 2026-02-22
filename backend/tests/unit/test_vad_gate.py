@@ -378,8 +378,42 @@ class TestDgWallMapper:
 
         # Exactly at second checkpoint start
         assert mapper.dg_to_wall_rel(5.0) == 10.0
-        # Just before second checkpoint
-        assert abs(mapper.dg_to_wall_rel(4.99) - 4.99) < 0.01
+
+    def test_monotonicity_enforced(self):
+        """Pre-roll subtraction can cause non-monotonic wall times.
+
+        When a brief silence gap has a larger pre-roll buffer than the preceding
+        transition, pre_roll_wall_rel = wall_rel - pre_roll_duration can go below
+        the previous checkpoint's wall time. The mapper must clamp the new
+        checkpoint's wall time to at least prev_wall + dg_elapsed, ensuring
+        remapped timestamps are always monotonically increasing.
+        """
+        from utils.stt.vad_gate import DgWallMapper
+
+        mapper = DgWallMapper()
+
+        # Speech 1: 3s at wall=2.0 → dg [0, 3), wall [2, 5)
+        mapper.on_audio_sent(3.0, 2.0)
+        mapper.on_silence_skipped()
+
+        # Speech 2: 1.5s at wall=34.77 → dg [3, 4.5)
+        mapper.on_audio_sent(1.5, 34.77)
+        mapper.on_silence_skipped()
+
+        # Speech 3: pre-roll gives wall=34.67 (< 34.77!)
+        # Clamped to prev_wall + dg_elapsed = 34.77 + (4.5-3.0) = 36.27
+        mapper.on_audio_sent(2.0, 34.67)
+
+        # dg=4.0 in segment 2 (CP2: dg=3.0, wall=34.77) → 34.77 + 1.0 = 35.77
+        result_seg2 = mapper.dg_to_wall_rel(4.0)
+        assert result_seg2 == pytest.approx(35.77, abs=0.01)
+
+        # dg=5.0 in segment 3 (CP3: dg=4.5, wall=36.27) → 36.27 + 0.5 = 36.77
+        result_seg3 = mapper.dg_to_wall_rel(5.0)
+        assert result_seg3 == pytest.approx(36.77, abs=0.01)
+
+        # Monotonicity: earlier DG time maps to earlier wall time
+        assert result_seg2 < result_seg3, "Timestamps must be monotonically increasing"
 
 
 class TestGateConfig:

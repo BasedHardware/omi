@@ -134,7 +134,15 @@ class DgWallMapper:
         """Called when audio is actually sent to DG."""
         with self._lock:
             if not self._sending:
-                # New speech segment: record checkpoint
+                # Enforce monotonicity: the new checkpoint's wall time must be at
+                # least prev_wall + (dg_elapsed since prev checkpoint).  Pre-roll
+                # subtraction can produce wall times below the previous checkpoint,
+                # and simple clamping to prev_wall creates overlapping wall-time
+                # ranges that cause non-monotonic remapped timestamps.
+                if self._checkpoints:
+                    prev_dg, prev_wall = self._checkpoints[-1]
+                    min_wall = prev_wall + (self._dg_cursor_sec - prev_dg)
+                    chunk_wall_rel_sec = max(chunk_wall_rel_sec, min_wall)
                 self._checkpoints.append((self._dg_cursor_sec, chunk_wall_rel_sec))
                 self._sending = True
             self._dg_cursor_sec += chunk_duration_sec
