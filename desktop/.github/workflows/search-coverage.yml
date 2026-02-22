@@ -1,0 +1,28 @@
+name: Settings Search Coverage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Desktop/Sources/MainWindow/Pages/SettingsPage.swift'
+      - 'Desktop/Sources/MainWindow/Pages/ShortcutsSettingsSection.swift'
+      - 'Desktop/Sources/MainWindow/SettingsSidebar.swift'
+      - 'scripts/check_settings_search.swift'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Desktop/Sources/MainWindow/Pages/SettingsPage.swift'
+      - 'Desktop/Sources/MainWindow/Pages/ShortcutsSettingsSection.swift'
+      - 'Desktop/Sources/MainWindow/SettingsSidebar.swift'
+      - 'scripts/check_settings_search.swift'
+
+jobs:
+  search-coverage:
+    runs-on: macos-15
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Settings Search Coverage
+        run: xcrun swift scripts/check_settings_search.swift
