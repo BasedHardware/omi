@@ -736,6 +736,40 @@ class TestGatedDeepgramSocket:
         metrics = socket.get_metrics()
         assert metrics['finalize_errors'] > 0
 
+    def test_keepalive_on_initial_prolonged_silence(self):
+        """Keepalive should trigger even if no audio was ever sent (initial silence)."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Only silence — _last_send_wall_time stays None, but _first_audio_wall_time is set
+        _set_vad_speech(False)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # _last_send_wall_time should be None (no audio forwarded)
+        assert gate._last_send_wall_time is None
+        # _first_audio_wall_time should be set
+        assert gate._first_audio_wall_time == t
+
+        # Send chunk 25s after first audio — should trigger keepalive via fallback
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+        mock_conn.keep_alive.assert_called()
+        assert gate._keepalive_count > 0
+
+    def test_finish_tracks_finalize_errors(self):
+        """finish() should increment finalize_errors when finalize throws."""
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError("connection closed")
+        gate = self._make_gate(mode='active')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        assert gate._finalize_errors == 0
+        socket.finish()
+        assert gate._finalize_errors == 1
+        mock_conn.finish.assert_called_once()
+
 
 class TestActivateMode:
     """Tests for shadow→active mode switching (preseconds solution)."""

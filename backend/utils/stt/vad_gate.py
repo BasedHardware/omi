@@ -256,9 +256,10 @@ class VADStreamingGate:
         """Check if a keepalive should be sent to prevent DG timeout."""
         if self.mode != 'active':
             return False
-        if self._last_send_wall_time is None:
+        ref_time = self._last_send_wall_time or self._first_audio_wall_time
+        if ref_time is None:
             return False
-        return (wall_time - self._last_send_wall_time) >= VAD_GATE_KEEPALIVE_SEC
+        return (wall_time - ref_time) >= VAD_GATE_KEEPALIVE_SEC
 
     def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray:
         """Convert audio to float32 at 16kHz mono for VAD."""
@@ -567,7 +568,8 @@ class GatedDeepgramSocket:
             try:
                 self._conn.finalize()
             except Exception:
-                pass
+                self._gate._finalize_errors += 1
+                logger.warning('finalize in finish() failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
         self._conn.finish()
 
     def remap_segments(self, segments: list) -> None:
