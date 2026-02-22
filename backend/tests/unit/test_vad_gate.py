@@ -118,7 +118,7 @@ class TestVADStreamingGate:
         assert len(total_sent) == len(total_input)
 
     def test_hangover_then_finalize(self):
-        """After speech ends, hangover sends audio, then finalize on silence."""
+        """After speech ends, hangover sends audio, then exactly one finalize fires."""
         from utils.stt.vad_gate import GateState
 
         gate = self._make_gate()
@@ -137,10 +137,40 @@ class TestVADStreamingGate:
         assert not out.should_finalize
 
         # Continue silence past hangover (700ms default)
+        finalize_count = 0
         for i in range(30):  # 900ms of silence
             out = gate.process_audio(_make_pcm(30), t + 0.18 + i * 0.03)
+            if out.should_finalize:
+                finalize_count += 1
 
-        # Last output should have finalized
+        # Exactly one finalize event on hangover→silence transition
+        assert finalize_count == 1
+        assert out.state == GateState.SILENCE
+
+    def test_hangover_boundary_timing(self):
+        """Hangover must not expire before hangover_ms, must expire after."""
+        from utils.stt.vad_gate import GateState
+
+        gate = self._make_gate()
+        t = time.time()
+
+        # Speech for 5 chunks (150ms)
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Silence starts
+        _set_vad_speech(False)
+
+        # Feed silence just under hangover (700ms): 22 chunks = 660ms since last speech
+        for i in range(22):
+            out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+        assert out.state == GateState.HANGOVER, "Should still be in HANGOVER at 660ms"
+        assert not out.should_finalize
+
+        # Next chunk pushes past 700ms: 23rd = 690ms, 24th = 720ms
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 22 * 0.03)
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 23 * 0.03)
         assert out.should_finalize or out.state == GateState.SILENCE
 
     def test_hangover_cancelled_by_speech(self):
@@ -214,6 +244,24 @@ class TestVADStreamingGate:
             total_sent += out.audio_to_send
 
         assert len(total_sent) > 0, "8kHz speech should be detected after buffer fills"
+
+    def test_preroll_capacity_truncation(self):
+        """Pre-roll buffer should truncate to maxlen when silence exceeds capacity."""
+        gate = self._make_gate()
+        t = time.time()
+        chunk = _make_pcm(30)
+
+        # Feed 20 silence chunks (600ms) — exceeds 300ms pre-roll capacity (maxlen=11)
+        _set_vad_speech(False)
+        for i in range(20):
+            gate.process_audio(chunk, t + i * 0.03)
+
+        # Speech — pre-roll should contain at most 11 chunks
+        _set_vad_speech(True)
+        out = gate.process_audio(chunk, t + 0.60)
+        # Pre-roll + current chunk in the output; max 11 chunks in deque + current
+        assert len(out.audio_to_send) <= len(chunk) * 12
+        assert len(out.audio_to_send) > 0
 
     def test_shadow_mode_sends_all_audio(self):
         """Shadow mode should always send all audio regardless of VAD."""
@@ -370,3 +418,18 @@ class TestGateConfig:
             from utils.stt.vad_gate import should_gate_session
 
             assert should_gate_session('any-user')
+
+    def test_rollout_0_percent(self):
+        """0% rollout should never gate any session."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 0):
+            from utils.stt.vad_gate import should_gate_session
+
+            assert not should_gate_session('any-user')
+            assert not should_gate_session('another-user')
+
+    def test_mode_off_overrides_rollout(self):
+        """Mode=off should prevent gating even with 100% rollout."""
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
+            from utils.stt.vad_gate import should_gate_session
+
+            assert not should_gate_session('any-user')
