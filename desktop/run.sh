@@ -226,7 +226,9 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
 fi
 
 substep "Copying .env.app"
-if [ -f ".env.app" ]; then
+if [ -f ".env.app.dev" ]; then
+    cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
+elif [ -f ".env.app" ]; then
     cp -f .env.app "$APP_BUNDLE/Contents/Resources/.env"
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
