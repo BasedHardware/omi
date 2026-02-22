@@ -113,17 +113,11 @@ struct TaskChatPanel: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
 
-                Text("Task Chat")
+                Text(task?.description ?? "Task Chat")
                     .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
-
-                if let task = task {
-                    Text(task.description)
-                        .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Spacer()
 
