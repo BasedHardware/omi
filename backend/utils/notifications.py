@@ -55,7 +55,7 @@ def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool
     return messaging.AndroidConfig(**config_kwargs)
 
 
-def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSConfig:
+def _build_apns_config(tag: str, is_background: bool = False, sound: str | None = None) -> messaging.APNSConfig:
     """Build APNs configuration with deduplication."""
     headers = {'apns-collapse-id': tag}
 
@@ -70,6 +70,12 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
         return messaging.APNSConfig(
             headers=headers,
             payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        )
+
+    if sound:
+        return messaging.APNSConfig(
+            headers=headers,
+            payload=messaging.APNSPayload(aps=messaging.Aps(sound=sound)),
         )
 
     return messaging.APNSConfig(headers=headers)
@@ -111,6 +117,7 @@ def _build_message(
     data: dict = None,
     is_background: bool = False,
     priority: str = 'normal',
+    sound: str | None = None,
 ) -> messaging.Message:
     """Build a complete FCM message with proper platform configs."""
     # Extract title/body for webpush config (browsers need explicit values)
@@ -124,7 +131,7 @@ def _build_message(
         notification=notification,
         data=data,
         android=_build_android_config(tag, priority, is_data_only=(notification is None)),
-        apns=_build_apns_config(tag, is_background),
+        apns=_build_apns_config(tag, is_background, sound=sound),
         webpush=_build_webpush_config(tag, title, body, link),
     )
 
@@ -137,6 +144,7 @@ def _send_to_user(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: list = None,
+    sound: str | None = None,
 ) -> int:
     """Send a message to all user's devices using batch send. Returns count of successful sends."""
     if tokens is None:
@@ -146,7 +154,7 @@ def _send_to_user(
         return 0
 
     # Build messages for all tokens
-    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+    messages = [_build_message(token, tag, notification, data, is_background, priority, sound=sound) for token in tokens]
 
     try:
         response = messaging.send_each(messages)
@@ -178,12 +186,12 @@ def _send_to_user(
         return 0
 
 
-def send_notification(user_id: str, title: str, body: str, data: dict = None, tokens: list = None):
+def send_notification(user_id: str, title: str, body: str, data: dict = None, tokens: list = None, sound: str | None = None):
     """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
     print(f'send_notification to user {user_id}')
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
-    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens, sound=sound)
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: dict = None):
