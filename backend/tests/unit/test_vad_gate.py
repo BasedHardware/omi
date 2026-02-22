@@ -580,3 +580,25 @@ class TestGatedDeepgramSocket:
         mock_conn = MagicMock()
         assert not GatedDeepgramSocket(mock_conn, gate=None).is_gated
         assert GatedDeepgramSocket(mock_conn, gate=self._make_gate()).is_gated
+
+    def test_finalize_passthrough(self):
+        """finalize() should call the underlying connection's finalize."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        socket = GatedDeepgramSocket(mock_conn, gate=self._make_gate())
+        socket.finalize()
+        mock_conn.finalize.assert_called_once()
+
+    def test_finish_swallows_finalize_exception(self):
+        """finish() should swallow exceptions from finalize before calling finish."""
+        from utils.stt.vad_gate import GatedDeepgramSocket
+
+        mock_conn = MagicMock()
+        mock_conn.finalize.side_effect = RuntimeError("connection closed")
+        gate = self._make_gate(mode='active')
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+        # Should not raise despite finalize error
+        socket.finish()
+        mock_conn.finalize.assert_called_once()
+        mock_conn.finish.assert_called_once()
