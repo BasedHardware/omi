@@ -162,8 +162,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // MARK: - Public Monitoring Control
 
-    /// Start monitoring
-    public func startMonitoring(completion: @escaping (Bool, String?) -> Void) {
+    /// Start monitoring with optional retry for transient permission failures
+    public func startMonitoring(retryCount: Int = 0, completion: @escaping (Bool, String?) -> Void) {
+        let maxRetries = 3
+        let retryDelays: [Double] = [2.0, 4.0, 8.0]  // exponential backoff
+
         // Guard against both active monitoring and pending startup (race condition fix)
         guard !isMonitoring && !isStartingMonitoring else {
             completion(isMonitoring, nil)
@@ -176,8 +179,22 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Check screen recording permission (and update cache)
         refreshScreenRecordingPermission()
         guard hasScreenRecordingPermission else {
-            // Request both traditional TCC and ScreenCaptureKit permissions
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            if retryCount == 0 {
+                // First attempt: request permissions and schedule retry
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
+
+            if retryCount < maxRetries {
+                let delay = retryDelays[retryCount]
+                log("Screen recording permission not yet granted, retrying in \(delay)s (attempt \(retryCount + 1)/\(maxRetries))")
+                isStartingMonitoring = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.startMonitoring(retryCount: retryCount + 1, completion: completion)
+                }
+                return
+            }
+
+            log("Screen recording permission not granted after \(maxRetries) retries, giving up")
             isStartingMonitoring = false
             completion(false, "Screen recording permission not granted")
             return
@@ -239,6 +256,20 @@ public class ProactiveAssistantsPlugin: NSObject {
             register.arguments = ["-f", appPath]
             try? register.run()
             register.waitUntilExit()
+
+            // Restart usernoted (notification center daemon) to pick up fresh registration
+            // Runs as current user (no sudo needed), auto-restarts within ~1 second
+            let killUsernoted = Process()
+            killUsernoted.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            killUsernoted.arguments = ["usernoted"]
+            killUsernoted.standardOutput = FileHandle.nullDevice
+            killUsernoted.standardError = FileHandle.nullDevice
+            try? killUsernoted.run()
+            killUsernoted.waitUntilExit()
+            log("Restarted usernoted to force notification re-discovery")
+
+            // Wait for usernoted to restart before retrying
+            Thread.sleep(forTimeInterval: 1.5)
 
             DispatchQueue.main.async {
                 // Also re-register via LSRegisterURL (must be on main thread)
@@ -872,6 +903,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             captureTimer = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self = self, self.isMonitoring else { return }
+                self.captureTimer?.invalidate()
                 self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
                     Task { @MainActor in
                         await self?.captureFrame()
@@ -910,6 +942,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             screenCaptureService = ScreenCaptureService()
 
             // Restart capture timer
+            captureTimer?.invalidate()
             captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     await self?.captureFrame()

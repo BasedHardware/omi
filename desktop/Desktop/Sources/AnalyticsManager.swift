@@ -698,6 +698,11 @@ class AnalyticsManager {
         PostHogManager.shared.tierChanged(tier: tier, reason: reason)
     }
 
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        MixpanelManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+        PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+    }
+
     // MARK: - Settings State
 
     /// Track the current state of key settings (screenshots, memory extraction, notifications)
@@ -802,6 +807,9 @@ class AnalyticsManager {
         props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
         props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
 
+        // -- AI Chat Mode --
+        props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
+
         // -- UI Preferences --
         props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
         props["conversations_compact_view"] = ud.object(forKey: "conversationsCompactView") as? Bool ?? true
@@ -818,6 +826,9 @@ class AnalyticsManager {
         // -- Floating Bar (AskOmi) --
         props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
         props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
+
+        // -- Dev Mode --
+        props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
 
         return props
     }
