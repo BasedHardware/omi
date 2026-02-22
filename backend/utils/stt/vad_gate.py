@@ -243,14 +243,26 @@ class VADStreamingGate:
         self._keepalive_count = 0
 
     def activate(self) -> None:
-        """Switch from shadow to active mode (used after speech profile completes)."""
+        """Switch from shadow to active mode (used after speech profile completes).
+
+        Advances the DgWallMapper cursor to account for all audio sent during
+        shadow mode. Without this, the mapper would think DG cursor is at 0
+        and over-shift all timestamps after the first gated silence gap.
+        """
         if self.mode == 'shadow':
             self.mode = 'active'
             # Reset state machine to start fresh in active mode
             self._state = GateState.SILENCE
             self._pre_roll.clear()
             self._pre_roll_total_ms = 0.0
-            logger.info('VADGate activated shadow->active uid=%s session=%s', self.uid, self.session_id)
+            # Sync mapper cursor: DG received all audio during shadow phase
+            self.dg_wall_mapper._dg_cursor_sec = self._audio_cursor_ms / 1000.0
+            logger.info(
+                'VADGate activated shadow->active uid=%s session=%s cursor=%.1fms',
+                self.uid,
+                self.session_id,
+                self._audio_cursor_ms,
+            )
 
     def needs_keepalive(self, wall_time: float) -> bool:
         """Check if a keepalive should be sent to prevent DG timeout."""

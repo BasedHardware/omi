@@ -837,6 +837,56 @@ class TestActivateMode:
         assert len(gate._pre_roll) == 0
         assert gate._pre_roll_total_ms == 0.0
 
+    def test_activate_syncs_mapper_cursor(self):
+        """activate() should advance DgWallMapper cursor to match shadow phase audio."""
+        gate = self._make_gate(mode='shadow')
+        t = 1000.0
+
+        # Send 10 chunks of 30ms in shadow (300ms total)
+        _set_vad_speech(False)
+        for i in range(10):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        assert gate._audio_cursor_ms == pytest.approx(300.0, abs=1.0)
+
+        gate.activate()
+
+        # Mapper DG cursor should be 0.3s (not 0.0)
+        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(0.3, abs=0.01)
+
+    def test_shadow_active_remap_continuous(self):
+        """After shadow→active, remapped timestamps should be continuous, not over-shifted."""
+        gate = self._make_gate(mode='shadow')
+        t = 1000.0
+
+        # Shadow phase: 35s of audio (1167 chunks at 30ms)
+        _set_vad_speech(False)
+        for i in range(1167):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Activate after 35s
+        gate.activate()
+        wall_at_activation = t + 1167 * 0.03
+
+        # Active: 5s silence (skipped)
+        for i in range(167):
+            gate.process_audio(_make_pcm(30), wall_at_activation + i * 0.03)
+
+        # Active: speech at wall ~40s
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), wall_at_activation + 5.0 + i * 0.03)
+
+        # Simulate DG returning a timestamp during the active speech phase
+        # DG time should be ~35.3s (35s shadow + 0.3s pre-roll of active speech)
+        dg_time = 35.3
+        remapped = gate.dg_wall_mapper.dg_to_wall_rel(dg_time)
+
+        # Wall-relative time should be around 40s (activation + 5s silence + 0.3s into speech)
+        # NOT 75s (which would happen if mapper cursor wasn't synced)
+        assert remapped < 50.0, f"Remapped {remapped} is over-shifted (cursor sync bug)"
+        assert remapped > 35.0, f"Remapped {remapped} is too early"
+
 
 class TestCostMetrics:
     """Tests for bytes_sent/bytes_skipped tracking."""
