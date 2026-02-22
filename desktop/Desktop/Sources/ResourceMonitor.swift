@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Sentry
 
@@ -23,6 +24,10 @@ class ResourceMonitor {
     /// Memory growth rate threshold (MB/min) - detect leaks
     private let memoryGrowthRateThreshold: Double = 50
 
+    /// Extreme memory threshold - auto-restart to prevent system from becoming unusable.
+    /// At this level the OS is under severe pressure and the user cannot reopen the app.
+    private let memoryAutoRestartThreshold: UInt64 = 4000 // 4GB
+
     // MARK: - State
 
     private var monitorTimer: Timer?
@@ -32,6 +37,7 @@ class ResourceMonitor {
     private var lastWarningTime: Date?
     private var lastCriticalTime: Date?
     private var peakMemoryObserved: UInt64 = 0 // Track peak memory manually
+    private var autoRestartTriggered = false // Only auto-restart once per session
 
     // Minimum time between warnings (prevent spam)
     private let warningCooldown: TimeInterval = 300 // 5 minutes
@@ -191,6 +197,30 @@ class ResourceMonitor {
 
     private func checkMemoryThresholds(_ snapshot: ResourceSnapshot) {
         let now = Date()
+
+        // Extreme threshold - auto-restart to prevent the system from becoming unresponsive.
+        // Without this, memory can climb to 7GB+, causing SQLite I/O failures and making
+        // the app impossible to reopen without a full computer restart.
+        if snapshot.memoryFootprintMB >= memoryAutoRestartThreshold && !autoRestartTriggered && !isDevBuild {
+            autoRestartTriggered = true
+            logError("ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation")
+
+            SentrySDK.capture(message: "App Auto-Restarting Due to Extreme Memory") { scope in
+                scope.setLevel(.fatal)
+                scope.setTag(value: "auto_restart", key: "resource_alert")
+                scope.setContext(value: snapshot.asDictionary(), key: "resources")
+            }
+
+            // Give Sentry 3 seconds to flush, then relaunch and terminate
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                let task = Process()
+                task.launchPath = "/usr/bin/open"
+                task.arguments = ["-n", Bundle.main.bundleURL.path]
+                try? task.run()
+                NSApp.terminate(nil)
+            }
+            return
+        }
 
         // Critical threshold
         if snapshot.memoryFootprintMB >= memoryCriticalThreshold {
