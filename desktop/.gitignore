@@ -11,6 +11,7 @@ DerivedData/
 # Environment (both contain secrets)
 .env
 .env.app
+.env.app.dev
 
 # Credentials
 **/google-credentials.json
