@@ -26,11 +26,6 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 
-try:
-    from utils.stt.vad import model as _existing_vad_model
-except ImportError:
-    _existing_vad_model = None
-
 logger = logging.getLogger('vad_gate')
 
 # ---------------------------------------------------------------------------
@@ -83,15 +78,10 @@ def _ensure_vad_model():
     with _vad_init_lock:
         if _vad_model is not None:
             return
-        if _existing_vad_model is not None:
-            # Reuse model already loaded by vad.py
-            _vad_torch = torch  # Set BEFORE _vad_model
-            _vad_model = _existing_vad_model
-        else:
-            torch.set_num_threads(1)
-            model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-            _vad_torch = torch  # Set BEFORE _vad_model
-            _vad_model = model
+        torch.set_num_threads(1)
+        model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+        _vad_torch = torch  # Set BEFORE _vad_model
+        _vad_model = model
 
 
 # ---------------------------------------------------------------------------

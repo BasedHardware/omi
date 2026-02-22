@@ -10,6 +10,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from utils.stt.soniox_util import *
+from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
 
 logger = logging.getLogger(__name__)
@@ -330,8 +331,6 @@ async def process_audio_dg(
         _original_stream_transcript = stream_transcript
 
         def stream_transcript(segments):
-            from utils.stt.vad_gate import GatedDeepgramSocket
-
             # Remap in-place before passing to caller
             if vad_gate.mode == 'active':
                 for seg in segments:
@@ -394,8 +393,6 @@ async def process_audio_dg(
 
     # Wrap with VAD gate if provided
     if vad_gate is not None:
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         return GatedDeepgramSocket(dg_connection, gate=vad_gate)
     return dg_connection
 

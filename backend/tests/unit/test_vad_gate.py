@@ -7,6 +7,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from utils.stt.vad_gate import (
+    DgWallMapper,
+    GateState,
+    GatedDeepgramSocket,
+    VADStreamingGate,
+    is_gate_enabled,
+    should_gate_session,
+)
+
 # Global speech flag for mock VAD
 _mock_is_speech = False
 
@@ -56,8 +65,6 @@ def _set_vad_speech(is_speech: bool):
 
 class TestVADStreamingGate:
     def _make_gate(self, mode='active', sample_rate=16000):
-        from utils.stt.vad_gate import VADStreamingGate
-
         return VADStreamingGate(
             sample_rate=sample_rate,
             channels=1,
@@ -119,8 +126,6 @@ class TestVADStreamingGate:
 
     def test_hangover_then_finalize(self):
         """After speech ends, hangover sends audio, then exactly one finalize fires."""
-        from utils.stt.vad_gate import GateState
-
         gate = self._make_gate()
         t = time.time()
 
@@ -149,8 +154,6 @@ class TestVADStreamingGate:
 
     def test_hangover_boundary_timing(self):
         """Hangover must not expire before hangover_ms, must expire after."""
-        from utils.stt.vad_gate import GateState
-
         gate = self._make_gate()
         t = time.time()
 
@@ -175,8 +178,6 @@ class TestVADStreamingGate:
 
     def test_hangover_cancelled_by_speech(self):
         """If speech resumes during hangover, no finalize should happen."""
-        from utils.stt.vad_gate import GateState
-
         gate = self._make_gate()
         t = time.time()
 
@@ -204,8 +205,6 @@ class TestVADStreamingGate:
         (only emits start/end events). Raw model returns probability per window,
         so continuous speech should keep the gate in SPEECH state.
         """
-        from utils.stt.vad_gate import GateState
-
         gate = self._make_gate()
         t = time.time()
 
@@ -301,15 +300,11 @@ class TestVADStreamingGate:
 class TestDgWallMapper:
     def test_no_checkpoints_passthrough(self):
         """With no checkpoints, DG time equals wall time."""
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
         assert mapper.dg_to_wall_rel(5.0) == 5.0
 
     def test_single_checkpoint_offset(self):
         """Single checkpoint maps DG time with correct offset."""
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
 
         # First speech at wall=0.0, DG=0.0
@@ -318,8 +313,6 @@ class TestDgWallMapper:
 
     def test_gap_creates_offset(self):
         """After a silence gap, DG timestamps should be offset to wall time."""
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
 
         # Speech 1: 5s of audio starting at wall=0.0
@@ -342,8 +335,6 @@ class TestDgWallMapper:
 
     def test_multiple_gaps(self):
         """Multiple silence gaps should accumulate offsets correctly."""
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
 
         # Speech 1: 3s at wall=0
@@ -368,8 +359,6 @@ class TestDgWallMapper:
 
     def test_boundary_values(self):
         """Test exact checkpoint boundaries."""
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
 
         mapper.on_audio_sent(5.0, 0.0)
@@ -388,8 +377,6 @@ class TestDgWallMapper:
         checkpoint's wall time to at least prev_wall + dg_elapsed, ensuring
         remapped timestamps are always monotonically increasing.
         """
-        from utils.stt.vad_gate import DgWallMapper
-
         mapper = DgWallMapper()
 
         # Speech 1: 3s at wall=2.0 → dg [0, 3), wall [2, 5)
@@ -420,27 +407,19 @@ class TestGateConfig:
     def test_gate_disabled_by_default(self):
         """Gate should be disabled when VAD_GATE_MODE=off."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'):
-            from utils.stt.vad_gate import is_gate_enabled
-
             assert not is_gate_enabled()
 
     def test_gate_enabled_shadow(self):
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'shadow'):
-            from utils.stt.vad_gate import is_gate_enabled
-
             assert is_gate_enabled()
 
     def test_gate_enabled_active(self):
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
-            from utils.stt.vad_gate import is_gate_enabled
-
             assert is_gate_enabled()
 
     def test_rollout_percentage(self):
         """Rollout should be deterministic based on uid hash."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 50):
-            from utils.stt.vad_gate import should_gate_session
-
             # Same uid should always get same result
             result1 = should_gate_session('user-abc')
             result2 = should_gate_session('user-abc')
@@ -449,23 +428,17 @@ class TestGateConfig:
     def test_rollout_100_percent(self):
         """100% rollout should gate all sessions."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
-            from utils.stt.vad_gate import should_gate_session
-
             assert should_gate_session('any-user')
 
     def test_rollout_0_percent(self):
         """0% rollout should never gate any session."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 0):
-            from utils.stt.vad_gate import should_gate_session
-
             assert not should_gate_session('any-user')
             assert not should_gate_session('another-user')
 
     def test_mode_off_overrides_rollout(self):
         """Mode=off should prevent gating even with 100% rollout."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
-            from utils.stt.vad_gate import should_gate_session
-
             assert not should_gate_session('any-user')
 
 
@@ -473,8 +446,6 @@ class TestGatedDeepgramSocket:
     """Tests for the GatedDeepgramSocket wrapper."""
 
     def _make_gate(self, mode='active'):
-        from utils.stt.vad_gate import VADStreamingGate
-
         return VADStreamingGate(
             sample_rate=16000,
             channels=1,
@@ -485,8 +456,6 @@ class TestGatedDeepgramSocket:
 
     def test_passthrough_without_gate(self):
         """Without gate, send() passes audio directly to connection."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         socket = GatedDeepgramSocket(mock_conn, gate=None)
         socket.send(b'\x00' * 960)
@@ -494,8 +463,6 @@ class TestGatedDeepgramSocket:
 
     def test_gated_silence_not_forwarded(self):
         """With active gate, silence should not be forwarded to connection."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         gate = self._make_gate()
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
@@ -509,8 +476,6 @@ class TestGatedDeepgramSocket:
 
     def test_gated_speech_forwarded(self):
         """With active gate, speech should be forwarded to connection."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         gate = self._make_gate()
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
@@ -524,8 +489,6 @@ class TestGatedDeepgramSocket:
 
     def test_finalize_called_on_speech_end(self):
         """Wrapper should call finalize on speech→silence transition."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         gate = self._make_gate()
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
@@ -545,8 +508,6 @@ class TestGatedDeepgramSocket:
 
     def test_finish_finalizes_when_gated(self):
         """finish() should call finalize before finish when gate is active."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         gate = self._make_gate(mode='active')
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
@@ -557,8 +518,6 @@ class TestGatedDeepgramSocket:
 
     def test_remap_segments(self):
         """remap_segments should adjust DG timestamps to wall-clock."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         gate = self._make_gate()
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
@@ -575,16 +534,12 @@ class TestGatedDeepgramSocket:
 
     def test_is_gated_property(self):
         """is_gated should reflect whether gate is present."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         assert not GatedDeepgramSocket(mock_conn, gate=None).is_gated
         assert GatedDeepgramSocket(mock_conn, gate=self._make_gate()).is_gated
 
     def test_finalize_passthrough(self):
         """finalize() should call the underlying connection's finalize."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         socket = GatedDeepgramSocket(mock_conn, gate=self._make_gate())
         socket.finalize()
@@ -592,8 +547,6 @@ class TestGatedDeepgramSocket:
 
     def test_finish_swallows_finalize_exception(self):
         """finish() should swallow exceptions from finalize before calling finish."""
-        from utils.stt.vad_gate import GatedDeepgramSocket
-
         mock_conn = MagicMock()
         mock_conn.finalize.side_effect = RuntimeError("connection closed")
         gate = self._make_gate(mode='active')
