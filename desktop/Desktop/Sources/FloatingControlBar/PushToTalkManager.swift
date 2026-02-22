@@ -494,26 +494,29 @@ class PushToTalkManager: ObservableObject {
     }
     guard let capture = audioCaptureService else { return }
 
-    do {
-      try capture.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if batchMode {
-            // Batch mode: accumulate audio in buffer
-            self.batchAudioLock.lock()
-            self.batchAudioBuffer.append(audioData)
-            self.batchAudioLock.unlock()
-          } else {
-            // Live mode: stream to Deepgram
-            self.transcriptionService?.sendAudio(audioData)
-          }
-        },
-        onAudioLevel: { _ in }
-      )
-      log("PushToTalkManager: mic capture started (batch=\(batchMode))")
-    } catch {
-      logError("PushToTalkManager: mic capture failed", error: error)
-      stopListening()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await capture.startCapture(
+          onAudioChunk: { [weak self] audioData in
+            guard let self else { return }
+            if batchMode {
+              // Batch mode: accumulate audio in buffer
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
+            } else {
+              // Live mode: stream to Deepgram
+              self.transcriptionService?.sendAudio(audioData)
+            }
+          },
+          onAudioLevel: { _ in }
+        )
+        log("PushToTalkManager: mic capture started (batch=\(batchMode))")
+      } catch {
+        logError("PushToTalkManager: mic capture failed", error: error)
+        self.stopListening()
+      }
     }
   }
 
