@@ -28,6 +28,7 @@ actor AgentSyncService {
     // MARK: - State
 
     private var cursors: [String: SyncCursor] = [:]
+    private var cachedTableColumns: [String: [String]] = [:]
     private var vmIP: String?
     private var authToken: String?
     private var isRunning = false
@@ -223,16 +224,30 @@ actor AgentSyncService {
 
         let cursor = cursors[spec.name] ?? SyncCursor(lastId: 0, lastUpdatedAt: "1970-01-01T00:00:00")
 
+        // Resolve columns once and cache — PRAGMA table_info is static at runtime
+        let columns: [String]
+        if let cached = cachedTableColumns[spec.name] {
+            columns = cached
+        } else {
+            do {
+                let fetched: [String] = try await dbPool.read { db in
+                    let columnInfos = try Row.fetchAll(db, sql: "PRAGMA table_info('\(spec.name)')")
+                    let allColumns = columnInfos.compactMap { $0["name"] as? String }
+                    return allColumns.filter { !spec.excludedColumns.contains($0) }
+                }
+                cachedTableColumns[spec.name] = fetched
+                columns = fetched
+            } catch {
+                log("AgentSync: error fetching schema for \(spec.name) — \(error.localizedDescription)")
+                return 0
+            }
+        }
+
+        guard !columns.isEmpty else { return 0 }
+
         do {
+            let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
             let rows: [[String: Any]] = try await dbPool.read { db in
-                // Get actual column names from the table
-                let columnInfos = try Row.fetchAll(db, sql: "PRAGMA table_info('\(spec.name)')")
-                let allColumns = columnInfos.compactMap { $0["name"] as? String }
-                let columns = allColumns.filter { !spec.excludedColumns.contains($0) }
-
-                guard !columns.isEmpty else { return [] }
-
-                let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
                 let sql: String
                 let args: [any DatabaseValueConvertible]
 
@@ -335,6 +350,10 @@ actor AgentSyncService {
 
             if httpResponse.statusCode == 200 {
                 return .success
+            } else if httpResponse.statusCode >= 500 {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
+                return .networkError  // 5xx = server not ready, trigger backoff
             } else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")

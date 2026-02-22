@@ -14,10 +14,16 @@ struct LiveTranscriptView: View {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    /// A lightweight fingerprint of the segments to detect any content change
+    private var scrollTrigger: String {
+        guard let last = segments.last else { return "" }
+        return "\(segments.count)-\(last.id)-\(last.text.count)"
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     ForEach(segments) { segment in
                         LiveSegmentView(
                             segment: segment,
@@ -26,14 +32,17 @@ struct LiveTranscriptView: View {
                             onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
                         )
                     }
+
+                    // Stable bottom anchor that never changes ID
+                    Color.clear
+                        .frame(height: 1)
+                        .id("transcript-bottom")
                 }
                 .padding(16)
             }
-            .onChange(of: segments.count) { _, _ in
-                // Auto-scroll to bottom when new segments arrive
-                if let last = segments.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
-                }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: scrollTrigger) { _, _ in
+                proxy.scrollTo("transcript-bottom", anchor: .bottom)
             }
         }
     }
