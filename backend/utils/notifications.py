@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import math
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
@@ -365,36 +366,57 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
-def send_apple_reminders_sync_push(user_id: str, action_item_id: str, description: str, due_at=None) -> bool:
+def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
     """
-    Sends a silent push notification to trigger Apple Reminders creation on device.
-    iOS will wake the app in background to create the reminder locally.
+    Sends a single silent push notification with a batch of action items to sync to Apple Reminders.
+    This avoids iOS throttling that occurs when sending multiple rapid silent pushes.
 
     Args:
         user_id: The user's Firebase UID
-        action_item_id: ID of the action item to sync
-        description: Task description
-        due_at: Optional due date (datetime object or ISO string)
+        action_items: List of dicts, each with 'id', 'description', and optional 'due_at'
 
     Returns:
         bool: True if notification was sent successfully
     """
-    print(f'send_apple_reminders_sync_push to user {user_id}')
+    if not action_items:
+        return False
 
-    due_at_str = None
-    if due_at:
-        if hasattr(due_at, 'isoformat'):
-            due_at_str = due_at.isoformat()
-        else:
-            due_at_str = str(due_at)
+    print(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
 
+    items_payload = []
+    for item in action_items:
+        due_at = item.get('due_at')
+        due_at_str = ''
+        if due_at:
+            if hasattr(due_at, 'isoformat'):
+                due_at_str = due_at.isoformat()
+            else:
+                due_at_str = str(due_at)
+
+        items_payload.append(
+            {
+                'id': item['id'],
+                'description': item['description'],
+                'due_at': due_at_str,
+            }
+        )
+
+    # FCM data values must be strings, so JSON-encode the items list
+    # Include first item's fields at top level for backwards compatibility with old app versions
+    # that expect action_item_id/description as top-level keys (single-item format).
+    # Old apps will create only the first item; new apps read the full 'items' JSON array.
+    first = items_payload[0]
     data = {
         'type': 'apple_reminders_sync',
-        'action_item_id': action_item_id,
-        'description': description,
-        'due_at': due_at_str or '',
+        'items': json.dumps(items_payload),
+        'action_item_id': first['id'],
+        'description': first['description'],
+        'due_at': first['due_at'],
     }
-    tag = _generate_tag(f"{user_id}:apple_reminders_sync:{action_item_id}")
+
+    # Use a unique tag per batch based on all item IDs to avoid collapsing different batches
+    item_ids = ':'.join(item['id'] for item in action_items)
+    tag = _generate_tag(f"{user_id}:apple_reminders_sync:{item_ids}")
     success_count = _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
     return success_count > 0
 

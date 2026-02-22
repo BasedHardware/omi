@@ -12,7 +12,7 @@ struct OnboardingView: View {
     // Timer to periodically check permission status when on permissions step
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
-    let steps = ["Video", "Name", "Language", "Permissions", "Get to Know You"]
+    let steps = ["Video", "Name", "Language", "Get to Know You", "Permissions", "Explore"]
 
     // State for name input
     @State private var nameInput: String = ""
@@ -23,11 +23,13 @@ struct OnboardingView: View {
     @State private var selectedLanguage: String = "en"
     @State private var autoDetectEnabled: Bool = false
 
-    // State for file indexing step (step 4)
+    // State for file indexing (now step 3 consent, background scan, step 5 chat reveal)
     @State private var fileIndexingDone = false
+    @State private var fileIndexingSkipped = false
+    @State private var backgroundScanTask: Task<Void, Never>?
+    @State private var totalFilesScanned: Int = 0
+    @State private var scanningInProgress: Bool = false
 
-    // Track whether we've initialized bluetooth on the permissions step
-    @State private var hasInitializedBluetoothForPermissions = false
 
     // Privacy sheet
     @State private var showPrivacySheet = false
@@ -65,7 +67,7 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onReceive(permissionCheckTimer) { _ in
             // Poll all permissions when on the permissions step
-            if currentStep == 3 {
+            if currentStep == 4 {
                 appState.checkNotificationPermission()
                 appState.checkScreenRecordingPermission()
                 appState.checkMicrophonePermission()
@@ -77,13 +79,13 @@ struct OnboardingView: View {
         }
         // Bring app to front when any permission is granted while on the permissions step
         .onChange(of: appState.hasNotificationPermission) { _, granted in
-            if granted && currentStep == 3 {
+            if granted && currentStep == 4 {
                 log("Notification permission granted on permissions step, bringing to front")
                 bringToFront()
             }
         }
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
-            if granted && currentStep == 3 {
+            if granted && currentStep == 4 {
                 log("Screen recording permission granted on permissions step, bringing to front")
                 bringToFront()
                 // Silently trigger system audio permission (piggybacks on screen recording)
@@ -93,49 +95,55 @@ struct OnboardingView: View {
             }
         }
         .onChange(of: appState.hasMicrophonePermission) { _, granted in
-            if granted && currentStep == 3 {
+            if granted && currentStep == 4 {
                 log("Microphone permission granted on permissions step, bringing to front")
                 bringToFront()
             }
         }
         .onChange(of: appState.hasAccessibilityPermission) { _, granted in
-            if granted && currentStep == 3 {
+            if granted && currentStep == 4 {
                 log("Accessibility permission granted on permissions step, bringing to front")
                 bringToFront()
             }
         }
         .onChange(of: appState.hasAutomationPermission) { _, granted in
-            if granted && currentStep == 3 {
+            if granted && currentStep == 4 {
                 log("Automation permission granted on permissions step, bringing to front")
                 bringToFront()
             }
         }
-        .onChange(of: appState.hasBluetoothPermission) { _, granted in
-            if granted && currentStep == 3 {
-                log("Bluetooth permission granted on permissions step, bringing to front")
-                bringToFront()
-            }
-        }
-        .onChange(of: currentStep) { _, newStep in
-            // Initialize Bluetooth when reaching permissions step
-            if newStep == 3 && !hasInitializedBluetoothForPermissions {
-                log("Reached Permissions step, initializing Bluetooth manager")
-                appState.initializeBluetoothIfNeeded()
-                hasInitializedBluetoothForPermissions = true
-            }
-        }
         .onAppear {
-            // Handle relaunch case: if app restarts on step 3 (e.g., after Screen Recording quit & reopen),
-            // immediately initialize Bluetooth and check all permissions.
+            // Handle relaunch case: if app restarts on step 4 (e.g., after Screen Recording quit & reopen),
+            // immediately check all permissions.
             // onChange(of: currentStep) won't fire since the value didn't change.
-            if currentStep == 3 {
-                if !hasInitializedBluetoothForPermissions {
-                    log("OnboardingView onAppear: on permissions step, initializing Bluetooth")
-                    appState.initializeBluetoothIfNeeded()
-                    hasInitializedBluetoothForPermissions = true
-                }
+            if currentStep == 4 {
                 log("OnboardingView onAppear: on permissions step, checking all permissions immediately")
                 appState.checkAllPermissions()
+            }
+
+            // Handle relaunch case: if app restarts on step 4 or 5, the background scan task is lost.
+            // Re-launch it if scanning hasn't completed yet, or restore file count if it has.
+            if (currentStep == 4 || currentStep == 5) && backgroundScanTask == nil && !fileIndexingSkipped {
+                let alreadyCompleted = UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
+                if alreadyCompleted {
+                    // Scan finished before restart — restore file count from DB
+                    log("OnboardingView onAppear: file indexing already completed, restoring count")
+                    Task {
+                        let count = await FileIndexerService.shared.getIndexedFileCount()
+                        await MainActor.run {
+                            totalFilesScanned = count
+                        }
+                        // If chat is empty, re-start the exploration chat
+                        if chatProvider.messages.isEmpty {
+                            log("OnboardingView onAppear: chat empty after restart, re-starting exploration")
+                            await startExplorationChat()
+                        }
+                    }
+                } else {
+                    // Scan was interrupted — re-launch the full pipeline
+                    log("OnboardingView onAppear: scan interrupted by restart, re-launching background indexing")
+                    startBackgroundFileIndexing()
+                }
             }
         }
     }
@@ -176,8 +184,9 @@ struct OnboardingView: View {
         case 0: return true // Video step - always valid
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
-        case 3: return requiredPermissionsGranted
-        case 4: return fileIndexingDone // File indexing step
+        case 3: return true // File indexing consent - always valid (has buttons)
+        case 4: return requiredPermissionsGranted // Permissions step
+        case 5: return fileIndexingDone // Chat reveal step
         default: return true
         }
     }
@@ -188,7 +197,6 @@ struct OnboardingView: View {
             && appState.hasNotificationPermission
             && appState.hasAccessibilityPermission
             && appState.hasAutomationPermission
-            && (appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied)
     }
 
     private var requiredPermissionsGranted: Bool {
@@ -206,7 +214,6 @@ struct OnboardingView: View {
         if !appState.hasNotificationPermission { return 2 }
         if !appState.hasAccessibilityPermission { return 3 }
         if !appState.hasAutomationPermission { return 4 }
-        if !(appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied) { return 5 }
         return -1 // All granted
     }
 
@@ -214,6 +221,7 @@ struct OnboardingView: View {
         switch activePermissionIndex {
         case 0: return "permissions"
         case 2: return "enable_notifications"
+        case 3: return "accessibility_permission"
         default: return nil
         }
     }
@@ -229,7 +237,6 @@ struct OnboardingView: View {
                 return "Having trouble? Open System Settings → Privacy & Security → Automation, find Omi and toggle it ON. If Omi isn't listed, try quitting and reopening the app."
             }
             return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
-        case 5: return "Click 'Grant Access' to allow Omi to connect to Bluetooth wearable devices."
         default: return "All permissions granted! Click Continue to finish setup."
         }
     }
@@ -241,7 +248,6 @@ struct OnboardingView: View {
         case 2: return "bell"
         case 3: return "hand.raised"
         case 4: return "gearshape.2"
-        case 5: return "antenna.radiowaves.left.and.right"
         default: return "checkmark.circle"
         }
     }
@@ -253,7 +259,6 @@ struct OnboardingView: View {
         case 2: return "Notifications"
         case 3: return "Accessibility"
         case 4: return "Automation"
-        case 5: return "Bluetooth"
         default: return ""
         }
     }
@@ -317,8 +322,8 @@ struct OnboardingView: View {
 
                         buttonSection
                     }
-                    .frame(width: currentStep == 3 ? 720 : (currentStep == 4 ? 600 : 420))
-                    .frame(height: currentStep == 3 ? 560 : (currentStep == 4 ? 650 : 420))
+                    .frame(width: currentStep == 4 ? 720 : (currentStep == 5 ? 600 : 420))
+                    .frame(height: currentStep == 4 ? 560 : (currentStep == 5 ? 650 : 420))
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(OmiColors.backgroundSecondary)
@@ -362,8 +367,9 @@ struct OnboardingView: View {
         case 0: return true // Video - always "granted"
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
-        case 3: return allPermissionsGranted // Permissions step
-        case 4: return fileIndexingDone // File indexing step
+        case 3: return true // File indexing consent - always "granted"
+        case 4: return allPermissionsGranted // Permissions step
+        case 5: return fileIndexingDone // Chat reveal step
         default: return false
         }
     }
@@ -378,11 +384,11 @@ struct OnboardingView: View {
         case 2:
             languageStepView
         case 3:
-            permissionsStepView
+            fileIndexingConsentView
         case 4:
-            FileIndexingView(chatProvider: chatProvider) { fileCount in
-                handleFileIndexingComplete(fileCount: fileCount)
-            }
+            permissionsStepView
+        case 5:
+            onboardingChatRevealView
         default:
             EmptyView()
         }
@@ -487,6 +493,146 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = AssistantSettings.shared.transcriptionLanguage
             autoDetectEnabled = false
+            // Fetch language from Firestore (source of truth) for returning users
+            Task {
+                if let response = try? await APIClient.shared.getUserLanguage(),
+                   !response.language.isEmpty {
+                    await MainActor.run {
+                        selectedLanguage = response.language
+                        AssistantSettings.shared.transcriptionLanguage = response.language
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - File Indexing Consent View (Step 3)
+
+    private var fileIndexingConsentView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+
+            Image(systemName: "folder.badge.gearshape")
+                .scaledFont(size: 48)
+                .foregroundColor(OmiColors.purplePrimary)
+
+            Text("Get to Know You")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text("Let Omi look at your files to understand what you work on, your projects, and interests.")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.secondary)
+                    Text("Scans common folders for file names only")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.secondary)
+                }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "eye.slash")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.secondary)
+                    Text("File contents are never uploaded")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.top, 4)
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Chat Reveal View (Step 5)
+
+    private var onboardingChatRevealView: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                   let logoImage = NSImage(contentsOf: logoURL) {
+                    Image(nsImage: logoImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                }
+
+                if scanningInProgress {
+                    Text("Scanning your files...")
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                } else {
+                    Text("Exploring \(totalFilesScanned.formatted()) files...")
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                }
+
+                Spacer()
+
+                Button(action: { handleFileIndexingComplete(fileCount: totalFilesScanned) }) {
+                    Text("Done")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.purplePrimary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(OmiColors.purplePrimary.opacity(0.1))
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider()
+
+            // Messages
+            ChatMessagesView(
+                messages: chatProvider.messages,
+                isSending: chatProvider.isSending,
+                hasMoreMessages: false,
+                isLoadingMoreMessages: false,
+                isLoadingInitial: chatProvider.isLoading,
+                app: nil,
+                onLoadMore: {},
+                onRate: { _, _ in },
+                welcomeContent: {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Analyzing your files...")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            )
+
+            // Input
+            ChatInputView(
+                onSend: { text in
+                    Task { await chatProvider.sendMessage(text) }
+                },
+                onFollowUp: { text in
+                    Task { await chatProvider.sendFollowUp(text) }
+                },
+                onStop: {
+                    chatProvider.stopAgent()
+                },
+                isSending: chatProvider.isSending,
+                isStopping: chatProvider.isStopping,
+                mode: $chatProvider.chatMode,
+                inputText: $chatProvider.draftText
+            )
+            .padding()
         }
     }
 
@@ -497,11 +643,15 @@ struct OnboardingView: View {
 
         if fileCount > 0 {
             log("OnboardingView: File indexing completed with \(fileCount) files")
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileIndexing")
         } else {
             log("OnboardingView: File indexing skipped")
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FileIndexing_Skipped")
         }
+
+        // Cancel background scan task if still running
+        backgroundScanTask?.cancel()
+        backgroundScanTask = nil
 
         AnalyticsManager.shared.onboardingCompleted()
         appState.hasCompletedOnboarding = true
@@ -514,6 +664,24 @@ struct OnboardingView: View {
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
+
+        // Create a welcome task for the new user
+        Task {
+            await TasksStore.shared.createTask(
+                description: "Run Omi for two days to start receiving helpful advice",
+                dueAt: Date(),
+                priority: "low"
+            )
+        }
+
+        // Send a welcome notification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            NotificationService.shared.sendNotification(
+                title: "You're all set!",
+                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
+            )
+        }
+
         if let onComplete = onComplete {
             onComplete()
         }
@@ -590,19 +758,6 @@ struct OnboardingView: View {
                             appState.triggerAutomationPermission()
                         }
                     )
-                    permissionRow(
-                        number: 6,
-                        icon: "antenna.radiowaves.left.and.right",
-                        name: "Bluetooth",
-                        isGranted: appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied,
-                        isActive: activePermissionIndex == 5,
-                        action: {
-                            AnalyticsManager.shared.permissionRequested(permission: "bluetooth")
-                            appState.initializeBluetoothIfNeeded()
-                            appState.triggerBluetoothPermission()
-                        }
-                    )
-
                     // Privacy link
                     Button(action: { showPrivacySheet = true }) {
                         HStack(spacing: 6) {
@@ -720,22 +875,34 @@ struct OnboardingView: View {
         )
     }
 
-    private var isBluetoothPermissionDenied: Bool {
-        appState.isBluetoothPermissionDenied()
-    }
-
-    private var isBluetoothUnsupported: Bool {
-        appState.isBluetoothUnsupported()
-    }
-
     @ViewBuilder
     private var buttonSection: some View {
         VStack(spacing: 8) {
-            // Step 4 has its own buttons inside FileIndexingView
-            if currentStep != 4 {
+            // Step 5 (chat reveal) has its own Done button in the header
+            if currentStep == 5 {
+                EmptyView()
+            } else if currentStep == 3 {
+                // File indexing consent: custom Get Started + Skip buttons
+                VStack(spacing: 8) {
+                    Button(action: handleMainAction) {
+                        Text("Get Started")
+                            .frame(maxWidth: 200)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button(action: handleSkipFileIndexing) {
+                        Text("Skip")
+                            .scaledFont(size: 13)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
                 HStack(spacing: 16) {
-                    // Back button (not shown on first step or name step)
-                    if currentStep > 0 && currentStep != 1 {
+                    // Back button (not shown on first step, name step, or permissions step if scan started)
+                    if currentStep > 0 && currentStep != 1 && !(currentStep == 4 && scanningInProgress) {
                         Button(action: {
                             currentStep -= 1
                         }) {
@@ -758,7 +925,7 @@ struct OnboardingView: View {
                 }
             }
 
-            if currentStep == 3 && !requiredPermissionsGranted {
+            if currentStep == 4 && !requiredPermissionsGranted {
                 Text("You can grant permissions later in Settings")
                     .scaledFont(size: 12)
                     .foregroundColor(.secondary)
@@ -807,8 +974,13 @@ struct OnboardingView: View {
             AnalyticsManager.shared.languageChanged(language: selectedLanguage)
             currentStep += 1
         case 3:
-            // Permissions step - advance to Done
-            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Permissions")
+            // File indexing consent - start background scan and advance to permissions
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FileIndexingConsent")
+            startBackgroundFileIndexing()
+            currentStep += 1
+        case 4:
+            // Permissions step - advance to chat reveal (or complete if file indexing was skipped)
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Permissions")
             // Log granted permissions
             if appState.hasScreenRecordingPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "screen_recording")
@@ -824,9 +996,6 @@ struct OnboardingView: View {
             }
             if appState.hasAutomationPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "automation")
-            }
-            if appState.hasBluetoothPermission {
-                AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
             }
             // Log skipped permissions
             if !appState.hasScreenRecordingPermission {
@@ -848,12 +1017,156 @@ struct OnboardingView: View {
             if appState.hasScreenRecordingPermission {
                 ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
-            currentStep += 1
-        case 4:
-            break // FileIndexingView handles step 4 actions via handleFileIndexingComplete
+            // If file indexing was skipped, complete onboarding directly
+            if fileIndexingSkipped {
+                handleFileIndexingComplete(fileCount: 0)
+            } else {
+                currentStep += 1
+            }
+        case 5:
+            break // Chat reveal view has its own Done button
         default:
             break
         }
+    }
+
+    // MARK: - Background File Indexing
+
+    private func startBackgroundFileIndexing() {
+        scanningInProgress = true
+        backgroundScanTask = Task {
+            await performBackgroundScan()
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                scanningInProgress = false
+            }
+
+            // Auto-start the AI exploration chat
+            await startExplorationChat()
+        }
+    }
+
+    private func performBackgroundScan() async {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let folders = [
+            ("Downloads", home.appendingPathComponent("Downloads")),
+            ("Documents", home.appendingPathComponent("Documents")),
+            ("Desktop", home.appendingPathComponent("Desktop")),
+            ("Developer", home.appendingPathComponent("Developer")),
+            ("Projects", home.appendingPathComponent("Projects")),
+            ("Code", home.appendingPathComponent("Code")),
+            ("src", home.appendingPathComponent("src")),
+            ("repos", home.appendingPathComponent("repos")),
+            ("Sites", home.appendingPathComponent("Sites")),
+        ]
+
+        let fm = FileManager.default
+        for (name, url) in folders {
+            guard !Task.isCancelled else { return }
+            guard fm.fileExists(atPath: url.path) else { continue }
+            log("FileIndexer: Scanning \(name)")
+            let count = await FileIndexerService.shared.scanFolders([url])
+            await MainActor.run {
+                totalFilesScanned += count
+            }
+        }
+
+        // Also index installed app names from /Applications
+        guard !Task.isCancelled else { return }
+        let appDirs = [
+            URL(fileURLWithPath: "/Applications"),
+            home.appendingPathComponent("Applications"),
+        ]
+        for dir in appDirs {
+            guard !Task.isCancelled else { return }
+            let scanned = await FileIndexerService.shared.scanFolders([dir])
+            await MainActor.run {
+                totalFilesScanned += scanned
+            }
+        }
+
+        await MainActor.run {
+            UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+        }
+    }
+
+    private func startExplorationChat() async {
+        // Multi-chat users get a dedicated session; single-chat users stay in default chat
+        if chatProvider.multiChatEnabled {
+            let session = await chatProvider.createNewSession(skipGreeting: true)
+            guard session != nil else {
+                log("OnboardingView: Failed to create session for file exploration")
+                return
+            }
+        }
+
+        let prompt = """
+        I just indexed \(totalFilesScanned) files on your computer. I want to understand who you are — your projects, passions, and what you're building.
+
+        Use the execute_sql tool to explore the indexed_files table. Start with an overview (file types, folders, project indicators), then dig deeper:
+
+        1. Find project files (package.json, Cargo.toml, etc.) to identify active projects
+        2. Look at recently modified files to understand what you're working on right now
+        3. Search for patterns — recurring themes, technologies, interests
+        4. Open interesting files (read_file tool) to understand project purposes and context
+        5. Don't stop at surface level — keep investigating, follow threads, connect the dots
+
+        Tell me a story about this person. Who are they? What are they building? What drives them? What's their tech stack and workflow? Share discoveries as you find them, like you're exploring and getting to know a new friend.
+        """
+        await chatProvider.sendMessage(prompt)
+
+        // Append the AI's exploration response to the user's AI profile
+        await appendExplorationToProfile()
+
+        // Follow up: ask the model to find something actionable
+        await chatProvider.sendMessage("Now based on everything you discovered, find something that you can actually help me with to get done. Something that is clearly not done yet and something that you as an AI agent can execute upon.")
+    }
+
+    private func appendExplorationToProfile() async {
+        // Get the last AI message (the exploration response)
+        guard let lastAIMessage = chatProvider.messages.last(where: { $0.sender == .ai }),
+              !lastAIMessage.text.isEmpty else {
+            log("OnboardingView: No AI response to append to profile")
+            return
+        }
+
+        let explorationText = lastAIMessage.text
+        let service = AIUserProfileService.shared
+
+        // Retry up to 3 times for transient SQLite/network failures
+        for attempt in 1...3 {
+            let existingProfile = await service.getLatestProfile()
+
+            if let existing = existingProfile, let profileId = existing.id {
+                // Append to existing profile
+                let updated = existing.profileText + "\n\n--- File Exploration Insights ---\n" + explorationText
+                let success = await service.updateProfileText(id: profileId, newText: updated)
+                log("OnboardingView: Appended exploration to AI profile (success=\(success), attempt=\(attempt))")
+                if success { return }
+            } else {
+                // No profile exists yet — save exploration text directly as a new profile
+                let success = await service.saveExplorationAsProfile(text: "--- File Exploration Insights ---\n" + explorationText)
+                log("OnboardingView: Saved exploration as new AI profile (success=\(success), attempt=\(attempt))")
+                if success { return }
+            }
+
+            // Wait before retrying (2s, 4s)
+            if attempt < 3 {
+                log("OnboardingView: Retrying profile save (attempt \(attempt) failed)")
+                try? await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)
+            }
+        }
+        log("OnboardingView: Failed to save exploration to AI profile after 3 attempts")
+    }
+
+    private func handleSkipFileIndexing() {
+        log("OnboardingView: User skipped file indexing")
+        fileIndexingSkipped = true
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FileIndexingConsent_Skipped")
+        currentStep += 1 // Advance to permissions step
     }
 }
 

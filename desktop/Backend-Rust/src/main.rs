@@ -42,16 +42,17 @@ pub struct AppState {
     pub integrations: Arc<IntegrationService>,
     pub redis: Option<Arc<RedisService>>,
     pub config: Arc<Config>,
+    pub crisp_session_cache: routes::crisp::SessionCache,
 }
 
 #[tokio::main]
 async fn main() {
-    // Open log file (same as Swift app: /tmp/omi.log)
+    // Open log file (same as Swift dev app: /tmp/omi-dev.log)
     // Wrap in LineWriter to flush after each line (ensures logs appear immediately)
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/omi.log")
+        .open("/tmp/omi-dev.log")
         .expect("Failed to open log file");
     let line_writer = LineWriter::new(log_file);
 
@@ -164,6 +165,7 @@ async fn main() {
         integrations,
         redis,
         config: Arc::new(config.clone()),
+        crisp_session_cache: routes::crisp::new_session_cache(),
     };
 
     // Build CORS layer

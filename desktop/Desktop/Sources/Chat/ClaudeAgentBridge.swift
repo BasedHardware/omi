@@ -10,6 +10,7 @@ actor ClaudeAgentBridge {
     struct QueryResult {
         let text: String
         let costUsd: Double
+        let sessionId: String
     }
 
     /// Callback for streaming text deltas
@@ -52,6 +53,10 @@ actor ClaudeAgentBridge {
     private var pendingMessages: [InboundMessage] = []
     private var messageContinuation: CheckedContinuation<InboundMessage, Error>?
     private var messageGeneration: UInt64 = 0
+    /// Set when stderr indicates OOM so handleTermination can throw the right error
+    private var lastExitWasOOM = false
+    /// Set when interrupt() is called so query() can skip remaining tool calls
+    private var isInterrupted = false
 
     /// Whether the bridge subprocess is alive and ready
     var isAlive: Bool { isRunning }
@@ -66,11 +71,10 @@ actor ClaudeAgentBridge {
         readTask?.cancel()
         readTask = nil
         process = nil
-        stdinPipe = nil
-        stdoutPipe = nil
-        stderrPipe = nil
+        closePipes()
         pendingMessages.removeAll()
         messageContinuation = nil
+        lastExitWasOOM = false
 
         let nodePath = findNodeBinary()
         guard let nodePath else {
@@ -87,11 +91,19 @@ actor ClaudeAgentBridge {
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: nodePath)
-        proc.arguments = [bridgePath]
+        // Use --jitless to avoid V8 CodeRange virtual memory reservation failures
+        // on constrained environments (macOS VMs, low-memory machines).
+        // The agent-bridge is I/O-bound so JIT makes no noticeable difference.
+        proc.arguments = ["--jitless", bridgePath]
 
         // Inherit environment (includes ANTHROPIC_API_KEY from .env)
         var env = ProcessInfo.processInfo.environment
         env["NODE_NO_WARNINGS"] = "1"
+        // Note: do NOT set NODE_OPTIONS=--jitless here. The bridge process gets
+        // --jitless via proc.arguments (it only does stdin/stdout, no HTTP).
+        // Child processes (Claude Code CLI, MCP servers) need WebAssembly for
+        // Node.js fetch (undici/llhttp). Instead, the node binary is signed with
+        // JIT entitlements in release.sh to allow V8 JIT under Hardened Runtime.
         // Ensure the directory containing node is in PATH so child processes (e.g. claude-agent-sdk) can find it
         let nodeDir = (nodePath as NSString).deletingLastPathComponent
         let existingPath = env["PATH"] ?? "/usr/bin:/bin"
@@ -107,8 +119,6 @@ actor ClaudeAgentBridge {
             if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
                 env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
             }
-            // Auto-install the Chrome extension via policy
-            Self.ensureChromeExtensionInstalled()
         }
 
         proc.environment = env
@@ -126,11 +136,14 @@ actor ClaudeAgentBridge {
         self.stderrPipe = stderr
         self.process = proc
 
-        // Read stderr for logging
-        stderr.fileHandleForReading.readabilityHandler = { handle in
+        // Read stderr for logging and OOM detection
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
                 log("ClaudeAgentBridge stderr: \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
+                if text.contains("FatalProcessOutOfMemory") || text.contains("JavaScript heap out of memory") {
+                    Task { await self?.markOOM() }
+                }
             }
         }
 
@@ -165,16 +178,16 @@ actor ClaudeAgentBridge {
         readTask?.cancel()
         readTask = nil
 
-        // Send stop message
+        // Send stop message, then close stdin so Node sees EOF
         sendLine("""
         {"type":"stop"}
         """)
+        try? stdinPipe?.fileHandleForWriting.close()
 
         process?.terminate()
         process = nil
-        stdinPipe = nil
-        stdoutPipe = nil
-        stderrPipe = nil
+        // Close remaining pipe handles before releasing
+        closePipes()
         isRunning = false
 
         // Cancel any pending continuation
@@ -199,6 +212,7 @@ actor ClaudeAgentBridge {
         cwd: String? = nil,
         mode: String? = nil,
         model: String? = nil,
+        resume: String? = nil,
         onTextDelta: @escaping TextDeltaHandler,
         onToolCall: @escaping ToolCallHandler,
         onToolActivity: @escaping ToolActivityHandler,
@@ -209,7 +223,7 @@ actor ClaudeAgentBridge {
             throw BridgeError.notRunning
         }
 
-        // Build query message — no session resume, each query is independent
+        // Build query message
         var queryDict: [String: Any] = [
             "type": "query",
             "id": UUID().uuidString,
@@ -225,17 +239,27 @@ actor ClaudeAgentBridge {
         if let model = model {
             queryDict["model"] = model
         }
+        if let resume = resume {
+            queryDict["resume"] = resume
+        }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw BridgeError.encodingError
         }
 
+        isInterrupted = false
+        // Discard any stale messages from a previous interrupted/timed-out query
+        // to avoid desynchronizing the request-response protocol.
+        if !pendingMessages.isEmpty {
+            log("ClaudeAgentBridge: clearing \(pendingMessages.count) stale pending messages before new query")
+            pendingMessages.removeAll()
+        }
         sendLine(jsonString)
 
         // Read messages until we get a result or error
         while true {
-            let message = try await waitForMessage()
+            let message = try await waitForMessage(timeout: 90.0)
 
             switch message {
             case .`init`:
@@ -245,6 +269,11 @@ actor ClaudeAgentBridge {
                 onTextDelta(text)
 
             case .toolUse(let callId, let name, let input):
+                // If already interrupted, skip this tool call entirely
+                if isInterrupted {
+                    log("ClaudeAgentBridge: skipping tool call \(name) (interrupted)")
+                    continue
+                }
                 // Route OMI tool calls back to Swift for execution
                 let result = await onToolCall(callId, name, input)
                 // Send result back to bridge
@@ -258,6 +287,36 @@ actor ClaudeAgentBridge {
                     sendLine(resultString)
                 }
 
+                // If interrupted during tool execution, skip remaining tool calls
+                // and drain messages to find the result (already sent by the bridge).
+                if isInterrupted {
+                    log("ClaudeAgentBridge: interrupted during tool call, draining for result")
+                    // First check already-buffered messages
+                    while !pendingMessages.isEmpty {
+                        let pending = pendingMessages.removeFirst()
+                        switch pending {
+                        case .result(let text, let sessionId, let costUsd):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
+                        case .error(let message):
+                            throw BridgeError.agentError(message)
+                        default:
+                            continue
+                        }
+                    }
+                    // Result not yet buffered — wait with a short timeout
+                    while true {
+                        let msg = try await waitForMessage(timeout: 10.0)
+                        switch msg {
+                        case .result(let text, let sessionId, let costUsd):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
+                        case .error(let message):
+                            throw BridgeError.agentError(message)
+                        default:
+                            continue
+                        }
+                    }
+                }
+
             case .thinkingDelta(let text):
                 onThinkingDelta(text)
 
@@ -267,8 +326,8 @@ actor ClaudeAgentBridge {
             case .toolResultDisplay(let toolUseId, let name, let output):
                 onToolResultDisplay(toolUseId, name, output)
 
-            case .result(let text, _, let costUsd):
-                return QueryResult(text: text, costUsd: costUsd ?? 0)
+            case .result(let text, let sessionId, let costUsd):
+                return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
 
             case .error(let message):
                 throw BridgeError.agentError(message)
@@ -282,6 +341,7 @@ actor ClaudeAgentBridge {
     /// The bridge will abort the current query and send back a partial result.
     func interrupt() {
         guard isRunning else { return }
+        isInterrupted = true
         sendLine("{\"type\":\"interrupt\"}")
     }
 
@@ -291,7 +351,11 @@ actor ClaudeAgentBridge {
         guard let pipe = stdinPipe else { return }
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if let data = (trimmed + "\n").data(using: .utf8) {
-            pipe.fileHandleForWriting.write(data)
+            do {
+                try pipe.fileHandleForWriting.write(contentsOf: data)
+            } catch {
+                log("ClaudeAgentBridge: Failed to write to stdin pipe: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -420,20 +484,61 @@ actor ClaudeAgentBridge {
         }
     }
 
+    private func markOOM() {
+        lastExitWasOOM = true
+    }
+
     private func handleTermination() {
-        log("ClaudeAgentBridge: process terminated")
+        let error: BridgeError = lastExitWasOOM ? .outOfMemory : .processExited
+        lastExitWasOOM = false
+        log("ClaudeAgentBridge: process terminated (\(error))")
         isRunning = false
-        messageContinuation?.resume(throwing: BridgeError.processExited)
+        closePipes()
+        messageContinuation?.resume(throwing: error)
         messageContinuation = nil
+    }
+
+    /// Close all pipe file handles to prevent fd leaks and EPIPE in the child
+    private func closePipes() {
+        if let stdin = stdinPipe {
+            try? stdin.fileHandleForWriting.close()
+            try? stdin.fileHandleForReading.close()
+        }
+        if let stdout = stdoutPipe {
+            stdout.fileHandleForReading.readabilityHandler = nil
+            try? stdout.fileHandleForReading.close()
+            try? stdout.fileHandleForWriting.close()
+        }
+        if let stderr = stderrPipe {
+            stderr.fileHandleForReading.readabilityHandler = nil
+            try? stderr.fileHandleForReading.close()
+            try? stderr.fileHandleForWriting.close()
+        }
+        stdinPipe = nil
+        stdoutPipe = nil
+        stderrPipe = nil
     }
 
     // MARK: - Node.js Discovery
 
     private func findNodeBinary() -> String? {
         // 1. Check bundled node binary in app resources (preferred — no external dependency)
-        if let bundledNode = Bundle.resourceBundle.path(forResource: "node", ofType: nil),
-           FileManager.default.isExecutableFile(atPath: bundledNode) {
+        let bundledNode = Bundle.resourceBundle.path(forResource: "node", ofType: nil)
+        if let bundledNode, FileManager.default.isExecutableFile(atPath: bundledNode) {
+            log("Bridge: Found bundled node at \(bundledNode)")
             return bundledNode
+        }
+        // Log why bundled node failed
+        let bundleURL = Bundle.resourceBundle.bundleURL.path
+        let mainBundleURL = Bundle.main.bundleURL.path
+        if let bundledNode {
+            log("Bridge: Bundled node at \(bundledNode) is not executable")
+        } else {
+            log("Bridge: No bundled node found in resourceBundle (\(bundleURL)), main bundle (\(mainBundleURL))")
+            // List what's actually in the resource bundle for debugging
+            if let contents = try? FileManager.default.contentsOfDirectory(atPath: bundleURL) {
+                log("Bridge: resourceBundle contents: \(contents.prefix(20))")
+            }
         }
 
         // 2. Fall back to system-installed node
@@ -445,11 +550,30 @@ actor ClaudeAgentBridge {
 
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
+                log("Bridge: Found system node at \(path)")
                 return path
             }
         }
+        log("Bridge: No system node found at \(candidates)")
 
-        // 3. Try `which node`
+        // 3. Check NVM installations (~/.nvm/versions/node/*)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let nvmDir = (home as NSString).appendingPathComponent(".nvm/versions/node")
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmDir) {
+            // Sort versions descending to prefer the latest
+            let sorted = versions.sorted { v1, v2 in
+                v1.compare(v2, options: .numeric) == .orderedDescending
+            }
+            for version in sorted {
+                let nodePath = (nvmDir as NSString).appendingPathComponent("\(version)/bin/node")
+                if FileManager.default.isExecutableFile(atPath: nodePath) {
+                    log("Bridge: Found NVM node at \(nodePath)")
+                    return nodePath
+                }
+            }
+        }
+
+        // 4. Try `which node`
         let whichProcess = Process()
         whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         whichProcess.arguments = ["node"]
@@ -461,9 +585,11 @@ actor ClaudeAgentBridge {
         if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !path.isEmpty,
            FileManager.default.isExecutableFile(atPath: path) {
+            log("Bridge: Found node via 'which' at \(path)")
             return path
         }
 
+        logError("Bridge: Node.js not found anywhere. Bundle: \(bundleURL), main: \(mainBundleURL)")
         return nil
     }
 
@@ -503,28 +629,6 @@ actor ClaudeAgentBridge {
         return nil
     }
 
-    // MARK: - Chrome Extension Auto-Install
-
-    private static let playwrightExtensionId = "mmlmfjhmonkocbjadbfplnigmagldckm"
-    private static let chromeUpdateURL = "https://clients2.google.com/service/update2/crx"
-    private static let chromeDomain = "com.google.Chrome"
-
-    /// Auto-install the Playwright MCP Bridge Chrome extension via Chrome's ExtensionInstallForcelist policy.
-    /// Uses user-level preferences (recommended policy) — no admin privileges needed.
-    /// The extension is silently installed and enabled on next Chrome launch/policy refresh.
-    static func ensureChromeExtensionInstalled() {
-        let entry = "\(playwrightExtensionId);\(chromeUpdateURL)"
-        var prefs = UserDefaults.standard.persistentDomain(forName: chromeDomain) ?? [:]
-        var forcelist = prefs["ExtensionInstallForcelist"] as? [String] ?? []
-
-        guard !forcelist.contains(entry) else { return }
-
-        forcelist.append(entry)
-        prefs["ExtensionInstallForcelist"] = forcelist
-        UserDefaults.standard.setPersistentDomain(prefs, forName: chromeDomain)
-        log("ClaudeAgentBridge: Auto-installed Playwright MCP Bridge Chrome extension via policy")
-    }
-
     // MARK: - Playwright Connection Test
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -555,23 +659,6 @@ actor ClaudeAgentBridge {
         return connected
     }
 
-    /// Remove the Playwright MCP Bridge extension from Chrome's forcelist policy.
-    static func removeChromeExtensionPolicy() {
-        var prefs = UserDefaults.standard.persistentDomain(forName: chromeDomain) ?? [:]
-        guard var forcelist = prefs["ExtensionInstallForcelist"] as? [String] else { return }
-
-        let before = forcelist.count
-        forcelist.removeAll { $0.hasPrefix(playwrightExtensionId) }
-        guard forcelist.count != before else { return }
-
-        if forcelist.isEmpty {
-            prefs.removeValue(forKey: "ExtensionInstallForcelist")
-        } else {
-            prefs["ExtensionInstallForcelist"] = forcelist
-        }
-        UserDefaults.standard.setPersistentDomain(prefs, forName: chromeDomain)
-        log("ClaudeAgentBridge: Removed Playwright MCP Bridge Chrome extension policy")
-    }
 }
 
 // MARK: - Errors
@@ -583,25 +670,28 @@ enum BridgeError: LocalizedError {
     case encodingError
     case timeout
     case processExited
+    case outOfMemory
     case stopped
     case agentError(String)
 
     var errorDescription: String? {
         switch self {
         case .nodeNotFound:
-            return "Node.js not found. Install via: brew install node"
+            return "Node.js not found. Please reinstall the app."
         case .bridgeScriptNotFound:
-            return "Agent bridge script not found"
+            return "AI components missing. Please reinstall the app."
         case .notRunning:
-            return "Agent bridge is not running"
+            return "AI is not running. Try sending your message again."
         case .encodingError:
             return "Failed to encode message"
         case .timeout:
-            return "Agent bridge timed out"
+            return "AI took too long to respond. Try again."
         case .processExited:
-            return "Agent bridge process exited unexpectedly"
+            return "AI stopped unexpectedly. Try sending your message again."
+        case .outOfMemory:
+            return "Not enough memory for AI chat. Close some apps and try again."
         case .stopped:
-            return "Agent bridge was stopped"
+            return "Response stopped."
         case .agentError(let msg):
             return "Agent error: \(msg)"
         }

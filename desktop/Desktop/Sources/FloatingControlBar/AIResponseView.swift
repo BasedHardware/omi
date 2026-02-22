@@ -1,17 +1,16 @@
-import MarkdownUI
 import SwiftUI
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {
     @EnvironmentObject var state: FloatingControlBarState
     @Binding var isLoading: Bool
-    @Binding var responseText: String
+    let currentMessage: ChatMessage?
     @State private var isQuestionExpanded = false
     @State private var followUpText: String = ""
     @FocusState private var isFollowUpFocused: Bool
 
     let userInput: String
-    let chatHistory: [ChatExchange]
+    let chatHistory: [FloatingChatExchange]
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
 
@@ -47,7 +46,12 @@ struct AIResponseView: View {
                         Color.clear.frame(height: 1).id("bottom")
                     }
                 }
-                .onChange(of: responseText) {
+                .onChange(of: currentMessage?.text) {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottom", anchor: .bottom)
+                    }
+                }
+                .onChange(of: currentMessage?.contentBlocks.count) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
@@ -116,14 +120,39 @@ struct AIResponseView: View {
         }
     }
 
-    // Model picker moved to Settings > Ask Omi Floating Bar
-    // private var modelPicker: some View { ... }
-    // private func showModelMenu() { ... }
-    // private var currentModelLabel: String { ... }
+    // MARK: - Content Blocks Rendering
+
+    /// Renders a ChatMessage's content blocks using the shared components from ChatPage.
+    @ViewBuilder
+    private func contentBlocksView(for message: ChatMessage) -> some View {
+        if !message.contentBlocks.isEmpty {
+            let grouped = ContentBlockGroup.group(message.contentBlocks)
+            ForEach(grouped) { group in
+                switch group {
+                case .text(_, let text):
+                    SelectableMarkdown(text: text, sender: .ai)
+                        .textSelection(.enabled)
+                        .environment(\.colorScheme, .dark)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .toolCalls(_, let calls):
+                    ToolCallsGroup(calls: calls)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .thinking(_, let text):
+                    ThinkingBlock(text: text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } else if !message.text.isEmpty {
+            SelectableMarkdown(text: message.text, sender: .ai)
+                .textSelection(.enabled)
+                .environment(\.colorScheme, .dark)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     // MARK: - Chat History
 
-    private func chatExchangeView(_ exchange: ChatExchange) -> some View {
+    private func chatExchangeView(_ exchange: FloatingChatExchange) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // Question bubble
             HStack(alignment: .top, spacing: 8) {
@@ -138,12 +167,8 @@ struct AIResponseView: View {
             .background(Color.white.opacity(0.1))
             .cornerRadius(8)
 
-            // Response
-            Markdown(exchange.response)
-                .scaledMarkdownTheme(.ai)
-                .textSelection(.enabled)
-                .environment(\.colorScheme, .dark)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            // Response with content blocks
+            contentBlocksView(for: exchange.aiMessage)
                 .padding(.horizontal, 4)
 
             Divider()
@@ -213,29 +238,32 @@ struct AIResponseView: View {
 
     private var currentContentView: some View {
         Group {
-            if responseText.isEmpty {
-                ThinkingDotsView()
+            if let message = currentMessage {
+                VStack(alignment: .leading, spacing: 4) {
+                    contentBlocksView(for: message)
+
+                    // Show typing indicator while streaming with no text yet
+                    if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
+                        TypingIndicator()
+                    }
+                }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 8)
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.text, forType: .string)
+                    }
+                    Button("Copy Question & Answer") {
+                        let combined = "Q: \(userInput)\n\nA: \(message.text)"
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(combined, forType: .string)
+                    }
+                }
+            } else {
+                TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .padding(.horizontal, 4)
-            } else if !responseText.isEmpty {
-                Markdown(responseText)
-                    .scaledMarkdownTheme(.ai)
-                    .textSelection(.enabled)
-                    .environment(\.colorScheme, .dark)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 8)
-                    .contextMenu {
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(responseText, forType: .string)
-                        }
-                        Button("Copy Question & Answer") {
-                            let combined = "Q: \(userInput)\n\nA: \(responseText)"
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(combined, forType: .string)
-                        }
-                    }
             }
         }
     }
@@ -308,34 +336,6 @@ struct AIResponseView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         onSendFollowUp?(trimmed)
-    }
-}
-
-// MARK: - Thinking Animation
-
-/// Animated dots that pulse sequentially to indicate AI is processing.
-struct ThinkingDotsView: View {
-    @State private var activeDot = 0
-
-    private let dotCount = 3
-    private let dotSize: CGFloat = 6
-
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<dotCount, id: \.self) { index in
-                Circle()
-                    .fill(Color.white.opacity(index == activeDot ? 0.9 : 0.25))
-                    .frame(width: dotSize, height: dotSize)
-                    .scaleEffect(index == activeDot ? 1.3 : 1.0)
-                    .animation(.easeInOut(duration: 0.3), value: activeDot)
-            }
-        }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(400))
-                activeDot = (activeDot + 1) % dotCount
-            }
-        }
     }
 }
 

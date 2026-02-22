@@ -115,7 +115,8 @@ class DashboardViewModel: ObservableObject {
                 title: title,
                 goalType: goalType,
                 targetValue: targetValue,
-                unit: unit
+                unit: unit,
+                source: "user"
             )
             _ = try? await GoalStorage.shared.syncServerGoal(goal)
             goals = try await GoalStorage.shared.getLocalGoals()

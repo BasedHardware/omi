@@ -65,6 +65,10 @@ class SystemAudioCaptureService {
     // Tap UUID for identification
     private let tapUUID = UUID()
 
+    /// Dedicated queue for CoreAudio device operations (start/stop)
+    /// to avoid blocking the main thread on AudioDeviceStart/Stop calls.
+    private let audioQueue = DispatchQueue(label: "com.omi.systemaudiocapture.device")
+
     // MARK: - Permission Checking
 
     /// Check if system audio capture permission is available
@@ -193,10 +197,37 @@ class SystemAudioCaptureService {
     /// Stop capturing system audio
     func stopCapture() {
         guard isCapturing else { return }
-        cleanup()
         isCapturing = false
         onAudioChunk = nil
         onAudioLevel = nil
+
+        // Capture values for background cleanup to avoid blocking main thread
+        let procID = self.ioProcID
+        let aggDevID = self.aggregateDeviceID
+        let tID = self.tapID
+
+        self.ioProcID = nil
+        self.aggregateDeviceID = kAudioObjectUnknown
+        self.tapID = kAudioObjectUnknown
+        self.audioConverter = nil
+        self.inputFormat = nil
+        self.targetFormat = nil
+        self.sourceSampleRate = 0.0
+
+        // AudioDeviceStop can block — run off main thread
+        audioQueue.async {
+            if let procID = procID, aggDevID != kAudioObjectUnknown {
+                AudioDeviceStop(aggDevID, procID)
+                AudioDeviceDestroyIOProcID(aggDevID, procID)
+            }
+            if aggDevID != kAudioObjectUnknown {
+                AudioHardwareDestroyAggregateDevice(aggDevID)
+            }
+            if tID != kAudioObjectUnknown {
+                AudioHardwareDestroyProcessTap(tID)
+            }
+        }
+
         log("SystemAudioCapture: Stopped capturing")
     }
 
@@ -367,6 +398,23 @@ class SystemAudioCaptureService {
     }
 
     deinit {
-        cleanup()
+        // Use sync in deinit to ensure cleanup completes before deallocation
+        let procID = self.ioProcID
+        let aggDevID = self.aggregateDeviceID
+        let tID = self.tapID
+        if procID != nil || aggDevID != kAudioObjectUnknown || tID != kAudioObjectUnknown {
+            audioQueue.sync {
+                if let procID = procID, aggDevID != kAudioObjectUnknown {
+                    AudioDeviceStop(aggDevID, procID)
+                    AudioDeviceDestroyIOProcID(aggDevID, procID)
+                }
+                if aggDevID != kAudioObjectUnknown {
+                    AudioHardwareDestroyAggregateDevice(aggDevID)
+                }
+                if tID != kAudioObjectUnknown {
+                    AudioHardwareDestroyProcessTap(tID)
+                }
+            }
+        }
     }
 }

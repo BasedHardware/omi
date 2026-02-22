@@ -143,6 +143,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var toggleBarObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
+        // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
+        signal(SIGPIPE, SIG_IGN)
+
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
@@ -182,6 +186,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.beforeSend = { event in
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
+                    return nil
+                }
+                // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
+                // (e.g. proactive assistants cancelling in-flight Gemini requests on context switch)
+                if let exceptions = event.exceptions, exceptions.contains(where: { exc in
+                    exc.type == "NSURLErrorDomain" && exc.value.contains("Code=-999") ||
+                    exc.type == "NSURLErrorDomain" && exc.value.contains("Code: -999")
+                }) {
                     return nil
                 }
                 return event
@@ -381,34 +393,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return event
         }
 
-        // Shared handler for Ask AI shortcut — works globally without activating main window
-        // NSEvent monitors run on the main thread, so assumeIsolated is safe here
-        let askOmiHandler: (NSEvent) -> Bool = { event in
-            return MainActor.assumeIsolated {
-                let shortcut = ShortcutSettings.shared.askOmiKey
-                if shortcut.matches(event) {
-                    FloatingControlBarManager.shared.openAIInput()
-                    return true
-                }
-                return false
-            }
-        }
+        // Ask Omi shortcut is registered via Carbon RegisterEventHotKey in
+        // GlobalShortcutManager (works regardless of accessibility permission state).
 
-        // Global monitor - for when OTHER apps are focused (requires Accessibility permission)
+        // Global monitor - for when OTHER apps are focused (Ctrl+Option+R only)
         globalHotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
-            if askOmiHandler(event) { return }
             _ = hotkeyHandler(event)
         }
 
-        // Local monitor - for when THIS app is focused
+        // Local monitor - for when THIS app is focused (Ctrl+Option+R only)
         localHotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if askOmiHandler(event) { return nil }
             return hotkeyHandler(event)
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        let askOmiKeyLabel = MainActor.assumeIsolated { ShortcutSettings.shared.askOmiKey.rawValue }
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask AI (\(askOmiKeyLabel)), Cmd+\\ (Toggle bar)")
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
     }
 
     /// Set up observers to show/hide dock icon when main window appears/disappears
@@ -485,6 +484,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !hasVisibleOmiWindow && NSApp.activationPolicy() != .accessory {
             NSApp.setActivationPolicy(.accessory)
             log("AppDelegate: Dock icon hidden (no visible Omi windows)")
+            // Workaround for macOS Sequoia bug: switching to .accessory can cause
+            // NSStatusBar items to disappear. Force-refresh the status bar item.
+            refreshMenuBarIcon()
+        }
+    }
+
+    /// Force-refresh the menu bar icon after activation policy changes.
+    /// Works around a macOS Sequoia bug where NSStatusBar items vanish
+    /// when switching to .accessory activation policy.
+    private func refreshMenuBarIcon() {
+        guard let statusBarItem = statusBarItem else { return }
+        statusBarItem.isVisible = false
+        DispatchQueue.main.async {
+            statusBarItem.isVisible = true
+            log("AppDelegate: [MENUBAR] Refreshed status bar item after policy change")
         }
     }
 
@@ -605,11 +619,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @MainActor @objc private func openOmiFromMenu() {
         AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
         NSApp.activate(ignoringOtherApps: true)
+        var foundWindow = false
         for window in NSApp.windows {
             if window.title.hasPrefix("Omi") {
+                foundWindow = true
                 window.makeKeyAndOrderFront(nil)
                 window.appearance = NSAppearance(named: .darkAqua)
             }
+        }
+        // Restore dock icon when opening from menu bar
+        showDockIcon()
+        if !foundWindow {
+            log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
         }
     }
 

@@ -10,6 +10,7 @@ export interface QueryMessage {
   cwd?: string;
   mode?: "ask" | "act";
   model?: string;
+  resume?: string;
 }
 
 export interface ToolResultMessage {

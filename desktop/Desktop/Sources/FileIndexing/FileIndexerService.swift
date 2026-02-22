@@ -51,6 +51,19 @@ actor FileIndexerService {
         _dbQueue = nil
     }
 
+    /// Returns the total number of indexed files in the database
+    func getIndexedFileCount() async -> Int {
+        guard let db = try? await ensureDB() else { return 0 }
+        do {
+            return try await db.read { database in
+                try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM indexed_files") ?? 0
+            }
+        } catch {
+            log("FileIndexer: Failed to get indexed file count: \(error)")
+            return 0
+        }
+    }
+
     // MARK: - Onboarding Pipeline
 
     /// Main entry point: scan files → post notification → chat AI does the analysis
@@ -108,18 +121,60 @@ actor FileIndexerService {
         log("FileIndexer: Pipeline complete, posted fileIndexingComplete notification")
     }
 
+    // MARK: - Background Re-scan
+
+    /// Incremental background re-scan of all standard folders.
+    /// Updates metadata for existing files and adds new ones.
+    func backgroundRescan() async {
+        guard !isScanning else {
+            log("FileIndexer: Scan already in progress, skipping background rescan")
+            return
+        }
+
+        isScanning = true
+        defer { isScanning = false }
+
+        log("FileIndexer: Starting background rescan")
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let folders = [
+            home.appendingPathComponent("Downloads"),
+            home.appendingPathComponent("Documents"),
+            home.appendingPathComponent("Desktop"),
+            home.appendingPathComponent("Developer"),
+            home.appendingPathComponent("Projects"),
+            home.appendingPathComponent("Code"),
+            home.appendingPathComponent("src"),
+            home.appendingPathComponent("repos"),
+            home.appendingPathComponent("Sites"),
+            URL(fileURLWithPath: "/Applications"),
+            home.appendingPathComponent("Applications"),
+        ]
+
+        let count = await scanFolders(folders, incremental: true)
+        log("FileIndexer: Background rescan complete, \(count) files indexed")
+    }
+
     // MARK: - File Scanning
 
     /// Scan folders and store file metadata in indexed_files table
     /// Returns total number of files indexed
     @discardableResult
-    func scanFolders(_ folders: [URL]) async -> Int {
+    func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
         let db: DatabasePool
         do {
             db = try await ensureDB()
         } catch {
             log("FileIndexer: DB init failed: \(error.localizedDescription)")
             return 0
+        }
+
+        // For incremental scans, load existing index for O(1) lookup
+        let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
+        var scannedPaths = Set<String>()
+
+        if incremental {
+            log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")
         }
 
         let fm = FileManager.default
@@ -147,13 +202,20 @@ actor FileIndexerService {
                 fm: fm,
                 batch: &batch,
                 totalFiles: &totalFiles,
-                db: db
+                db: db,
+                existingIndex: existingIndex,
+                scannedPaths: &scannedPaths
             )
         }
 
         // Flush remaining batch
         if !batch.isEmpty {
             insertBatch(batch, into: db)
+        }
+
+        // For incremental scans, remove files that no longer exist on disk
+        if incremental && !existingIndex.isEmpty {
+            deleteRemovedFiles(scannedPaths: scannedPaths, existingPaths: Set(existingIndex.keys), db: db)
         }
 
         return totalFiles
@@ -168,7 +230,9 @@ actor FileIndexerService {
         fm: FileManager,
         batch: inout [IndexedFileRecord],
         totalFiles: inout Int,
-        db: DatabasePool
+        db: DatabasePool,
+        existingIndex: [String: Date?],
+        scannedPaths: inout Set<String>
     ) {
         guard depth <= maxDepth else { return }
 
@@ -201,6 +265,14 @@ actor FileIndexerService {
                     if relativePath.hasPrefix(homePath) {
                         relativePath = "~" + relativePath.dropFirst(homePath.count)
                     }
+                    scannedPaths.insert(relativePath)
+                    // Skip unchanged files (incremental scan)
+                    if let existingModified = existingIndex[relativePath],
+                       let newModified = resourceValues?.contentModificationDate,
+                       let existing = existingModified,
+                       abs(existing.timeIntervalSince(newModified)) < 1.0 {
+                        continue
+                    }
                     let record = IndexedFileRecord(
                         path: relativePath,
                         filename: name,
@@ -230,7 +302,9 @@ actor FileIndexerService {
                     fm: fm,
                     batch: &batch,
                     totalFiles: &totalFiles,
-                    db: db
+                    db: db,
+                    existingIndex: existingIndex,
+                    scannedPaths: &scannedPaths
                 )
                 continue
             }
@@ -248,6 +322,15 @@ actor FileIndexerService {
             var relativePath = item.path
             if relativePath.hasPrefix(homePath) {
                 relativePath = "~" + relativePath.dropFirst(homePath.count)
+            }
+
+            scannedPaths.insert(relativePath)
+            // Skip unchanged files (incremental scan)
+            if let existingModified = existingIndex[relativePath],
+               let newModified = resourceValues?.contentModificationDate,
+               let existing = existingModified,
+               abs(existing.timeIntervalSince(newModified)) < 1.0 {
+                continue
             }
 
             let record = IndexedFileRecord(
@@ -276,12 +359,74 @@ actor FileIndexerService {
         do {
             try db.write { database in
                 for record in records {
-                    // Use INSERT OR IGNORE to skip duplicates (unique path constraint)
-                    try record.insert(database, onConflict: .ignore)
+                    // Upsert: insert new files, update metadata for existing ones
+                    try database.execute(
+                        sql: """
+                            INSERT INTO indexed_files (path, filename, fileExtension, fileType, sizeBytes, folder, depth, createdAt, modifiedAt, indexedAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(path) DO UPDATE SET
+                                sizeBytes = excluded.sizeBytes,
+                                modifiedAt = excluded.modifiedAt,
+                                indexedAt = excluded.indexedAt
+                            """,
+                        arguments: [
+                            record.path, record.filename, record.fileExtension,
+                            record.fileType, record.sizeBytes, record.folder,
+                            record.depth, record.createdAt, record.modifiedAt, record.indexedAt
+                        ]
+                    )
                 }
             }
         } catch {
             log("FileIndexer: Batch insert error: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Incremental Scan Helpers
+
+    /// Load all existing indexed file paths and their modifiedAt dates for O(1) lookup
+    private func loadExistingIndex(from db: DatabasePool) -> [String: Date?] {
+        do {
+            return try db.read { database in
+                var index: [String: Date?] = [:]
+                let rows = try Row.fetchAll(database, sql: "SELECT path, modifiedAt FROM indexed_files")
+                for row in rows {
+                    guard let path: String = row["path"] else { continue }
+                    let modifiedAt: Date? = row["modifiedAt"]
+                    index[path] = modifiedAt
+                }
+                return index
+            }
+        } catch {
+            log("FileIndexer: Failed to load existing index: \(error.localizedDescription)")
+            return [:]
+        }
+    }
+
+    /// Delete files from the index that no longer exist on disk
+    private func deleteRemovedFiles(scannedPaths: Set<String>, existingPaths: Set<String>, db: DatabasePool) {
+        let removed = existingPaths.subtracting(scannedPaths)
+        guard !removed.isEmpty else { return }
+
+        log("FileIndexer: Removing \(removed.count) deleted files from index")
+
+        let removedArray = Array(removed)
+        var offset = 0
+        while offset < removedArray.count {
+            let end = min(offset + 500, removedArray.count)
+            let chunk = Array(removedArray[offset..<end])
+            do {
+                try db.write { database in
+                    let placeholders = chunk.map { _ in "?" }.joined(separator: ", ")
+                    try database.execute(
+                        sql: "DELETE FROM indexed_files WHERE path IN (\(placeholders))",
+                        arguments: StatementArguments(chunk)
+                    )
+                }
+            } catch {
+                log("FileIndexer: Batch delete error: \(error.localizedDescription)")
+            }
+            offset = end
         }
     }
 

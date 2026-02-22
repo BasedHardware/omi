@@ -36,15 +36,15 @@ enum SidebarNavItem: Int, CaseIterable {
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
+        case .dashboard: return "house.fill"
         case .conversations: return "text.bubble.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
-        case .memories: return "brain.head.profile"
-        case .tasks: return "checkmark.square.fill"
+        case .memories: return "brain"
+        case .tasks: return "checklist"
         case .focus: return "eye.fill"
         case .advice: return "lightbulb.fill"
         case .rewind: return "clock.arrow.circlepath"
-        case .apps: return "square.grid.2x2.fill"
+        case .apps: return "puzzlepiece.fill"
         case .settings: return "gearshape.fill"
         case .permissions: return "exclamationmark.triangle.fill"
         case .device: return "wave.3.right.circle.fill"
@@ -217,7 +217,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        toggleMonitoring(enabled: !isMonitoring)
+                                        // Use combined state so toggle matches what's displayed
+                                        let isFullyOn = isMonitoring && appState.isTranscribing
+                                        toggleMonitoring(enabled: !isFullyOn)
                                     },
                                     showRewindIcon: true
                                 )
@@ -1086,6 +1088,11 @@ struct SidebarView: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             // Request both traditional TCC and ScreenCaptureKit permissions
@@ -1105,13 +1112,22 @@ struct SidebarView: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription to match (Rewind bundles both)
+        if enabled && !appState.isTranscribing {
+            appState.startTranscription()
+        } else if !enabled && appState.isTranscribing {
+            appState.stopTranscription()
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
-                        // Revert on failure
+                        // Revert on failure including persistent setting
                         isMonitoring = false
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -1125,7 +1141,13 @@ struct SidebarView: View {
     }
 
     private func syncMonitoringState() {
-        isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+        isMonitoring = pluginState
+        // Keep persistent setting in sync when monitoring stops due to errors
+        if !pluginState && screenAnalysisEnabled {
+            screenAnalysisEnabled = false
+            AssistantSettings.shared.screenAnalysisEnabled = false
+        }
     }
 
     // MARK: - Page Loading Helpers

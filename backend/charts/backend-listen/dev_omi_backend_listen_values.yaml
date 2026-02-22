@@ -129,7 +129,7 @@ env:
         name: dev-omi-backend-secrets
         key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
-    value: "10797"
+    value: "13151"
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -145,6 +145,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: WORKFLOW_API_KEY
+  - name: STT_SERVICE_MODELS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STT_SERVICE_MODELS
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -220,7 +225,10 @@ env:
   - name: DEEPGRAM_SELF_HOSTED_URL
     value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
-    value: "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ENCRYPTION_SECRET
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
     value: "1000000"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -237,6 +245,13 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

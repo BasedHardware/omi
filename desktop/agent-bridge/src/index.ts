@@ -16,7 +16,11 @@ const playwrightCli = join(__dirname, "..", "node_modules", "@playwright", "mcp"
 // --- Helpers ---
 
 function send(msg: OutboundMessage): void {
-  process.stdout.write(JSON.stringify(msg) + "\n");
+  try {
+    process.stdout.write(JSON.stringify(msg) + "\n");
+  } catch (err) {
+    logErr(`Failed to write to stdout: ${err}`);
+  }
 }
 
 function logErr(msg: string): void {
@@ -56,65 +60,66 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
   // Track pending tool calls so we can mark them completed on interrupt
   const pendingTools: string[] = [];
 
+  // Build options outside try so catch block can access them for resume retry
+  const mode = msg.mode ?? "act";
+  const isAskMode = mode === "ask";
+  setQueryMode(mode);
+  logErr(`Query mode: ${mode}`);
+
+  const readOnlyPlaywrightTools = [
+    "mcp__playwright__browser_snapshot",
+    "mcp__playwright__browser_take_screenshot",
+    "mcp__playwright__browser_console_messages",
+    "mcp__playwright__browser_network_requests",
+    "mcp__playwright__browser_tabs",
+    "mcp__playwright__browser_navigate",
+    "mcp__playwright__browser_navigate_back",
+    "mcp__playwright__browser_wait_for",
+    "mcp__playwright__browser_resize",
+  ];
+
+  const allowedTools = isAskMode
+    ? [
+        "Read", "Glob", "Grep", "WebSearch", "WebFetch",
+        "mcp__omi-tools__execute_sql",
+        "mcp__omi-tools__semantic_search",
+        ...readOnlyPlaywrightTools,
+      ]
+    : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
+
+  const playwrightArgs = [playwrightCli];
+  if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+    playwrightArgs.push("--extension");
+  }
+
+  const mcpServers: Record<string, unknown> = {
+    "omi-tools": omiServer,
+    "playwright": {
+      command: process.execPath,
+      args: playwrightArgs,
+    },
+  };
+
+  const options: Record<string, unknown> = {
+    model: msg.model || "claude-opus-4-6",
+    abortController,
+    systemPrompt: msg.systemPrompt,
+    allowedTools,
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: undefined,
+    cwd: msg.cwd || process.env.HOME || "/",
+    mcpServers,
+    includePartialMessages: true,
+  };
+
+  // Resume a previous SDK session (for task chat persistence)
+  if (msg.resume) {
+    options.resume = msg.resume;
+    logErr(`Resuming session: ${msg.resume}`);
+  }
+
   try {
-    // Each query is standalone — conversation history comes via systemPrompt
-    // This ensures cross-platform sync (mobile messages are included in context)
-    const mode = msg.mode ?? "act";
-    const isAskMode = mode === "ask";
-    setQueryMode(mode);
-    logErr(`Query mode: ${mode}`);
-
-    // In ask mode, only allow read-only built-in tools + read-only MCP tools
-    // MCP tools use the naming convention: mcp__<server>__<tool>
-    const readOnlyPlaywrightTools = [
-      "mcp__playwright__browser_snapshot",
-      "mcp__playwright__browser_take_screenshot",
-      "mcp__playwright__browser_console_messages",
-      "mcp__playwright__browser_network_requests",
-      "mcp__playwright__browser_tabs",
-      "mcp__playwright__browser_navigate",
-      "mcp__playwright__browser_navigate_back",
-      "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_resize",
-    ];
-
-    const allowedTools = isAskMode
-      ? [
-          "Read", "Glob", "Grep", "WebSearch", "WebFetch",
-          // OMI MCP tools (execute_sql is gated in omi-tools.ts to SELECT-only)
-          "mcp__omi-tools__execute_sql",
-          "mcp__omi-tools__semantic_search",
-          // Read-only Playwright tools
-          ...readOnlyPlaywrightTools,
-        ]
-      : ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"];
-
-    // Always include both MCP servers
-    const playwrightArgs = [playwrightCli];
-    if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
-      playwrightArgs.push("--extension");
-    }
-
-    const mcpServers: Record<string, unknown> = {
-      "omi-tools": omiServer,
-      "playwright": {
-        command: process.execPath,
-        args: playwrightArgs,
-      },
-    };
-
-    const options: Record<string, unknown> = {
-      model: msg.model || "claude-opus-4-6",
-      abortController,
-      systemPrompt: msg.systemPrompt,
-      allowedTools,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      maxTurns: undefined,
-      cwd: msg.cwd || process.env.HOME || "/",
-      mcpServers,
-      includePartialMessages: true,
-    };
 
     // Track tool_use block index → {id, name, inputChunks} for accumulating input_json_delta
     const blockTools: Map<number, { id: string; name: string; inputChunks: string[] }> = new Map();
@@ -153,6 +158,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
               blockTools.set(blockIndex, { id: toolUseId, name, inputChunks: [] });
             }
             send({ type: "tool_activity", name, status: "started", toolUseId });
+            logErr(`Tool started: ${name} (id=${toolUseId ?? "?"})`);
           }
 
           // Accumulate input_json_delta for tool blocks
@@ -186,6 +192,12 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
                     toolUseId: block.id,
                     input,
                   });
+                  // Log tool input summary for debugging
+                  const inputSummary = Object.entries(input).map(([k, v]) => {
+                    const val = typeof v === "string" ? (v.length > 100 ? v.slice(0, 100) + "…" : v) : JSON.stringify(v);
+                    return `${k}=${val}`;
+                  }).join(", ");
+                  logErr(`Tool input: ${block.name} (id=${block.id}) ${inputSummary}`);
                 } catch {
                   // Failed to parse accumulated input — skip
                 }
@@ -285,6 +297,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
                 }
                 // Mark tool as completed
                 send({ type: "tool_activity", name, status: "completed", toolUseId });
+                logErr(`Tool completed: ${name} (id=${toolUseId}) output=${output ? output.length + " chars" : "none"}`);
               }
             }
           }
@@ -337,6 +350,41 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       return;
     }
     const errMsg = err instanceof Error ? err.message : String(err);
+    // If resume was set, retry without it (session may have expired)
+    if (msg.resume && !fullText) {
+      logErr(`Query with resume failed (${errMsg}), retrying without resume`);
+      delete options.resume;
+      try {
+        const retryQ = query({ prompt: msg.prompt, options: options as any });
+        for await (const message of retryQ) {
+          if (abortController.signal.aborted) break;
+          if (message.type === "system" && "session_id" in message) {
+            sessionId = message.session_id as string;
+            send({ type: "init", sessionId });
+          } else if (message.type === "stream_event") {
+            const event = (message as any).event;
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              const text = event.delta.text as string;
+              fullText += text;
+              send({ type: "text_delta", text });
+            }
+          } else if (message.type === "result") {
+            const result = message as any;
+            if (result.subtype === "success") {
+              costUsd = result.total_cost_usd || 0;
+              if (!fullText && result.result) fullText = result.result;
+            }
+          }
+        }
+        send({ type: "result", text: fullText, sessionId, costUsd });
+        return;
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        logErr(`Retry without resume also failed: ${retryMsg}`);
+        send({ type: "error", message: retryMsg });
+        return;
+      }
+    }
     logErr(`Query error: ${errMsg}`);
     send({ type: "error", message: errMsg });
   } finally {
@@ -349,6 +397,30 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 // Prevent unhandled rejections from crashing the bridge process
 process.on("unhandledRejection", (reason) => {
   logErr(`Unhandled rejection: ${reason}`);
+});
+
+// Prevent uncaught exceptions from crashing the bridge process.
+// This catches unhandled 'error' events on Sockets (e.g. EPIPE on a child
+// process pipe when the Playwright MCP subprocess crashes during init).
+process.on("uncaughtException", (err) => {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "EPIPE" || code === "ERR_STREAM_DESTROYED") {
+    logErr(`Caught ${code} in uncaughtException (subprocess pipe closed)`);
+    return; // Swallow — the query will fail via the Agent SDK's own error path
+  }
+  logErr(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
+  // For non-pipe errors, send error to Swift and exit
+  send({ type: "error", message: `Uncaught: ${err.message}` });
+  process.exit(1);
+});
+
+// Handle stdout pipe errors (EPIPE = Swift closed its end of the pipe)
+process.stdout.on("error", (err) => {
+  if ((err as NodeJS.ErrnoException).code === "EPIPE") {
+    logErr("stdout pipe closed (parent process disconnected)");
+    process.exit(0);
+  }
+  logErr(`stdout error: ${err.message}`);
 });
 
 // --- Main: read JSON lines from stdin ---

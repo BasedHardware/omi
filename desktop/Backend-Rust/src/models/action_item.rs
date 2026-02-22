@@ -67,6 +67,12 @@ pub struct ActionItemDB {
     /// Whether this task was promoted from staged_tasks
     #[serde(default)]
     pub from_staged: Option<bool>,
+    /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
+    #[serde(default)]
+    pub recurrence_rule: Option<String>,
+    /// ID of original parent task in recurrence chain
+    #[serde(default)]
+    pub recurrence_parent_id: Option<String>,
 }
 
 /// Request body for updating an action item
@@ -90,6 +96,8 @@ pub struct UpdateActionItemRequest {
     pub sort_order: Option<i32>,
     /// Indent level (0-3)
     pub indent_level: Option<i32>,
+    /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly" (empty string = clear)
+    pub recurrence_rule: Option<String>,
 }
 
 /// Response for action item status operations
@@ -128,6 +136,10 @@ pub struct CreateActionItemRequest {
     pub category: Option<String>,
     /// Relevance score for prioritization
     pub relevance_score: Option<i32>,
+    /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
+    pub recurrence_rule: Option<String>,
+    /// ID of original parent task in recurrence chain
+    pub recurrence_parent_id: Option<String>,
 }
 
 /// Request body for sharing tasks

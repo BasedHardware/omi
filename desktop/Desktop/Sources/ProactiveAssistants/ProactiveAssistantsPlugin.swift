@@ -320,6 +320,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
 
         } catch {
+            log("ProactiveAssistantsPlugin: Failed to initialize assistants: \(error.localizedDescription)")
+            logError("ProactiveAssistantsPlugin: Assistant initialization failed", error: error)
             isStartingMonitoring = false
             completion(false, error.localizedDescription)
             return
@@ -426,6 +428,10 @@ public class ProactiveAssistantsPlugin: NSObject {
         currentWindowTitle = nil
         lastStatus = nil
         frameCount = 0
+
+        // Sync the persistent setting so the UI and auto-start stay in sync
+        AssistantSettings.shared.screenAnalysisEnabled = false
+        UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
 
         // Clear FocusStorage real-time state
         FocusStorage.shared.clearRealtimeStatus()
@@ -612,8 +618,12 @@ public class ProactiveAssistantsPlugin: NSObject {
                 frameCount += 1
                 let captureTime = Date()
 
-                // Encode JPEG once for assistants
-                if let jpegData = screenCaptureService.encodeJPEG(from: cgImage) {
+                // Encode JPEG off main actor — CGImageDestinationFinalize is CPU-heavy
+                let captureService = screenCaptureService
+                let jpegData = await Task.detached(priority: .userInitiated) {
+                    captureService.encodeJPEG(from: cgImage)
+                }.value
+                if let jpegData = jpegData {
                     let frame = CapturedFrame(
                         jpegData: jpegData,
                         appName: appName,

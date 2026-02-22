@@ -92,8 +92,9 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
+            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
             let records = try query
-                .order(Column("createdAt").desc)
+                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -233,8 +234,9 @@ actor ActionItemStorage {
                 }
             }
 
+            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
             let records = try query
-                .order(Column("createdAt").desc)
+                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -287,8 +289,9 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
+            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
             let records = try query
-                .order(Column("createdAt").desc)
+                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -538,14 +541,16 @@ actor ActionItemStorage {
                 if var existingRecord = try ActionItemRecord
                     .filter(Column("backendId") == item.id)
                     .fetchOne(database) {
-                    // Skip if local record is newer than incoming API data
-                    // This prevents auto-refresh from overwriting recent local changes
-                    // (e.g. toggling a task) with stale backend data.
-                    // Exception: during full sync, accept API data for records we locally
-                    // marked as "staged" since that was our guess and the API is the source of truth.
+                    // Skip if local record is newer than incoming API data AND the
+                    // local change is very recent (< 60s). This protects in-flight
+                    // optimistic updates (e.g. toggling a task) from being overwritten
+                    // by stale auto-refresh data. Beyond 60s, trust the API as source
+                    // of truth — this prevents failed optimistic updates from persisting
+                    // forever (e.g. user toggled on desktop but API call failed/app crashed).
                     let incomingTimestamp = item.updatedAt ?? item.createdAt
                     let isLocalStagedGuess = overrideStagedDeletions && existingRecord.deletedBy == "staged"
-                    if existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
+                    let isRecentLocalChange = Date().timeIntervalSince(existingRecord.updatedAt) < 60
+                    if isRecentLocalChange && existingRecord.updatedAt > incomingTimestamp && !isLocalStagedGuess {
                         skipped += 1
                         continue
                     }
@@ -590,14 +595,13 @@ actor ActionItemStorage {
     }
 
 
-    /// Mark incomplete tasks NOT present in the API response as staged (soft-deleted).
-    /// This cleans up tasks that were moved to staged_tasks on the backend
+    /// Hard-delete incomplete tasks NOT present in the API response.
+    /// This cleans up tasks that were moved to staged_tasks or deleted on the backend
     /// but still linger in local SQLite, preventing phantom entries in the task list.
     func markAbsentTasksAsStaged(apiIds: Set<String>) async throws {
         let db = try await ensureInitialized()
 
-        let marked = try await db.write { database -> Int in
-            // Find recent incomplete, non-deleted tasks whose backendId is NOT in the API set
+        let deleted = try await db.write { database -> Int in
             let records = try ActionItemRecord
                 .filter(Column("completed") == false)
                 .filter(Column("deleted") == false)
@@ -605,22 +609,55 @@ actor ActionItemStorage {
                 .fetchAll(database)
 
             var count = 0
-            for var record in records {
+            for record in records {
                 guard let backendId = record.backendId, !backendId.isEmpty else { continue }
                 if !apiIds.contains(backendId) {
-                    record.deleted = true
-                    record.deletedBy = "staged"
-                    record.updatedAt = Date()
-                    try record.update(database)
+                    try record.delete(database)
                     count += 1
                 }
             }
             return count
         }
 
-        if marked > 0 {
-            log("ActionItemStorage: Marked \(marked) absent tasks as staged")
+        if deleted > 0 {
+            log("ActionItemStorage: Hard-deleted \(deleted) absent tasks during full sync")
         }
+    }
+
+    /// Hard-delete local tasks whose backendId is NOT in the given API set.
+    /// Only targets synced records (backendSynced=true, backendId present) to avoid
+    /// deleting locally-created tasks that haven't been pushed yet.
+    /// Returns the number of records deleted.
+    func hardDeleteAbsentTasks(apiIds: Set<String>) async throws -> Int {
+        let db = try await ensureInitialized()
+
+        let deleted = try await db.write { database -> Int in
+            let records = try ActionItemRecord
+                .filter(Column("completed") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("backendId") != nil)
+                .filter(Column("backendSynced") == true)
+                .fetchAll(database)
+
+            var count = 0
+            for record in records {
+                guard let backendId = record.backendId, !backendId.isEmpty else { continue }
+                if !apiIds.contains(backendId) {
+                    try database.execute(
+                        sql: "DELETE FROM action_items WHERE id = ?",
+                        arguments: [record.id]
+                    )
+                    count += 1
+                }
+            }
+            return count
+        }
+
+        if deleted > 0 {
+            log("ActionItemStorage: hard-deleted \(deleted) absent tasks")
+        }
+
+        return deleted
     }
 
     /// Returns all active scored tasks for batch-syncing scores to backend
@@ -732,21 +769,19 @@ actor ActionItemStorage {
         }
     }
 
-    /// Soft delete an action item
+    /// Hard-delete an action item by local SQLite ID
     func deleteActionItem(id: Int64) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            guard var record = try ActionItemRecord.fetchOne(database, key: id) else {
+            guard let record = try ActionItemRecord.fetchOne(database, key: id) else {
                 throw ActionItemStorageError.recordNotFound
             }
 
-            record.deleted = true
-            record.updatedAt = Date()
-            try record.update(database)
+            try record.delete(database)
         }
 
-        log("ActionItemStorage: Soft deleted action item \(id)")
+        log("ActionItemStorage: Hard-deleted action item \(id)")
     }
 
     /// Optimistically update completion status locally (before API call)
@@ -775,7 +810,8 @@ actor ActionItemStorage {
         description: String? = nil,
         dueAt: Date? = nil,
         priority: String? = nil,
-        metadata: [String: Any]? = nil
+        metadata: [String: Any]? = nil,
+        recurrenceRule: String? = nil
     ) async throws {
         let db = try await ensureInitialized()
 
@@ -796,6 +832,9 @@ actor ActionItemStorage {
             }
             if let metadata = metadata {
                 record.setMetadata(metadata)
+            }
+            if let recurrenceRule = recurrenceRule {
+                record.recurrenceRule = recurrenceRule.isEmpty ? nil : recurrenceRule
             }
             record.updatedAt = Date()
             try record.update(database)
@@ -834,25 +873,36 @@ actor ActionItemStorage {
         log("ActionItemStorage: Undeleted action item with backendId \(backendId)")
     }
 
-    /// Soft delete an action item by backend ID
+    /// Purge all soft-deleted items from local SQLite (one-time cleanup during full sync)
+    func purgeAllSoftDeletedItems() async throws -> Int {
+        let db = try await ensureInitialized()
+
+        let count = try await db.write { database -> Int in
+            let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM action_items WHERE deleted = 1") ?? 0
+            if count > 0 {
+                try database.execute(sql: "DELETE FROM action_items WHERE deleted = 1")
+            }
+            return count
+        }
+
+        if count > 0 {
+            log("ActionItemStorage: Purged \(count) soft-deleted items from SQLite")
+        }
+        return count
+    }
+
+    /// Hard-delete an action item by backend ID
     func deleteActionItemByBackendId(_ backendId: String, deletedBy: String? = nil) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
-            if let deletedBy = deletedBy {
-                try database.execute(
-                    sql: "UPDATE action_items SET deleted = 1, deletedBy = ?, updatedAt = ? WHERE backendId = ?",
-                    arguments: [deletedBy, Date(), backendId]
-                )
-            } else {
-                try database.execute(
-                    sql: "UPDATE action_items SET deleted = 1, updatedAt = ? WHERE backendId = ?",
-                    arguments: [Date(), backendId]
-                )
-            }
+            try database.execute(
+                sql: "DELETE FROM action_items WHERE backendId = ?",
+                arguments: [backendId]
+            )
         }
 
-        log("ActionItemStorage: Soft deleted action item with backendId \(backendId) (by: \(deletedBy ?? "unknown"))")
+        log("ActionItemStorage: Hard-deleted action item with backendId \(backendId)")
     }
 
     // MARK: - FTS5 Search & Context Methods
@@ -1147,7 +1197,7 @@ actor ActionItemStorage {
                 .filter(Column("deleted") == false)
                 .filter(Column("completed") == false)
                 .filter(Column("source") != "manual")
-                .order(Column("createdAt").desc)
+                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit)
                 .fetchAll(database)
 

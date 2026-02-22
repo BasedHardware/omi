@@ -15,7 +15,10 @@ class AppleRemindersService {
 
   void _initBackgroundSyncHandler() {
     _channel.setMethodCallHandler((call) async {
-      if (call.method == 'markExported') {
+      if (call.method == 'markExportedBatch') {
+        final ids = (call.arguments['action_item_ids'] as List?)?.cast<String>() ?? [];
+        await Future.wait(ids.map(_markActionItemExported));
+      } else if (call.method == 'markExported') {
         final actionItemId = call.arguments['action_item_id'] as String?;
         if (actionItemId != null) {
           await _markActionItemExported(actionItemId);
@@ -34,6 +37,20 @@ class AppleRemindersService {
       );
     } catch (e) {
       Logger.debug('Error marking action item as exported: $e');
+    }
+  }
+
+  /// Trigger native sync from foreground when FCM data message is received.
+  /// Forwards the raw FCM data payload to the native side for processing,
+  /// then marks successfully created reminders as exported in the backend.
+  Future<void> triggerSyncFromFCM(Map<String, dynamic> data) async {
+    if (!isAvailable) return;
+    try {
+      final result = await _channel.invokeMethod('syncFromFCM', data);
+      final exportedIds = (result as List?)?.cast<String>() ?? [];
+      await Future.wait(exportedIds.map(_markActionItemExported));
+    } catch (e) {
+      Logger.debug('Error triggering sync from FCM: $e');
     }
   }
 

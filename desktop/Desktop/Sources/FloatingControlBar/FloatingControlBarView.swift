@@ -68,7 +68,7 @@ struct FloatingControlBarView: View {
             }
         }
         .background(DraggableAreaView(targetWindow: window))
-        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 11)
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 5)
     }
 
     private func openFloatingBarSettings() {
@@ -110,24 +110,11 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal icon shown when not hovering
+    /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
-        Group {
-            if let logoImage = NSImage(contentsOf: Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png")!) {
-                Image(nsImage: logoImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 12)
-                    .colorInvert()
-            } else {
-                Image(systemName: "waveform")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .frame(height: 22)
-        .padding(.horizontal, 8)
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.white.opacity(0.5))
+            .frame(width: 28, height: 4)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -223,7 +210,7 @@ struct FloatingControlBarView: View {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
                 onSendQuery(message, screenshot)
             },
@@ -247,10 +234,7 @@ struct FloatingControlBarView: View {
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            responseText: Binding(
-                get: { state.aiResponseText },
-                set: { state.aiResponseText = $0 }
-            ),
+            currentMessage: state.currentAIMessage,
             userInput: state.displayedQuery,
             chatHistory: state.chatHistory,
             isVoiceFollowUp: Binding(
@@ -265,16 +249,15 @@ struct FloatingControlBarView: View {
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
-                let currentResponse = state.aiResponseText
-                if !currentQuery.isEmpty && !currentResponse.isEmpty {
-                    state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
 
                 state.displayedQuery = message
                 let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
                 onSendQuery(message, screenshot)
             }

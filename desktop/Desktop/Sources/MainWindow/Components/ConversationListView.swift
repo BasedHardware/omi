@@ -146,13 +146,15 @@ struct ConversationListView: View {
     }
 
     private var conversationListContent: some View {
-        LazyVStack(alignment: .leading, spacing: 8) {
-            ForEach(groupedConversations, id: \.0) { group, convos in
+        let groups = groupedConversations
+        let firstGroup = groups.first?.0
+        return LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(groups, id: \.0) { group, convos in
                 // Date header
                 Text(group)
                     .scaledFont(size: 12, weight: .semibold)
                     .foregroundColor(OmiColors.textTertiary)
-                    .padding(.top, group == groupedConversations.first?.0 ? 0 : 16)
+                    .padding(.top, group == firstGroup ? 0 : 16)
                     .padding(.bottom, 8)
 
                 // Conversations in this group

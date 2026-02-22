@@ -1,6 +1,137 @@
 {
   "releases": [
     {
+      "version": "0.10.1",
+      "date": "2026-02-20",
+      "changes": [
+        "Claude Code mode: use your own Claude Pro/Max account for AI chat via ACP bridge",
+        "Dual bridge architecture: switch between Agent SDK and Claude Code in Settings",
+        "Task chat persistence: conversations saved locally and resume across app restarts",
+        "Claude authentication sheet for signing in with your Claude account",
+        "Staged release pipeline: updates progress through staging, beta, and stable channels",
+        "Update channel picker in Settings to opt into beta releases",
+        "Task chat uses independent bridge processes per task",
+        "Onboarding loading animation during file indexing",
+        "Resource monitor and agent sync reliability improvements",
+        "Fixed staging releases incorrectly updating the public download link"
+      ]
+    },
+    {
+      "version": "0.10.0",
+      "date": "2026-02-19",
+      "changes": [
+        "Claude Code mode: use your own Claude Pro/Max account for AI chat via ACP bridge",
+        "Dual bridge architecture: switch between Agent SDK and Claude Code in Settings",
+        "Task chat persistence: conversations saved locally and resume across app restarts",
+        "Claude authentication sheet for signing in with your Claude account",
+        "Staged release pipeline: updates progress through staging, beta, and stable channels",
+        "Update channel picker in Settings to opt into beta releases",
+        "Task chat uses independent bridge processes per task",
+        "Onboarding loading animation during file indexing",
+        "Resource monitor and agent sync reliability improvements"
+      ]
+    },
+    {
+      "version": "0.9.9",
+      "date": "2026-02-19",
+      "changes": [
+        "Fixed AI agent crash: bundled Node.js now signed with JIT entitlements for V8 under Hardened Runtime",
+        "Bundled Node.js: AI chat works out of the box on any Mac without Node.js installed",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "AI chat error messages shown in a banner instead of silently failing",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing with incremental scans that skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Sparkle update logs now persist even when the app terminates during an update",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.8",
+      "date": "2026-02-19",
+      "changes": [
+        "Fixed AI agent crash caused by JIT conflicts with code-signed Node.js binary",
+        "Bundled Node.js: AI chat works out of the box on any Mac without Node.js installed",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "AI chat error messages shown in a banner instead of silently failing",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing with incremental scans that skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.7",
+      "date": "2026-02-19",
+      "changes": [
+        "Rolled back due to agent crash"
+      ]
+    },
+    {
+      "version": "0.9.6",
+      "date": "2026-02-19",
+      "changes": [
+        "Bundled Node.js: AI chat now works out of the box on any Mac without Node.js installed",
+        "AI chat error messages: errors are now shown in a banner instead of silently failing",
+        "Fixed AI chat crash on macOS VMs and low-memory machines",
+        "Project workspace: set a project directory in Settings to use its CLAUDE.md and project-specific skills",
+        "Task chat: chat about specific tasks with scoped AI conversations",
+        "Space key toggles task completion, keyboard shortcuts prioritize selected task",
+        "Faster file indexing: incremental scans skip unchanged files",
+        "Follow-up messages sync to backend, preventing duplicate messages in chat",
+        "Memories deletion and undo now works correctly across filters and search results",
+        "Fixed Tasks page hang when switching to multi-select mode",
+        "Performance: mic capture, screenshots, battery checks, and date formatting moved off the main thread",
+        "Fixed broken-pipe crashes and eliminated noise from intentional cancellations in crash reporting"
+      ]
+    },
+    {
+      "version": "0.9.3",
+      "date": "2026-02-18",
+      "changes": [
+        "Browser extension setup: auto-detects Chrome installation and extension with live polling, clearer step-by-step flow",
+        "Grouped tool calls in chat: multi-step AI actions collapse into a single summary with progress indicator",
+        "Fixed chat scroll: messages now reliably stay pinned to bottom during streaming",
+        "Sleeker floating control bar: thinner, more minimal default appearance",
+        "Simplified onboarding: Bluetooth permission no longer required during setup",
+        "Screen analysis toggle fix: setting now stays in sync with actual monitoring state across restarts",
+        "AI profile save retries: file indexing insights saved reliably with automatic retry on failure",
+        "Rewind database session safety: prevents stale sign-out tasks from closing freshly opened databases",
+        "Stop button shows spinner while processing stop request",
+        "Settings analytics: tracking added to all major settings sections for usage insights"
+      ]
+    },
+    {
+      "version": "0.9.2",
+      "date": "2026-02-18",
+      "changes": [
+        "File indexing onboarding: Omi scans your folders to understand what you work on, then opens an AI chat to explore your files",
+        "Transcription auto-restart: audio monitoring resumes automatically after your Mac wakes from sleep",
+        "Notification self-repair: detects and fixes silently revoked notification permissions on macOS 26+",
+        "Reliable task sync: deleted tasks now properly disappear, reconciliation runs when switching to Tasks tab",
+        "Task sort order matches mobile: consistent due_at/created_at ordering across platforms",
+        "Old tasks hidden: incomplete tasks older than 7 days are excluded from the task list",
+        "Goals widget improvements: tooltips on buttons, drag clamping fix, manual goals never auto-removed, AI generation opt-in",
+        "Chat input rewritten: fixed cursor misalignment with native NSTextView, typing indicator works during tool calls",
+        "Refreshed sidebar icons and fixed Rewind toggle to control both screen and audio together",
+        "User names loaded from backend profile, fixing blank names for Apple Sign-In users",
+        "Rewind arrow key navigation corrected: left=newer, right=older",
+        "Floating control bar hover flicker fix",
+        "Compact view is now the default for Conversations",
+        "Reduced Crisp support chat polling from 30s to 2min with session caching",
+        "AI profile generation uses fewer tokens (5 recent profiles instead of 50)",
+        "Proactive assistant backpressure: drops frames during slow analysis instead of queuing"
+      ]
+    },
+    {
       "version": "0.9.1",
       "date": "2026-02-17",
       "changes": [

@@ -58,6 +58,11 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            GOOGLE_CLOUD_PROJECT=based-hardware
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -66,6 +71,11 @@ jobs:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            GOOGLE_CLOUD_PROJECT=based-hardware
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Connect to GKE cluster
         run: |
@@ -74,9 +84,15 @@ jobs:
           sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
           gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
       - name: Deploy ${{ env.SERVICE }}-listen to GKE
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
+            ${{ vars.ENV }}-omi-backend-listen \
+            ./backend/charts/backend-listen \
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -85,6 +101,11 @@ jobs:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            GOOGLE_CLOUD_PROJECT=based-hardware
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Show Output
         run: echo "Backend deployed to development environment"

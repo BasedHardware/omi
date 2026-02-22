@@ -28,6 +28,10 @@ actor RewindDatabase {
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
 
+    /// Monotonic counter incremented by configure(). Used by closeIfStale() to detect
+    /// whether a new sign-in session has started since the close was requested.
+    nonisolated(unsafe) static var configureGeneration: Int = 0
+
     /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
     /// When this hits the threshold, we close the database so the next initialize() attempt
     /// goes through the full recovery path (WAL cleanup, corruption detection, fresh DB).
@@ -82,7 +86,18 @@ actor RewindDatabase {
         let resolvedId = (userId?.isEmpty == false) ? userId! : "anonymous"
         configuredUserId = resolvedId
         RewindDatabase.currentUserId = resolvedId
-        log("RewindDatabase: Configured for user \(resolvedId)")
+        RewindDatabase.configureGeneration += 1
+        log("RewindDatabase: Configured for user \(resolvedId) (generation \(RewindDatabase.configureGeneration))")
+    }
+
+    /// Close the database only if no new session has started (configure() not called since).
+    /// Prevents a stale sign-out Task from closing a freshly opened database.
+    func closeIfStale(generation: Int) {
+        guard generation == RewindDatabase.configureGeneration else {
+            log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
+            return
+        }
+        close()
     }
 
     /// Close the database, allowing re-initialization for a different user.
@@ -1993,6 +2008,77 @@ actor RewindDatabase {
             try db.create(index: "idx_indexed_files_folder", on: "indexed_files", columns: ["folder"])
             try db.create(index: "idx_indexed_files_ext", on: "indexed_files", columns: ["fileExtension"])
             try db.create(index: "idx_indexed_files_modified", on: "indexed_files", columns: ["modifiedAt"])
+        }
+
+        migrator.registerMigration("createTaskChatMessages") { db in
+            try db.create(table: "task_chat_messages") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("taskId", .text).notNull()          // action_items backendId
+                t.column("acpSessionId", .text)               // ACP session for resume
+                t.column("messageId", .text).notNull()        // UUID from ChatMessage.id
+                t.column("sender", .text).notNull()           // "user" or "ai"
+                t.column("messageText", .text).notNull()
+                t.column("contentBlocksJson", .text)          // JSON-encoded ChatContentBlock array
+                t.column("embedding", .blob)                  // 3072 Float32s for vector search
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.column("backendSynced", .boolean).notNull().defaults(to: false)
+                t.column("backendMessageId", .text)           // Server-side message ID
+            }
+
+            // Indexes for common queries
+            try db.create(index: "idx_task_chat_messages_taskId", on: "task_chat_messages", columns: ["taskId"])
+            try db.create(index: "idx_task_chat_messages_messageId", on: "task_chat_messages", columns: ["messageId"], unique: true)
+            try db.create(index: "idx_task_chat_messages_created", on: "task_chat_messages", columns: ["taskId", "createdAt"])
+            // Partial index for unsynced messages (future backend sync)
+            try db.execute(sql: """
+                CREATE INDEX idx_task_chat_messages_unsynced
+                ON task_chat_messages (taskId)
+                WHERE backendSynced = 0
+            """)
+            // Partial index for embedding search
+            try db.execute(sql: """
+                CREATE INDEX idx_task_chat_messages_embedding
+                ON task_chat_messages (taskId)
+                WHERE embedding IS NOT NULL
+            """)
+
+            // FTS5 for full-text search over messages
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE task_chat_messages_fts USING fts5(
+                    messageText,
+                    content='task_chat_messages',
+                    content_rowid='id'
+                )
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_ai AFTER INSERT ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(rowid, messageText)
+                    VALUES (new.id, new.messageText);
+                END
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_ad AFTER DELETE ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(task_chat_messages_fts, rowid, messageText)
+                    VALUES ('delete', old.id, old.messageText);
+                END
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_au AFTER UPDATE ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(task_chat_messages_fts, rowid, messageText)
+                    VALUES ('delete', old.id, old.messageText);
+                    INSERT INTO task_chat_messages_fts(rowid, messageText)
+                    VALUES (new.id, new.messageText);
+                END
+            """)
+        }
+
+        migrator.registerMigration("addActionItemRecurrence") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceRule TEXT")
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
         }
 
         try migrator.migrate(queue)

@@ -15,6 +15,7 @@ struct DesktopHomeView: View {
     // Settings sidebar state
     @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
     @State private var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection? = nil
+    @State private var highlightedSettingId: String? = nil
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
@@ -97,6 +98,11 @@ struct DesktopHomeView: View {
                                         log("DesktopHomeView: Screen analysis started")
                                     } else {
                                         log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown")")
+                                        // Revert persistent setting so UI reflects actual state
+                                        DispatchQueue.main.async {
+                                            AssistantSettings.shared.screenAnalysisEnabled = false
+                                            UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
+                                        }
                                     }
                                 }
                             } else {
@@ -135,6 +141,29 @@ struct DesktopHomeView: View {
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
                             Task { await appState.refreshConversations() }
+                        }
+                        // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
+                        // hasCompletedOnboarding must be set here (in a View) because @AppStorage
+                        // on ObservableObject caches internally and ignores UserDefaults.removeObject().
+                        // Stopping transcription here prevents FOREIGN KEY errors from an old
+                        // transcription session writing to a new user's database.
+                        .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+                            log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
+                            appState.hasCompletedOnboarding = false
+                            appState.stopTranscription()
+                        }
+                        // Periodic file re-scan (every 3 hours)
+                        .task {
+                            while !Task.isCancelled {
+                                try? await Task.sleep(for: .seconds(3 * 60 * 60))
+                                guard !Task.isCancelled else { break }
+                                guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { continue }
+                                log("DesktopHomeView: Triggering background file rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
+                            showFileIndexingSheet = true
                         }
                         .dismissableSheet(isPresented: $showFileIndexingSheet) {
                             FileIndexingView(
@@ -254,6 +283,7 @@ struct DesktopHomeView: View {
                     SettingsSidebar(
                         selectedSection: $selectedSettingsSection,
                         selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        highlightedSettingId: $highlightedSettingId,
                         onBack: {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 selectedIndex = previousIndexBeforeSettings
@@ -284,6 +314,7 @@ struct DesktopHomeView: View {
                     viewModelContainer: viewModelContainer,
                     selectedSettingsSection: $selectedSettingsSection,
                     selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    highlightedSettingId: $highlightedSettingId,
                     selectedTabIndex: $selectedIndex
                 )
                 .id(selectedIndex)
@@ -344,6 +375,11 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.chat.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.tasks.rawValue
+            }
+        }
         .onChange(of: selectedIndex) { oldValue, newValue in
             // Track the previous index when navigating to settings
             if newValue == SidebarNavItem.settings.rawValue && oldValue != SidebarNavItem.settings.rawValue {
@@ -367,6 +403,7 @@ private struct PageContentView: View {
     let viewModelContainer: ViewModelContainer
     @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
     @Binding var selectedTabIndex: Int
 
     var body: some View {
@@ -396,6 +433,7 @@ private struct PageContentView: View {
                     appState: appState,
                     selectedSection: $selectedSettingsSection,
                     selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    highlightedSettingId: $highlightedSettingId,
                     chatProvider: viewModelContainer.chatProvider
                 )
             case 10:

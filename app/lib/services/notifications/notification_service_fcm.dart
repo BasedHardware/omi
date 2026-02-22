@@ -17,6 +17,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
+import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -226,7 +227,10 @@ class _FCMNotificationService implements NotificationInterface {
 
         // Handle action item data messages
         final messageType = data['type'];
-        if (messageType == 'action_item_reminder') {
+        if (messageType == 'apple_reminders_sync') {
+          AppleRemindersService().triggerSyncFromFCM(data);
+          return;
+        } else if (messageType == 'action_item_reminder') {
           ActionItemNotificationHandler.handleReminderMessage(data, channel.channelKey!);
           return;
         } else if (messageType == 'action_item_update') {

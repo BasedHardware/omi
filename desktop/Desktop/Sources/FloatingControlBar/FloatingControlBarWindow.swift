@@ -6,8 +6,8 @@ import SwiftUI
 class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private static let positionKey = "FloatingControlBarPosition"
     private static let sizeKey = "FloatingControlBarSize"
-    private static let defaultSize = NSSize(width: 52, height: 22)
-    private static let minBarSize = NSSize(width: 52, height: 22)
+    private static let defaultSize = NSSize(width: 40, height: 10)
+    private static let minBarSize = NSSize(width: 40, height: 10)
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
@@ -177,8 +177,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
         // Small delay to let the window disappear before capture
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            let url = ScreenCaptureManager.captureScreen()
-            self?.state.screenshotURL = url
+            // Capture screenshot off main thread — PNG encoding + file write can block
+            Task.detached {
+                let url = ScreenCaptureManager.captureScreen()
+                await MainActor.run {
+                    self?.state.screenshotURL = url
+                }
+            }
 
             if wasVisible {
                 self?.orderFront(nil)
@@ -230,7 +235,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
-            state.aiResponseText = ""
+            state.currentAIMessage = nil
             state.screenshotURL = nil
             state.chatHistory = []
             state.isVoiceFollowUp = false
@@ -304,13 +309,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.showingAIResponse = false
             state.isAILoading = false
             state.aiInputText = ""
-            state.aiResponseText = ""
+            state.currentAIMessage = nil
             // Match the explicit resize height so the observer doesn't immediately override it
             state.inputViewHeight = 120
         }
         setupInputHeightObserver()
 
-        // Make the window key so the ResizableTextEditor's focusOnAppear can take effect.
+        // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
         // The text editor itself handles focusing via updateNSView once it's in the window.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             self?.makeKeyAndOrderFront(nil)
@@ -454,13 +459,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
+        resizeWorkItem = nil
 
         let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
 
-        // Dispatch async to avoid blocking SwiftUI body evaluation with a synchronous
-        // window server round-trip (setFrame). Cancellable via resizeWorkItem so rapid
-        // hover in/out doesn't queue stale resizes. (OMI-COMPUTER-1PT)
-        resizeWorkItem = DispatchWorkItem { [weak self] in
+        let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             let newOrigin = NSPoint(
                 x: self.frame.midX - targetSize.width / 2,
@@ -468,12 +471,24 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             )
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
-            // Non-animated setFrame avoids race between window-server animation and
-            // NSTrackingArea updates that causes hover flicker. SwiftUI handles the visual transition.
             self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
             self.isResizingProgrammatically = false
         }
-        DispatchQueue.main.async(execute: resizeWorkItem!)
+
+        if expanded {
+            // Expand synchronously so the window is already large enough when
+            // SwiftUI re-evaluates body with isHovering=true. If this were async,
+            // the 50px expanded content renders in the still-22px window, causing
+            // the tracking area to invalidate and trigger immediate unhover — producing
+            // a flicker loop when hovering from the top or bottom edge.
+            doResize()
+        } else {
+            // Collapse async to avoid blocking SwiftUI body evaluation during unhover.
+            // Cancellable via resizeWorkItem so rapid hover in/out doesn't queue stale
+            // resizes. (OMI-COMPUTER-1PT)
+            resizeWorkItem = DispatchWorkItem(block: doResize)
+            DispatchQueue.main.async(execute: resizeWorkItem!)
+        }
     }
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
@@ -521,6 +536,13 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
     /// fully visible on any screen.
     private func validatePositionOnScreenChange() {
+        // Non-draggable mode: always restore to default position on screen change
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            log("FloatingControlBarWindow: non-draggable mode, re-centering after monitor change")
+            centerOnMainScreen()
+            return
+        }
+
         let barFrame = self.frame
         // Check if the bar's center point is on any visible screen
         let center = NSPoint(x: barFrame.midX, y: barFrame.midY)
@@ -742,7 +764,7 @@ class FloatingControlBarManager {
         window.state.showingAIConversation = false
         window.state.showingAIResponse = false
         window.state.aiInputText = ""
-        window.state.aiResponseText = ""
+        window.state.currentAIMessage = nil
         window.state.screenshotURL = nil
         window.state.chatHistory = []
         window.state.isVoiceFollowUp = false
@@ -773,7 +795,7 @@ class FloatingControlBarManager {
         window.state.isAILoading = true
         window.state.aiInputText = query
         window.state.displayedQuery = query
-        window.state.aiResponseText = ""
+        window.state.currentAIMessage = nil
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
 
@@ -793,9 +815,8 @@ class FloatingControlBarManager {
 
         // Archive current exchange
         let currentQuery = window.state.displayedQuery
-        let currentResponse = window.state.aiResponseText
-        if !currentQuery.isEmpty && !currentResponse.isEmpty {
-            window.state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+        if let currentMessage = window.state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+            window.state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
         }
 
         // Cancel existing streaming response if still in progress
@@ -804,7 +825,7 @@ class FloatingControlBarManager {
 
         // Set up new query
         window.state.displayedQuery = query
-        window.state.aiResponseText = ""
+        window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
         let screenshot = window.state.screenshotURL
@@ -834,7 +855,7 @@ class FloatingControlBarManager {
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
-        barWindow.state.aiResponseText = ""
+        barWindow.state.currentAIMessage = nil
         barWindow.state.isAILoading = true
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
@@ -843,9 +864,11 @@ class FloatingControlBarManager {
                 guard messages.count > messageCountBefore,
                       let aiMessage = messages.last,
                       aiMessage.sender == .ai else { return }
+
+                // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
+                barWindow?.state.currentAIMessage = aiMessage
+
                 if aiMessage.isStreaming {
-                    barWindow?.updateAIResponse(type: "data", text: "")
-                    barWindow?.state.aiResponseText = aiMessage.text
                     barWindow?.state.isAILoading = false
                     if let barWindow = barWindow, !barWindow.state.showingAIResponse {
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -854,7 +877,6 @@ class FloatingControlBarManager {
                         barWindow.resizeToResponseHeightPublic(animated: true)
                     }
                 } else {
-                    barWindow?.state.aiResponseText = aiMessage.text
                     barWindow?.state.isAILoading = false
                 }
             }
@@ -867,11 +889,29 @@ class FloatingControlBarManager {
 
         await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel)
 
-        // Handle errors: if sendMessage completed but no response was delivered to the bar,
-        // something went wrong (bridge error, session creation failed, etc.)
-        if barWindow.state.aiResponseText.isEmpty {
-            barWindow.state.isAILoading = false
-            barWindow.state.aiResponseText = provider.errorMessage ?? "Failed to get a response. Please try again."
+        // Handle errors after sendMessage completes
+        barWindow.state.isAILoading = false
+
+        if let errorText = provider.errorMessage {
+            // Provider reported an error (timeout, bridge crash, etc.)
+            // Show it even if there's partial content — append to existing or create new message
+            if barWindow.state.currentAIMessage != nil && !barWindow.state.aiResponseText.isEmpty {
+                barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
+            } else {
+                barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
+            }
+        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
+            // No error message and no response — something else went wrong
+            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+        }
+
+        // Ensure the response view is visible and resized (handles the case where
+        // the sink never fired because no streaming data arrived before the error)
+        if !barWindow.state.showingAIResponse {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                barWindow.state.showingAIResponse = true
+            }
+            barWindow.resizeToResponseHeightPublic(animated: true)
         }
     }
 }

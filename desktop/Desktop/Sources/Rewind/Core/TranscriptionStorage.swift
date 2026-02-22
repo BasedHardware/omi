@@ -459,7 +459,7 @@ actor TranscriptionStorage {
                 // Skip if local record is newer than the conversation's latest timestamp.
                 // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.)
                 let serverTimestamp = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
-                if existingSession.updatedAt > serverTimestamp {
+                if existingSession.updatedAt >= serverTimestamp {
                     guard let sessionId = existingSession.id else {
                         throw TranscriptionStorageError.invalidState("Session ID is nil")
                     }
