@@ -11,14 +11,13 @@ Modes (VAD_GATE_MODE env var):
   active — VAD gates audio: silence skipped, KeepAlive sent instead
 """
 
-import audioop
+import hashlib
 import logging
 import os
 import threading
-import time
 from bisect import bisect_right
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Tuple
 
@@ -40,12 +39,16 @@ def is_gate_enabled() -> bool:
 
 
 def should_gate_session(uid: str) -> bool:
-    """Determine if this session should be gated based on rollout percentage."""
+    """Determine if this session should be gated based on rollout percentage.
+
+    Uses MD5 for stable hashing across processes (Python hash() is randomized).
+    """
     if not is_gate_enabled():
         return False
     if VAD_GATE_ROLLOUT_PCT >= 100:
         return True
-    return (hash(uid) % 100) < VAD_GATE_ROLLOUT_PCT
+    digest = hashlib.md5(uid.encode()).hexdigest()
+    return (int(digest[:8], 16) % 100) < VAD_GATE_ROLLOUT_PCT
 
 
 # ---------------------------------------------------------------------------
@@ -54,24 +57,32 @@ def should_gate_session(uid: str) -> bool:
 _vad_model = None
 _vad_utils = None
 _vad_model_lock = threading.Lock()
+_vad_init_lock = threading.Lock()
 
 
 def _ensure_vad_model():
-    """Lazy-load Silero VAD model (reuses the one from vad.py if already loaded)."""
+    """Lazy-load Silero VAD model (reuses the one from vad.py if already loaded).
+
+    Double-checked locking to prevent concurrent initialization.
+    """
     global _vad_model, _vad_utils
     if _vad_model is not None:
         return
-    try:
-        from utils.stt.vad import model as existing_model, VADIterator
+    with _vad_init_lock:
+        if _vad_model is not None:
+            return
+        try:
+            # Reuse model already loaded by vad.py
+            from utils.stt.vad import model as existing_model, VADIterator
 
-        _vad_model = existing_model
-        _vad_utils = {'VADIterator': VADIterator}
-    except ImportError:
-        import torch
+            _vad_model = existing_model
+            _vad_utils = {'VADIterator': VADIterator}
+        except ImportError:
+            import torch
 
-        torch.set_num_threads(1)
-        _vad_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-        _vad_utils = {'VADIterator': utils[3]}
+            torch.set_num_threads(1)
+            _vad_model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+            _vad_utils = {'VADIterator': utils[3]}
 
 
 def create_vad_iterator(sample_rate: int = 16000):
@@ -150,6 +161,10 @@ class DgWallMapper:
 class VADStreamingGate:
     """Per-session VAD gate that decides whether to send audio to DG.
 
+    Uses Silero VAD model's speech probability (not start/end events) for
+    robust per-chunk speech detection. Buffers VAD input samples to handle
+    chunk sizes smaller than the VAD window (e.g. 30ms at 8kHz = 240 < 256).
+
     Args:
         sample_rate: Input audio sample rate (Hz)
         channels: Number of audio channels
@@ -172,12 +187,12 @@ class VADStreamingGate:
         self.uid = uid
         self.session_id = session_id
 
-        # VAD setup
-        self._vad_sample_rate = 16000 if sample_rate not in (8000, 16000) else sample_rate
+        # VAD setup — always resample to 16kHz for best accuracy
+        self._vad_sample_rate = 16000
         self._vad_iterator = create_vad_iterator(self._vad_sample_rate)
-        # Use 256 samples at 16kHz (16ms) to handle 30ms chunks (480 samples)
-        # Silero supports 256 and 512 sample windows
-        self._vad_window_samples = 256
+        self._vad_window_samples = 512  # Silero recommended for 16kHz
+        self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
+        self._speech_threshold = 0.5  # Probability threshold for speech
         self._ratecv_state = None  # for resampling
 
         # State machine
@@ -201,33 +216,55 @@ class VADStreamingGate:
         self._finalize_count = 0
         self._first_audio_wall_time: Optional[float] = None
 
-    def _convert_for_vad(self, pcm_data: bytes) -> bytes:
-        """Convert audio to format suitable for VAD (mono, correct sample rate)."""
+    def _convert_for_vad(self, pcm_data: bytes) -> np.ndarray:
+        """Convert audio to float32 at 16kHz mono for VAD."""
+        # Convert to mono if stereo
         data = pcm_data
         if self.channels == 2:
+            import audioop
+
             data = audioop.tomono(data, 2, 0.5, 0.5)
+
+        data_int16 = np.frombuffer(data, dtype=np.int16)
+
+        # Resample to 16kHz if needed
         if self.sample_rate != self._vad_sample_rate:
-            data, self._ratecv_state = audioop.ratecv(
-                data, 2, 1, self.sample_rate, self._vad_sample_rate, self._ratecv_state
-            )
-        return data
+            # Simple linear interpolation resampling
+            ratio = self._vad_sample_rate / self.sample_rate
+            n_out = int(len(data_int16) * ratio)
+            indices = np.linspace(0, len(data_int16) - 1, n_out)
+            data_int16 = np.interp(indices, np.arange(len(data_int16)), data_int16.astype(np.float64)).astype(np.int16)
+
+        return data_int16.astype(np.float32) / 32768.0
 
     def _run_vad(self, pcm_data: bytes) -> bool:
-        """Run Silero VAD on audio chunk. Returns True if speech detected."""
-        vad_data = self._convert_for_vad(pcm_data)
-        data_int16 = np.frombuffer(vad_data, dtype=np.int16)
-        data_float32 = data_int16.astype(np.float32) / 32768.0
+        """Run Silero VAD on audio chunk. Returns True if speech detected.
+
+        Uses the model's __call__ directly for per-chunk speech probability
+        instead of VADIterator's start/end event mode. This gives a continuous
+        speech/silence signal suitable for gating.
+
+        Buffers samples across chunks to handle cases where chunk size < window size.
+        """
+        float_data = self._convert_for_vad(pcm_data)
+
+        # Append to buffer
+        self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
 
         speech_detected = False
         with _vad_model_lock:
-            for i in range(0, len(data_float32), self._vad_window_samples):
-                chunk = data_float32[i : i + self._vad_window_samples]
-                if len(chunk) < self._vad_window_samples:
-                    break
-                result = self._vad_iterator(chunk, return_seconds=False)
+            # Process all complete windows in buffer
+            while len(self._vad_buffer) >= self._vad_window_samples:
+                window = self._vad_buffer[: self._vad_window_samples]
+                self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
+
+                result = self._vad_iterator(window, return_seconds=False)
                 if result:
                     speech_detected = True
-                    break
+
+        # Keep buffer bounded (max 1 window of leftover)
+        if len(self._vad_buffer) > self._vad_window_samples:
+            self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
         return speech_detected
 

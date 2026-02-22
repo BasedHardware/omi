@@ -92,15 +92,26 @@ class TestVADStreamingGate:
         assert not out.should_finalize
 
     def test_speech_continues_sending(self):
-        """During continuous speech, all audio should be sent."""
+        """During continuous speech, all audio should be sent (via pre-roll + direct).
+
+        Note: First chunk may buffer in VAD (480 samples < 512 window), so speech
+        detection triggers on chunk 2. Pre-roll then sends chunk 1+2 together.
+        Total audio sent must equal total audio input.
+        """
         gate = self._make_gate()
         _set_vad_speech(True)
         t = time.time()
 
+        total_sent = b''
+        total_input = b''
         for i in range(10):
             chunk = _make_pcm(30)
+            total_input += chunk
             out = gate.process_audio(chunk, t + i * 0.03)
-            assert out.audio_to_send == chunk
+            total_sent += out.audio_to_send
+
+        # All audio accounted for (pre-roll captures early chunks, sends on detection)
+        assert len(total_sent) == len(total_input)
 
     def test_hangover_then_finalize(self):
         """After speech ends, hangover sends audio, then finalize on silence."""
@@ -151,6 +162,25 @@ class TestVADStreamingGate:
         assert out.state == GateState.SPEECH
         assert not out.should_finalize
         assert out.audio_to_send != b''
+
+    def test_8khz_speech_detection(self):
+        """VAD should detect speech at 8kHz via resampling to 16kHz."""
+        gate = self._make_gate(sample_rate=8000)
+        t = time.time()
+
+        # Feed silence, then speech at 8kHz (30ms = 240 samples, resampled to 480)
+        _set_vad_speech(False)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30, sample_rate=8000), t + i * 0.03)
+
+        _set_vad_speech(True)
+        # Need multiple chunks for buffer to fill (240→480 resampled, window=512)
+        total_sent = b''
+        for i in range(5):
+            out = gate.process_audio(_make_pcm(30, sample_rate=8000), t + 0.15 + i * 0.03)
+            total_sent += out.audio_to_send
+
+        assert len(total_sent) > 0, "8kHz speech should be detected after buffer fills"
 
     def test_shadow_mode_sends_all_audio(self):
         """Shadow mode should always send all audio regardless of VAD."""
