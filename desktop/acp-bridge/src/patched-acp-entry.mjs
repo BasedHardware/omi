@@ -12,7 +12,7 @@ console.info = console.error;
 console.warn = console.error;
 console.debug = console.error;
 
-import { ClaudeAcpAgent, runAcp } from "@zed-industries/claude-code-acp/dist/acp-agent.js";
+import { ClaudeAcpAgent, runAcp } from "@zed-industries/claude-agent-acp/dist/acp-agent.js";
 
 // Patch newSession to pass model via setModel() after session creation
 const originalNewSession = ClaudeAcpAgent.prototype.newSession;
