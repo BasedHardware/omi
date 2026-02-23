@@ -24,17 +24,7 @@ ClaudeAcpAgent.prototype.newSession = async function (params) {
 
   const session = this.sessions?.[result.sessionId];
 
-  // Patch 1: Set model if requested
-  if (params.model && session?.query?.setModel) {
-    try {
-      await session.query.setModel(params.model);
-      console.error(`[patched-acp] Model set to: ${params.model}`);
-    } catch (err) {
-      console.error(`[patched-acp] setModel failed: ${err}`);
-    }
-  }
-
-  // Patch 2: Wrap query.next() to intercept SDKResultSuccess and capture cost/usage.
+  // Wrap query.next() to intercept SDKResultSuccess and capture cost/usage.
   // The SDK result message has total_cost_usd and usage (input_tokens, output_tokens, etc.)
   // but acp-agent.js drops them and only returns { stopReason }. We capture them here
   // so that our patched prompt() can attach them to the response.
@@ -44,16 +34,11 @@ ClaudeAcpAgent.prototype.newSession = async function (params) {
       const item = await originalNext(...args);
       if (
         item.value?.type === "result" &&
-        item.value?.subtype === "success" &&
-        item.value?.total_cost_usd !== undefined
+        item.value?.subtype === "success"
       ) {
         session._lastCostUsd = item.value.total_cost_usd;
         session._lastUsage = item.value.usage;
-        console.error(
-          `[patched-acp] Captured: cost=$${item.value.total_cost_usd}, ` +
-          `input=${item.value.usage?.input_tokens ?? "?"}, ` +
-          `output=${item.value.usage?.output_tokens ?? "?"} tokens`
-        );
+        session._lastModelUsage = item.value.modelUsage;
       }
       return item;
     };
@@ -69,26 +54,39 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
   const result = await originalPrompt.call(this, params);
 
   const session = this.sessions?.[params.sessionId];
-  if (session?._lastCostUsd !== undefined && session?._lastUsage !== undefined) {
-    const sdkUsage = session._lastUsage;
-    const inputTokens = sdkUsage.input_tokens ?? 0;
-    const outputTokens = sdkUsage.output_tokens ?? 0;
+  if (session?._lastCostUsd !== undefined) {
+    // usage fields are snake_case (raw Anthropic API format)
+    const u = session._lastUsage ?? {};
+    const inputTokens = u.input_tokens ?? 0;
+    const outputTokens = u.output_tokens ?? 0;
+    const cacheRead = u.cache_read_input_tokens ?? 0;
+    const cacheWrite = u.cache_creation_input_tokens ?? 0;
+    const costUsd = session._lastCostUsd;
+
+    // Total = new input + cache writes + cache reads + output
+    const totalTokens = inputTokens + cacheWrite + cacheRead + outputTokens;
+
+    console.error(
+      `[patched-acp] Usage: cost=$${costUsd}, ` +
+      `input=${inputTokens}, output=${outputTokens}, ` +
+      `cacheWrite=${cacheWrite}, cacheRead=${cacheRead}, ` +
+      `total=${totalTokens}`
+    );
+
     const augmented = {
       ...result,
-      // ACP PromptResponse.usage (experimental field, matches ACP Usage type)
       usage: {
         inputTokens,
         outputTokens,
-        cachedReadTokens: sdkUsage.cache_read_input_tokens ?? null,
-        cachedWriteTokens: sdkUsage.cache_creation_input_tokens ?? null,
-        totalTokens: inputTokens + outputTokens,
+        cachedReadTokens: cacheRead,
+        cachedWriteTokens: cacheWrite,
+        totalTokens,
       },
-      // Pass cost via _meta since PromptResponse has no cost field
-      _meta: { costUsd: session._lastCostUsd },
+      _meta: { costUsd },
     };
-    // Reset for next turn
     delete session._lastCostUsd;
     delete session._lastUsage;
+    delete session._lastModelUsage;
     return augmented;
   }
 
