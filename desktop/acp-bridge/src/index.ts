@@ -573,7 +573,6 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
           const sessionParams: Record<string, unknown> = {
             cwd: warmCwd,
             mcpServers: buildMcpServers("act"),
-            model: warmModel,
           };
 
           // Retry once after a short delay if session/new fails
@@ -588,6 +587,8 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
           }
 
           sessions.set(warmModel, { sessionId: result.sessionId, cwd: warmCwd });
+          // Set the model via the proper ACP method (model field is stripped from session/new by schema)
+          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: warmModel });
           logErr(
             `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
           );
@@ -663,15 +664,15 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         cwd: requestedCwd,
         mcpServers: buildMcpServers(mode),
       };
-      if (requestedModel) {
-        sessionParams.model = requestedModel;
-      }
-
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
       sessionId = sessionResult.sessionId;
       sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
       isNewSession = true;
+      // Set the model via the proper ACP method (model field is stripped from session/new by schema)
+      if (requestedModel) {
+        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+      }
       logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
