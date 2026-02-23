@@ -295,7 +295,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
-    var chunkSize = sdcardChunkSizeSecs * 100;
+    var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
@@ -361,10 +361,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
-        timerStart += sdcardChunkSizeSecs;
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await callback(file, offset, timerStart);
+          timerStart += sdcardChunkSizeSecs;
         } catch (e) {
           Logger.debug('Error in callback during chunking: $e');
           hasError = true;
@@ -397,7 +397,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     if (!hasError && bytesLeft < bytesData.length - 1) {
       var chunk = bytesData.sublist(bytesLeft);
-      timerStart += sdcardChunkSizeSecs;
       var file = await _flushToDisk(wal, chunk, timerStart);
       await callback(file, offset, timerStart);
     }
@@ -1139,19 +1138,19 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       while (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
-        timerStart += sdcardChunkSizeSecs;
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await _registerSingleChunk(wal, file, timerStart);
         } catch (e) {
           Logger.debug('SDCardWalSync WiFi: Error flushing chunk: $e');
+        } finally {
+          timerStart += sdcardChunkSizeSecs;
         }
       }
 
       // Flush any remaining frames
       if (bytesLeft < bytesData.length) {
         var chunk = bytesData.sublist(bytesLeft);
-        timerStart += sdcardChunkSizeSecs;
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
           await _registerSingleChunk(wal, file, timerStart);
