@@ -524,7 +524,10 @@ class ChatProvider: ObservableObject {
 
     /// Switch between bridge modes (Omi AI vs user's Claude account)
     func switchBridgeMode(to mode: BridgeMode) async {
-        guard mode.rawValue != bridgeMode else { return }
+        // Compare against the actual running bridge state, not bridgeMode (@AppStorage updates
+        // immediately when the Picker changes, so bridgeMode already equals `mode` by the time
+        // this function is called — the old string comparison always exits early).
+        guard (mode == .omiAI) != acpBridge.passApiKey else { return }
         let oldMode = bridgeMode
         log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
 
@@ -1178,12 +1181,12 @@ class ChatProvider: ObservableObject {
         let enabledSkillNames = getEnabledSkillNames()
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
-            let skillDescriptions = allSkills
+            let skillNames = allSkills
                 .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
-                .map { "- \($0.name): \($0.description)" }
-                .joined(separator: "\n")
-            if !skillDescriptions.isEmpty {
-                prompt += "\n\n<available_skills>\n\(skillDescriptions)\n</available_skills>"
+                .map { $0.name }
+                .joined(separator: ", ")
+            if !skillNames.isEmpty {
+                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
             }
         }
 
@@ -1232,12 +1235,12 @@ class ChatProvider: ObservableObject {
         let enabledSkillNames = getEnabledSkillNames()
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
-            let skillDescriptions = allSkills
+            let skillNames = allSkills
                 .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
-                .map { "- \($0.name): \($0.description)" }
-                .joined(separator: "\n")
-            if !skillDescriptions.isEmpty {
-                prompt += "\n\n<available_skills>\n\(skillDescriptions)\n</available_skills>"
+                .map { $0.name }
+                .joined(separator: ", ")
+            if !skillNames.isEmpty {
+                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
             }
         }
 
@@ -1450,7 +1453,7 @@ class ChatProvider: ObservableObject {
     }
 
     /// Extract description from YAML frontmatter in SKILL.md
-    private nonisolated static func extractSkillDescription(from content: String) -> String {
+    nonisolated static func extractSkillDescription(from content: String) -> String {
         guard content.hasPrefix("---") else {
             // No frontmatter — use first non-empty line as description
             let lines = content.components(separatedBy: "\n")
