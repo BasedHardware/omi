@@ -1328,7 +1328,7 @@ async def _stream_handler(
                         continue
                     emb = profile.get('speaker_embedding')
                     if emb:
-                        name = profile.get('name') or owner_uid[:8]
+                        name = profile.get('display_name') or owner_uid[:8]
                         person_embeddings_cache[f"shared:{owner_uid}"] = {
                             'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                             'name': name,

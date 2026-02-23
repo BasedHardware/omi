@@ -628,7 +628,7 @@ def process_conversation(
             owner_uid = shared_pid.split(":", 1)[1]
             profile = users_db.get_user_profile(owner_uid)
             if profile:
-                name = profile.get('name') or owner_uid[:8]
+                name = profile.get('display_name') or owner_uid[:8]
                 people.append(
                     Person(
                         id=shared_pid,

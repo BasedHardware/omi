@@ -17,6 +17,7 @@ from database.users import (
     revoke_speech_profile_share,
     remove_shared_profile_from_me,
     get_profiles_shared_with_user_details,
+    get_users_shared_with,
     get_users_shared_with_details,
 )
 from models.conversation import Conversation
@@ -136,6 +137,9 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
         raise HTTPException(status_code=400, detail="No speech profile recorded.")
     if not is_exists_user(data.target_uid):
         raise HTTPException(status_code=404, detail="Target user not found.")
+    existing = get_users_shared_with(uid)
+    if data.target_uid in existing:
+        raise HTTPException(status_code=400, detail="Already shared with this user.")
     share_speech_profile(uid, data.target_uid)
     return {"status": "ok"}
 

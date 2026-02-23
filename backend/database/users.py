@@ -5,6 +5,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
+from database.auth import get_user_name
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 
@@ -1061,15 +1062,21 @@ def get_profiles_shared_with_user(target_uid: str):
     return [share.reference.parent.parent.id for share in shares_query.stream()]
 
 
+def _fetch_user_names(uids: list) -> dict:
+    """Fetch display names from Firebase Auth for a list of UIDs."""
+    names = {}
+    for uid in uids:
+        names[uid] = get_user_name(uid, use_default=False) or ''
+    return names
+
+
 def get_profiles_shared_with_user_details(target_uid: str):
     """Return a list of {uid, name} dicts for users who have shared their speech profile with target_uid."""
     owner_uids = get_profiles_shared_with_user(target_uid)
-    results = []
-    for uid in owner_uids:
-        profile = get_user_profile(uid)
-        name = profile.get('name', '') if profile else ''
-        results.append({'uid': uid, 'name': name})
-    return results
+    if not owner_uids:
+        return []
+    names = _fetch_user_names(owner_uids)
+    return [{'uid': uid, 'name': names.get(uid, '')} for uid in owner_uids]
 
 
 def remove_shared_profile_from_me(owner_uid: str, target_uid: str):
@@ -1092,9 +1099,7 @@ def get_users_shared_with(owner_uid: str):
 def get_users_shared_with_details(owner_uid: str):
     """Return a list of {uid, name} dicts for users with whom the owner has shared their speech profile."""
     target_uids = get_users_shared_with(owner_uid)
-    results = []
-    for uid in target_uids:
-        profile = get_user_profile(uid)
-        name = profile.get('name', '') if profile else ''
-        results.append({'uid': uid, 'name': name})
-    return results
+    if not target_uids:
+        return []
+    names = _fetch_user_names(target_uids)
+    return [{'uid': uid, 'name': names.get(uid, '')} for uid in target_uids]

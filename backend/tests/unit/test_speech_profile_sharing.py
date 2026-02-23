@@ -257,8 +257,8 @@ def test_shared_pid_skipped_for_pusher_extraction():
 def test_shared_name_resolution_with_profile():
     """Test that shared profile owner name is resolved from user profile."""
     owner_uid = "owner123"
-    profile = {'name': 'Alice Smith', 'email': 'alice@example.com'}
-    name = profile.get('name') or owner_uid[:8]
+    profile = {'display_name': 'Alice Smith', 'email': 'alice@example.com'}
+    name = profile.get('display_name') or owner_uid[:8]
     assert name == 'Alice Smith'
 
 
@@ -268,12 +268,12 @@ def test_shared_name_resolution_fallback_to_uid_prefix():
 
     # No name in profile
     profile_no_name = {'email': 'test@example.com'}
-    name = profile_no_name.get('name') or owner_uid[:8]
+    name = profile_no_name.get('display_name') or owner_uid[:8]
     assert name == 'abcdef12'
 
     # Empty name in profile
-    profile_empty_name = {'name': '', 'email': 'test@example.com'}
-    name = profile_empty_name.get('name') or owner_uid[:8]
+    profile_empty_name = {'display_name': '', 'email': 'test@example.com'}
+    name = profile_empty_name.get('display_name') or owner_uid[:8]
     assert name == 'abcdef12'
 
 
