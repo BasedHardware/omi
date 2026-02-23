@@ -29,6 +29,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool loadingExportMemories = false;
   bool loadingImportMemories = false;
 
+  bool audioBytesOfflineSyncEnabled = false;
+
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
@@ -62,6 +64,11 @@ class DeveloperModeProvider extends BaseProvider {
     } else {
       enableWebhook(type: 'audio_bytes');
     }
+    notifyListeners();
+  }
+
+  void onAudioBytesOfflineSyncChanged(bool value) {
+    audioBytesOfflineSyncEnabled = value;
     notifyListeners();
   }
 
@@ -101,6 +108,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookOnTranscriptReceived.text = SharedPreferencesUtil().webhookOnTranscriptReceived;
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
+    audioBytesOfflineSyncEnabled = SharedPreferencesUtil().audioBytesOfflineSyncEnabled;
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
@@ -206,6 +214,7 @@ class DeveloperModeProvider extends BaseProvider {
     } catch (e) {
       Logger.error('Error occurred while updating endpoints: $e');
     }
+    prefs.audioBytesOfflineSyncEnabled = audioBytesOfflineSyncEnabled;
     // Experimental
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
