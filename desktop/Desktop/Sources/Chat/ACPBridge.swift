@@ -15,6 +15,8 @@ actor ACPBridge {
         let sessionId: String
         let inputTokens: Int
         let outputTokens: Int
+        let cacheReadTokens: Int
+        let cacheWriteTokens: Int
     }
 
     /// Callback for streaming text deltas
@@ -46,7 +48,7 @@ actor ACPBridge {
         case toolUse(callId: String, name: String, input: [String: Any])
         case toolActivity(name: String, status: String, toolUseId: String?, input: [String: Any]?)
         case toolResultDisplay(toolUseId: String, name: String, output: String)
-        case result(text: String, sessionId: String, costUsd: Double?, inputTokens: Int, outputTokens: Int)
+        case result(text: String, sessionId: String, costUsd: Double?, inputTokens: Int, outputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int)
         case error(message: String)
         case authRequired(methods: [[String: Any]], authUrl: String?)
         case authSuccess
@@ -359,8 +361,8 @@ actor ACPBridge {
                     while !pendingMessages.isEmpty {
                         let pending = pendingMessages.removeFirst()
                         switch pending {
-                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens):
-                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens)
+                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
                         case .error(let message):
                             throw BridgeError.agentError(message)
                         default:
@@ -370,8 +372,8 @@ actor ACPBridge {
                     while true {
                         let msg = try await waitForMessage(timeout: 10.0)
                         switch msg {
-                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens):
-                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens)
+                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
                         case .error(let message):
                             throw BridgeError.agentError(message)
                         default:
@@ -389,8 +391,8 @@ actor ACPBridge {
             case .toolResultDisplay(let toolUseId, let name, let output):
                 onToolResultDisplay(toolUseId, name, output)
 
-            case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens):
-                return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens)
+            case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
 
             case .error(let message):
                 throw BridgeError.agentError(message)
@@ -504,8 +506,11 @@ actor ACPBridge {
             let costUsd = dict["costUsd"] as? Double
             let inputTokens = dict["inputTokens"] as? Int ?? 0
             let outputTokens = dict["outputTokens"] as? Int ?? 0
+            let cacheReadTokens = dict["cacheReadTokens"] as? Int ?? 0
+            let cacheWriteTokens = dict["cacheWriteTokens"] as? Int ?? 0
             return .result(text: text, sessionId: sessionId, costUsd: costUsd,
-                           inputTokens: inputTokens, outputTokens: outputTokens)
+                           inputTokens: inputTokens, outputTokens: outputTokens,
+                           cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
 
         case "error":
             let message = dict["message"] as? String ?? "Unknown error"
