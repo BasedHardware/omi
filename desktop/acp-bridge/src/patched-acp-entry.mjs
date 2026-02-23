@@ -44,16 +44,17 @@ ClaudeAcpAgent.prototype.newSession = async function (params) {
       const item = await originalNext(...args);
       if (
         item.value?.type === "result" &&
-        item.value?.subtype === "success" &&
-        item.value?.total_cost_usd !== undefined
+        item.value?.subtype === "success"
       ) {
-        session._lastCostUsd = item.value.total_cost_usd;
+        // Debug: dump full result message to inspect actual field names/values
+        const debugKeys = Object.keys(item.value).filter(k => !["type", "subtype", "result", "uuid", "session_id", "permission_denials", "structured_output"].includes(k));
+        const debugObj = {};
+        for (const k of debugKeys) debugObj[k] = item.value[k];
+        console.error(`[patched-acp] SDKResultSuccess fields: ${JSON.stringify(debugObj)}`);
+
+        session._lastCostUsd = item.value.total_cost_usd ?? item.value.totalCostUSD;
         session._lastUsage = item.value.usage;
-        console.error(
-          `[patched-acp] Captured: cost=$${item.value.total_cost_usd}, ` +
-          `input=${item.value.usage?.input_tokens ?? "?"}, ` +
-          `output=${item.value.usage?.output_tokens ?? "?"} tokens`
-        );
+        session._lastModelUsage = item.value.modelUsage;
       }
       return item;
     };
@@ -69,26 +70,37 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
   const result = await originalPrompt.call(this, params);
 
   const session = this.sessions?.[params.sessionId];
-  if (session?._lastCostUsd !== undefined && session?._lastUsage !== undefined) {
-    const sdkUsage = session._lastUsage;
-    const inputTokens = sdkUsage.input_tokens ?? 0;
-    const outputTokens = sdkUsage.output_tokens ?? 0;
+  if (session?._lastCostUsd !== undefined) {
+    const sdkUsage = session._lastUsage ?? {};
+    const modelUsage = session._lastModelUsage ?? {};
+
+    // Try both snake_case (API) and camelCase (SDK transforms)
+    const inputTokens = sdkUsage.input_tokens ?? sdkUsage.inputTokens ?? 0;
+    const outputTokens = sdkUsage.output_tokens ?? sdkUsage.outputTokens ?? 0;
+    const cacheRead = sdkUsage.cache_read_input_tokens ?? sdkUsage.cacheReadInputTokens ?? null;
+    const cacheWrite = sdkUsage.cache_creation_input_tokens ?? sdkUsage.cacheCreationInputTokens ?? null;
+
+    console.error(
+      `[patched-acp] Usage: cost=$${session._lastCostUsd}, ` +
+      `input=${inputTokens}, output=${outputTokens}, ` +
+      `cacheRead=${cacheRead}, cacheWrite=${cacheWrite}, ` +
+      `modelUsage=${JSON.stringify(modelUsage)}`
+    );
+
     const augmented = {
       ...result,
-      // ACP PromptResponse.usage (experimental field, matches ACP Usage type)
       usage: {
         inputTokens,
         outputTokens,
-        cachedReadTokens: sdkUsage.cache_read_input_tokens ?? null,
-        cachedWriteTokens: sdkUsage.cache_creation_input_tokens ?? null,
-        totalTokens: inputTokens + outputTokens,
+        cachedReadTokens: cacheRead,
+        cachedWriteTokens: cacheWrite,
+        totalTokens: (inputTokens) + (outputTokens) + (cacheRead ?? 0) + (cacheWrite ?? 0),
       },
-      // Pass cost via _meta since PromptResponse has no cost field
       _meta: { costUsd: session._lastCostUsd },
     };
-    // Reset for next turn
     delete session._lastCostUsd;
     delete session._lastUsage;
+    delete session._lastModelUsage;
     return augmented;
   }
 
