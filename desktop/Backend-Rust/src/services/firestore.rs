@@ -65,6 +65,7 @@ pub const KG_NODES_SUBCOLLECTION: &str = "kg_nodes";
 pub const KG_EDGES_SUBCOLLECTION: &str = "kg_edges";
 pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
+pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
@@ -293,6 +294,58 @@ impl FirestoreService {
     /// Build authenticated request for GCE Compute Engine API (public for agent routes)
     pub async fn build_compute_request(&self, method: reqwest::Method, url: &str) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
         self.build_request(method, url).await
+    }
+
+    // =========================================================================
+    // LLM USAGE
+
+    /// Atomically increment LLM usage counters for a user on a given date.
+    /// Uses Firestore REST commit with FieldTransforms (server-side atomic increments).
+    pub async fn record_llm_usage(
+        &self,
+        uid: &str,
+        input: i64,
+        output: i64,
+        cache_read: i64,
+        cache_write: i64,
+        total: i64,
+        cost: f64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let date_key = Utc::now().format("%Y-%m-%d").to_string();
+        let doc_path = format!(
+            "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+            self.project_id, USERS_COLLECTION, uid, LLM_USAGE_SUBCOLLECTION, date_key
+        );
+        let commit_url = format!(
+            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            self.project_id
+        );
+        let body = json!({
+            "writes": [{
+                "transform": {
+                    "document": doc_path,
+                    "fieldTransforms": [
+                        { "fieldPath": "desktop_chat.input_tokens",       "increment": { "integerValue": input.to_string() } },
+                        { "fieldPath": "desktop_chat.output_tokens",      "increment": { "integerValue": output.to_string() } },
+                        { "fieldPath": "desktop_chat.cache_read_tokens",  "increment": { "integerValue": cache_read.to_string() } },
+                        { "fieldPath": "desktop_chat.cache_write_tokens", "increment": { "integerValue": cache_write.to_string() } },
+                        { "fieldPath": "desktop_chat.total_tokens",       "increment": { "integerValue": total.to_string() } },
+                        { "fieldPath": "desktop_chat.cost_usd",           "increment": { "doubleValue": cost } },
+                        { "fieldPath": "desktop_chat.call_count",         "increment": { "integerValue": "1" } },
+                    ]
+                }
+            }]
+        });
+        let resp = self
+            .build_request(reqwest::Method::POST, &commit_url)
+            .await?
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(resp.text().await?.into());
+        }
+        Ok(())
     }
 
     // =========================================================================

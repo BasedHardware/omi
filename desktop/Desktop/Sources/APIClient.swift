@@ -4339,4 +4339,37 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
     }
+
+    // MARK: - LLM Usage
+
+    func recordLlmUsage(
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheReadTokens: Int,
+        cacheWriteTokens: Int,
+        totalTokens: Int,
+        costUsd: Double
+    ) async {
+        struct Req: Encodable {
+            let input_tokens: Int
+            let output_tokens: Int
+            let cache_read_tokens: Int
+            let cache_write_tokens: Int
+            let total_tokens: Int
+            let cost_usd: Double
+        }
+        struct Res: Decodable { let status: String }
+        do {
+            let _: Res = try await post("v1/users/me/llm-usage", body: Req(
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                cache_read_tokens: cacheReadTokens,
+                cache_write_tokens: cacheWriteTokens,
+                total_tokens: totalTokens,
+                cost_usd: costUsd
+            ))
+        } catch {
+            log("APIClient: LLM usage record failed: \(error.localizedDescription)")
+        }
+    }
 }
