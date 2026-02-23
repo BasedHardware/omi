@@ -524,7 +524,10 @@ class ChatProvider: ObservableObject {
 
     /// Switch between bridge modes (Omi AI vs user's Claude account)
     func switchBridgeMode(to mode: BridgeMode) async {
-        guard mode.rawValue != bridgeMode else { return }
+        // Compare against the actual running bridge state, not bridgeMode (@AppStorage updates
+        // immediately when the Picker changes, so bridgeMode already equals `mode` by the time
+        // this function is called — the old string comparison always exits early).
+        guard (mode == .omiAI) != acpBridge.passApiKey else { return }
         let oldMode = bridgeMode
         log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
 
