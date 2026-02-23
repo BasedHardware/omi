@@ -24,6 +24,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentAIMessage: ChatMessage? = nil
     @Published var displayedQuery: String = ""
     @Published var inputViewHeight: CGFloat = 120
+    @Published var responseContentHeight: CGFloat = 0
     @Published var screenshotURL: URL? = nil
     @Published var chatHistory: [FloatingChatExchange] = []
 

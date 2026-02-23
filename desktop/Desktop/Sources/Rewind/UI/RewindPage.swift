@@ -136,6 +136,7 @@ struct RewindPage: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             // Rewind intro video overlay (first-time experience)
@@ -968,6 +969,8 @@ struct RewindPage: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
+            Spacer()
+
             ZStack {
                 Circle()
                     .fill(OmiColors.purplePrimary.opacity(0.1))
@@ -999,6 +1002,8 @@ struct RewindPage: View {
             .background(Color.white.opacity(0.1))
             .cornerRadius(8)
             .padding(.top, 8)
+
+            Spacer()
         }
     }
 

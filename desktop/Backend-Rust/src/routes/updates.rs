@@ -71,7 +71,7 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
             "<p>Bug fixes and improvements.</p>".to_string()
         } else {
             let items: String = release.changelog.iter()
-                .map(|c| format!("<li>{}</li>", html_escape(c)))
+                .map(|c| format!("<li>{}</li>", c))
                 .collect();
             format!("<ul>{}</ul>", items)
         };
@@ -115,14 +115,6 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
 
     xml.push_str("  </channel>\n</rss>\n");
     xml
-}
-
-/// Simple HTML escape for changelog items
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 /// GET /appcast.xml - Sparkle appcast feed
