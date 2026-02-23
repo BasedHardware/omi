@@ -38,7 +38,7 @@ VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
 VAD_GATE_ROLLOUT_PCT = int(os.getenv('VAD_GATE_ROLLOUT_PCT', '100'))
 VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
 VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
-VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.5'))
+VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
 try:
     VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
