@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import struct
 import time
@@ -103,6 +104,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
@@ -1967,16 +1969,7 @@ async def _stream_handler(
         finally:
             # Log VAD gate metrics before cleanup
             if vad_gate is not None:
-                metrics = vad_gate.get_metrics()
-                print(
-                    f'VAD gate metrics uid={uid} session={session_id} '
-                    f'mode={metrics["mode"]} silence_ratio={metrics["silence_ratio"]:.2%} '
-                    f'chunks={metrics["chunks_total"]} finalizes={metrics["finalize_count"]} '
-                    f'finalize_errors={metrics["finalize_errors"]} '
-                    f'bytes_sent={metrics["bytes_sent"]} bytes_skipped={metrics["bytes_skipped"]} '
-                    f'bytes_saved={metrics["bytes_saved_ratio"]:.1%} '
-                    f'keepalives={metrics["keepalive_count"]}'
-                )
+                logger.info(json.dumps(vad_gate.to_json_log()))
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
