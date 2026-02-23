@@ -32,7 +32,7 @@ mod services;
 
 use auth::{firebase_auth_extension, FirebaseAuth};
 use config::Config;
-use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, memories_routes, messages_routes, people_routes, personas_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
+use routes::{action_items_routes, advice_routes, agent_routes, apps_routes, auth_routes, chat_routes, chat_sessions_routes, conversations_routes, crisp_routes, daily_score_routes, focus_sessions_routes, folder_routes, goals_routes, health_routes, knowledge_graph_routes, llm_usage_routes, memories_routes, messages_routes, people_routes, personas_routes, staged_tasks_routes, stats_routes, updates_routes, users_routes, webhook_routes};
 use services::{FirestoreService, IntegrationService, RedisService};
 
 /// Application state shared across handlers
@@ -199,6 +199,7 @@ async fn main() {
         .merge(people_routes())
         .merge(personas_routes())
         .merge(knowledge_graph_routes())
+        .merge(llm_usage_routes())
         .merge(stats_routes())
         .merge(webhook_routes())
         .merge(crisp_routes())

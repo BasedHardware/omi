@@ -2194,10 +2194,23 @@ struct SettingsContentView: View {
     }
 
     private func refreshAIChatConfig() {
+        // Pull skill and CLAUDE.md data directly from ChatProvider (already discovered at startup).
+        // Fall back to reading from disk only when ChatProvider is unavailable.
+        if let provider = chatProvider {
+            aiChatClaudeMdContent = provider.claudeMdContent
+            aiChatClaudeMdPath = provider.claudeMdPath
+            aiChatDiscoveredSkills = provider.discoveredSkills
+            aiChatProjectClaudeMdContent = provider.projectClaudeMdContent
+            aiChatProjectClaudeMdPath = provider.projectClaudeMdPath
+            aiChatProjectDiscoveredSkills = provider.projectDiscoveredSkills
+            loadDisabledSkills()
+            return
+        }
+
+        // Fallback: read from disk (used when Settings is shown before ChatProvider initializes)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let claudeDir = "\(home)/.claude"
 
-        // Discover global CLAUDE.md
         let mdPath = "\(claudeDir)/CLAUDE.md"
         if FileManager.default.fileExists(atPath: mdPath),
            let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
@@ -2208,7 +2221,6 @@ struct SettingsContentView: View {
             aiChatClaudeMdPath = nil
         }
 
-        // Discover global skills
         var skills: [(name: String, description: String, path: String)] = []
         let skillsDir = "\(claudeDir)/skills"
         if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
@@ -2216,17 +2228,15 @@ struct SettingsContentView: View {
                 let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
                 if FileManager.default.fileExists(atPath: skillPath),
                    let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    let desc = extractSkillDescription(from: content)
+                    let desc = ChatProvider.extractSkillDescription(from: content)
                     skills.append((name: dir, description: desc, path: skillPath))
                 }
             }
         }
         aiChatDiscoveredSkills = skills
 
-        // Discover project-level config from workspace directory
         let workspace = aiChatWorkingDirectory
         if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
-            // Project CLAUDE.md
             let projectMdPath = "\(workspace)/CLAUDE.md"
             if FileManager.default.fileExists(atPath: projectMdPath),
                let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
@@ -2237,7 +2247,6 @@ struct SettingsContentView: View {
                 aiChatProjectClaudeMdPath = nil
             }
 
-            // Project skills
             var projectSkills: [(name: String, description: String, path: String)] = []
             let projectSkillsDir = "\(workspace)/.claude/skills"
             if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
@@ -2245,7 +2254,7 @@ struct SettingsContentView: View {
                     let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
                     if FileManager.default.fileExists(atPath: skillPath),
                        let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                        let desc = extractSkillDescription(from: content)
+                        let desc = ChatProvider.extractSkillDescription(from: content)
                         projectSkills.append((name: dir, description: desc, path: skillPath))
                     }
                 }
@@ -2257,29 +2266,7 @@ struct SettingsContentView: View {
             aiChatProjectDiscoveredSkills = []
         }
 
-        // Load enabled skills from UserDefaults
         loadDisabledSkills()
-    }
-
-    private func extractSkillDescription(from content: String) -> String {
-        guard content.hasPrefix("---") else {
-            let lines = content.components(separatedBy: "\n")
-            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
-        }
-        let lines = content.components(separatedBy: "\n")
-        for line in lines.dropFirst() {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
-                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
-                value = value.trimmingCharacters(in: .whitespaces)
-                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-                   (value.hasPrefix("'") && value.hasSuffix("'")) {
-                    value = String(value.dropFirst().dropLast())
-                }
-                return value
-            }
-        }
-        return ""
     }
 
     private func loadDisabledSkills() {
