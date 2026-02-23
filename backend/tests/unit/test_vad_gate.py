@@ -42,9 +42,11 @@ def mock_silero():
     so _run_vad passes numpy arrays directly to the mock.
     """
     mock_model = _MockVADModel()
-    real_lock = threading.Lock()
-    with patch('utils.stt.vad_gate._vad_model', mock_model), patch('utils.stt.vad_gate._vad_torch', None), patch(
-        'utils.stt.vad_gate._vad_model_lock', real_lock
+    with (
+        patch('utils.stt.vad_gate._vad_model', mock_model),
+        patch('utils.stt.vad_gate._vad_torch', None),
+        patch('utils.stt.vad_gate._vad_model_pool', None),
+        patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
     ):
         global _mock_is_speech
         _mock_is_speech = False
@@ -432,7 +434,7 @@ class TestDgWallMapper:
         assert result_seg2 < result_seg3, "Timestamps must be monotonically increasing"
 
     def test_checkpoint_compaction(self):
-        """Checkpoints should be capped to _MAX_CHECKPOINTS to bound memory."""
+        """Compaction should keep first checkpoint as anchor + recent checkpoints."""
         mapper = DgWallMapper()
         # Override cap to small value for testing
         mapper._MAX_CHECKPOINTS = 5
@@ -443,6 +445,9 @@ class TestDgWallMapper:
 
         # Should have at most 5 checkpoints
         assert len(mapper._checkpoints) <= 5
+        # First checkpoint must remain as anchor for early timestamp remaps
+        assert mapper._checkpoints[0] == (0.0, 0.0)
+        assert mapper.dg_to_wall_rel(0.5) == 0.5
         # Most recent checkpoint should still work for remap
         last_dg = mapper._checkpoints[-1][0]
         result = mapper.dg_to_wall_rel(last_dg + 0.5)
@@ -705,6 +710,23 @@ class TestGatedDeepgramSocket:
         mock_conn.keep_alive.assert_called()
         assert gate._keepalive_count > 0
 
+    def test_keepalive_records_via_gate_api(self):
+        """Socket should call gate.record_keepalive instead of mutating internals."""
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        gate.record_keepalive = MagicMock(wraps=gate.record_keepalive)
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        _set_vad_speech(False)
+        for i in range(5):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        socket.send(_make_pcm(30), wall_time=t + 25.0)
+
+        mock_conn.keep_alive.assert_called_once()
+        gate.record_keepalive.assert_called_once_with(t + 25.0)
+
     def test_keepalive_not_sent_in_shadow_mode(self):
         """Keepalive should NOT be sent in shadow mode (all audio forwarded)."""
         mock_conn = MagicMock()
@@ -915,7 +937,7 @@ class TestCostMetrics:
         assert metrics['bytes_sent'] > 0
 
     def test_bytes_skipped_tracked_on_silence(self):
-        """bytes_skipped should accumulate when pre-roll evicts chunks."""
+        """bytes_skipped should accumulate for silence not forwarded to DG."""
         gate = self._make_gate()
         _set_vad_speech(False)
         t = 1000.0
@@ -924,6 +946,18 @@ class TestCostMetrics:
             gate.process_audio(_make_pcm(30), t + i * 0.03)
         metrics = gate.get_metrics()
         assert metrics['bytes_skipped'] > 0
+
+    def test_bytes_skipped_counts_unsent_preroll_without_eviction(self):
+        """Even short silence should count as skipped when never sent."""
+        gate = self._make_gate()
+        chunk = _make_pcm(30)
+        _set_vad_speech(False)
+        gate.process_audio(chunk, 1000.0)
+
+        metrics = gate.get_metrics()
+        assert metrics['bytes_received'] == len(chunk)
+        assert metrics['bytes_sent'] == 0
+        assert metrics['bytes_skipped'] == len(chunk)
 
     def test_bytes_saved_ratio(self):
         """bytes_saved_ratio should reflect skipped/(sent+skipped)."""
@@ -953,6 +987,99 @@ class TestCostMetrics:
         metrics = gate.get_metrics()
         assert metrics['bytes_sent'] == len(chunk)
         assert metrics['bytes_skipped'] == 0
+
+
+class TestStructuredMetricsLog:
+    def test_to_json_log_contains_derived_fields(self):
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u1', session_id='s1')
+        t = 1000.0
+
+        _set_vad_speech(False)
+        gate.process_audio(_make_pcm(30), t)
+        _set_vad_speech(True)
+        gate.process_audio(_make_pcm(40), t + 0.03)
+
+        payload = gate.to_json_log()
+        assert payload['event'] == 'vad_gate_metrics'
+        assert payload['uid'] == 'u1'
+        assert payload['session_id'] == 's1'
+        assert 'session_duration_sec' in payload
+        assert 'speech_ratio' in payload
+        assert 'estimated_savings_pct' in payload
+        assert payload['estimated_savings_pct'] == pytest.approx(payload['bytes_saved_ratio'] * 100.0, abs=0.001)
+
+
+class _StatefulMockModel:
+    def __init__(self):
+        self._state = 0
+
+    def __call__(self, tensor, sample_rate):
+        self._state += 1
+        return 0.9 if self._state >= 2 else 0.1
+
+    def reset_states(self):
+        self._state = 0
+
+
+class _SlowMockModel:
+    def __init__(self, sleep_sec):
+        self.sleep_sec = sleep_sec
+
+    def __call__(self, tensor, sample_rate):
+        time.sleep(self.sleep_sec)
+        return 0.1
+
+    def reset_states(self):
+        pass
+
+
+class TestModelPoolAndState:
+    def test_session_state_persists_across_chunks(self):
+        """Second chunk should see carried LSTM-like state and trigger speech."""
+        model = _StatefulMockModel()
+        with (
+            patch('utils.stt.vad_gate._vad_model', model),
+            patch('utils.stt.vad_gate._vad_torch', None),
+            patch('utils.stt.vad_gate._vad_model_pool', None),
+            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 1),
+        ):
+            gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+            out1 = gate.process_audio(_make_pcm(40), 1000.0)
+            out2 = gate.process_audio(_make_pcm(40), 1000.04)
+
+            assert not out1.is_speech
+            assert out2.is_speech
+
+    def test_model_pool_allows_parallel_inference(self):
+        """Two sessions should infer concurrently when pool size > 1."""
+        sleep_sec = 0.2
+        model = _SlowMockModel(sleep_sec=sleep_sec)
+        with (
+            patch('utils.stt.vad_gate._vad_model', model),
+            patch('utils.stt.vad_gate._vad_torch', None),
+            patch('utils.stt.vad_gate._vad_model_pool', None),
+            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
+        ):
+            gate1 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u1', session_id='s1')
+            gate2 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u2', session_id='s2')
+            barrier = threading.Barrier(3)
+            chunk = _make_pcm(40)  # >= 1 VAD window at 16kHz
+
+            def _run(gate, wall_time):
+                barrier.wait()
+                gate.process_audio(chunk, wall_time)
+
+            t1 = threading.Thread(target=_run, args=(gate1, 1000.0))
+            t2 = threading.Thread(target=_run, args=(gate2, 1000.0))
+            t1.start()
+            t2.start()
+            start = time.perf_counter()
+            barrier.wait()
+            t1.join()
+            t2.join()
+            elapsed = time.perf_counter() - start
+
+            assert elapsed < sleep_sec * 1.75
 
 
 class TestSpeechThreshold:
