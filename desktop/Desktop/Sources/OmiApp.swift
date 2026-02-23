@@ -147,6 +147,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
         signal(SIGPIPE, SIG_IGN)
 
+        // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
+        // These break the code signature seal, causing the NEXT update to fail with
+        // "An error occurred while running the updater."
+        stripProvenanceXattrs()
+
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
@@ -366,6 +371,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 scope.setTag(value: "heartbeat", key: "event_type")
             }
             log("Sentry: Session heartbeat captured")
+        }
+    }
+
+    /// Strip com.apple.provenance extended attributes from our own bundle.
+    /// macOS adds these when Sparkle extracts the update ZIP, which breaks the code
+    /// signature seal and causes subsequent updates to fail.
+    private func stripProvenanceXattrs() {
+        let bundlePath = Bundle.main.bundlePath
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.launchPath = "/usr/bin/xattr"
+            process.arguments = ["-cr", bundlePath]
+            process.standardOutput = nil
+            process.standardError = nil
+            try? process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                log("AppDelegate: Stripped provenance xattrs from bundle")
+            }
         }
     }
 

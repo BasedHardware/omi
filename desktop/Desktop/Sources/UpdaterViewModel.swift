@@ -78,7 +78,13 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         if isUpToDate {
             logSync("Sparkle: Already up to date")
         } else {
-            logSync("Sparkle: Update check failed - \(message)")
+            logSync("Sparkle: Update check failed - \(message) [domain=\(nsError.domain) code=\(nsError.code)]")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                logSync("Sparkle: Underlying error - \(underlying.localizedDescription) [domain=\(underlying.domain) code=\(underlying.code)]")
+            }
+            for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
+                logSync("Sparkle: Error info [\(key)] = \(value)")
+            }
             Task { @MainActor in
                 AnalyticsManager.shared.updateCheckFailed(error: message)
             }
