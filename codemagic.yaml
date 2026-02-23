@@ -1841,7 +1841,7 @@ workflows:
   omi-desktop-swift-release:
     name: Release OMI Desktop (Swift)
     instance_type: mac_mini_m2
-    max_build_duration: 180
+    max_build_duration: 120
     environment:
       groups:
         - app_env
