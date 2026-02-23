@@ -12,9 +12,11 @@ Modes (VAD_GATE_MODE env var):
 """
 
 import audioop
+import copy
 import hashlib
 import logging
 import os
+import queue
 import sys
 import threading
 import time
@@ -22,7 +24,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -38,6 +40,10 @@ VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
 VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.5'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
+try:
+    VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
+except ValueError:
+    VAD_GATE_MODEL_POOL_SIZE = max(1, os.cpu_count() or 1)
 
 
 def is_gate_enabled() -> bool:
@@ -58,12 +64,15 @@ def should_gate_session(uid: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Silero VAD model (shared, thread-safe via lock)
+# Silero VAD model pool (shared across sessions)
 # ---------------------------------------------------------------------------
 _vad_model = None  # Set LAST during init (used as fast-path sentinel)
 _vad_torch = None  # torch module ref for tensor conversion (set before _vad_model)
-_vad_model_lock = threading.Lock()
 _vad_init_lock = threading.Lock()
+_vad_model_pool = None  # queue.Queue of model instances, initialized lazily
+_vad_model_pool_lock = threading.Lock()
+
+_VAD_STATE_ATTRS = ('_state', '_context', '_last_sr', '_last_batch_size')
 
 
 def _ensure_vad_model():
@@ -95,6 +104,92 @@ def _ensure_vad_model():
             model, _ = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
             _vad_torch = torch  # Set BEFORE _vad_model
             _vad_model = model
+
+
+def _clone_state_value(value: Any) -> Any:
+    """Clone model state values, preserving tensor semantics."""
+    if _vad_torch is not None and isinstance(value, _vad_torch.Tensor):
+        return value.detach().clone()
+    if isinstance(value, tuple):
+        return tuple(_clone_state_value(v) for v in value)
+    if isinstance(value, list):
+        return [_clone_state_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _clone_state_value(v) for k, v in value.items()}
+    try:
+        return copy.deepcopy(value)
+    except Exception:
+        return value
+
+
+def _capture_model_state(model: Any) -> Dict[str, Any]:
+    state: Dict[str, Any] = {}
+    for attr in _VAD_STATE_ATTRS:
+        if hasattr(model, attr):
+            state[attr] = _clone_state_value(getattr(model, attr))
+    return state
+
+
+def _restore_model_state(model: Any, state: Optional[Dict[str, Any]]) -> None:
+    if hasattr(model, 'reset_states'):
+        model.reset_states()
+    if not state:
+        return
+    for attr, value in state.items():
+        if hasattr(model, attr):
+            setattr(model, attr, _clone_state_value(value))
+
+
+def _clone_vad_model(base_model: Any) -> Any:
+    clone = copy.deepcopy(base_model)
+    if hasattr(clone, 'eval'):
+        clone.eval()
+    if hasattr(clone, 'reset_states'):
+        clone.reset_states()
+    return clone
+
+
+def _ensure_vad_model_pool() -> None:
+    """Lazy-init inference pool to avoid single global model bottleneck."""
+    global _vad_model_pool
+    if _vad_model_pool is not None:
+        return
+    _ensure_vad_model()
+    with _vad_model_pool_lock:
+        if _vad_model_pool is not None:
+            return
+        models = []
+        if hasattr(_vad_model, 'eval'):
+            _vad_model.eval()
+        if hasattr(_vad_model, 'reset_states'):
+            _vad_model.reset_states()
+        models.append(_vad_model)
+        for i in range(1, VAD_GATE_MODEL_POOL_SIZE):
+            try:
+                models.append(_clone_vad_model(_vad_model))
+            except Exception as e:
+                logger.warning(
+                    'VAD model clone failed at idx=%s, using pool_size=%s requested=%s err=%s',
+                    i,
+                    len(models),
+                    VAD_GATE_MODEL_POOL_SIZE,
+                    e,
+                )
+                break
+        model_pool = queue.Queue(maxsize=len(models))
+        for model in models:
+            model_pool.put(model)
+        _vad_model_pool = model_pool
+        logger.info('VAD model pool ready size=%s requested=%s', len(models), VAD_GATE_MODEL_POOL_SIZE)
+
+
+def _borrow_vad_model() -> Any:
+    _ensure_vad_model_pool()
+    return _vad_model_pool.get()
+
+
+def _return_vad_model(model: Any) -> None:
+    _vad_model_pool.put(model)
 
 
 # ---------------------------------------------------------------------------
@@ -151,9 +246,12 @@ class DgWallMapper:
                     min_wall = prev_wall + (self._dg_cursor_sec - prev_dg)
                     chunk_wall_rel_sec = max(chunk_wall_rel_sec, min_wall)
                 self._checkpoints.append((self._dg_cursor_sec, chunk_wall_rel_sec))
-                # Compact: keep only recent checkpoints to bound memory
+                # Compact: keep an anchor for early remaps + recent checkpoints.
                 if len(self._checkpoints) > self._MAX_CHECKPOINTS:
-                    self._checkpoints = self._checkpoints[-self._MAX_CHECKPOINTS :]
+                    if self._MAX_CHECKPOINTS <= 1:
+                        self._checkpoints = self._checkpoints[:1]
+                    else:
+                        self._checkpoints = [self._checkpoints[0]] + self._checkpoints[-(self._MAX_CHECKPOINTS - 1) :]
                 self._sending = True
             self._dg_cursor_sec += chunk_duration_sec
 
@@ -210,9 +308,11 @@ class VADStreamingGate:
         # Uses raw model probability (not VADIterator events) for continuous
         # per-window speech classification suitable for streaming gating.
         self._vad_sample_rate = 16000
-        _ensure_vad_model()
+        _ensure_vad_model_pool()
         self._vad_window_samples = 512  # Silero recommended for 16kHz
         self._vad_buffer = np.array([], dtype=np.float32)  # Buffer for cross-chunk accumulation
+        self._vad_state: Optional[Dict[str, Any]] = None
+        self._vad_inference_lock = threading.Lock()
         self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
 
         # State machine
@@ -236,8 +336,8 @@ class VADStreamingGate:
         self._chunks_silence = 0
         self._finalize_count = 0
         self._finalize_errors = 0
+        self._bytes_received = 0
         self._bytes_sent = 0
-        self._bytes_skipped = 0
         self._first_audio_wall_time: Optional[float] = None
         self._last_send_wall_time: Optional[float] = None  # For keepalive timing
         self._keepalive_count = 0
@@ -300,42 +400,49 @@ class VADStreamingGate:
         and returns None during continuous speech, which would cause the gate
         to drop audio mid-utterance.
 
-        Resets model hidden state before each batch so shared model state
-        doesn't leak between sessions. Within a batch, LSTM context carries
-        over naturally for better accuracy.
+        Preserves session-local model state across chunks for LSTM context.
+        Session state is loaded before inference and saved afterward.
+        Model instances come from a global pool to allow concurrent sessions.
 
         Buffers samples across chunks to handle cases where chunk size < window size.
         """
-        float_data = self._convert_for_vad(pcm_data)
+        with self._vad_inference_lock:
+            float_data = self._convert_for_vad(pcm_data)
 
-        # Append to buffer
-        self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
+            # Append to buffer
+            self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
+            del float_data
 
-        speech_detected = False
-        with _vad_model_lock:
-            _vad_model.reset_states()
-            # Process all complete windows in buffer
-            while len(self._vad_buffer) >= self._vad_window_samples:
-                window = self._vad_buffer[: self._vad_window_samples]
-                self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
+            speech_detected = False
+            if len(self._vad_buffer) >= self._vad_window_samples:
+                model = _borrow_vad_model()
+                try:
+                    _restore_model_state(model, self._vad_state)
+                    # Process all complete windows in buffer
+                    while len(self._vad_buffer) >= self._vad_window_samples:
+                        window = self._vad_buffer[: self._vad_window_samples]
+                        self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
 
-                # Convert to tensor for production Silero; mock accepts numpy
-                if _vad_torch is not None:
-                    tensor = _vad_torch.from_numpy(window.copy())
-                else:
-                    tensor = window
-                prob = _vad_model(tensor, self._vad_sample_rate)
-                # Silero returns tensor; mock returns float
-                if hasattr(prob, 'item'):
-                    prob = prob.item()
-                if prob > self._speech_threshold:
-                    speech_detected = True
+                        # Convert to tensor for production Silero; mock accepts numpy
+                        if _vad_torch is not None:
+                            tensor = _vad_torch.from_numpy(window.copy())
+                        else:
+                            tensor = window
+                        prob = model(tensor, self._vad_sample_rate)
+                        # Silero returns tensor; mock returns float
+                        if hasattr(prob, 'item'):
+                            prob = prob.item()
+                        if prob > self._speech_threshold:
+                            speech_detected = True
+                    self._vad_state = _capture_model_state(model)
+                finally:
+                    _return_vad_model(model)
 
-        # Keep buffer bounded (max 1 window of leftover)
-        if len(self._vad_buffer) > self._vad_window_samples:
-            self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
+            # Keep buffer bounded (max 1 window of leftover)
+            if len(self._vad_buffer) > self._vad_window_samples:
+                self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
-        return speech_detected
+            return speech_detected
 
     def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
         """Process an audio chunk through the VAD gate.
@@ -351,6 +458,7 @@ class VADStreamingGate:
             self._first_audio_wall_time = wall_time
 
         self._chunks_total += 1
+        self._bytes_received += len(pcm_data)
 
         # Track audio time
         n_samples = len(pcm_data) // (2 * self.channels)
@@ -408,7 +516,6 @@ class VADStreamingGate:
                 evicted = self._pre_roll.popleft()
                 evicted_ms = (len(evicted) / (2.0 * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms -= evicted_ms
-                self._bytes_skipped += len(evicted)  # Truly discarded from pre-roll
 
             if is_speech:
                 # Transition: SILENCE → SPEECH
@@ -483,7 +590,7 @@ class VADStreamingGate:
                 self._pre_roll.append(pcm_data)
                 chunk_ms_local = (len(pcm_data) / (2.0 * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms = chunk_ms_local
-                # pcm_data is in pre-roll (not yet skipped/sent); bytes_skipped on eviction
+                # pcm_data is buffered in pre-roll and will count as skipped if never sent
                 self.dg_wall_mapper.on_silence_skipped()
                 return GateOutput(
                     audio_to_send=b'',
@@ -509,7 +616,8 @@ class VADStreamingGate:
     def get_metrics(self) -> dict:
         """Return gate metrics for logging/monitoring."""
         total = self._chunks_total or 1
-        total_bytes = (self._bytes_sent + self._bytes_skipped) or 1
+        bytes_skipped = max(0, self._bytes_received - self._bytes_sent)
+        total_bytes = self._bytes_received or 1
         return {
             'chunks_total': self._chunks_total,
             'chunks_speech': self._chunks_speech,
@@ -517,13 +625,33 @@ class VADStreamingGate:
             'silence_ratio': self._chunks_silence / total,
             'finalize_count': self._finalize_count,
             'finalize_errors': self._finalize_errors,
+            'bytes_received': self._bytes_received,
             'bytes_sent': self._bytes_sent,
-            'bytes_skipped': self._bytes_skipped,
-            'bytes_saved_ratio': self._bytes_skipped / total_bytes,
+            'bytes_skipped': bytes_skipped,
+            'bytes_saved_ratio': bytes_skipped / total_bytes,
             'keepalive_count': self._keepalive_count,
             'state': self._state.value,
             'mode': self.mode,
         }
+
+    def to_json_log(self) -> dict:
+        """Return JSON-safe metrics with derived quality/cost fields."""
+        metrics = self.get_metrics()
+        total = metrics['chunks_total'] or 1
+        return {
+            'event': 'vad_gate_metrics',
+            'uid': self.uid,
+            'session_id': self.session_id,
+            'session_duration_sec': self._audio_cursor_ms / 1000.0,
+            'speech_ratio': metrics['chunks_speech'] / total,
+            'estimated_savings_pct': metrics['bytes_saved_ratio'] * 100.0,
+            **metrics,
+        }
+
+    def record_keepalive(self, wall_time: float) -> None:
+        """Record a keepalive send using the gate public API."""
+        self._keepalive_count += 1
+        self._last_send_wall_time = wall_time
 
 
 # ---------------------------------------------------------------------------
@@ -559,8 +687,7 @@ class GatedDeepgramSocket:
             # Prevent DG 30s idle timeout during extended silence
             try:
                 self._conn.keep_alive()
-                self._gate._keepalive_count += 1
-                self._gate._last_send_wall_time = now
+                self._gate.record_keepalive(now)
             except Exception:
                 logger.debug('keepalive failed uid=%s', self._gate.uid)
         if gate_out.should_finalize:
