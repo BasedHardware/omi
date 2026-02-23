@@ -278,6 +278,11 @@ async function handleJsonRpc(
           }
         }
 
+        // For dev-mode, prepend workspace path so Claude has that context
+        if (content && name === "dev-mode" && workspace) {
+          content = `Workspace: ${workspace}\n\n${content}`;
+        }
+
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
