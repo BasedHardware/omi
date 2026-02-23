@@ -534,7 +534,7 @@ workflows:
         submit_to_app_store: false
 
   macos-prod-testflight:
-    name: Release macOS to Testflight
+    name: "[DISABLED] Flutter macOS to Testflight (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1030,7 +1030,7 @@ workflows:
           failure: false
 
   macos-desktop-release:
-    name: Release macOS Desktop Update (DMG)
+    name: "[DISABLED] Flutter macOS Desktop Release (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1050,27 +1050,7 @@ workflows:
       cache_paths:
         - $HOME/.pub-cache
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - tag
-        - push
-      tag_patterns:
-        # Only trigger on manual tags
-        - pattern: "v*-desktop-cm"
-          include: true
-        - pattern: "v*-macos-cm"
-          include: true
-        - pattern: "v*-desktop-auto"
-          include: false
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'app/lib/desktop/**'
-          - 'app/macos/**'
+    # DISABLED: Triggering removed — replaced by omi-desktop-swift-release workflow
     working_directory: app
     scripts:
       - name: Set up Firebase
