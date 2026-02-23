@@ -1,6 +1,13 @@
 {
   "releases": [
     {
+      "version": "0.10.6",
+      "date": "2026-02-22",
+      "changes": [
+        "Fixed auto-update failing with 'An error occurred while running the updater': app now self-heals macOS provenance xattrs that break code signature"
+      ]
+    },
+    {
       "version": "0.10.5",
       "date": "2026-02-22",
       "changes": [
