@@ -181,16 +181,6 @@ class SharedPreferencesUtil {
 
   bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
 
-  // Cached agent VM IP for WebSocket connection
-  set cachedAgentVmIp(String value) => saveString('cachedAgentVmIp', value);
-
-  String get cachedAgentVmIp => getString('cachedAgentVmIp');
-
-  // Cached agent VM auth token
-  set cachedAgentVmAuthToken(String value) => saveString('cachedAgentVmAuthToken', value);
-
-  String get cachedAgentVmAuthToken => getString('cachedAgentVmAuthToken');
-
   // Daily reflection notification at 9 PM - default is true (enabled)
   set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
 

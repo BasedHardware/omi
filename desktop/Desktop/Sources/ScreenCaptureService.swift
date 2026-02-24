@@ -11,7 +11,7 @@ final class ScreenCaptureService: Sendable {
     /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
     /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
     /// thread pool (captureActiveWindowCGImage runs non-isolated), so a lock is required.
-    nonisolated(unsafe) private static let axStateLock = NSLock()
+    private static let axStateLock = NSLock()
     /// Tracks consecutive AX cannotComplete failures per bundle ID.
     /// Apps that consistently fail (Qt, OpenGL, etc.) are skipped for AX after the threshold.
     /// Must be accessed only while holding axStateLock.

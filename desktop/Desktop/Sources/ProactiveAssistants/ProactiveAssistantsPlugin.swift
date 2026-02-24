@@ -460,10 +460,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         lastStatus = nil
         frameCount = 0
 
-        // Sync the persistent setting so the UI and auto-start stay in sync
-        AssistantSettings.shared.screenAnalysisEnabled = false
-        UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
-
         // Clear FocusStorage real-time state
         FocusStorage.shared.clearRealtimeStatus()
 

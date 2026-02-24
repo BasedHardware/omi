@@ -936,7 +936,10 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, screenshotURL: URL?, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotURL != nil)
+        // Capture a fresh screenshot for every message so context is always current
+        let latestScreenshot = await Task.detached { ScreenCaptureManager.captureScreen() }.value
+
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: latestScreenshot != nil)
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -974,7 +977,7 @@ class FloatingControlBarManager {
 
         // Build prompt with screenshot context if available
         var fullMessage = message
-        if let url = screenshotURL {
+        if let url = latestScreenshot {
             fullMessage = "[Screenshot of user's screen attached: \(url.path)]\n\n\(message)"
         }
 

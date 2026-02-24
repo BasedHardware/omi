@@ -663,20 +663,14 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      // Connect if not already connected
-      if (!_agentChatService.isConnected) {
-        final ip = SharedPreferencesUtil().cachedAgentVmIp;
-        final token = SharedPreferencesUtil().cachedAgentVmAuthToken;
-        if (ip.isEmpty || token.isEmpty) {
-          message.text = 'Agent VM not configured. Please toggle Claude Agent off and on again.';
-          notifyListeners();
-          setShowTypingIndicator(false);
-          setSendingMessage(false);
-          return;
-        }
-        final connected = await _agentChatService.connect(ip, token);
-        if (!connected) {
-          message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
+      // Connect to agent proxy (authenticates via Firebase token)
+      final connected = await _agentChatService.connect();
+      if (!connected) {
+        // Retry once before giving up
+        await Future.delayed(const Duration(seconds: 1));
+        final retried = await _agentChatService.connect();
+        if (!retried) {
+          message.text = 'Failed to connect to agent. Check that your desktop is running.';
           notifyListeners();
           setShowTypingIndicator(false);
           setSendingMessage(false);

@@ -151,6 +151,13 @@ actor AgentVMService {
         return true
     }
 
+    /// Re-upload the database to a VM that lost its data (e.g. after a restart).
+    /// Called by AgentSyncService when it detects databaseReady: false on the VM.
+    func reuploadDatabase(vmIP: String, authToken: String) async {
+        log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
+        await uploadDatabase(vmIP: vmIP, authToken: authToken)
+    }
+
     /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
     /// Pauses AgentSync during upload to prevent competing for memory and network.
     private func uploadDatabase(vmIP: String, authToken: String) async {
@@ -225,7 +232,7 @@ actor AgentVMService {
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.setValue("deflate", forHTTPHeaderField: "Content-Encoding")
+        request.setValue("gzip", forHTTPHeaderField: "Content-Encoding")
         request.timeoutInterval = 600
 
         do {

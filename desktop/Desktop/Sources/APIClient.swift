@@ -3705,6 +3705,12 @@ struct AssistantSettingsResponse: Codable {
     var task: TaskSettingsResponse?
     var advice: AdviceSettingsResponse?
     var memory: MemorySettingsResponse?
+    var updateChannel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case shared, focus, task, advice, memory
+        case updateChannel = "update_channel"
+    }
 }
 
 // MARK: - Focus Sessions API
@@ -4370,6 +4376,19 @@ extension APIClient {
             ))
         } catch {
             log("APIClient: LLM usage record failed: \(error.localizedDescription)")
+        }
+    }
+
+    func fetchTotalOmiAICost() async -> Double? {
+        struct Res: Decodable { let total_cost_usd: Double }
+        do {
+            log("APIClient: Fetching total Omi AI cost from backend")
+            let res: Res = try await get("v1/users/me/llm-usage/total")
+            log("APIClient: Total Omi AI cost from backend: $\(String(format: "%.4f", res.total_cost_usd))")
+            return res.total_cost_usd
+        } catch {
+            log("APIClient: LLM total cost fetch failed: \(error.localizedDescription)")
+            return nil
         }
     }
 }

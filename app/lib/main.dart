@@ -3,6 +3,7 @@ import 'dart:ui';
 // trigger rebuild
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -142,6 +143,12 @@ Future _init() async {
       Env.overrideApiBaseUrl('https://api.omiapi.com/');
       debugPrint('TestFlight detected: using dev backend');
     }
+  }
+
+  // Local agent proxy testing — port-forward svc/prod-omi-agent-proxy 8082:8080
+  // Comment out when agent.omi.me DNS is configured.
+  if (kDebugMode) {
+    Env.overrideAgentProxyWsUrl('ws://localhost:8082/v1/agent/ws');
   }
 
   FlutterForegroundTask.initCommunicationPort();

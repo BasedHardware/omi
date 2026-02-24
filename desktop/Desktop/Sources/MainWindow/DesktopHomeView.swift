@@ -91,6 +91,18 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
                             }
 
+                            // Migration: one-time reset for users whose screenAnalysisEnabled
+                            // was incorrectly set to false by a bug in stopMonitoring() that
+                            // persisted false on every automatic stop (failures, sign-out, etc.).
+                            let migrationKey = "screenAnalysisAutoStartFixed_v1"
+                            if !UserDefaults.standard.bool(forKey: migrationKey) {
+                                UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
+                                UserDefaults.standard.set(true, forKey: migrationKey)
+                                log("DesktopHomeView: Applied screenAnalysisAutoStart migration — reset to enabled")
+                                // Push true to server so syncFromServer() doesn't revert it
+                                Task { await SettingsSyncManager.shared.syncToServer() }
+                            }
+
                             // Start proactive assistants monitoring if enabled in settings
                             if settings.screenAnalysisEnabled {
                                 ProactiveAssistantsPlugin.shared.startMonitoring { success, error in

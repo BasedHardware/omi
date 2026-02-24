@@ -348,6 +348,48 @@ impl FirestoreService {
         Ok(())
     }
 
+    /// Sum all daily desktop_chat.cost_usd values for a user across all llm_usage documents.
+    pub async fn get_total_llm_cost(
+        &self,
+        uid: &str,
+    ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+        let query = json!({
+            "structuredQuery": {
+                "from": [{"collectionId": LLM_USAGE_SUBCOLLECTION}]
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .await?
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Firestore query failed: {}", error_text).into());
+        }
+
+        let results: Vec<Value> = response.json().await?;
+        let total: f64 = results.iter().filter_map(|entry| {
+            let cost = entry
+                .get("document")?
+                .get("fields")?
+                .get("desktop_chat")?
+                .get("mapValue")?
+                .get("fields")?
+                .get("cost_usd")?;
+            // Firestore stores doubles as doubleValue, but may also be integerValue
+            cost.get("doubleValue")
+                .and_then(|v| v.as_f64())
+                .or_else(|| cost.get("integerValue").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()))
+        }).sum();
+
+        Ok(total)
+    }
+
     // =========================================================================
     // CONVERSATIONS
     // =========================================================================
@@ -4841,12 +4883,16 @@ impl FirestoreService {
             excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
         });
 
+        // Read top-level update_channel from user doc (not from assistant_settings sub-map)
+        let update_channel = self.parse_string(fields, "update_channel");
+
         Ok(AssistantSettingsData {
             shared,
             focus,
             task,
             advice,
             memory,
+            update_channel,
         })
     }
 
@@ -6616,8 +6662,10 @@ impl FirestoreService {
                                 == Some(target_app)
                         }
                         None => {
-                            // Looking for main chat: plugin_id is null, absent, or empty
-                            match fields.get("plugin_id") {
+                            // Looking for main chat: both plugin_id AND app_id must be
+                            // null, absent, or empty.  Without the app_id check, task-chat
+                            // sessions (plugin_id=null, app_id="task-chat") match falsely.
+                            let plugin_id_null = match fields.get("plugin_id") {
                                 None => true,
                                 Some(val) => {
                                     val.get("nullValue").is_some()
@@ -6626,7 +6674,18 @@ impl FirestoreService {
                                             .and_then(|v| v.as_str())
                                             .map_or(false, |s| s.is_empty())
                                 }
-                            }
+                            };
+                            let app_id_null = match fields.get("app_id") {
+                                None => true,
+                                Some(val) => {
+                                    val.get("nullValue").is_some()
+                                        || val
+                                            .get("stringValue")
+                                            .and_then(|v| v.as_str())
+                                            .map_or(false, |s| s.is_empty())
+                                }
+                            };
+                            plugin_id_null && app_id_null
                         }
                     };
 
