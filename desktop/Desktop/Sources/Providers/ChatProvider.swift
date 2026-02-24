@@ -274,6 +274,9 @@ class ChatProvider: ObservableObject {
     @Published var isLoadingMoreMessages = false
     @Published var showStarredOnly = false
     @Published var searchQuery = ""
+    /// Pre-computed grouped sessions for sidebar display.
+    /// Updated reactively via Combine instead of recomputed on every SwiftUI render pass.
+    @Published private(set) var groupedSessions: [(String, [ChatSession])] = []
 
     /// Triggered when a browser tool is called but the extension token isn't configured.
     /// The UI should observe this and present BrowserExtensionSetup.
@@ -335,6 +338,7 @@ class ChatProvider: ObservableObject {
     private let maxMessagesInMemory = 200
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
+    private var sessionGroupingObserver: AnyCancellable?
 
     // MARK: - Cross-Platform Message Polling
     /// Polls for new messages from other platforms (mobile) every 15 seconds.
@@ -459,6 +463,14 @@ class ChatProvider: ObservableObject {
                         logError("Failed to restart ACP bridge after Playwright setting change", error: error)
                     }
                 }
+            }
+
+        // Keep groupedSessions in sync — runs off the hot path so SwiftUI body never recomputes it
+        sessionGroupingObserver = Publishers.CombineLatest3($sessions, $searchQuery, $currentSession)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _, _, _ in
+                guard let self else { return }
+                self.groupedSessions = self.computeGroupedSessions()
             }
     }
 
@@ -1310,6 +1322,17 @@ class ChatProvider: ObservableObject {
 
     /// Initialize chat: fetch sessions and load messages
     func initialize() async {
+        // Seed cumulative Omi AI cost from backend now that auth is ready (background, no latency)
+        Task.detached(priority: .background) { [weak self] in
+            guard let serverCost = await APIClient.shared.fetchTotalOmiAICost() else { return }
+            await MainActor.run {
+                guard let self = self else { return }
+                // Always trust the server value — it's the authoritative total
+                self.omiAICumulativeCostUsd = serverCost
+                log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
+            }
+        }
+
         if multiChatEnabled {
             // Multi-chat mode: load sessions, default to default chat
             await fetchSessions()
@@ -2336,8 +2359,8 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Session Grouping Helpers
 
-    /// Group sessions by date for sidebar display (uses filteredSessions for search)
-    var groupedSessions: [(String, [ChatSession])] {
+    /// Group sessions by date — called by the Combine observer, not on every SwiftUI render pass.
+    private func computeGroupedSessions() -> [(String, [ChatSession])] {
         let calendar = Calendar.current
         let now = Date()
 
