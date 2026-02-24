@@ -566,19 +566,30 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
+
   Future<bool> deleteSelectedItems() async {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
-    final success = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)))
-        .then((results) => results.every((success) => success));
 
-    if (success) {
-      _selectedItems.clear();
-      _isSelectionMode = false;
+    _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    _selectedItems.clear();
+    _isEditMode = false;
+    notifyListeners();
+
+    try {
+      final success = await Future.wait(
+        itemsToDelete.map((item) => api.deleteActionItem(item.id)),
+      ).then((results) => results.every((success) => success));
+
+      if (!success) {
+        Logger.debug('Failed to delete some action items on server');
+      }
+      return success;
+    } catch (e) {
+      Logger.debug('Error in bulk deletion: $e');
+      return false;
     }
-
-    return success;
   }
 
   @override
