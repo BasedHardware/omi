@@ -1,6 +1,28 @@
 {
   "releases": [
     {
+      "version": "11.2",
+      "date": "2026-02-24",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Fixed Screen Analysis being incorrectly disabled when monitoring stops",
+        "Faster data syncing with gzip compression",
+        "Fixed OMI AI cost tracking to use server-authoritative totals",
+        "Improved Proactive Assistants reliability"
+      ]
+    },
+    {
+      "version": "11.1",
+      "date": "2026-02-24",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Fixed auto-update on macOS 26: upgraded Sparkle to 2.9.0 and added launchctl kickstart workaround for on-demand-only mode",
+        "Chat performance: cached markdown rendering, equatable chat bubbles, and session grouping moved off the render path",
+        "$50 free usage limit with prompt to connect your own Claude account",
+        "Server-controlled update channel for remote beta/stable switching"
+      ]
+    },
+    {
       "version": "11.0",
       "date": "2026-02-23",
       "changes": [
