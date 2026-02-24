@@ -27,9 +27,8 @@ Services: backend (+ backend-sync, backend-integration, backend-listen — same 
 
 Inter-service communication:
 - backend-listen → pusher: WebSocket with binary protocol (`utils/pusher.py` → `connect_to_trigger_pusher()`)
-- backend/pusher → diarizer: HTTP POST `/v2/embedding` (`utils/stt/speaker_embedding.py`, env `HOSTED_SPEAKER_EMBEDDING_API_URL`)
-- backend/pusher → vad: HTTP POST `/v1/vad` (`utils/stt/vad.py`, env `HOSTED_VAD_API_URL`, cached in Redis 24h)
-- backend/pusher → speech-profile: HTTP POST `/v1/speaker-identification` (`utils/stt/speech_profile.py`, env `HOSTED_SPEECH_PROFILE_API_URL`)
+- backend-listen → diarizer: HTTP POST for real-time speaker embeddings (`routers/transcribe.py` → `utils/stt/speaker_embedding.py`, env `HOSTED_SPEAKER_EMBEDDING_API_URL`)
+- backend-listen & pusher → vad, speech-profile: both call these via `postprocess_conversation` (`utils/conversations/postprocess_conversation.py`). Pusher triggers via `process_conversation` after receiving audio. VAD results cached in Redis 24h.
 - All services share Firestore (`database/_client.py`) and Redis (`database/redis_db.py`) for cache + pub/sub (`cache_invalidation` channel via `database/redis_pubsub.py`)
 - notifications-job: cron, reads Firestore + Redis, sends push notifications
 
