@@ -572,10 +572,13 @@ class MessageProvider extends ChangeNotifier {
     _isNextMessageFromVoice = false;
 
     // Route through agent VM if Claude Agent is enabled
+    print('[DEBUG] claudeAgentEnabled=${SharedPreferencesUtil().claudeAgentEnabled}');
     if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[DEBUG] routing through _sendMessageViaAgent');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
+    print('[DEBUG] routing through regular stream');
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
@@ -686,6 +689,8 @@ class MessageProvider extends ChangeNotifier {
       final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
 
       await for (var event in _agentChatService.sendQuery(prompt)) {
+        print(
+            '[DEBUG] agent event: type=${event.type}, text="${event.text.length > 50 ? event.text.substring(0, 50) : event.text}"');
         switch (event.type) {
           case AgentChatEventType.textDelta:
             if (agentThinkingAfterText) {
@@ -700,6 +705,8 @@ class MessageProvider extends ChangeNotifier {
             break;
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
+            print(
+                '[DEBUG] toolActivity: text="${event.text}", msgText.isEmpty=${message.text.isEmpty}, agentThinkingAfterText=$agentThinkingAfterText');
             flushBuffer();
             if (message.text.isNotEmpty) {
               agentThinkingAfterText = true;
@@ -707,6 +714,8 @@ class MessageProvider extends ChangeNotifier {
             if (event.text.isNotEmpty) {
               message.thinkings.add(event.text);
             }
+            print(
+                '[DEBUG] after toolActivity: agentThinkingAfterText=$agentThinkingAfterText, thinkings=${message.thinkings.length}');
             notifyListeners();
             break;
           case AgentChatEventType.result:
