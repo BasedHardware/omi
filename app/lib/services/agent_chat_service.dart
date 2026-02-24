@@ -73,8 +73,10 @@ class AgentChatService {
     _channel!.stream.listen(
       (data) {
         try {
+          print('[DEBUG-WS] raw: ${(data as String).length > 100 ? (data as String).substring(0, 100) : data}');
           final msg = jsonDecode(data as String) as Map<String, dynamic>;
           final type = msg['type'] as String?;
+          print('[DEBUG-WS] parsed type=$type');
           final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
 
           switch (type) {
