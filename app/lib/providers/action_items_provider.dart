@@ -592,6 +592,30 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> deleteCompletedItems() async {
+    final itemsToDelete = completedItems; 
+    if (itemsToDelete.isEmpty) return false;
+
+    // 1. Remove all completed items from local state immediately
+    _actionItems.removeWhere((item) => item.completed);
+    notifyListeners(); // Update the UI ONCE
+
+    // 2. Process API deletions in the background
+    try {
+      final success = await Future.wait(
+        itemsToDelete.map((item) => api.deleteActionItem(item.id))
+      ).then((results) => results.every((success) => success));
+
+      if (!success) {
+        Logger.debug('Failed to delete some completed action items on server');
+      }
+      return success;
+    } catch (e) {
+      Logger.debug('Error in bulk deletion: $e');
+      return false;
+    }
+  }
+
   @override
   void dispose() {
     _refreshDebounceTimer?.cancel();
