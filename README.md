@@ -1,5 +1,7 @@
 <div align="center">
 
+<!-- Test PR from Claude Code -->
+
 # **omi**
 
 Meet Omi, the world’s leading open-source AI wearable that captures conversations, gives summaries, action items and does actions for you. Simply connect Omi to your mobile device and enjoy automatic, high-quality
