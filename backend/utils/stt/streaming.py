@@ -331,11 +331,7 @@ async def process_audio_dg(
         _original_stream_transcript = stream_transcript
 
         def stream_transcript(segments):
-            # Remap in-place before passing to caller
-            if vad_gate.mode == 'active':
-                for seg in segments:
-                    seg['start'] = vad_gate.dg_wall_mapper.dg_to_wall_rel(seg['start'])
-                    seg['end'] = vad_gate.dg_wall_mapper.dg_to_wall_rel(seg['end'])
+            vad_gate.remap_segments(segments)
             _original_stream_transcript(segments)
 
     def on_message(self, result, **kwargs):
