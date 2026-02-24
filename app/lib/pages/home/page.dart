@@ -635,6 +635,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   if (isRepeat) {
                                     _scrollToTop(index);
                                   } else {
+                                    if (index != 1) {
+                                      final actionItemsProvider = Provider.of<ActionItemsProvider>(context, listen: false);
+                                      if (actionItemsProvider.isEditMode) {
+                                        actionItemsProvider.toggleEditMode();
+                                      }
+                                    }
                                     home.setIndex(index);
                                   }
                                 },
@@ -989,6 +995,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   final showCompleted = actionItemsProvider.showCompletedView;
                   return Row(
                     children: [
+                      // Edit mode toggle
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: actionItemsProvider.isEditMode
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            FontAwesomeIcons.penToSquare,
+                            size: 16,
+                            color: actionItemsProvider.isEditMode ? Colors.white : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            actionItemsProvider.toggleEditMode();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       // Export button
                       Container(
                         width: 36,
