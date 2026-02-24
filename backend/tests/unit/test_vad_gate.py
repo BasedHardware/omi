@@ -1422,3 +1422,51 @@ class TestGateCreationIntegration:
 
         assert main_socket.is_gated
         assert not profile_socket.is_gated
+
+
+class TestFailOpen:
+    """Tests for fail-open resilience: VAD errors must not drop user audio."""
+
+    def test_gated_socket_falls_back_on_process_error(self):
+        """Runtime VAD error should disable gate and send data directly."""
+        mock_conn = MagicMock()
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            uid='test',
+            session_id='sess',
+        )
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+        assert gated.is_gated
+
+        # Make process_audio raise
+        with patch.object(gate, 'process_audio', side_effect=RuntimeError('model crash')):
+            gated.send(b'\x00' * 640, wall_time=1.0)
+
+        # Data should have been sent directly to DG
+        mock_conn.send.assert_called_once_with(b'\x00' * 640)
+        # Gate should be disabled for rest of session
+        assert gated._gate is None
+        assert not gated.is_gated
+
+    def test_gated_socket_sends_normally_after_fallback(self):
+        """After fallback, subsequent sends go directly to DG (no gate)."""
+        mock_conn = MagicMock()
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            uid='test',
+            session_id='sess',
+        )
+        gated = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        # Trigger fallback
+        with patch.object(gate, 'process_audio', side_effect=RuntimeError('crash')):
+            gated.send(b'\x00' * 640, wall_time=1.0)
+
+        mock_conn.reset_mock()
+        # Subsequent send should go directly without gate
+        gated.send(b'\x01' * 640, wall_time=2.0)
+        mock_conn.send.assert_called_once_with(b'\x01' * 640)
