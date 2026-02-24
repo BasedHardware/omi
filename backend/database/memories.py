@@ -9,6 +9,9 @@ from ._client import db
 from database import users as users_db
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+import logging
+
+logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
@@ -69,7 +72,7 @@ def get_memories(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
 ):
-    print('get_memories db', uid, limit, offset, categories, start_date, end_date)
+    logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date}')
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
 
     if categories:
@@ -90,14 +93,14 @@ def get_memories(
 
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
-    print("get_memories", len(memories))
+    logger.info(f"get_memories {len(memories)}")
     result = [memory for memory in memories if memory.get('user_review') is not False]
     return result
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
-    print('get_public_memories', limit, offset)
+    logger.info(f'get_public_memories {limit} {offset}')
 
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
@@ -116,7 +119,7 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
 def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
-    print('get_non_filtered_memories', uid, limit, offset)
+    logger.info(f'get_non_filtered_memories {uid} {limit} {offset}')
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     memories_ref = memories_ref.limit(limit).offset(offset)
@@ -281,7 +284,7 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
         batch.delete(doc.reference)
         removed_ids.append(doc.id)
     batch.commit()
-    print('delete_memories_for_conversation', memory_id, len(removed_ids))
+    logger.info(f'delete_memories_for_conversation {memory_id} {len(removed_ids)}')
 
 
 def unlock_all_memories(uid: str):
@@ -303,7 +306,7 @@ def unlock_all_memories(uid: str):
             count = 0
     if count > 0:
         batch.commit()
-    print(f"Unlocked all memories for user {uid}")
+    logger.info(f"Unlocked all memories for user {uid}")
 
 
 # **************************************
@@ -341,7 +344,7 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            print(f"Memory {doc_snapshot.id} not found, skipping.")
+            logger.info(f"Memory {doc_snapshot.id} not found, skipping.")
             continue
 
         memory_data = doc_snapshot.to_dict()
@@ -371,7 +374,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     Migrate memories from one user to another.
     If app_id is provided, only migrate memories related to that app.
     """
-    print(f'Migrating memories from {prev_uid} to {new_uid}')
+    logger.info(f'Migrating memories from {prev_uid} to {new_uid}')
 
     # Get source memories
     prev_user_ref = db.collection(users_collection).document(prev_uid)
@@ -387,7 +390,7 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     memories_to_migrate = [doc.to_dict() for doc in query.stream()]
 
     if not memories_to_migrate:
-        print(f'No memories to migrate for user {prev_uid}')
+        logger.info(f'No memories to migrate for user {prev_uid}')
         return 0
 
     # Create batch for destination user
@@ -402,5 +405,5 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
 
     # Commit batch
     batch.commit()
-    print(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
+    logger.info(f'Migrated {len(memories_to_migrate)} memories from {prev_uid} to {new_uid}')
     return len(memories_to_migrate)

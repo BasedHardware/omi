@@ -1,13 +1,16 @@
 from firebase_admin import auth
 
 from database.redis_db import cache_user_name, get_cached_user_name
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_user_from_uid(uid: str):
     try:
         user = auth.get_user(uid) if uid else None
     except Exception as e:
-        print(e)
+        logger.info(e)
         user = None
     if not user:
         return None
