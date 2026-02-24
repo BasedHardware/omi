@@ -995,30 +995,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   final showCompleted = actionItemsProvider.showCompletedView;
                   return Row(
                     children: [
-                      // Edit mode toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: actionItemsProvider.isEditMode
-                              ? Colors.deepPurple.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            FontAwesomeIcons.penToSquare,
-                            size: 16,
-                            color: actionItemsProvider.isEditMode ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleEditMode();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
                       // Export button
                       Container(
                         width: 36,
@@ -1042,6 +1018,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 builder: (context) => const TaskIntegrationsPage(),
                               ),
                             );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Edit mode toggle
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: actionItemsProvider.isEditMode
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            FontAwesomeIcons.penToSquare,
+                            size: 16,
+                            color: actionItemsProvider.isEditMode ? Colors.white : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            actionItemsProvider.toggleEditMode();
                           },
                         ),
                       ),
