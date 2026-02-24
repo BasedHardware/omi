@@ -57,6 +57,7 @@ from database.redis_db import (
     decrease_app_installs_count,
     enable_app,
     disable_app,
+    is_app_enabled,
     delete_app_cache_by_id,
     is_username_taken,
     save_username,
@@ -1752,7 +1753,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
-    if app_id in get_enabled_apps(uid):
+    if is_app_enabled(uid, app_id):
         disable_app(uid, app_id)
         app = get_available_app_by_id(app_id, uid)
         if app:
