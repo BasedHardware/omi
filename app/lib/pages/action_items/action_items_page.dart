@@ -199,7 +199,12 @@ Widget _buildFab() {
       if (provider.isEditMode) {
         return const SizedBox.shrink();
       }
-      if (provider.showCompletedView) {
+if (provider.showCompletedView) {
+        // Optional UX Polish: Hide the trash can if there are no completed items!
+        if (provider.completedItems.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
         return Positioned(
           right: 20,
           bottom: 100,
@@ -226,21 +231,14 @@ Widget _buildFab() {
                   ],
                 ),
               );
+              
               if (confirm == true) {
-                final completedItems = provider.actionItems
-                    .where((i) => i.completed)
-                    .toList();
-                for (final item in completedItems) {
-                  try {
-                    await provider.deleteActionItem(item);
-                  } catch (e) {
-                    Logger.debug('Error deleting completed item: $e');
-                  }
-                }
+                // Call the new, highly optimized provider method instead of a slow loop!
+                await provider.deleteCompletedItems();
               }
             },
             backgroundColor: Colors.red[600],
-            child: const Icon(Icons.delete, color: Colors.white),
+            child: const Icon(Icons.delete_sweep, color: Colors.white), // delete_sweep looks great here!
           ),
         );
       }
