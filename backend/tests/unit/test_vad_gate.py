@@ -1531,3 +1531,180 @@ class TestFailOpen:
         # Subsequent send should go directly without gate
         gated.send(b'\x01' * 640, wall_time=2.0)
         mock_conn.send.assert_called_once_with(b'\x01' * 640)
+
+
+class TestRemapSegments:
+    """Tests for VADStreamingGate.remap_segments() — the extracted remap method."""
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_remap_active_mode(self):
+        """In active mode, segments should be remapped with mapper offsets."""
+        gate = self._make_gate(mode='active')
+        # Simulate a silence gap via mapper
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello'}]
+        gate.remap_segments(segments)
+        assert segments[0]['start'] == 16.0
+        assert segments[0]['end'] == 17.0
+
+    def test_remap_shadow_mode_noop(self):
+        """In shadow mode, segments should remain unchanged."""
+        gate = self._make_gate(mode='shadow')
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello'}]
+        gate.remap_segments(segments)
+        assert segments[0]['start'] == 6.0
+        assert segments[0]['end'] == 7.0
+
+    def test_remap_off_mode_noop(self):
+        """In off mode (fail-open case), segments should remain unchanged."""
+        gate = self._make_gate(mode='active')
+        gate.mode = 'off'  # Simulate fail-open
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello'}]
+        gate.remap_segments(segments)
+        assert segments[0]['start'] == 6.0
+        assert segments[0]['end'] == 7.0
+
+    def test_remap_empty_segments(self):
+        """Empty segment list should be handled gracefully."""
+        gate = self._make_gate(mode='active')
+        segments = []
+        gate.remap_segments(segments)
+        assert segments == []
+
+    def test_remap_zero_duration_segment(self):
+        """Segment with start == end should be remapped correctly."""
+        gate = self._make_gate(mode='active')
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [{'start': 6.0, 'end': 6.0, 'text': ''}]
+        gate.remap_segments(segments)
+        assert segments[0]['start'] == 16.0
+        assert segments[0]['end'] == 16.0
+
+    def test_remap_preserves_other_fields(self):
+        """Remap should only modify start/end, leaving text, speaker, etc. untouched."""
+        gate = self._make_gate(mode='active')
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [
+            {
+                'start': 6.0,
+                'end': 7.0,
+                'text': 'hello world',
+                'speaker': 'SPEAKER_00',
+                'is_user': True,
+                'person_id': None,
+            }
+        ]
+        gate.remap_segments(segments)
+        assert segments[0]['text'] == 'hello world'
+        assert segments[0]['speaker'] == 'SPEAKER_00'
+        assert segments[0]['is_user'] is True
+        assert segments[0]['person_id'] is None
+
+    def test_remap_multiple_segments(self):
+        """Multiple segments should all be remapped correctly."""
+        gate = self._make_gate(mode='active')
+        # Build a mapper with one silence gap: 5s audio, gap, 3s audio at wall=15s
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        segments = [
+            {'start': 1.0, 'end': 2.0, 'text': 'first'},
+            {'start': 5.5, 'end': 6.5, 'text': 'second'},
+            {'start': 7.0, 'end': 7.5, 'text': 'third'},
+        ]
+        gate.remap_segments(segments)
+        # First segment is in the first audio block (0-5s maps to wall 0-5s)
+        assert segments[0]['start'] == 1.0
+        assert segments[0]['end'] == 2.0
+        # Second segment is in the second audio block (5s+ maps to wall 15s+)
+        assert segments[1]['start'] == 15.5
+        assert segments[1]['end'] == 16.5
+        # Third segment also in second block
+        assert segments[2]['start'] == 17.0
+        assert segments[2]['end'] == 17.5
+
+    def test_remap_active_no_checkpoints_passthrough(self):
+        """Active mode with no mapper checkpoints should still remap (identity mapping)."""
+        gate = self._make_gate(mode='active')
+        # No on_audio_sent calls — mapper has no checkpoints
+        segments = [{'start': 3.0, 'end': 4.0, 'text': 'test'}]
+        gate.remap_segments(segments)
+        # With no checkpoints, dg_to_wall_rel returns the input unchanged
+        assert segments[0]['start'] == 3.0
+        assert segments[0]['end'] == 4.0
+
+    def test_remap_malformed_segments_missing_keys(self):
+        """Segments missing start/end keys should raise KeyError (not silently pass)."""
+        gate = self._make_gate(mode='active')
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+
+        with pytest.raises(KeyError):
+            gate.remap_segments([{'text': 'no timestamps'}])
+
+    def test_remap_malformed_segments_none_values(self):
+        """Segments with None start/end should raise TypeError during remap."""
+        gate = self._make_gate(mode='active')
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+
+        with pytest.raises(TypeError):
+            gate.remap_segments([{'start': None, 'end': None}])
+
+
+class TestGatedSocketRemapDelegation:
+    """Tests for GatedDeepgramSocket.remap_segments() delegation to gate."""
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_gated_socket_remap_delegates_to_gate(self):
+        """GatedDeepgramSocket.remap_segments() should delegate to gate.remap_segments()."""
+        mock_conn = MagicMock()
+        gate = self._make_gate(mode='active')
+        gate.remap_segments = MagicMock(wraps=gate.remap_segments)
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        segments = [{'start': 1.0, 'end': 2.0, 'text': 'test'}]
+        socket.remap_segments(segments)
+        gate.remap_segments.assert_called_once_with(segments)
+
+    def test_gated_socket_remap_noop_without_gate(self):
+        """Without gate, remap_segments() should leave segments unchanged."""
+        mock_conn = MagicMock()
+        socket = GatedDeepgramSocket(mock_conn, gate=None)
+
+        segments = [{'start': 1.0, 'end': 2.0, 'text': 'test'}]
+        socket.remap_segments(segments)
+        assert segments[0]['start'] == 1.0
+        assert segments[0]['end'] == 2.0
