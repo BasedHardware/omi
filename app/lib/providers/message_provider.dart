@@ -689,8 +689,9 @@ class MessageProvider extends ChangeNotifier {
 
       void startSilenceTimer() {
         silenceTimer?.cancel();
-        if (message.text.isNotEmpty) {
+        if (message.text.isNotEmpty || textBuffer.isNotEmpty) {
           silenceTimer = Timer(const Duration(seconds: 2), () {
+            flushBuffer();
             agentThinkingAfterText = true;
             if (!message.thinkings.any((t) => t == 'Thinking')) {
               message.thinkings.add('Thinking');
