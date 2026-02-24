@@ -685,7 +685,12 @@ class GatedDeepgramSocket:
             return self._conn.send(data)
 
         now = wall_time or time.time()
-        gate_out = self._gate.process_audio(data, now)
+        try:
+            gate_out = self._gate.process_audio(data, now)
+        except Exception:
+            logger.exception('VAD gate process error, falling back to direct send uid=%s', self._gate.uid)
+            self._gate = None  # Disable gate for rest of session
+            return self._conn.send(data)
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
         elif self._gate.needs_keepalive(now):
