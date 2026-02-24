@@ -992,38 +992,6 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ))
             : const SizedBox.shrink(),
         message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
-        if (showTypingIndicator && message.text.isNotEmpty && provider.agentThinkingAfterText)
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            child: Row(
-              children: [
-                thinkingText != null
-                    ? Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            ShimmerWithTimeout(
-                              baseColor: Colors.white,
-                              highlightColor: Colors.grey,
-                              child: Text(
-                                overflow: TextOverflow.fade,
-                                maxLines: 1,
-                                softWrap: false,
-                                thinkingText,
-                                style: const TextStyle(color: Colors.white, fontSize: 14),
-                              ),
-                            )
-                          ],
-                        ),
-                      )
-                    : const SizedBox(
-                        height: 16,
-                        child: OmiTypingIndicator(),
-                      ),
-              ],
-            ),
-          ),
         if (message.text.isNotEmpty && !showTypingIndicator)
           MessageActionBar(
             messageText: message.text.decodeString,
