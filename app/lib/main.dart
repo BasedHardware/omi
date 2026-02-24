@@ -145,12 +145,6 @@ Future _init() async {
     }
   }
 
-  // Local agent proxy testing — port-forward svc/prod-omi-agent-proxy 8082:8080
-  // Comment out when agent.omi.me DNS is configured.
-  if (kDebugMode) {
-    Env.overrideAgentProxyWsUrl('ws://localhost:8082/v1/agent/ws');
-  }
-
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
