@@ -833,6 +833,7 @@ class TasksViewModel: ObservableObject {
 
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
+        log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
         var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
 
         // Remove task from current position
@@ -2021,7 +2022,13 @@ struct TasksPage: View {
     var chatProvider: ChatProvider?
 
     // Chat panel state
-    @ObservedObject var chatCoordinator: TaskChatCoordinator
+    // NOTE: NOT @ObservedObject — observing coordinator here would re-render the
+    // entire task list (including all row layout) on every streaming token.
+    // TaskChatSidePanelView handles coordinator observation in an isolated subtree.
+    var chatCoordinator: TaskChatCoordinator
+    /// Mirrors coordinator.activeTaskId — updated via onReceive so task rows
+    /// highlight the correct item without observing the full coordinator.
+    @State private var activeChatTaskId: String? = nil
     @State private var showChatPanel = false
     @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
     /// The window width before the chat panel was opened, so we can restore it exactly.
@@ -2049,7 +2056,7 @@ struct TasksPage: View {
 
     init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
         self.viewModel = viewModel
-        self._chatCoordinator = ObservedObject(wrappedValue: chatCoordinator)
+        self.chatCoordinator = chatCoordinator
         self.chatProvider = chatProvider
     }
 
@@ -2098,25 +2105,14 @@ struct TasksPage: View {
                         }
                 )
 
-                // Right panel: Task chat (slides in from right)
-                Group {
-                    if let taskState = chatCoordinator.activeTaskState {
-                        TaskChatPanel(
-                            taskState: taskState,
-                            coordinator: chatCoordinator,
-                            task: activeTask,
-                            onClose: {
-                                closeChatPanel()
-                            }
-                        )
-                    } else {
-                        // No task selected — show empty panel with close button
-                        TaskChatPanelPlaceholder(
-                            coordinator: chatCoordinator,
-                            onClose: { closeChatPanel() }
-                        )
-                    }
-                }
+                // Right panel: Task chat (slides in from right).
+                // Uses a dedicated view that owns coordinator observation so
+                // streaming updates don't re-render the task list on the left.
+                TaskChatSidePanelView(
+                    coordinator: chatCoordinator,
+                    viewModel: viewModel,
+                    onClose: { closeChatPanel() }
+                )
                 .frame(width: chatPanelWidth)
                 .transition(.move(edge: .trailing))
             }
@@ -2154,12 +2150,9 @@ struct TasksPage: View {
                 // Do NOT call chatCoordinator.closeChat() — coordinator state persists at app level
             }
         }
-    }
-
-    /// The currently active task for the chat panel
-    private var activeTask: TaskActionItem? {
-        guard let taskId = chatCoordinator.activeTaskId else { return nil }
-        return viewModel.findTask(taskId)
+        .onReceive(chatCoordinator.$activeTaskId) { taskId in
+            activeChatTaskId = taskId
+        }
     }
 
     /// Start a background AI investigation for a task (no panel opens)
@@ -3038,7 +3031,7 @@ struct TasksPage: View {
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
                                     dropTargetTaskId: viewModel.dropTargetTaskId,
                                     dropAbove: viewModel.dropAbove,
@@ -3109,7 +3102,7 @@ struct TasksPage: View {
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
@@ -3199,6 +3192,37 @@ struct TasksPage: View {
                 await viewModel.loadTasks()
             }
             .onAppear { viewModel.scrollProxy = proxy }
+        }
+    }
+}
+
+// MARK: - Task Chat Side Panel (isolated coordinator observation)
+
+/// Owns @ObservedObject for the coordinator so streaming updates only
+/// re-render this subtree — not the task list on the left.
+private struct TaskChatSidePanelView: View {
+    @ObservedObject var coordinator: TaskChatCoordinator
+    let viewModel: TasksViewModel
+    let onClose: () -> Void
+
+    private var activeTask: TaskActionItem? {
+        guard let taskId = coordinator.activeTaskId else { return nil }
+        return viewModel.findTask(taskId)
+    }
+
+    var body: some View {
+        if let taskState = coordinator.activeTaskState {
+            TaskChatPanel(
+                taskState: taskState,
+                coordinator: coordinator,
+                task: activeTask,
+                onClose: onClose
+            )
+        } else {
+            TaskChatPanelPlaceholder(
+                coordinator: coordinator,
+                onClose: onClose
+            )
         }
     }
 }
@@ -3298,14 +3322,17 @@ struct TaskCategorySection: View {
                         }
                     }
                     .dropDestination(for: String.self) { droppedIds, _ in
+                        log("DROP-TOP: Received drop at top of \(category.rawValue), ids=\(droppedIds)")
                         isTopDropTargeted = false
                         guard let droppedId = droppedIds.first,
                               let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) else {
+                            log("DROP-TOP: Could not find dropped task")
                             return false
                         }
                         onMoveTask?(droppedTask, 0, category)
                         return true
                     } isTargeted: { targeted in
+                        log("DROP-TOP: isTargeted=\(targeted) on \(category.rawValue)")
                         isTopDropTargeted = targeted
                     }
             }
