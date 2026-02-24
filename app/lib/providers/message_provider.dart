@@ -572,13 +572,10 @@ class MessageProvider extends ChangeNotifier {
     _isNextMessageFromVoice = false;
 
     // Route through agent VM if Claude Agent is enabled
-    print('[DEBUG] claudeAgentEnabled=${SharedPreferencesUtil().claudeAgentEnabled}');
     if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[DEBUG] routing through _sendMessageViaAgent');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
-    print('[DEBUG] routing through regular stream');
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
