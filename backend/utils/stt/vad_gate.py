@@ -653,6 +653,13 @@ class VADStreamingGate:
             **metrics,
         }
 
+    def remap_segments(self, segments: list) -> None:
+        """Remap DG timestamps to wall-clock-relative if gate is active."""
+        if self.mode == 'active':
+            for seg in segments:
+                seg['start'] = self.dg_wall_mapper.dg_to_wall_rel(seg['start'])
+                seg['end'] = self.dg_wall_mapper.dg_to_wall_rel(seg['end'])
+
     def record_keepalive(self, wall_time: float) -> None:
         """Record a keepalive send using the gate public API."""
         self._keepalive_count += 1
@@ -724,10 +731,8 @@ class GatedDeepgramSocket:
 
     def remap_segments(self, segments: list) -> None:
         """Remap DG timestamps from audio-time to wall-clock-relative time."""
-        if self._gate is not None and self._gate.mode == 'active':
-            for seg in segments:
-                seg['start'] = self._gate.dg_wall_mapper.dg_to_wall_rel(seg['start'])
-                seg['end'] = self._gate.dg_wall_mapper.dg_to_wall_rel(seg['end'])
+        if self._gate is not None:
+            self._gate.remap_segments(segments)
 
     def get_metrics(self) -> Optional[dict]:
         """Return gate metrics, or None if no gate."""
