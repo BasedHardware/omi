@@ -1,6 +1,55 @@
 {
   "releases": [
     {
+      "version": "11.0",
+      "date": "2026-02-23",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Task chat session history: resume previous AI conversations about tasks across app restarts",
+        "Dedicated task chat side panel with better layout isolation and session ID display",
+        "Add task button in toolbar (⌘N) for quick inline task creation",
+        "File graph keyboard hints: drag to rotate, right-drag to pan, scroll to zoom",
+        "Removed per-message timeouts in AI bridge — long-running tools no longer fail prematurely",
+        "Chat memory capped at 200 messages to prevent unbounded growth",
+        "Auto-restart memory threshold lowered from 4GB to 3GB for safer recovery",
+        "Fixed PostHog lifecycle capture causing 2-second XPC hangs to Spotlight",
+        "Fixed drag-and-drop task reordering with proper macOS NSItemProvider support",
+        "Fixed SwiftUI layout recursion in chat panels and task list",
+        "Fixed conversation list depth hangs during refresh",
+        "Fixed Rewind ffmpeg process burst when switching apps rapidly",
+        "Removed misleading 'End-to-end encryption (Coming Soon)' badge"
+      ]
+    },
+    {
+      "version": "0.10.9",
+      "date": "2026-02-23",
+      "changes": [
+        "<span style='color:red;font-size:16px;font-weight:bold'>⚠️ AUTO-UPDATE IS BROKEN — YOU MUST DOWNLOAD MANUALLY</span>",
+        "<span style='color:red'>The Install button will NOT work.</span> Please download the new version here: <a href='https://macos.omi.me' style='color:red;font-weight:bold;font-size:15px'>macos.omi.me</a>",
+        "Steps: 1) Click the link above or open <a href='https://macos.omi.me'>macos.omi.me</a> in your browser  2) Download the DMG  3) Open it and drag Omi to Applications  4) Replace the existing app when prompted",
+        "This is a one-time fix. After installing manually, all future updates will work normally.",
+        "Fixed floating control bar dismiss race: PTT query during close animation no longer gets immediately dismissed",
+        "AI chat sees new tables (goals, staged tasks, task chat messages) and hides internal columns for cleaner schema"
+      ]
+    },
+    {
+      "version": "0.10.8",
+      "date": "2026-02-22",
+      "changes": [
+        "Appcast changelog now renders HTML (clickable links, styled text) in Sparkle update dialog",
+        "Updated macos.omi.me download to serve latest DMG",
+        "Floating control bar improvements"
+      ]
+    },
+    {
+      "version": "0.10.7",
+      "date": "2026-02-22",
+      "changes": [
+        "Fixed auto-update: removed code that was breaking app code signature on every launch",
+        "Added detailed Sparkle error logging for easier debugging"
+      ]
+    },
+    {
       "version": "0.10.6",
       "date": "2026-02-22",
       "changes": [

@@ -15,6 +15,9 @@ from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/v1/auth",
@@ -181,13 +184,13 @@ async def auth_token(
                 custom_token = await _generate_custom_token(provider, id_token, access_token)
                 response["custom_token"] = custom_token
             except Exception as e:
-                print(f"Error generating custom token: {e}")
+                logger.error(f"Error generating custom token: {e}")
                 # Don't fail the request, just log and continue without custom token
 
         return response
 
     except Exception as e:
-        print(f"Error parsing OAuth credentials: {e}")
+        logger.error(f"Error parsing OAuth credentials: {e}")
         raise HTTPException(status_code=400, detail="Invalid OAuth credentials")
 
 
@@ -341,7 +344,7 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         )
 
         if token_response.status_code != 200:
-            print(f"Apple token exchange failed: {token_response.text}")
+            logger.error(f"Apple token exchange failed: {token_response.text}")
             raise HTTPException(status_code=400, detail="Failed to exchange Apple authorization code")
 
         token_json = token_response.json()
@@ -364,7 +367,7 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error exchanging Apple code for tokens: {e}")
+        logger.error(f"Error exchanging Apple code for tokens: {e}")
         raise HTTPException(status_code=500, detail="Failed to exchange Apple code for tokens")
 
 
@@ -406,7 +409,7 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         response = requests.post(sign_in_url, json=payload)
 
         if response.status_code != 200:
-            print(f"Firebase sign-in failed: {response.text}")
+            logger.error(f"Firebase sign-in failed: {response.text}")
             raise Exception(f"Firebase sign-in failed: {response.text}")
 
         result = response.json()
@@ -415,7 +418,7 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         if not firebase_uid:
             raise Exception("No Firebase UID returned from sign-in")
 
-        print(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+        logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
 
         # Create custom token for this UID
         custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
@@ -423,7 +426,7 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
 
     except Exception as e:
-        print(f"Error in _generate_custom_token: {e}")
+        logger.error(f"Error in _generate_custom_token: {e}")
         raise
 
 
@@ -461,7 +464,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
         return client_secret
 
     except Exception as e:
-        print(f"Error generating Apple client secret: {e}")
+        logger.error(f"Error generating Apple client secret: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate Apple client secret")
 
 
@@ -502,5 +505,5 @@ def _verify_apple_id_token(id_token: str, client_id: str) -> dict:
         return decoded_token
 
     except Exception as e:
-        print(f"Error verifying Apple ID token: {e}")
+        logger.error(f"Error verifying Apple ID token: {e}")
         raise HTTPException(status_code=400, detail="Invalid Apple ID token")

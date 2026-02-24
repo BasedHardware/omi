@@ -9,11 +9,30 @@ Two endpoints:
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tools.app_tools import load_app_tools
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/v1/agent/vm-status")
+def get_vm_status(uid: str = Depends(get_current_user_uid)):
+    """Return the user's agent VM info from Firestore."""
+    vm = get_agent_vm(uid)
+    logger.info(f"[vm-status] uid={uid} vm={vm}")
+    if not vm or vm.get("status") != "ready":
+        return {"has_vm": False}
+    return {
+        "has_vm": True,
+        "ip": vm.get("ip"),
+        "auth_token": vm.get("authToken"),
+        "status": vm.get("status"),
+    }
 
 
 def _tool_schema(t) -> dict:
@@ -51,7 +70,7 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
         for t in app_tools:
             tools.append(_tool_schema(t))
     except Exception as e:
-        print(f"⚠️ Error loading app tools for agent_tools: {e}")
+        logger.error(f"⚠️ Error loading app tools for agent_tools: {e}")
 
     return {"tools": tools}
 
@@ -81,7 +100,7 @@ async def execute_tool(
         app_tools = load_app_tools(uid)
         all_tools.extend(app_tools)
     except Exception as e:
-        print(f"⚠️ Error loading app tools: {e}")
+        logger.error(f"⚠️ Error loading app tools: {e}")
 
     target = None
     for t in all_tools:
@@ -104,5 +123,5 @@ async def execute_tool(
             result = target.invoke(params, config=config)
         return {"result": str(result)}
     except Exception as e:
-        print(f"❌ Error executing tool {body.tool_name}: {e}")
+        logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
         return {"error": str(e)}

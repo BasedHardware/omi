@@ -16,6 +16,9 @@ import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import llm_mini, llm_medium
 from utils.llm.usage_tracker import track_usage, Features
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
@@ -44,7 +47,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                     if overview:
                         conv_summaries.append(f"[Relevant] {overview[:300]}")
     except Exception as e:
-        print(f"[GOAL-ADVICE] Vector search error: {e}")
+        logger.error(f"[GOAL-ADVICE] Vector search error: {e}")
 
     # 2. Recent conversations (last 7 days) - for current context
     try:
@@ -65,7 +68,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                         if len(conv_summaries) >= 10:
                             break
     except Exception as e:
-        print(f"[GOAL-ADVICE] Recent conversations error: {e}")
+        logger.error(f"[GOAL-ADVICE] Recent conversations error: {e}")
 
     # 3. Recent chat messages
     chat_context = ""
@@ -80,7 +83,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                     chat_lines.append(f"{sender}: {text}")
             chat_context = '\n'.join(chat_lines[-10:])  # Last 10 messages
     except Exception as e:
-        print(f"[GOAL-ADVICE] Chat messages error: {e}")
+        logger.error(f"[GOAL-ADVICE] Chat messages error: {e}")
 
     # 4. User memories/facts
     memory_context = ""
@@ -89,7 +92,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
         memory_texts = [m.get('content', '')[:150] for m in memories[:15] if m.get('content')]
         memory_context = '\n'.join(memory_texts)
     except Exception as e:
-        print(f"[GOAL-ADVICE] Memories error: {e}")
+        logger.error(f"[GOAL-ADVICE] Memories error: {e}")
 
     return {
         'conversation_context': '\n'.join(conv_summaries),
@@ -164,7 +167,7 @@ Make the goal specific, measurable, and relevant to their interests."""
         }
 
     except Exception as e:
-        print(f"Error generating goal suggestion: {e}")
+        logger.error(f"Error generating goal suggestion: {e}")
         return {
             'suggested_title': 'Make progress every day',
             'suggested_type': 'scale',
@@ -216,7 +219,7 @@ USER FACTS:
 
 Give ONE specific action in 1-2 sentences. Be concise but complete. No generic advice."""
 
-        print(
+        logger.info(
             f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat"
         )
 
@@ -230,7 +233,7 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
         return advice
 
     except Exception as e:
-        print(f"[GOAL-ADVICE] Error: {e}")
+        logger.error(f"[GOAL-ADVICE] Error: {e}")
         traceback.print_exc()
         return 'Focus on the next small step toward your goal.'
 
@@ -313,7 +316,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 if new_value != old_value:
                     goals_db.update_goal_progress(uid, goal_id, new_value)
                     goal_title = goal.get('title', '')
-                    print(
+                    logger.info(
                         f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
                     )
                     updates.append(
@@ -332,7 +335,7 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
             return {"status": "updated", "updates": updates}
         return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
     except Exception as e:
-        print(f"Error in extract_and_update_goal_progress: {e}")
+        logger.error(f"Error in extract_and_update_goal_progress: {e}")
         return {"status": "error", "message": str(e)}
 
 

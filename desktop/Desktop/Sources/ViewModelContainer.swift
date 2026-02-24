@@ -12,7 +12,14 @@ class ViewModelContainer: ObservableObject {
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
-    let chatProvider = ChatProvider()
+    let chatProvider: ChatProvider
+    let taskChatCoordinator: TaskChatCoordinator
+
+    init() {
+        let provider = ChatProvider()
+        chatProvider = provider
+        taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
+    }
 
     // Loading state
     @Published var isInitialLoadComplete = false
@@ -100,6 +107,8 @@ class ViewModelContainer: ObservableObject {
         // Restore agent sessions from database (reconnect to live tmux sessions)
         if dbAvailable {
             await TaskAgentManager.shared.restoreSessionsFromDatabase()
+            // Wire task chat coordinator to view model for delete/purge operations
+            tasksViewModel.chatCoordinator = taskChatCoordinator
         }
 
         isLoading = false

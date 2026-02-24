@@ -156,13 +156,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
         // Force macOS to use the correct app icon (bypasses icon cache)
+        // NOTE: Only set NSApp.applicationIconImage (in-memory).
+        // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
+        // the .app bundle, which breaks the code signature and prevents Sparkle
+        // auto-updates from working ("An error occurred while running the updater").
         if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
-            // Also update the on-disk registration
-            let appURL = Bundle.main.bundleURL
-            NSWorkspace.shared.setIcon(icon, forFile: appURL.path, options: [])
-            if let cfURL = appURL as CFURL? {
+            if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
             log("AppDelegate: Set application icon from OmiIcon.icns")

@@ -12,6 +12,9 @@ from utils import encryption
 from utils.other.endpoints import timeit
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+import logging
+
+logger = logging.getLogger(__name__)
 
 # *********************************
 # ******* ENCRYPTION HELPERS ******
@@ -176,7 +179,7 @@ def get_messages(
     chat_session_id: Optional[str] = None,
     # include_plugin_id_filter: bool = True,
 ):
-    print('get_messages', uid, limit, offset, app_id, include_conversations)
+    logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
     # if include_plugin_id_filter:
@@ -261,7 +264,7 @@ def report_message(uid: str, msg_doc_id: str):
         message_ref.update({'reported': True})
         return {"message": "Message reported"}
     except Exception as e:
-        print("Update failed:", e)
+        logger.error(f"Update failed: {e}")
         return {"message": f"Update failed: {e}"}
 
 
@@ -278,15 +281,15 @@ def update_message_rating(uid: str, message_id: str, rating: int | None):
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
     if not message_doc:
-        print(f"⚠️ Message {message_id} not found for user {uid}")
+        logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
         return False
 
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
-        print(f"✅ Updated message {message_id} rating to {rating}")
+        logger.info(f"✅ Updated message {message_id} rating to {rating}")
         return True
     except Exception as e:
-        print(f"❌ Failed to update message rating: {e}")
+        logger.error(f"❌ Failed to update message rating: {e}")
         return False
 
 
@@ -297,14 +300,14 @@ def batch_delete_messages(
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
         messages_ref = messages_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    print('batch_delete_messages', app_id)
+    logger.info(f'batch_delete_messages {app_id}')
 
     while True:
         docs_stream = messages_ref.limit(batch_size).stream()
         docs_list = list(docs_stream)
 
         if not docs_list:
-            print("No more messages to delete")
+            logger.info("No more messages to delete")
             break
 
         batch = db.batch()
@@ -312,17 +315,17 @@ def batch_delete_messages(
             batch.delete(doc.reference)
         batch.commit()
 
-        print(f'Deleted {len(docs_list)} messages')
+        logger.info(f'Deleted {len(docs_list)} messages')
 
         if len(docs_list) < batch_size:
-            print("Processed all messages")
+            logger.info("Processed all messages")
             break
 
 
 def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
     try:
         user_ref = db.collection('users').document(uid)
-        print(f"Deleting messages for user: {uid}")
+        logger.info(f"Deleting messages for user: {uid}")
         if not user_ref.get().exists:
             return {"message": "User not found"}
         batch_delete_messages(user_ref, app_id=app_id, chat_session_id=chat_session_id)
@@ -474,7 +477,7 @@ def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: st
 
     if update_data:
         session_ref.update(update_data)
-        print(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
+        logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
 
 
 # **************************************
@@ -512,7 +515,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            print(f"Message {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
             continue
 
         message_data = doc_snapshot.to_dict()

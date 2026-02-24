@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 // MARK: - Task Category (by due date)
 
@@ -833,6 +834,7 @@ class TasksViewModel: ObservableObject {
 
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
+        log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
         var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
 
         // Remove task from current position
@@ -965,7 +967,7 @@ class TasksViewModel: ObservableObject {
     }
 
     /// Handle a key-down event. Returns true if the event was consumed.
-    func handleKeyDown(_ event: NSEvent) -> Bool {
+    func handleKeyDown(_ event: NSEvent, chatOpen: Bool = false) -> Bool {
         // Don't intercept keys when a text field has focus
         if let firstResponder = NSApp.keyWindow?.firstResponder,
            firstResponder is NSTextView || firstResponder is NSTextField {
@@ -1041,7 +1043,9 @@ class TasksViewModel: ObservableObject {
         }
 
         // Enter: inline create or double-enter for edit
-        if keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
+        // Skip when chat panel is open — the input may briefly lose focus after
+        // sending a message and we don't want Enter to accidentally trigger here.
+        if !chatOpen && keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
             if !searchText.isEmpty { return false }
 
             let now = Date()
@@ -2021,7 +2025,13 @@ struct TasksPage: View {
     var chatProvider: ChatProvider?
 
     // Chat panel state
-    @StateObject private var chatCoordinator: TaskChatCoordinator
+    // NOTE: NOT @ObservedObject — observing coordinator here would re-render the
+    // entire task list (including all row layout) on every streaming token.
+    // TaskChatSidePanelView handles coordinator observation in an isolated subtree.
+    var chatCoordinator: TaskChatCoordinator
+    /// Mirrors coordinator.activeTaskId — updated via onReceive so task rows
+    /// highlight the correct item without observing the full coordinator.
+    @State private var activeChatTaskId: String? = nil
     @State private var showChatPanel = false
     @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
     /// The window width before the chat panel was opened, so we can restore it exactly.
@@ -2047,11 +2057,10 @@ struct TasksPage: View {
     @State private var isDraggingDivider = false
     @State private var dragStartWidth: Double = 0
 
-    init(viewModel: TasksViewModel, chatProvider: ChatProvider? = nil) {
+    init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
         self.viewModel = viewModel
+        self.chatCoordinator = chatCoordinator
         self.chatProvider = chatProvider
-        let provider = chatProvider ?? ChatProvider()
-        _chatCoordinator = StateObject(wrappedValue: TaskChatCoordinator(chatProvider: provider))
     }
 
     var body: some View {
@@ -2099,25 +2108,14 @@ struct TasksPage: View {
                         }
                 )
 
-                // Right panel: Task chat (slides in from right)
-                Group {
-                    if let taskState = chatCoordinator.activeTaskState {
-                        TaskChatPanel(
-                            taskState: taskState,
-                            coordinator: chatCoordinator,
-                            task: activeTask,
-                            onClose: {
-                                closeChatPanel()
-                            }
-                        )
-                    } else {
-                        // No task selected — show empty panel with close button
-                        TaskChatPanelPlaceholder(
-                            coordinator: chatCoordinator,
-                            onClose: { closeChatPanel() }
-                        )
-                    }
-                }
+                // Right panel: Task chat (slides in from right).
+                // Uses a dedicated view that owns coordinator observation so
+                // streaming updates don't re-render the task list on the left.
+                TaskChatSidePanelView(
+                    coordinator: chatCoordinator,
+                    viewModel: viewModel,
+                    onClose: { closeChatPanel() }
+                )
                 .frame(width: chatPanelWidth)
                 .transition(.move(edge: .trailing))
             }
@@ -2126,8 +2124,11 @@ struct TasksPage: View {
         .background(Color.clear)
         // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
-            // Wire coordinator so delete operations can purge in-memory chat states
-            viewModel.chatCoordinator = chatCoordinator
+            // Restore panel UI if coordinator was open when we navigated away
+            if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
+                showChatPanel = true
+                adjustWindowWidth(expand: true)
+            }
             // If tasks are already loaded, notify sidebar to clear loading indicator
             if !viewModel.isLoading {
                 NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
@@ -2144,19 +2145,17 @@ struct TasksPage: View {
             }
         }
         .onDisappear {
-            // Reset chat state and shrink window when navigating away from Tasks tab
+            // Shrink window when navigating away, but keep coordinator alive
+            // so streaming state and unread dots persist across tab switches.
             if showChatPanel {
                 adjustWindowWidth(expand: false)
                 showChatPanel = false
-                chatCoordinator.closeChat()
+                // Do NOT call chatCoordinator.closeChat() — coordinator state persists at app level
             }
         }
-    }
-
-    /// The currently active task for the chat panel
-    private var activeTask: TaskActionItem? {
-        guard let taskId = chatCoordinator.activeTaskId else { return nil }
-        return viewModel.findTask(taskId)
+        .onReceive(chatCoordinator.$activeTaskId) { taskId in
+            activeChatTaskId = taskId
+        }
     }
 
     /// Start a background AI investigation for a task (no panel opens)
@@ -2320,8 +2319,9 @@ struct TasksPage: View {
     private func installKeyboardMonitor() {
         guard keyboardMonitor == nil else { return }
         let vm = viewModel
-        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            return vm.handleKeyDown(event) ? nil : event
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak chatCoordinator] event in
+            let chatOpen = chatCoordinator?.isPanelOpen == true
+            return vm.handleKeyDown(event, chatOpen: chatOpen) ? nil : event
         }
     }
 
@@ -2447,6 +2447,7 @@ struct TasksPage: View {
                 if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
                     chatToggleButton
                 }
+                addTaskButton
                 taskSettingsButton
             }
         }
@@ -2485,6 +2486,23 @@ struct TasksPage: View {
         }
         .buttonStyle(.plain)
         .help("Save current filters as a view")
+    }
+
+    private var addTaskButton: some View {
+        Button {
+            viewModel.inlineCreateAfterTaskId = nil
+            viewModel.isInlineCreating = true
+        } label: {
+            Image(systemName: "plus")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .help("Add task (⌘N)")
     }
 
     // MARK: - Filter Dropdown
@@ -3012,7 +3030,7 @@ struct TasksPage: View {
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
                                     dropTargetTaskId: viewModel.dropTargetTaskId,
                                     dropAbove: viewModel.dropAbove,
@@ -3083,7 +3101,7 @@ struct TasksPage: View {
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
@@ -3173,6 +3191,37 @@ struct TasksPage: View {
                 await viewModel.loadTasks()
             }
             .onAppear { viewModel.scrollProxy = proxy }
+        }
+    }
+}
+
+// MARK: - Task Chat Side Panel (isolated coordinator observation)
+
+/// Owns @ObservedObject for the coordinator so streaming updates only
+/// re-render this subtree — not the task list on the left.
+private struct TaskChatSidePanelView: View {
+    @ObservedObject var coordinator: TaskChatCoordinator
+    let viewModel: TasksViewModel
+    let onClose: () -> Void
+
+    private var activeTask: TaskActionItem? {
+        guard let taskId = coordinator.activeTaskId else { return nil }
+        return viewModel.findTask(taskId)
+    }
+
+    var body: some View {
+        if let taskState = coordinator.activeTaskState {
+            TaskChatPanel(
+                taskState: taskState,
+                coordinator: coordinator,
+                task: activeTask,
+                onClose: onClose
+            )
+        } else {
+            TaskChatPanelPlaceholder(
+                coordinator: coordinator,
+                onClose: onClose
+            )
         }
     }
 }
@@ -3271,16 +3320,26 @@ struct TaskCategorySection: View {
                                 .frame(height: 2)
                         }
                     }
-                    .dropDestination(for: String.self) { droppedIds, _ in
-                        isTopDropTargeted = false
-                        guard let droppedId = droppedIds.first,
-                              let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) else {
-                            return false
+                    .onDrop(of: [.plainText], isTargeted: Binding(
+                        get: { isTopDropTargeted },
+                        set: { targeted in
+                            log("DROP-TOP: isTargeted=\(targeted) on \(category.rawValue)")
+                            isTopDropTargeted = targeted
                         }
-                        onMoveTask?(droppedTask, 0, category)
+                    )) { providers in
+                        log("DROP-TOP: Received drop at top of \(category.rawValue)")
+                        isTopDropTargeted = false
+                        guard let provider = providers.first else { return false }
+                        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                            guard let data = data as? Data,
+                                  let droppedId = String(data: data, encoding: .utf8) else { return }
+                            DispatchQueue.main.async {
+                                if let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) {
+                                    onMoveTask?(droppedTask, 0, category)
+                                }
+                            }
+                        }
                         return true
-                    } isTargeted: { targeted in
-                        isTopDropTargeted = targeted
                     }
             }
 
@@ -3353,10 +3412,9 @@ struct TaskCategorySection: View {
 
 // MARK: - Conditional Drag & Drop (reduces gesture graph depth when disabled)
 
-/// Conditionally applies .draggable + .dropDestination to avoid deep ExclusiveGesture nesting.
-/// When disabled (e.g. multi-select mode), the view has fewer gesture modifiers, preventing hangs.
-/// Uses closures instead of the full orderedTasks array to avoid gesture graph rebuilds
-/// when the array identity changes during recomputes (every 30s auto-refresh).
+/// Applies .onDrop to a task row for reorder drop targets.
+/// Uses onDrag/onDrop (NSItemProvider) instead of draggable/dropDestination for reliable macOS support.
+/// The .onDrag is handled by the drag handle inside TaskRow to avoid conflicts with swipe gestures.
 struct TaskDragDropModifier: ViewModifier {
     let isEnabled: Bool
     let taskId: String
@@ -3381,26 +3439,44 @@ struct TaskDragDropModifier: ViewModifier {
                             .transition(.opacity)
                     }
                 }
-                .draggable(taskId) {
-                    TaskDragPreviewSimple(taskId: taskId, description: taskDescription)
-                }
-                .dropDestination(for: String.self) { droppedIds, _ in
+                .onDrop(of: [.plainText], isTargeted: Binding(
+                    get: { isDropTarget },
+                    set: { targeted in
+                        log("DROP: isTargeted=\(targeted) on task \(taskId)")
+                        if targeted {
+                            onHoverChanged?(taskId, true)
+                        } else {
+                            onHoverChanged?(taskId, false)
+                        }
+                    }
+                )) { providers in
+                    log("DROP: Received drop on task \(taskId), providers=\(providers.count)")
                     onDragEnded?()
-                    guard let droppedId = droppedIds.first,
-                          droppedId != taskId,
-                          let targetIndex = findTargetIndex?() else {
+                    guard let provider = providers.first else {
+                        log("DROP: No providers")
                         return false
                     }
-                    if let droppedTask = findTask?(droppedId) {
-                        onMoveTask?(droppedTask, targetIndex)
+                    provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                        guard let data = data as? Data,
+                              let droppedId = String(data: data, encoding: .utf8),
+                              droppedId != taskId else {
+                            log("DROP: Rejected — same task or failed to decode")
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            guard let targetIndex = findTargetIndex?() else {
+                                log("DROP: findTargetIndex returned nil")
+                                return
+                            }
+                            if let droppedTask = findTask?(droppedId) {
+                                log("DROP: Moving task \(droppedId) to index \(targetIndex)")
+                                onMoveTask?(droppedTask, targetIndex)
+                            } else {
+                                log("DROP: Could not find task for id \(droppedId)")
+                            }
+                        }
                     }
                     return true
-                } isTargeted: { isTargeted in
-                    if isTargeted {
-                        onHoverChanged?(taskId, true)
-                    } else {
-                        onHoverChanged?(taskId, false)
-                    }
                 }
         } else {
             content
@@ -3439,41 +3515,68 @@ struct TaskDragPreviewSimple: View {
 
 /// Shows streaming activity or unread dot for a task's chat session.
 /// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+///
+/// Uses @State + .onReceive instead of @ObservedObject so that only this
+/// specific task's indicator re-renders when coordinator state changes —
+/// not every task row simultaneously (which caused the 822-level layout
+/// traversal on every coordinator publish).
 struct ChatSessionStatusIndicator: View {
     let task: TaskActionItem
-    @ObservedObject var coordinator: TaskChatCoordinator
+    let coordinator: TaskChatCoordinator
     var onOpenChat: ((TaskActionItem) -> Void)?
 
+    @State private var isStreaming = false
+    @State private var streamingStatus: String? = nil
+    @State private var hasUnread = false
+
     var body: some View {
-        if coordinator.streamingTaskIds.contains(task.id) {
-            // Streaming: spinning indicator + status text
-            HStack(spacing: 4) {
-                ProgressView()
-                    .scaleEffect(0.5)
-                    .frame(width: 10, height: 10)
-
-                Text(coordinator.streamingStatuses[task.id] ?? "Responding...")
-                    .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .lineLimit(1)
-            }
-        } else if coordinator.unreadTaskIds.contains(task.id) {
-            // Unread: purple dot
-            Button {
-                onOpenChat?(task)
-            } label: {
+        Group {
+            if isStreaming {
+                // Streaming: spinning indicator + status text
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 8, height: 8)
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 10, height: 10)
 
-                    Text("New reply")
+                    Text(streamingStatus ?? "Responding...")
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .lineLimit(1)
                 }
+            } else if hasUnread {
+                // Unread: purple dot
+                Button {
+                    onOpenChat?(task)
+                } label: {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(OmiColors.purplePrimary)
+                            .frame(width: 8, height: 8)
+
+                        Text("New reply")
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Open chat — new reply available")
             }
-            .buttonStyle(.plain)
-            .help("Open chat — new reply available")
+        }
+        // Subscribe to coordinator publishers to update task-local @State.
+        // .onReceive fires for all tasks but only mutates state when the
+        // value for THIS task changes, so re-renders stay task-local and
+        // don't trigger a full-tree layout pass on every coordinator publish.
+        .onReceive(coordinator.$streamingTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if isStreaming != new { isStreaming = new }
+        }
+        .onReceive(coordinator.$streamingStatuses) { statuses in
+            let new = statuses[task.id]
+            if streamingStatus != new { streamingStatus = new }
+        }
+        .onReceive(coordinator.$unreadTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if hasUnread != new { hasUnread = new }
         }
     }
 }
@@ -3560,28 +3663,46 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        swipeableContent
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onSelect?(task)
-                if isChatActive, !isActiveChatTask {
-                    onOpenChat?(task)
+        HStack(alignment: .center, spacing: 0) {
+            // Drag handle OUTSIDE swipeableContent so DragGesture doesn't intercept it
+            if category != nil && !isMultiSelectMode && !isDeletedTask {
+                Image(systemName: "line.3.horizontal")
+                    .scaledFont(size: 10)
+                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+                    .frame(width: 16, height: 24)
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
+                        return NSItemProvider(object: task.id as NSString)
+                    } preview: {
+                        TaskDragPreviewSimple(taskId: task.id, description: task.description)
+                    }
+                    .help("Drag to reorder")
+            }
+
+            swipeableContent
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelect?(task)
+                    if isChatActive, !isActiveChatTask {
+                        onOpenChat?(task)
+                    }
                 }
-            }
-            .sheet(isPresented: $showTaskDetail) {
-                TaskDetailView(
-                    task: task,
-                    onDismiss: { showTaskDetail = false }
-                )
-            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+        .sheet(isPresented: $showTaskDetail) {
+            TaskDetailView(
+                task: task,
+                onDismiss: { showTaskDetail = false }
+            )
+        }
     }
 
     // MARK: - Swipeable Content
@@ -3922,24 +4043,42 @@ struct TaskRow: View {
                             AgentStatusIndicator(task: task)
                         }
 
-                        // Investigate button (background AI chat)
+                        // Investigate / View chat button (background AI chat)
                         if let coordinator = chatCoordinator,
                            TaskAgentSettings.shared.isChatEnabled,
                            !coordinator.streamingTaskIds.contains(task.id),
                            !coordinator.unreadTaskIds.contains(task.id) {
-                            Button {
-                                onInvestigate?(task)
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "magnifyingglass")
-                                        .scaledFont(size: 9)
-                                    Text("Investigate")
-                                        .scaledFont(size: 10, weight: .medium)
+                            if task.chatSessionId != nil {
+                                // Previous session exists but is no longer active — let user view/resume it
+                                Button {
+                                    onOpenChat?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "bubble.left")
+                                            .scaledFont(size: 9)
+                                        Text("View chat")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.purplePrimary)
                                 }
-                                .foregroundColor(OmiColors.textSecondary)
+                                .buttonStyle(.plain)
+                                .help("View previous AI investigation")
+                            } else {
+                                // No prior session — start fresh investigation
+                                Button {
+                                    onInvestigate?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "magnifyingglass")
+                                            .scaledFont(size: 9)
+                                        Text("Investigate")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Start AI investigation in background")
                             }
-                            .buttonStyle(.plain)
-                            .help("Start AI investigation in background")
                         }
 
                         // Chat session status (streaming indicator or unread dot)

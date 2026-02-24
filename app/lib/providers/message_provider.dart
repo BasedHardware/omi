@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/main.dart';
+import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -40,6 +41,8 @@ class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
+
+  final AgentChatService _agentChatService = AgentChatService();
 
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
@@ -567,6 +570,12 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
+    // Route through agent VM if Claude Agent is enabled
+    if (SharedPreferencesUtil().claudeAgentEnabled) {
+      await _sendMessageViaAgent(text, currentAppId);
+      return;
+    }
+
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
     final aiIndex = messages.length - 1;
@@ -623,6 +632,93 @@ class MessageProvider extends ChangeNotifier {
       }
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
+      notifyListeners();
+    } finally {
+      timer?.cancel();
+      flushBuffer();
+      aiStreamProgress = 1.0;
+      setShowTypingIndicator(false);
+      setSendingMessage(false);
+    }
+  }
+
+  Future _sendMessageViaAgent(String text, String? appId) async {
+    var message = ServerMessage.empty(appId: appId);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
+    notifyListeners();
+    clearSelectedFiles();
+    clearUploadedFiles();
+    String textBuffer = '';
+    Timer? timer;
+
+    void flushBuffer() {
+      if (textBuffer.isNotEmpty) {
+        message.text += textBuffer;
+        textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
+        HapticFeedback.lightImpact();
+        notifyListeners();
+      }
+    }
+
+    try {
+      // Connect if not already connected
+      if (!_agentChatService.isConnected) {
+        final ip = SharedPreferencesUtil().cachedAgentVmIp;
+        final token = SharedPreferencesUtil().cachedAgentVmAuthToken;
+        if (ip.isEmpty || token.isEmpty) {
+          message.text = 'Agent VM not configured. Please toggle Claude Agent off and on again.';
+          notifyListeners();
+          setShowTypingIndicator(false);
+          setSendingMessage(false);
+          return;
+        }
+        final connected = await _agentChatService.connect(ip, token);
+        if (!connected) {
+          message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
+          notifyListeners();
+          setShowTypingIndicator(false);
+          setSendingMessage(false);
+          return;
+        }
+      }
+
+      await for (var event in _agentChatService.sendQuery(text)) {
+        switch (event.type) {
+          case AgentChatEventType.textDelta:
+            textBuffer += event.text;
+            timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+              flushBuffer();
+            });
+            break;
+          case AgentChatEventType.toolActivity:
+            // Show tool activity as thinking
+            flushBuffer();
+            message.thinkings.add(event.text);
+            notifyListeners();
+            break;
+          case AgentChatEventType.result:
+            timer?.cancel();
+            timer = null;
+            flushBuffer();
+            if (event.text.isNotEmpty && message.text.isEmpty) {
+              message.text = event.text;
+            }
+            notifyListeners();
+            break;
+          case AgentChatEventType.error:
+            timer?.cancel();
+            timer = null;
+            flushBuffer();
+            message.text = message.text.isEmpty ? 'Agent error: ${event.text}' : message.text;
+            notifyListeners();
+            break;
+        }
+      }
+    } catch (e) {
+      Logger.error('Agent chat error: $e');
+      message.text = message.text.isEmpty ? 'Failed to get response from agent.' : message.text;
       notifyListeners();
     } finally {
       timer?.cancel();

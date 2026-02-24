@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,7 +36,11 @@ class GoalsProvider extends ChangeNotifier {
     await _syncWithApi();
 
     _isLoading = false;
-    notifyListeners();
+    _notifyAfterFrame();
+  }
+
+  void _notifyAfterFrame() {
+    SchedulerBinding.instance.addPostFrameCallback((_) => notifyListeners());
   }
 
   Future<void> _loadFromLocalStorage() async {
@@ -45,7 +50,7 @@ class GoalsProvider extends ChangeNotifier {
       if (goalsJson != null) {
         final List<dynamic> decoded = jsonDecode(goalsJson);
         _goals = decoded.map((e) => Goal.fromJson(e)).toList();
-        notifyListeners();
+        _notifyAfterFrame();
       }
     } catch (_) {}
   }
@@ -62,7 +67,7 @@ class GoalsProvider extends ChangeNotifier {
       if (goals.isNotEmpty) {
         _goals = goals;
         await _saveToLocalStorage();
-        notifyListeners();
+        _notifyAfterFrame();
       }
     } catch (_) {}
   }

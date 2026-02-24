@@ -36,7 +36,11 @@ ClaudeAcpAgent.prototype.newSession = async function (params) {
         item.value?.type === "result" &&
         item.value?.subtype === "success"
       ) {
-        session._lastCostUsd = item.value.total_cost_usd;
+        // total_cost_usd is the CUMULATIVE session cost, not per-turn.
+        // We must compute the delta so Firebase increments are per-turn only.
+        const prevSessionCost = session._sessionCostUsd ?? 0;
+        session._lastCostUsd = item.value.total_cost_usd - prevSessionCost;
+        session._sessionCostUsd = item.value.total_cost_usd;
         session._lastUsage = item.value.usage;
         session._lastModelUsage = item.value.modelUsage;
       }
@@ -66,8 +70,9 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
     // Total = new input + cache writes + cache reads + output
     const totalTokens = inputTokens + cacheWrite + cacheRead + outputTokens;
 
+    const modelKeys = Object.keys(session._lastModelUsage ?? {});
     console.error(
-      `[patched-acp] Usage: cost=$${costUsd}, ` +
+      `[patched-acp] Usage: model=${modelKeys.join(",") || "unknown"}, cost=$${costUsd}, ` +
       `input=${inputTokens}, output=${outputTokens}, ` +
       `cacheWrite=${cacheWrite}, cacheRead=${cacheRead}, ` +
       `total=${totalTokens}`

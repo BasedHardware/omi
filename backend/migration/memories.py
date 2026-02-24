@@ -7,6 +7,9 @@ from database._client import db
 from google.cloud import firestore
 from google.cloud.firestore_v1.field_path import FieldPath
 from google.cloud.firestore_v1 import FieldFilter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryTime(BaseModel):
@@ -20,18 +23,18 @@ def migration_incorrect_start_finish_time():
     user_offset = 0
     user_limit = 400
     while True:
-        print(f"running...user...{user_offset}")
+        logger.info(f"running...user...{user_offset}")
         users_ref = db.collection('users').order_by(FieldPath.document_id(), direction=firestore.Query.ASCENDING)
         users_ref = users_ref.limit(user_limit).offset(user_offset)
         users = list(users_ref.stream())
         if not users or len(users) == 0:
-            print("no users")
+            logger.info("no users")
             break
         for user in users:
             offset = 0
             limit = 400
             while True:
-                print(f"running...user...{user.id}...memories...{offset}")
+                logger.info(f"running...user...{user.id}...memories...{offset}")
                 memories_ref = (
                     db.collection('users')
                     .document(user.id)

@@ -14,6 +14,9 @@ import httpx
 import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -137,7 +140,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         redis_db.r.delete(state_key)
         return state_data
     except Exception as e:
-        print(f"Error parsing state data: {e}")
+        logger.error(f"Error parsing state data: {e}")
         # Delete invalid state to prevent repeated parse failures
         redis_db.r.delete(state_key)
         return None
@@ -320,7 +323,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     base_url = os.getenv('BASE_API_URL')
     if not base_url:
-        print(f'ERROR: BASE_API_URL not configured for integration OAuth')
+        logger.error(f'ERROR: BASE_API_URL not configured for integration OAuth')
         raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
 
     # Generate cryptographically secure random state token
@@ -332,14 +335,14 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
         redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
-        print(f'ERROR: Failed to store OAuth state in Redis: {e}')
+        logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
 
     if app_key in AUTH_PROVIDERS:
         cfg = AUTH_PROVIDERS[app_key]
         client_id = os.getenv(cfg['client_env'])
         if not client_id:
-            print(f"ERROR: {cfg['client_env']} not configured for {cfg['log_name']} integration OAuth")
+            logger.error(f"ERROR: {cfg['client_env']} not configured for {cfg['log_name']} integration OAuth")
             raise HTTPException(status_code=500, detail=cfg['error_detail'])
 
         base_url_clean = base_url.rstrip('/')
@@ -364,7 +367,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
             params['code_challenge'] = code_challenge
 
         auth_url = f"{cfg['auth_base']}?{urlencode(params)}"
-        print(f"Generated {cfg['log_name']} OAuth URL for user {uid}")
+        logger.info(f"Generated {cfg['log_name']} OAuth URL for user {uid}")
 
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
@@ -454,7 +457,7 @@ async def handle_oauth_callback(
             refresh_token = token_data.get('refresh_token')
 
             if not access_token:
-                print(f'{app_key}: No access token received in response')
+                logger.info(f'{app_key}: No access token received in response')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
             integration_data = {
@@ -469,13 +472,13 @@ async def handle_oauth_callback(
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
                 integration_data.update(additional_data)
             except Exception as e:
-                print(f'{app_key}: Error fetching additional data: {e}')
+                logger.error(f'{app_key}: Error fetching additional data: {e}')
 
             # Store in Firebase
             try:
                 users_db.set_integration(uid, app_key, integration_data)
             except Exception as e:
-                print(f'{app_key}: Error storing tokens in Firebase: {e}')
+                logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
             deep_link = f'omi://{app_key}/callback?success=true'
@@ -483,12 +486,12 @@ async def handle_oauth_callback(
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
         else:
             error_body = token_response.text[:500] if token_response.text else "No error body"
-            print(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
-            print(f'{app_key}: Error response: {error_body}')
+            logger.error(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
+            logger.error(f'{app_key}: Error response: {error_body}')
             return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
     except Exception as e:
-        print(f'{app_key}: Unexpected error during OAuth callback: {e}')
+        logger.error(f'{app_key}: Unexpected error during OAuth callback: {e}')
         return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
 

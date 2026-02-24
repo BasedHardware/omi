@@ -136,6 +136,7 @@ struct RewindPage: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             // Rewind intro video overlay (first-time experience)
@@ -511,10 +512,10 @@ struct RewindPage: View {
 
     private var timelineContentBody: some View {
         VStack(spacing: 0) {
-            // Main frame display
-            Spacer()
+            // Main frame display - fills available space without Spacers to avoid SwiftUI layout loops
+            // (GeometryReader + Spacer inside VStack causes recursive StackLayout sizing)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls at bottom
             bottomControls
@@ -577,10 +578,9 @@ struct RewindPage: View {
 
     private var timelineWithSearch: some View {
         VStack(spacing: 0) {
-            // Frame display
-            Spacer()
+            // Frame display - fills available space (no Spacers to avoid layout loop)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls
             bottomControls
@@ -968,6 +968,8 @@ struct RewindPage: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
+            Spacer()
+
             ZStack {
                 Circle()
                     .fill(OmiColors.purplePrimary.opacity(0.1))
@@ -999,6 +1001,8 @@ struct RewindPage: View {
             .background(Color.white.opacity(0.1))
             .cornerRadius(8)
             .padding(.top, 8)
+
+            Spacer()
         }
     }
 

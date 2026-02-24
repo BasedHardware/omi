@@ -325,8 +325,14 @@ class ChatProvider: ObservableObject {
     @Published var isClaudeConnected = false
     /// Cumulative tokens used in the current session via Omi account
     @Published var sessionTokensUsed: Int = 0
+    /// Cumulative USD cost spent using the Omi account, persisted across sessions.
+    /// Used to enforce the $50 threshold for auto-switching to the user's Claude account.
+    @AppStorage("omiAICumulativeCostUsd") var omiAICumulativeCostUsd: Double = 0.0
+    /// Set to true when the $50 Omi account usage threshold is reached, triggering an alert.
+    @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
+    private let maxMessagesInMemory = 200
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
 
@@ -806,6 +812,11 @@ class ChatProvider: ObservableObject {
             messages.append(contentsOf: newMessages)
             messages.sort(by: { $0.createdAt < $1.createdAt })
 
+            // Cap memory usage: keep only the most recent messages
+            if messages.count > maxMessagesInMemory {
+                messages.removeFirst(messages.count - maxMessagesInMemory)
+            }
+
             // Check if there are more
             hasMoreMessages = olderMessages.count == messagesPageSize
             log("Loaded \(newMessages.count) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
@@ -1069,18 +1080,23 @@ class ChatProvider: ObservableObject {
             // Skip internal/FTS tables
             if ChatPrompts.excludedTables.contains(name) { continue }
             if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
+            if name.contains("_fts") { continue } // catches all FTS virtual + internal tables
 
-            // Extract columns from CREATE TABLE statement
-            let columns = extractColumns(from: sql)
-            guard !columns.isEmpty else { continue }
+            // Extract column names only, stripping types, constraints, and infrastructure columns
+            let columnNames = extractColumns(from: sql).compactMap { col -> String? in
+                let name = col.components(separatedBy: .whitespaces).first?
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`")) ?? ""
+                return ChatPrompts.excludedColumns.contains(name) ? nil : name
+            }.filter { !$0.isEmpty }
+            guard !columnNames.isEmpty else { continue }
 
             // Table header with annotation
             let annotation = ChatPrompts.tableAnnotations[name] ?? ""
             let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
             lines.append(header)
 
-            // Columns as compact one-liner
-            lines.append("  \(columns.joined(separator: ", "))")
+            // Column names as compact one-liner
+            lines.append("  \(columnNames.joined(separator: ", "))")
             lines.append("")
         }
 
@@ -1177,12 +1193,12 @@ class ChatProvider: ObservableObject {
         }
 
         // Append enabled skills as available context (global + project)
-        // Exclude dev-mode from the regular skills list — it has its own dedicated section
+        // dev-mode is included in the list when devModeEnabled; full content loaded on demand via load_skill
         let enabledSkillNames = getEnabledSkillNames()
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
             let skillNames = allSkills
-                .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
+                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
                 .map { $0.name }
                 .joined(separator: ", ")
             if !skillNames.isEmpty {
@@ -1190,16 +1206,29 @@ class ChatProvider: ObservableObject {
             }
         }
 
-        // Append dev mode context if enabled (full skill content, not just description)
-        if devModeEnabled, let devMode = devModeContext {
-            let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
-            prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
-        }
-
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
         let historyInjected = !history.isEmpty
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), dev_mode: \(devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), dev_mode_in_skills: \(devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
+
+        // Log per-section character breakdown
+        let baseTemplate = ChatPromptBuilder.buildDesktopChat(
+            userName: userName, memoriesSection: "", goalSection: "", tasksSection: "", aiProfileSection: "", databaseSchema: "")
+        let allSkillsForSize = (discoveredSkills + projectDiscoveredSkills)
+            .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
+            .map { $0.name }.joined(separator: ", ")
+        let skillsSectionSize = allSkillsForSize.isEmpty ? 0 : allSkillsForSize.count + 80 // names + wrapper
+        log("ChatProvider: prompt breakdown — " +
+            "base_template:\(baseTemplate.count)c, " +
+            "context:\(contextSection.count)c, " +
+            "goals:\(goalSection.count)c, " +
+            "tasks:\(tasksSection.count)c, " +
+            "ai_profile:\(aiProfileSection.count)c, " +
+            "schema:\(cachedDatabaseSchema.count)c, " +
+            "history:\(history.count)c, " +
+            "claude_md:\(claudeMdContent?.count ?? 0)c, " +
+            "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
+            "skills:\(skillsSectionSize)c")
 
         return prompt
     }
@@ -1236,18 +1265,12 @@ class ChatProvider: ObservableObject {
         if !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
             let skillNames = allSkills
-                .filter { enabledSkillNames.contains($0.name) && $0.name != "dev-mode" }
+                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
                 .map { $0.name }
                 .joined(separator: ", ")
             if !skillNames.isEmpty {
                 prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
             }
-        }
-
-        // Append dev mode context if enabled (full skill content, not just description)
-        if devModeEnabled, let devMode = devModeContext {
-            let workspaceDir = aiChatWorkingDirectory.isEmpty ? "not set" : aiChatWorkingDirectory
-            prompt += "\n\n<dev_mode>\nDev Mode is ENABLED. The user has opted in to app customization.\nWorkspace: \(workspaceDir)\n\n\(devMode)\n</dev_mode>"
         }
 
         log("ChatProvider: task chat prompt built — prompt_length: \(prompt.count) chars")
@@ -1662,7 +1685,7 @@ class ChatProvider: ObservableObject {
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false) async {
+    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -1753,12 +1776,12 @@ class ChatProvider: ObservableObject {
 
         do {
             // Build system prompt with locally cached memories (no backend Gemini call)
-            let systemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            var systemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            if let suffix = systemPromptSuffix, !suffix.isEmpty {
+                systemPrompt += "\n\n" + suffix
+            }
 
             // Query the active bridge with streaming
-            // Each query is standalone — conversation history is in the system prompt
-            // This ensures cross-platform sync (mobile messages appear in context)
-
             // Callbacks for ACP bridge
             let textDeltaHandler: ACPBridge.TextDeltaHandler = { [weak self] delta in
                 Task { @MainActor [weak self] in
@@ -1898,6 +1921,7 @@ class ChatProvider: ObservableObject {
 
             if bridgeMode == BridgeMode.omiAI.rawValue {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
+                omiAICumulativeCostUsd += queryResult.costUsd
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -1908,6 +1932,11 @@ class ChatProvider: ObservableObject {
                         totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
                         costUsd: r.costUsd
                     )
+                }
+                // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
+                if omiAICumulativeCostUsd >= 50.0 {
+                    showOmiThresholdAlert = true
+                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
 

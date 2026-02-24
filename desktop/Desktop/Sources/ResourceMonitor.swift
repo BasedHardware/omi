@@ -25,8 +25,10 @@ class ResourceMonitor {
     private let memoryGrowthRateThreshold: Double = 50
 
     /// Extreme memory threshold - auto-restart to prevent system from becoming unusable.
-    /// At this level the OS is under severe pressure and the user cannot reopen the app.
-    private let memoryAutoRestartThreshold: UInt64 = 4000 // 4GB
+    /// Keep this well below the point where free RAM is exhausted — at 4GB the system
+    /// has ~120MB free and the new instance fails to launch, leaving the user stuck.
+    /// At 3GB there is still ~10-13GB free on typical 16GB machines.
+    private let memoryAutoRestartThreshold: UInt64 = 3000 // 3GB
 
     // MARK: - State
 
@@ -203,7 +205,7 @@ class ResourceMonitor {
         // the app impossible to reopen without a full computer restart.
         if snapshot.memoryFootprintMB >= memoryAutoRestartThreshold && !autoRestartTriggered && !isDevBuild {
             autoRestartTriggered = true
-            logError("ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation")
+            log("ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation")
 
             SentrySDK.capture(message: "App Auto-Restarting Due to Extreme Memory") { scope in
                 scope.setLevel(.fatal)
@@ -211,13 +213,20 @@ class ResourceMonitor {
                 scope.setContext(value: snapshot.asDictionary(), key: "resources")
             }
 
-            // Give Sentry 3 seconds to flush, then relaunch and terminate
+            // Give Sentry 3 seconds to flush, then relaunch and terminate.
+            // Only terminate if the relaunch succeeds — otherwise the user would be
+            // left with no running app and would need a full computer restart.
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 let task = Process()
                 task.launchPath = "/usr/bin/open"
                 task.arguments = ["-n", Bundle.main.bundleURL.path]
-                try? task.run()
-                NSApp.terminate(nil)
+                do {
+                    try task.run()
+                    NSApp.terminate(nil)
+                } catch {
+                    logError("ResourceMonitor: Failed to relaunch app during auto-restart, aborting terminate to avoid leaving user stuck", error: error)
+                    self.autoRestartTriggered = false  // Allow retry on next threshold check
+                }
             }
             return
         }
@@ -227,7 +236,7 @@ class ResourceMonitor {
             if lastCriticalTime == nil || now.timeIntervalSince(lastCriticalTime!) > warningCooldown {
                 lastCriticalTime = now
 
-                logError("ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold")
+                log("ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold")
 
                 // Collect component diagnostics immediately at critical threshold
                 Task {
