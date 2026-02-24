@@ -1249,7 +1249,7 @@ if (provider.showCompletedView) {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isSelected ? Colors.red[400]! : Colors.grey[600]!,
+          color: isSelected ? Colors.red.shade400 : Colors.grey.shade600,
           width: 2,
         ),
         color: isSelected ? Colors.red[400] : Colors.transparent,
