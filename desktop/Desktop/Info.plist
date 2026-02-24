@@ -25,7 +25,7 @@
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSAppTransportSecurity</key>
