@@ -238,9 +238,7 @@ async def send_initial_file_path(
 
     Sends up to target_duration of audio from file, then pads with padding_seconds of silence.
     """
-    logger.info(
-        f'send_initial_file_path {f'target_duration={target_duration}s'} {f'padding_seconds={padding_seconds}s'}'
-    )
+    logger.info(f'send_initial_file_path target_duration={target_duration}s padding_seconds={padding_seconds}s')
     start = time.time()
 
     chunk_size = 320
@@ -268,9 +266,7 @@ async def send_initial_file_path(
         await transcript_socket_async_send(silence_chunk)
         bytes_sent += chunk_size
 
-    logger.info(
-        f'send_initial_file_path completed {f'bytes_sent={bytes_sent}'} {f'duration={time.time() - start:.2f}s'}'
-    )
+    logger.info(f'send_initial_file_path completed bytes_sent={bytes_sent} duration={time.time() - start:.2f}s')
     return bytes_sent
 
 
