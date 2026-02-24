@@ -12,6 +12,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/logger.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -196,7 +197,52 @@ Widget _buildFab() {
         );
       }
       if (provider.isEditMode) {
-        return const SizedBox.shrink(); // hide FAB when in edit mode with no selection
+        return const SizedBox.shrink();
+      }
+      if (provider.showCompletedView) {
+        return Positioned(
+          right: 20,
+          bottom: 100,
+          child: FloatingActionButton(
+            heroTag: 'action_items_fab',
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: const Color(0xFF1F1F25),
+                  title: const Text('Delete all completed', style: TextStyle(color: Colors.white)),
+                  content: const Text('This will permanently delete all completed tasks.', style: TextStyle(color: Colors.white70)),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete all'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                final completedItems = provider.actionItems
+                    .where((i) => i.completed)
+                    .toList();
+                for (final item in completedItems) {
+                  try {
+                    await provider.deleteActionItem(item);
+                  } catch (e) {
+                    Logger.debug('Error deleting completed item: $e');
+                  }
+                }
+              }
+            },
+            backgroundColor: Colors.red[600],
+            child: const Icon(Icons.delete, color: Colors.white),
+          ),
+        );
       }
       return Positioned(
         right: 20,
