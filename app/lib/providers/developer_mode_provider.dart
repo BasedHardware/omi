@@ -38,6 +38,12 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
+  // Claude Agent (experimental)
+  bool claudeAgentEnabled = false;
+  bool claudeAgentLoading = false;
+  AgentVmInfo? cachedVmInfo;
+  final AgentChatService agentChatService = AgentChatService();
+
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
     if (!value) {
@@ -109,6 +115,7 @@ class DeveloperModeProvider extends BaseProvider {
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -261,6 +268,43 @@ class DeveloperModeProvider extends BaseProvider {
       DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
     } else {
       DailyReflectionNotification.cancelNotification();
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> onClaudeAgentChanged(bool value) async {
+    if (value) {
+      // Enabling — check if VM exists first
+      claudeAgentLoading = true;
+      notifyListeners();
+
+      try {
+        final vmInfo = await getAgentVmStatus();
+        if (vmInfo == null || !vmInfo.hasVm) {
+          AppSnackbar.showSnackbarError('Requires OMI Desktop with agent enabled');
+          claudeAgentLoading = false;
+          notifyListeners();
+          return;
+        }
+
+        cachedVmInfo = vmInfo;
+        SharedPreferencesUtil().cachedAgentVmIp = vmInfo.ip ?? '';
+        SharedPreferencesUtil().cachedAgentVmAuthToken = vmInfo.authToken ?? '';
+        claudeAgentEnabled = true;
+        SharedPreferencesUtil().claudeAgentEnabled = true;
+      } catch (e) {
+        Logger.error('Failed to check agent VM status: $e');
+        AppSnackbar.showSnackbarError('Failed to check agent VM status');
+      }
+
+      claudeAgentLoading = false;
+    } else {
+      // Disabling — disconnect and revert
+      claudeAgentEnabled = false;
+      SharedPreferencesUtil().claudeAgentEnabled = false;
+      await agentChatService.disconnect();
+      cachedVmInfo = null;
     }
 
     notifyListeners();
