@@ -663,7 +663,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      // Connect if not already connected
+      // Connect (or reconnect) to the agent VM
       if (!_agentChatService.isConnected) {
         final ip = SharedPreferencesUtil().cachedAgentVmIp;
         final token = SharedPreferencesUtil().cachedAgentVmAuthToken;
@@ -674,13 +674,19 @@ class MessageProvider extends ChangeNotifier {
           setSendingMessage(false);
           return;
         }
+        // Use connect() which now closes any stale channel before opening a new one
         final connected = await _agentChatService.connect(ip, token);
         if (!connected) {
-          message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
-          notifyListeners();
-          setShowTypingIndicator(false);
-          setSendingMessage(false);
-          return;
+          // Retry once before giving up
+          await Future.delayed(const Duration(seconds: 1));
+          final retried = await _agentChatService.connect(ip, token);
+          if (!retried) {
+            message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
+            notifyListeners();
+            setShowTypingIndicator(false);
+            setSendingMessage(false);
+            return;
+          }
         }
       }
 
