@@ -9,11 +9,26 @@ Two endpoints:
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tools.app_tools import load_app_tools
 
 router = APIRouter()
+
+
+@router.get("/v1/agent/vm-status")
+def get_vm_status(uid: str = Depends(get_current_user_uid)):
+    """Return the user's agent VM info from Firestore."""
+    vm = get_agent_vm(uid)
+    if not vm or vm.get("status") != "ready":
+        return {"has_vm": False}
+    return {
+        "has_vm": True,
+        "ip": vm.get("ip"),
+        "auth_token": vm.get("authToken"),
+        "status": vm.get("status"),
+    }
 
 
 def _tool_schema(t) -> dict:
