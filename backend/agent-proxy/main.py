@@ -7,6 +7,7 @@ History: fetches last 10 agent messages from Firestore and prepends to prompt.
 """
 
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -15,6 +16,9 @@ from datetime import datetime, timezone
 
 import firebase_admin
 import websockets
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
 from google.cloud.firestore_v1 import Query
@@ -33,8 +37,11 @@ db = firestore.client()
 
 app = FastAPI()
 
-AGENT_PLUGIN_ID = '__agent__'
 HISTORY_LIMIT = 10
+
+# Encryption — optional; required for users with enhanced data protection.
+ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
+_encryption_ok = len(ENCRYPTION_SECRET) >= 32
 
 
 @app.get("/health")
@@ -42,49 +49,125 @@ def health():
     return {"status": "ok"}
 
 
-def _get_agent_vm(uid: str) -> dict | None:
-    doc = db.collection("users").document(uid).get()
+def _get_user_context(uid: str) -> tuple:
+    """Get agent VM info and data protection level from the user document."""
+    doc = db.collection('users').document(uid).get()
     if doc.exists:
-        return doc.to_dict().get("agentVm")
-    return None
+        data = doc.to_dict()
+        return data.get('agentVm'), data.get('data_protection_level', 'enhanced')
+    return None, 'enhanced'
 
 
-def _fetch_chat_history(uid: str) -> list:
-    """Fetch last N agent messages from Firestore, returned oldest-first."""
+# --------------- encryption helpers ---------------
+
+
+def _derive_key(uid: str) -> bytes:
+    hkdf = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=uid.encode('utf-8'),
+        info=b'user-data-encryption',
+    )
+    return hkdf.derive(ENCRYPTION_SECRET)
+
+
+def _encrypt_text(text: str, uid: str) -> str:
+    if not text or not _encryption_ok:
+        return text
+    key = _derive_key(uid)
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, text.encode('utf-8'), None)
+    return base64.b64encode(nonce + ciphertext).decode('utf-8')
+
+
+def _decrypt_text(text: str, uid: str) -> str:
+    if not text or not _encryption_ok:
+        return text
+    try:
+        key = _derive_key(uid)
+        aesgcm = AESGCM(key)
+        payload = base64.b64decode(text.encode('utf-8'))
+        return aesgcm.decrypt(payload[:12], payload[12:], None).decode('utf-8')
+    except Exception:
+        return text
+
+
+# --------------- chat session helpers ---------------
+
+
+def _get_or_create_chat_session(uid: str) -> dict:
+    """Get or create the default (plugin_id=None) chat session."""
+    session_ref = (
+        db.collection('users').document(uid).collection('chat_sessions').where('plugin_id', '==', None).limit(1)
+    )
+    for session in session_ref.stream():
+        return session.to_dict()
+
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'created_at': datetime.now(timezone.utc),
+        'plugin_id': None,
+        'message_ids': [],
+        'file_ids': [],
+    }
+    db.collection('users').document(uid).collection('chat_sessions').document(session_data['id']).set(session_data)
+    return session_data
+
+
+# --------------- message persistence ---------------
+
+
+def _fetch_chat_history(uid: str, chat_session_id: str) -> list:
+    """Fetch last N messages from the chat session, returned oldest-first."""
     messages_ref = (
         db.collection('users')
         .document(uid)
         .collection('messages')
-        .where('plugin_id', '==', AGENT_PLUGIN_ID)
+        .where('plugin_id', '==', None)
+        .where('chat_session_id', '==', chat_session_id)
         .order_by('created_at', direction=Query.DESCENDING)
         .limit(HISTORY_LIMIT)
     )
     messages = []
     for doc in messages_ref.stream():
         data = doc.to_dict()
-        messages.append(
-            {
-                'sender': data.get('sender', ''),
-                'text': data.get('text', ''),
-            }
-        )
+        text = data.get('text', '')
+        if data.get('data_protection_level') == 'enhanced':
+            text = _decrypt_text(text, uid)
+        messages.append({'sender': data.get('sender', ''), 'text': text})
     return list(reversed(messages))
 
 
-def _save_message(uid: str, text: str, sender: str):
-    """Save a message to Firestore under the agent plugin_id."""
+def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_protection_level: str):
+    """Save a message to Firestore with encryption and chat session linking."""
+    msg_id = str(uuid.uuid4())
+    store_text = text
+    level = data_protection_level
+    if level == 'enhanced':
+        if _encryption_ok:
+            store_text = _encrypt_text(text, uid)
+        else:
+            level = 'standard'
+
     msg_data = {
-        'id': str(uuid.uuid4()),
-        'text': text,
+        'id': msg_id,
+        'text': store_text,
         'created_at': datetime.now(timezone.utc),
         'sender': sender,
-        'plugin_id': AGENT_PLUGIN_ID,
+        'plugin_id': None,
         'type': 'text',
         'from_external_integration': False,
         'memories_id': [],
         'files_id': [],
+        'chat_session_id': chat_session_id,
+        'data_protection_level': level,
     }
-    db.collection('users').document(uid).collection('messages').add(msg_data)
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('messages').add(msg_data)
+    # Link message to chat session
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({'message_ids': firestore.ArrayUnion([msg_id])})
 
 
 def _build_prompt_with_history(prompt: str, history: list) -> str:
@@ -117,8 +200,8 @@ async def agent_ws(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid token")
         return
 
-    # Look up the user's agent VM
-    vm = _get_agent_vm(uid)
+    # Look up the user's agent VM and data protection level
+    vm, data_protection_level = _get_user_context(uid)
     if not vm or vm.get("status") != "ready":
         await websocket.close(code=4002, reason="No agent VM available")
         return
@@ -126,6 +209,10 @@ async def agent_ws(websocket: WebSocket):
     vm_ip = vm["ip"]
     vm_token = vm["authToken"]
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
+
+    # Get or create the default chat session so messages are linked properly
+    chat_session = await asyncio.to_thread(_get_or_create_chat_session, uid)
+    chat_session_id = chat_session['id']
 
     await websocket.accept()
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
@@ -142,11 +229,18 @@ async def agent_ws(websocket: WebSocket):
                             if data.get('type') == 'query':
                                 prompt = data.get('prompt', '')
                                 # Fetch history before saving new message
-                                history = await asyncio.to_thread(_fetch_chat_history, uid)
+                                history = await asyncio.to_thread(_fetch_chat_history, uid, chat_session_id)
                                 data['prompt'] = _build_prompt_with_history(prompt, history)
                                 msg = json.dumps(data)
                                 # Save user message
-                                await asyncio.to_thread(_save_message, uid, prompt, 'human')
+                                await asyncio.to_thread(
+                                    _save_message,
+                                    uid,
+                                    prompt,
+                                    'human',
+                                    chat_session_id,
+                                    data_protection_level,
+                                )
                                 logger.info(f"[agent-proxy] uid={uid} query with {len(history)} history messages")
                         except (json.JSONDecodeError, Exception) as e:
                             logger.warning(f"[agent-proxy] failed to process message: {e}")
@@ -177,7 +271,14 @@ async def agent_ws(websocket: WebSocket):
                     # Save AI response
                     if response_text.strip():
                         try:
-                            await asyncio.to_thread(_save_message, uid, response_text.strip(), 'ai')
+                            await asyncio.to_thread(
+                                _save_message,
+                                uid,
+                                response_text.strip(),
+                                'ai',
+                                chat_session_id,
+                                data_protection_level,
+                            )
                             logger.info(f"[agent-proxy] uid={uid} saved AI response ({len(response_text)} chars)")
                         except Exception as e:
                             logger.warning(f"[agent-proxy] failed to save AI response: {e}")
