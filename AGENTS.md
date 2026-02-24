@@ -30,11 +30,11 @@ backend (main.py)
   ├── ws ──► pusher (pusher/)
   ├── ──────► diarizer (diarizer/)
   ├── ──────► vad (modal/)
-  └── ──────► deepgram-self-hosted
+  └── ──────► deepgram (self-hosted or cloud)
 
 pusher
   ├── ──────► diarizer (diarizer/)
-  └── ──────► deepgram-self-hosted
+  └── ──────► deepgram (cloud)
 
 notifications-job (modal/job.py)  [cron]
 ```
@@ -45,7 +45,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called by backend only (`HOSTED_VAD_API_URL`, `HOSTED_SPEECH_PROFILE_API_URL`).
-- **deepgram-self-hosted** — Self-hosted STT. Used when `DEEPGRAM_SELF_HOSTED_ENABLED=true` (`DEEPGRAM_SELF_HOSTED_URL`). Called by backend and pusher.
+- **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
 
 ### App (Flutter)
