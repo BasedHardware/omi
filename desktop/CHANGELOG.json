@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "11.0",
+      "date": "2026-02-23",
+      "changes": [
+        "Task chat session history: resume previous AI conversations about tasks across app restarts",
+        "Dedicated task chat side panel with better layout isolation and session ID display",
+        "Add task button in toolbar (⌘N) for quick inline task creation",
+        "File graph keyboard hints: drag to rotate, right-drag to pan, scroll to zoom",
+        "Removed per-message timeouts in AI bridge — long-running tools no longer fail prematurely",
+        "Chat memory capped at 200 messages to prevent unbounded growth",
+        "Auto-restart memory threshold lowered from 4GB to 3GB for safer recovery",
+        "Fixed PostHog lifecycle capture causing 2-second XPC hangs to Spotlight",
+        "Fixed drag-and-drop task reordering with proper macOS NSItemProvider support",
+        "Fixed SwiftUI layout recursion in chat panels and task list",
+        "Fixed conversation list depth hangs during refresh",
+        "Fixed Rewind ffmpeg process burst when switching apps rapidly",
+        "Removed misleading 'End-to-end encryption (Coming Soon)' badge"
+      ]
+    },
+    {
       "version": "0.10.9",
       "date": "2026-02-23",
       "changes": [
