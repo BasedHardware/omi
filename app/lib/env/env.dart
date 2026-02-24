@@ -19,6 +19,17 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
+  /// WebSocket URL for the agent proxy service (agent.omi.me / agent.omiapi.com).
+  /// Derived from apiBaseUrl: https://api.* → wss://agent.*
+  static String get agentProxyWsUrl {
+    final base = apiBaseUrl ?? 'https://api.omi.me/';
+    return base
+            .replaceFirst('https://api.', 'wss://agent.')
+            .replaceFirst('http://api.', 'ws://agent.')
+            .replaceAll(RegExp(r'/$'), '') +
+        '/v1/agent/ws';
+  }
+
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
   static String? get googleMapsApiKey => _instance.googleMapsApiKey;
