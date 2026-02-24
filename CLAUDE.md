@@ -60,7 +60,7 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
 
 ```
               ┌───────────────────────────────┐
-              │  Firestore · Redis (shared)   │
+              │   Firestore · Redis (shared)  │
               └─────┬─────────────────┬───────┘
                     │                 │
           ┌────────┴───┐       ┌─────┴──────┐
@@ -70,28 +70,34 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
              │   │                │   │
              │   └────┬───────────┘   │
              │        ▼               │
-             │   ┌──────────┐         │
-             │   │ diarizer │         │
-             │   │ diarizer/│         │
-             │   └──────────┘         │
+             │  ┌───────────┐         │
+             │  │ diarizer  │         │
+             │  └───────────┘         │
              │                        │
              └──────────┬─────────────┘
                         ▼
-              ┌───────────────────┐
-              │   vad · speech-   │
-              │   profile         │
-              │   modal/          │
-              └───────────────────┘
+                ┌──────────────┐
+                │ vad (modal/) │
+                │ /v1/vad      │
+                │ /v1/speaker- │
+                │ identification│
+                └──────────────┘
+
+          ┌──────────────────────────┐
+          │ deepgram-self-hosted     │
+          └──────────────────────────┘
 
           notifications-job (modal/job.py)
               cron · Firestore · Redis
 ```
 
+Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted}/`
+
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings during transcription (`routers/transcribe.py`).
-- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Runs `process_conversation` which calls vad and speech-profile (`utils/conversations/postprocess_conversation.py`).
-- **diarizer** (`diarizer/main.py`) — Speaker embeddings. Called from backend via `utils/stt/speaker_embedding.py` (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
-- **vad** (`modal/main.py`) — Voice activity detection. Called via `utils/stt/vad.py` (`HOSTED_VAD_API_URL`). Results cached in Redis 24h.
-- **speech-profile** (`modal/main.py`) — Speaker identification. Called via `utils/stt/speech_profile.py` (`HOSTED_SPEECH_PROFILE_API_URL`).
+- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Runs `process_conversation` which calls vad (`utils/conversations/postprocess_conversation.py`).
+- **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings. Called from backend via `utils/stt/speaker_embedding.py` (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
+- **vad** (`modal/main.py`) — GPU. Two endpoints: `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called via `utils/stt/vad.py` and `utils/stt/speech_profile.py`. VAD results cached in Redis 24h.
+- **deepgram-self-hosted** — Self-hosted Deepgram for STT. Used when `DEEPGRAM_SELF_HOSTED_ENABLED=true` (`utils/stt/streaming.py`).
 - **notifications-job** (`modal/job.py`) — Cron job that reads Firestore/Redis and sends push notifications.
 
 ## App (Flutter)
