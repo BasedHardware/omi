@@ -12,6 +12,9 @@ from database import users as users_db
 from database import conversations as conversations_db
 from database import memories as memories_db
 from database import chat as chat_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
 # IMPORTANT: Set the GOOGLE_APPLICATION_CREDENTIALS environment variable
@@ -20,8 +23,8 @@ try:
     cred = credentials.ApplicationDefault()
     firebase_admin.initialize_app(cred)
 except Exception as e:
-    print("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    print(e)
+    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+    logger.error(e)
     sys.exit(1)
 
 
@@ -37,13 +40,13 @@ def load_ignore_uids(filepath: str) -> set:
             # Read UIDs, strip whitespace, and ignore empty lines
             return {line.strip() for line in f if line.strip()}
     except FileNotFoundError:
-        print(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
+        logger.warning(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
         return set()
 
 
 def migrate_user_to_enhanced(uid: str):
     """Migrates a single user's data from 'standard' to 'enhanced' protection."""
-    print(f"Starting migration for user: {uid}")
+    logger.info(f"Starting migration for user: {uid}")
 
     # 1. Get all items to migrate
     conversations_to_migrate = [item['id'] for item in conversations_db.get_conversations_to_migrate(uid, 'enhanced')]
@@ -52,11 +55,11 @@ def migrate_user_to_enhanced(uid: str):
 
     total_items = len(conversations_to_migrate) + len(memories_to_migrate) + len(chats_to_migrate)
     if total_items == 0:
-        print(f"User {uid} is already at enhanced or has no data to migrate. Setting level to enhanced.")
+        logger.info(f"User {uid} is already at enhanced or has no data to migrate. Setting level to enhanced.")
         users_db.set_data_protection_level(uid, 'enhanced')
         return
 
-    print(
+    logger.info(
         f"Found {len(conversations_to_migrate)} conversations, {len(memories_to_migrate)} memories, and {len(chats_to_migrate)} chats to migrate for user {uid}."
     )
 
@@ -64,35 +67,35 @@ def migrate_user_to_enhanced(uid: str):
     try:
         batch_size = 100
         if conversations_to_migrate:
-            print(f"Migrating {len(conversations_to_migrate)} conversations for {uid}...")
+            logger.info(f"Migrating {len(conversations_to_migrate)} conversations for {uid}...")
             for i in range(0, len(conversations_to_migrate), batch_size):
                 batch_ids = conversations_to_migrate[i : i + batch_size]
-                print(f"  Migrating conversation batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating conversation batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 conversations_db.migrate_conversations_level_batch(uid, batch_ids, 'enhanced')
-            print(f"Conversations migrated for {uid}.")
+            logger.info(f"Conversations migrated for {uid}.")
 
         if memories_to_migrate:
-            print(f"Migrating {len(memories_to_migrate)} memories for {uid}...")
+            logger.info(f"Migrating {len(memories_to_migrate)} memories for {uid}...")
             for i in range(0, len(memories_to_migrate), batch_size):
                 batch_ids = memories_to_migrate[i : i + batch_size]
-                print(f"  Migrating memory batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating memory batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 memories_db.migrate_memories_level_batch(uid, batch_ids, 'enhanced')
-            print(f"Memories migrated for {uid}.")
+            logger.info(f"Memories migrated for {uid}.")
 
         if chats_to_migrate:
-            print(f"Migrating {len(chats_to_migrate)} chats for {uid}...")
+            logger.info(f"Migrating {len(chats_to_migrate)} chats for {uid}...")
             for i in range(0, len(chats_to_migrate), batch_size):
                 batch_ids = chats_to_migrate[i : i + batch_size]
-                print(f"  Migrating chat batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
+                logger.info(f"  Migrating chat batch {i//batch_size + 1} for {uid} ({len(batch_ids)} items)")
                 chat_db.migrate_chats_level_batch(uid, batch_ids, 'enhanced')
-            print(f"Chats migrated for {uid}.")
+            logger.info(f"Chats migrated for {uid}.")
 
         # 3. Finalize migration by updating user's protection level
         users_db.finalize_migration(uid, 'enhanced')
-        print(f"Successfully migrated user {uid} to enhanced protection.")
+        logger.info(f"Successfully migrated user {uid} to enhanced protection.")
 
     except Exception as e:
-        print(f"ERROR migrating user {uid}: {e}")
+        logger.error(f"ERROR migrating user {uid}: {e}")
         # Re-raise the exception to be caught by the future in the main loop
         raise
 
@@ -103,13 +106,13 @@ def main():
     parser.add_argument('--ignore-file', type=str, help='Path to a file containing UIDs to ignore, one per line.')
     args = parser.parse_args()
 
-    print("Starting migration of users to 'enhanced' data protection...")
+    logger.info("Starting migration of users to 'enhanced' data protection...")
 
     ignore_uids = load_ignore_uids(args.ignore_file)
     if ignore_uids:
-        print(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
+        logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
-    print("Fetching list of users to migrate...")
+    logger.info("Fetching list of users to migrate...")
     users_ref = db.collection('users')
     all_users = users_ref.stream()
 
@@ -121,7 +124,7 @@ def main():
         total_user_count += 1
         uid = user_doc.id
         if uid in ignore_uids:
-            print(f"User {uid} is in the ignore list. Skipping.")
+            logger.warning(f"User {uid} is in the ignore list. Skipping.")
             skipped_user_count += 1
             continue
 
@@ -131,19 +134,19 @@ def main():
         if current_level == 'standard':
             users_to_migrate.append(uid)
         else:
-            print(f"User {uid} is already at '{current_level}' protection level. Skipping.")
+            logger.warning(f"User {uid} is already at '{current_level}' protection level. Skipping.")
             skipped_user_count += 1
 
-    print(f"\nChecked {total_user_count} total users.")
-    print(f"Found {len(users_to_migrate)} users to migrate.")
-    print(f"{skipped_user_count} users will be skipped.")
+    logger.info(f"\nChecked {total_user_count} total users.")
+    logger.info(f"Found {len(users_to_migrate)} users to migrate.")
+    logger.warning(f"{skipped_user_count} users will be skipped.")
 
     if not users_to_migrate:
-        print("No users to migrate. Exiting.")
+        logger.debug("No users to migrate. Exiting.")
         return
 
     with ThreadPoolExecutor(max_workers=64) as executor:
-        print(f"\nStarting migration with 64 threads...")
+        logger.info(f"\nStarting migration with 64 threads...")
         futures = {executor.submit(migrate_user_to_enhanced, uid): uid for uid in users_to_migrate}
 
         completed_count = 0
@@ -152,11 +155,13 @@ def main():
             completed_count += 1
             try:
                 future.result()  # This will re-raise any exception from the thread
-                print(f"({completed_count}/{len(users_to_migrate)}) COMPLETED: User {uid}")
+                logger.info(f"({completed_count}/{len(users_to_migrate)}) COMPLETED: User {uid}")
             except Exception as exc:
-                print(f"({completed_count}/{len(users_to_migrate)}) FAILED: User {uid} generated an exception: {exc}")
+                logger.error(
+                    f"({completed_count}/{len(users_to_migrate)}) FAILED: User {uid} generated an exception: {exc}"
+                )
 
-    print(f"\nMigration script finished. Processed {len(users_to_migrate)} users.")
+    logger.info(f"\nMigration script finished. Processed {len(users_to_migrate)} users.")
 
 
 if __name__ == '__main__':

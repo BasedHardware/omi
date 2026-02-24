@@ -1,8 +1,9 @@
 import Foundation
 
 /// Manages a long-lived Node.js subprocess running the ACP (Agent Client Protocol) bridge.
-/// This is the Mode B bridge — users authenticate with their own Claude account (Pro/Max).
-/// Communication uses JSON lines over stdin/stdout pipes, same protocol as ClaudeAgentBridge.
+/// This is the sole bridge for AI chat — supports both OMI's API key (passApiKey=true)
+/// and user's own Claude account via OAuth (passApiKey=false).
+/// Communication uses JSON lines over stdin/stdout pipes.
 actor ACPBridge {
 
     // MARK: - Types
@@ -12,6 +13,10 @@ actor ACPBridge {
         let text: String
         let costUsd: Double
         let sessionId: String
+        let inputTokens: Int
+        let outputTokens: Int
+        let cacheReadTokens: Int
+        let cacheWriteTokens: Int
     }
 
     /// Callback for streaming text deltas
@@ -29,8 +34,8 @@ actor ACPBridge {
     /// Callback for tool result display (toolUseId, name, output)
     typealias ToolResultDisplayHandler = @Sendable (String, String, String) -> Void
 
-    /// Callback for auth required events (methods array)
-    typealias AuthRequiredHandler = @Sendable ([[String: Any]]) -> Void
+    /// Callback for auth required events (methods array, optional auth URL)
+    typealias AuthRequiredHandler = @Sendable ([[String: Any]], String?) -> Void
 
     /// Callback for auth success
     typealias AuthSuccessHandler = @Sendable () -> Void
@@ -43,9 +48,9 @@ actor ACPBridge {
         case toolUse(callId: String, name: String, input: [String: Any])
         case toolActivity(name: String, status: String, toolUseId: String?, input: [String: Any]?)
         case toolResultDisplay(toolUseId: String, name: String, output: String)
-        case result(text: String, sessionId: String, costUsd: Double?)
+        case result(text: String, sessionId: String, costUsd: Double?, inputTokens: Int, outputTokens: Int, cacheReadTokens: Int, cacheWriteTokens: Int)
         case error(message: String)
-        case authRequired(methods: [[String: Any]])
+        case authRequired(methods: [[String: Any]], authUrl: String?)
         case authSuccess
     }
 
@@ -54,6 +59,19 @@ actor ACPBridge {
     /// When true, ANTHROPIC_API_KEY is passed through to the ACP subprocess
     /// (Mode A: OMI's key). When false, the key is stripped so ACP uses OAuth.
     let passApiKey: Bool
+
+    /// Persistent auth handler called whenever auth_required arrives (even outside query)
+    var onAuthRequiredGlobal: AuthRequiredHandler?
+    /// Persistent auth success handler called whenever auth_success arrives (even outside query)
+    var onAuthSuccessGlobal: AuthSuccessHandler?
+
+    func setGlobalAuthHandlers(
+        onAuthRequired: AuthRequiredHandler?,
+        onAuthSuccess: AuthSuccessHandler?
+    ) {
+        self.onAuthRequiredGlobal = onAuthRequired
+        self.onAuthSuccessGlobal = onAuthSuccess
+    }
 
     init(passApiKey: Bool = false) {
         self.passApiKey = passApiKey
@@ -116,7 +134,7 @@ actor ACPBridge {
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: nodePath)
-        proc.arguments = ["--jitless", bridgePath]
+        proc.arguments = ["--max-old-space-size=256", "--max-semi-space-size=16", bridgePath]
 
         // Build environment
         var env = ProcessInfo.processInfo.environment
@@ -165,7 +183,10 @@ actor ACPBridge {
             let data = handle.availableData
             if !data.isEmpty, let text = String(data: data, encoding: .utf8) {
                 log("ACPBridge stderr: \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
-                if text.contains("FatalProcessOutOfMemory") || text.contains("JavaScript heap out of memory") {
+                if text.contains("FatalProcessOutOfMemory")
+                    || text.contains("JavaScript heap out of memory")
+                    || text.contains("Failed to reserve virtual memory")
+                    || text.contains("out of memory") {
                     Task { await self?.markOOM() }
                 }
             }
@@ -268,7 +289,7 @@ actor ACPBridge {
         onToolActivity: @escaping ToolActivityHandler,
         onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
         onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
-        onAuthRequired: @escaping AuthRequiredHandler = { _ in },
+        onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
         onAuthSuccess: @escaping AuthSuccessHandler = { }
     ) async throws -> QueryResult {
         guard isRunning else {
@@ -290,6 +311,9 @@ actor ACPBridge {
         if let model = model {
             queryDict["model"] = model
         }
+        if let resume = resume {
+            queryDict["resume"] = resume
+        }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
@@ -305,9 +329,12 @@ actor ACPBridge {
         }
         sendLine(jsonString)
 
-        // Read messages until we get a result or error
+        // Read messages until we get a result or error.
+        // No per-message timeout — rely on process termination (handleTermination) to
+        // detect a dead bridge. A per-message timeout (like Zed's old low_speed_timeout)
+        // fires prematurely during long-running tools (sentry-logs, slow API calls, etc.).
         while true {
-            let message = try await waitForMessage(timeout: 90.0)
+            let message = try await waitForMessage()
 
             switch message {
             case .`init`:
@@ -340,8 +367,8 @@ actor ACPBridge {
                     while !pendingMessages.isEmpty {
                         let pending = pendingMessages.removeFirst()
                         switch pending {
-                        case .result(let text, let sessionId, let costUsd):
-                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
+                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
                         case .error(let message):
                             throw BridgeError.agentError(message)
                         default:
@@ -349,10 +376,10 @@ actor ACPBridge {
                         }
                     }
                     while true {
-                        let msg = try await waitForMessage(timeout: 10.0)
+                        let msg = try await waitForMessage()
                         switch msg {
-                        case .result(let text, let sessionId, let costUsd):
-                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
+                        case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                            return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
                         case .error(let message):
                             throw BridgeError.agentError(message)
                         default:
@@ -370,14 +397,14 @@ actor ACPBridge {
             case .toolResultDisplay(let toolUseId, let name, let output):
                 onToolResultDisplay(toolUseId, name, output)
 
-            case .result(let text, let sessionId, let costUsd):
-                return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId)
+            case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
+                return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
 
             case .error(let message):
                 throw BridgeError.agentError(message)
 
-            case .authRequired(let methods):
-                onAuthRequired(methods)
+            case .authRequired(let methods, let authUrl):
+                onAuthRequired(methods, authUrl)
 
             case .authSuccess:
                 onAuthSuccess()
@@ -483,7 +510,13 @@ actor ACPBridge {
             let text = dict["text"] as? String ?? ""
             let sessionId = dict["sessionId"] as? String ?? ""
             let costUsd = dict["costUsd"] as? Double
-            return .result(text: text, sessionId: sessionId, costUsd: costUsd)
+            let inputTokens = dict["inputTokens"] as? Int ?? 0
+            let outputTokens = dict["outputTokens"] as? Int ?? 0
+            let cacheReadTokens = dict["cacheReadTokens"] as? Int ?? 0
+            let cacheWriteTokens = dict["cacheWriteTokens"] as? Int ?? 0
+            return .result(text: text, sessionId: sessionId, costUsd: costUsd,
+                           inputTokens: inputTokens, outputTokens: outputTokens,
+                           cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)
 
         case "error":
             let message = dict["message"] as? String ?? "Unknown error"
@@ -491,7 +524,8 @@ actor ACPBridge {
 
         case "auth_required":
             let methods = dict["methods"] as? [[String: Any]] ?? []
-            return .authRequired(methods: methods)
+            let authUrl = dict["authUrl"] as? String
+            return .authRequired(methods: methods, authUrl: authUrl)
 
         case "auth_success":
             return .authSuccess
@@ -503,6 +537,23 @@ actor ACPBridge {
     }
 
     private func deliverMessage(_ message: InboundMessage) {
+        // Handle auth messages immediately via global handlers (even outside query)
+        switch message {
+        case .authRequired(let methods, let authUrl):
+            if messageContinuation == nil, let handler = onAuthRequiredGlobal {
+                // No active query waiting — fire the global handler immediately
+                handler(methods, authUrl)
+                return
+            }
+        case .authSuccess:
+            if messageContinuation == nil, let handler = onAuthSuccessGlobal {
+                handler()
+                return
+            }
+        default:
+            break
+        }
+
         if let continuation = messageContinuation {
             messageContinuation = nil
             continuation.resume(returning: message)
@@ -546,17 +597,24 @@ actor ACPBridge {
         }
 
         let reasonStr = reason == .uncaughtSignal ? "signal" : "exit"
-        let error: BridgeError = lastExitWasOOM ? .outOfMemory : .processExited
-        lastExitWasOOM = false
 
-        // Capture any remaining stderr before closing pipes (avoids race with readabilityHandler)
+        // Capture any remaining stderr before closing pipes (may reveal OOM)
         if let stderrHandle = stderrPipe?.fileHandleForReading {
             stderrHandle.readabilityHandler = nil  // Stop async handler
             let remaining = stderrHandle.availableData
             if !remaining.isEmpty, let text = String(data: remaining, encoding: .utf8) {
                 log("ACPBridge stderr (final): \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
+                if text.contains("out of memory") || text.contains("Failed to reserve virtual memory") {
+                    lastExitWasOOM = true
+                }
             }
         }
+
+        // SIGABRT (134) and SIGTRAP (133/5) with uncaughtSignal are typical V8 OOM crashes
+        let likelyOOM = lastExitWasOOM
+            || (reason == .uncaughtSignal && (exitCode == 134 || exitCode == 133 || exitCode == 5 || exitCode == 6))
+        let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
+        lastExitWasOOM = false
 
         log("ACPBridge: process terminated (code=\(exitCode), reason=\(reasonStr), error=\(error))")
         isRunning = false
@@ -585,7 +643,7 @@ actor ACPBridge {
         stderrPipe = nil
     }
 
-    // MARK: - Node.js Discovery (same as ClaudeAgentBridge)
+    // MARK: - Node.js Discovery
 
     private func findNodeBinary() -> String? {
         // 1. Check bundled node binary in app resources
@@ -639,6 +697,36 @@ actor ACPBridge {
         return nil
     }
 
+    // MARK: - Playwright Connection Test
+
+    /// Test that the Playwright Chrome extension is connected and working.
+    /// Sends a minimal query that triggers a browser_snapshot tool call.
+    /// Returns true if the extension responds successfully.
+    func testPlaywrightConnection() async throws -> Bool {
+        guard isRunning else {
+            throw BridgeError.notRunning
+        }
+
+        log("ACPBridge: Testing Playwright connection...")
+        let result = try await query(
+            prompt: "Call browser_snapshot to verify the extension is connected. Only call that one tool, then report success or failure.",
+            systemPrompt: "You are a connection test agent. Call the browser_snapshot tool exactly once. If it succeeds, respond with exactly 'CONNECTED'. If it fails, respond with 'FAILED' followed by the error.",
+            mode: "ask",
+            onTextDelta: { _ in },
+            onToolCall: { _, _, _ in "" },
+            onToolActivity: { name, status, _, _ in
+                log("ACPBridge: test tool activity: \(name) \(status)")
+            },
+            onThinkingDelta: { _ in },
+            onToolResultDisplay: { _, name, output in
+                log("ACPBridge: test tool result: \(name) -> \(output.prefix(200))")
+            }
+        )
+        let connected = result.text.contains("CONNECTED")
+        log("ACPBridge: Playwright test response: \(result.text.prefix(300)), connected=\(connected)")
+        return connected
+    }
+
     private func findBridgeScript() -> String? {
         // 1. Check in app bundle Resources
         if let bundlePath = Bundle.main.resourcePath {
@@ -671,5 +759,42 @@ actor ACPBridge {
         }
 
         return nil
+    }
+}
+
+// MARK: - Errors
+
+enum BridgeError: LocalizedError {
+    case nodeNotFound
+    case bridgeScriptNotFound
+    case notRunning
+    case encodingError
+    case timeout
+    case processExited
+    case outOfMemory
+    case stopped
+    case agentError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .nodeNotFound:
+            return "Node.js not found. Please reinstall the app."
+        case .bridgeScriptNotFound:
+            return "AI components missing. Please reinstall the app."
+        case .notRunning:
+            return "AI is not running. Try sending your message again."
+        case .encodingError:
+            return "Failed to encode message"
+        case .timeout:
+            return "AI took too long to respond. Try again."
+        case .processExited:
+            return "AI stopped unexpectedly. Try sending your message again."
+        case .outOfMemory:
+            return "Not enough memory for AI chat. Close some apps and try again."
+        case .stopped:
+            return "Response stopped."
+        case .agentError(let msg):
+            return "Agent error: \(msg)"
+        }
     }
 }

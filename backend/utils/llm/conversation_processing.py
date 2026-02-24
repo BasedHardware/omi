@@ -16,6 +16,9 @@ from models.conversation import (
     ActionItemsExtraction,
 )
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
+import logging
+
+logger = logging.getLogger(__name__)
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -148,7 +151,7 @@ Provide:
         return response.folder_id, response.confidence, response.reasoning
 
     except Exception as e:
-        print(f'Error assigning conversation to folder: {e}')
+        logger.error(f'Error assigning conversation to folder: {e}')
         return default_folder_id, 0.0, f"Error: {str(e)}"
 
 
@@ -226,7 +229,7 @@ Content:
         return response.discard
 
     except Exception as e:
-        print(f'Error determining memory discard: {e}')
+        logger.error(f'Error determining memory discard: {e}')
         return False
 
 
@@ -571,7 +574,7 @@ def extract_action_items(
         return response.action_items or []
 
     except Exception as e:
-        print(f'Error extracting action items: {e}')
+        logger.error(f'Error extracting action items: {e}')
         return []
 
 
@@ -859,7 +862,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
         return suggested_apps, response.reasoning
 
     except Exception as e:
-        print(f"Error getting suggested apps: {e}")
+        logger.error(f"Error getting suggested apps: {e}")
         return [], f"Error in app suggestion: {str(e)}"
 
 
@@ -935,7 +938,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
             return None
 
     except Exception as e:
-        print(f"Error selecting best app: {e}")
+        logger.error(f"Error selecting best app: {e}")
         return None
 
 

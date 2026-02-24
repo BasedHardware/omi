@@ -147,17 +147,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
         signal(SIGPIPE, SIG_IGN)
 
+        // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
+        // These break the code signature seal, causing the NEXT update to fail with
+        // "An error occurred while running the updater."
+        stripProvenanceXattrs()
+
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
         // Force macOS to use the correct app icon (bypasses icon cache)
+        // NOTE: Only set NSApp.applicationIconImage (in-memory).
+        // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
+        // the .app bundle, which breaks the code signature and prevents Sparkle
+        // auto-updates from working ("An error occurred while running the updater").
         if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
-            // Also update the on-disk registration
-            let appURL = Bundle.main.bundleURL
-            NSWorkspace.shared.setIcon(icon, forFile: appURL.path, options: [])
-            if let cfURL = appURL as CFURL? {
+            if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
             log("AppDelegate: Set application icon from OmiIcon.icns")
@@ -184,6 +190,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.enableCaptureFailedRequests = false
             options.maxBreadcrumbs = 100
             options.beforeSend = { event in
+                // Never send events from dev builds — they pollute production Sentry data
+                if isDev { return nil }
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
                     return nil
@@ -193,6 +201,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if let exceptions = event.exceptions, exceptions.contains(where: { exc in
                     exc.type == "NSURLErrorDomain" && exc.value.contains("Code=-999") ||
                     exc.type == "NSURLErrorDomain" && exc.value.contains("Code: -999")
+                }) {
+                    return nil
+                }
+                // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
+                // fails (network blip, expired token mid-refresh). The user is still signed in per
+                // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
+                if let exceptions = event.exceptions, exceptions.contains(where: { exc in
+                    exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
                 }) {
                     return nil
                 }
@@ -243,6 +259,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             await TranscriptionRetryService.shared.recoverPendingTranscriptions()
             TranscriptionRetryService.shared.start()
         }
+
+        // Start recurring task scheduler (checks every 60s for due tasks)
+        RecurringTaskScheduler.shared.start()
 
         // Identify user if already signed in
         if AuthState.shared.isSignedIn {
@@ -353,6 +372,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 scope.setTag(value: "heartbeat", key: "event_type")
             }
             log("Sentry: Session heartbeat captured")
+        }
+    }
+
+    /// Strip com.apple.provenance extended attributes from our own bundle.
+    /// macOS adds these when Sparkle extracts the update ZIP, which breaks the code
+    /// signature seal and causes subsequent updates to fail.
+    private func stripProvenanceXattrs() {
+        let bundlePath = Bundle.main.bundlePath
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.launchPath = "/usr/bin/xattr"
+            process.arguments = ["-cr", bundlePath]
+            process.standardOutput = nil
+            process.standardError = nil
+            try? process.run()
+            process.waitUntilExit()
+            if process.terminationStatus == 0 {
+                log("AppDelegate: Stripped provenance xattrs from bundle")
+            }
         }
     }
 
@@ -470,6 +508,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func showDockIcon() {
         if NSApp.activationPolicy() != .regular {
             NSApp.setActivationPolicy(.regular)
+            // Re-apply the custom icon — macOS can lose it when toggling activation policy
+            if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
+               let icon = NSImage(contentsOf: iconURL) {
+                NSApp.applicationIconImage = icon
+            }
             log("AppDelegate: Dock icon shown")
         }
     }
@@ -702,6 +745,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Stop transcription retry service
         TranscriptionRetryService.shared.stop()
+
+        // Stop recurring task scheduler
+        RecurringTaskScheduler.shared.stop()
 
         // Mark clean shutdown so next launch skips expensive DB integrity check
         RewindDatabase.markCleanShutdown()

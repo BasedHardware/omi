@@ -25,6 +25,7 @@ import type {
   WarmupMessage,
   AuthMethod,
 } from "./protocol.js";
+import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -220,6 +221,10 @@ function startAcpProcess(): void {
   // If absent (Mode B), ACP will use user's own OAuth.
   const env = { ...process.env };
   delete env.CLAUDE_CODE_USE_VERTEX;
+  // Remove CLAUDECODE so the ACP subprocess (and the Claude Code it spawns) don't
+  // inherit the nested-session guard. Without this, `--resume` silently fails when
+  // Claude Code detects it's being launched from inside another Claude Code session.
+  delete env.CLAUDECODE;
   env.NODE_NO_WARNINGS = "1";
 
   // Use our patched ACP entry point (adds model selection support)
@@ -227,7 +232,8 @@ function startAcpProcess(): void {
   const acpEntry = join(__dirname, "patched-acp-entry.mjs");
   const nodeBin = process.execPath;
 
-  logErr(`Starting ACP subprocess: ${nodeBin} ${acpEntry}`);
+  const mode = env.ANTHROPIC_API_KEY ? "Mode A (Omi API key)" : "Mode B (Your Claude Account / OAuth)";
+  logErr(`Starting ACP subprocess [${mode}]: ${nodeBin} ${acpEntry}`);
 
   acpProcess = spawn(nodeBin, [acpEntry], {
     env,
@@ -367,6 +373,69 @@ let isInitialized = false;
 let authMethods: AuthMethod[] = [];
 let authResolve: (() => void) | null = null;
 let preWarmPromise: Promise<void> | null = null;
+let authRetryCount = 0;
+const MAX_AUTH_RETRIES = 2;
+let activeAuthPromise: Promise<void> | null = null;
+let activeOAuthFlow: OAuthFlowHandle | null = null;
+
+// --- Auth flow (OAuth) ---
+
+/** Restart the ACP subprocess so it picks up freshly-stored credentials */
+async function restartAcpProcess(): Promise<void> {
+  logErr("Restarting ACP subprocess to pick up new credentials...");
+  if (acpProcess) {
+    const exitPromise = new Promise<void>((resolve) => {
+      acpProcess!.once("exit", () => resolve());
+    });
+    acpProcess.kill();
+    await exitPromise;
+  }
+  // State is cleaned up by the exit handler (sessions, handlers, etc.)
+  startAcpProcess();
+}
+
+/**
+ * Start the OAuth flow: spin up a local callback server, send the auth URL
+ * to Swift (so it can open the browser), wait for the user to complete auth,
+ * store credentials in Keychain, and restart the ACP subprocess.
+ *
+ * Idempotent: if a flow is already running, returns the same promise.
+ */
+async function startAuthFlow(): Promise<void> {
+  if (activeAuthPromise) {
+    logErr("Auth flow already in progress, waiting for it...");
+    return activeAuthPromise;
+  }
+
+  activeAuthPromise = (async () => {
+    try {
+      logErr("Starting OAuth flow...");
+      const flow = await startOAuthFlow(logErr);
+      activeOAuthFlow = flow;
+
+      // Send auth URL to Swift so it can open the browser
+      send({ type: "auth_required", methods: authMethods, authUrl: flow.authUrl });
+
+      // Wait for OAuth callback + token exchange + credential storage
+      await flow.complete;
+      logErr("OAuth flow completed successfully");
+
+      // Restart ACP subprocess so it picks up new credentials from Keychain
+      await restartAcpProcess();
+
+      // Notify Swift
+      send({ type: "auth_success" });
+    } catch (err) {
+      logErr(`OAuth flow failed: ${err}`);
+      throw err;
+    } finally {
+      activeOAuthFlow = null;
+      activeAuthPromise = null;
+    }
+  })();
+
+  return activeAuthPromise;
+}
 
 // --- ACP initialization ---
 
@@ -428,15 +497,9 @@ async function initializeAcp(): Promise<void> {
         }));
       }
       logErr(`ACP requires authentication: ${JSON.stringify(authMethods)}`);
-      send({ type: "auth_required", methods: authMethods });
+      await startAuthFlow();
 
-      // Wait for authenticate message from Swift
-      await new Promise<void>((resolve) => {
-        authResolve = resolve;
-      });
-
-      // Retry initialization after auth
-      isInitialized = false;
+      // Retry initialization after auth (ACP subprocess already restarted)
       await initializeAcp();
       return;
     }
@@ -453,18 +516,22 @@ type McpServerConfig = {
   env: Array<{ name: string; value: string }>;
 };
 
-function buildMcpServers(mode: string): McpServerConfig[] {
+function buildMcpServers(mode: string, cwd?: string): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
   // omi-tools (stdio, connects back via Unix socket)
+  const omiToolsEnv: Array<{ name: string; value: string }> = [
+    { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
+    { name: "OMI_QUERY_MODE", value: mode },
+  ];
+  if (cwd) {
+    omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
+  }
   servers.push({
     name: "omi-tools",
     command: process.execPath,
     args: [omiToolsStdioScript],
-    env: [
-      { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-      { name: "OMI_QUERY_MODE", value: mode },
-    ],
+    env: omiToolsEnv,
   });
 
   // Playwright MCP server
@@ -513,8 +580,7 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
         try {
           const sessionParams: Record<string, unknown> = {
             cwd: warmCwd,
-            mcpServers: buildMcpServers("act"),
-            model: warmModel,
+            mcpServers: buildMcpServers("act", warmCwd),
           };
 
           // Retry once after a short delay if session/new fails
@@ -529,44 +595,24 @@ async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
           }
 
           sessions.set(warmModel, { sessionId: result.sessionId, cwd: warmCwd });
+          // Set the model via the proper ACP method (model field is stripped from session/new by schema)
+          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: warmModel });
           logErr(
             `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
           );
         } catch (err) {
-          // If pre-warm fails with auth error, send auth_required to Swift
+          // If pre-warm fails with auth error, start OAuth flow.
+          // Only -32000 is AUTH_REQUIRED; -32603 is a generic error (credit balance, API error, etc.)
           if (err instanceof AcpError && err.code === -32000) {
-            const data = err.data as {
-              authMethods?: Array<{
-                id: string;
-                name: string;
-                description?: string;
-                type?: string;
-              }>;
-            };
-            if (data?.authMethods) {
-              authMethods = data.authMethods.map((m) => ({
-                id: m.id,
-                type: (m.type ?? "agent_auth") as AuthMethod["type"],
-                displayName: m.name || m.description || m.id,
-              }));
-            }
-            logErr(`Pre-warm failed with auth error, requesting authentication`);
-            isInitialized = false;
-            send({ type: "auth_required", methods: authMethods });
-            return;
+            logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
+            await startAuthFlow();
+            return; // After auth, warmup will happen on next query
           }
           logErr(`Pre-warm failed for ${warmModel}: ${err}`);
         }
       })
     );
   } catch (err) {
-    // If init/warmup fails with auth error, send auth_required to Swift
-    if (err instanceof AcpError && err.code === -32000) {
-      logErr(`Warmup init failed with auth error, requesting authentication`);
-      isInitialized = false;
-      send({ type: "auth_required", methods: authMethods });
-      return;
-    }
     logErr(`Pre-warm failed (will create on first query): ${err}`);
   }
 }
@@ -582,8 +628,10 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
   const abortController = new AbortController();
   activeAbort = abortController;
   interruptRequested = false;
+  authRetryCount = 0;
 
   let fullText = "";
+  let fullPrompt = "";
   let isNewSession = false;
   const pendingTools: string[] = [];
 
@@ -618,21 +666,39 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       }
     }
 
-    // Reuse existing session if alive, otherwise create a new one
+    // Reuse existing session if alive, resume a persisted one, or create a new one
+    if (msg.resume && !sessionId) {
+      // Resume a persisted session by ID (survives process restarts via ~/.claude/projects/)
+      // Fall back to session/new if the session file is gone or resume fails
+      try {
+        await acpRequest("session/resume", {
+          sessionId: msg.resume,
+          cwd: requestedCwd,
+          mcpServers: buildMcpServers(mode, requestedCwd),
+        });
+        sessionId = msg.resume;
+        sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
+        isNewSession = false;
+        logErr(`ACP session resumed: ${sessionId}`);
+      } catch (resumeErr) {
+        logErr(`ACP session resume failed (will create new session): ${resumeErr}`);
+        // Fall through to session/new below
+      }
+    }
     if (!sessionId) {
       const sessionParams: Record<string, unknown> = {
         cwd: requestedCwd,
-        mcpServers: buildMcpServers(mode),
+        mcpServers: buildMcpServers(mode, requestedCwd),
       };
-      if (requestedModel) {
-        sessionParams.model = requestedModel;
-      }
-
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
       sessionId = sessionResult.sessionId;
       sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
       isNewSession = true;
+      // Set the model via the proper ACP method (model field is stripped from session/new by schema)
+      if (requestedModel) {
+        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
+      }
       logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
@@ -642,7 +708,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
     // Only prepend system prompt on the first message in a new session.
     // On subsequent messages the session already has the context.
-    const fullPrompt = isNewSession && msg.systemPrompt
+    fullPrompt = isNewSession && msg.systemPrompt
       ? `<system>\n${msg.systemPrompt}\n</system>\n\n${msg.prompt}`
       : msg.prompt;
 
@@ -665,6 +731,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         prompt: [{ type: "text", text: fullPrompt }],
       })) as {
         stopReason: string;
+        // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess
+        usage?: { inputTokens: number; outputTokens: number; cachedReadTokens?: number | null; cachedWriteTokens?: number | null; totalTokens: number };
+        _meta?: { costUsd?: number };
       };
 
       logErr(`Prompt completed: stopReason=${promptResult.stopReason}`);
@@ -675,7 +744,12 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       }
       pendingTools.length = 0;
 
-      send({ type: "result", text: fullText, sessionId, costUsd: 0 });
+      const inputTokens = promptResult.usage?.inputTokens ?? Math.ceil(fullPrompt.length / 4);
+      const outputTokens = promptResult.usage?.outputTokens ?? Math.ceil(fullText.length / 4);
+      const cacheReadTokens = promptResult.usage?.cachedReadTokens ?? 0;
+      const cacheWriteTokens = promptResult.usage?.cachedWriteTokens ?? 0;
+      const costUsd = promptResult._meta?.costUsd ?? 0;
+      send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
     };
 
     try {
@@ -690,18 +764,35 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           logErr(
             `Query interrupted by user, sending partial result (${fullText.length} chars)`
           );
-          send({ type: "result", text: fullText, sessionId, costUsd: 0 });
+          const inputTokens = Math.ceil(fullPrompt.length / 4);
+          const outputTokens = Math.ceil(fullText.length / 4);
+          send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 });
         } else {
           logErr("Query aborted (superseded by new query)");
         }
         return;
       }
-      // If session/prompt failed and we were reusing a session, retry with a fresh one
-      if (sessionId) {
+      // Only -32000 is AUTH_REQUIRED in the new ACP protocol.
+      // -32603 is a generic internal error (API error, rate limit, etc.) — do NOT start OAuth for it.
+      if (err instanceof AcpError && err.code === -32000) {
+        if (authRetryCount >= MAX_AUTH_RETRIES) {
+          logErr(`session/prompt auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
+          send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+          return;
+        }
+        authRetryCount++;
+        logErr(`session/prompt failed with auth error (code=${err.code}), starting OAuth flow (attempt ${authRetryCount})`);
+        sessions.delete(requestedModel);
+        activeSessionId = "";
+        await startAuthFlow();
+        return handleQuery(msg);
+      }
+      // If session/prompt failed while reusing an existing session, retry once with a fresh one.
+      // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
+      if (!isNewSession && sessionId) {
         logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
         sessions.delete(requestedModel);
         activeSessionId = "";
-        // Recursive call to handleQuery will create a new session
         return handleQuery(msg);
       }
       throw err;
@@ -713,31 +804,24 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           send({ type: "tool_activity", name, status: "completed" });
         }
         pendingTools.length = 0;
-        send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0 });
+        const inputTokens = Math.ceil(fullPrompt.length / 4);
+        const outputTokens = Math.ceil(fullText.length / 4);
+        send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0, inputTokens, outputTokens });
       }
       return;
     }
-    // If the error is an auth error, send auth_required so Swift shows the sign-in sheet
+    // Only -32000 is AUTH_REQUIRED in the new ACP protocol.
+    // -32603 is a generic internal error — surface it as a real error, not auth.
     if (err instanceof AcpError && err.code === -32000) {
-      const data = err.data as {
-        authMethods?: Array<{
-          id: string;
-          name: string;
-          description?: string;
-          type?: string;
-        }>;
-      };
-      if (data?.authMethods) {
-        authMethods = data.authMethods.map((m) => ({
-          id: m.id,
-          type: (m.type ?? "agent_auth") as AuthMethod["type"],
-          displayName: m.name || m.description || m.id,
-        }));
+      if (authRetryCount >= MAX_AUTH_RETRIES) {
+        logErr(`Query auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
+        send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+        return;
       }
-      logErr(`Query failed with auth error, requesting re-authentication`);
-      isInitialized = false;
-      send({ type: "auth_required", methods: authMethods });
-      return;
+      authRetryCount++;
+      logErr(`Query failed with auth error (code=${(err as AcpError).code}), starting OAuth flow (attempt ${authRetryCount})`);
+      await startAuthFlow();
+      return handleQuery(msg);
     }
     const errMsg = err instanceof Error ? err.message : String(err);
     logErr(`Query error: ${errMsg}`);
@@ -801,9 +885,24 @@ function handleSessionUpdate(
 
     case "tool_call": {
       const toolCallId = (update.toolCallId as string) ?? "";
-      const title = (update.title as string) ?? "unknown";
+      let title = (update.title as string) ?? "unknown";
       const kind = (update.kind as string) ?? "";
       const status = (update.status as string) ?? "pending";
+
+      // Fix undefined titles for server-side tools (e.g. WebSearch, WebFetch)
+      // where input may not be populated when the notification fires
+      if (title.includes("undefined")) {
+        const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
+        const toolName = meta?.claudeCode?.toolName;
+        const rawInput = update.rawInput as Record<string, unknown> | undefined;
+        if (toolName === "WebSearch" && rawInput?.query) {
+          title = `"${rawInput.query}"`;
+        } else if (toolName === "WebFetch" && rawInput?.url) {
+          title = `Fetch ${rawInput.url}`;
+        } else if (toolName) {
+          title = toolName;
+        }
+      }
 
       if (status === "pending" || status === "in_progress") {
         pendingTools.push(title);
@@ -1009,26 +1108,14 @@ async function main(): Promise<void> {
         break;
 
       case "authenticate": {
-        logErr(`Authentication method selected: ${msg.methodId}`);
-        // Actually call ACP to perform the OAuth flow
-        acpRequest("authenticate", { methodId: msg.methodId })
-          .then(() => {
-            logErr("ACP authentication succeeded");
-            send({ type: "auth_success" });
-            if (authResolve) {
-              authResolve();
-              authResolve = null;
-            }
-          })
-          .catch((err) => {
-            const errMsg =
-              err instanceof Error ? err.message : String(err);
-            logErr(`ACP authentication failed: ${errMsg}`);
-            send({
-              type: "error",
-              message: `Authentication failed: ${errMsg}`,
-            });
-          });
+        // Legacy fallback: OAuth flow now handles auth internally.
+        // This handler is kept for backward compatibility.
+        logErr(`Authentication message received from Swift (legacy fallback)`);
+        send({ type: "auth_success" });
+        if (authResolve) {
+          authResolve();
+          authResolve = null;
+        }
         break;
       }
 

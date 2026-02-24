@@ -9,6 +9,9 @@
 
 import { createInterface } from "readline";
 import { createConnection } from "net";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -143,6 +146,20 @@ e.g. "reading about machine learning", "working on design mockups"`,
       required: ["query"],
     },
   },
+  {
+    name: "load_skill",
+    description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: {
+          type: "string" as const,
+          description: "Skill name exactly as listed in available_skills",
+        },
+      },
+      required: ["name"],
+    },
+  },
 ];
 
 // --- JSON-RPC handling ---
@@ -240,6 +257,42 @@ async function handleJsonRpc(
             jsonrpc: "2.0",
             id,
             result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "load_skill") {
+        const name = (args.name as string || "").trim();
+        const workspace = process.env.OMI_WORKSPACE || "";
+        const candidates = [
+          workspace ? join(workspace, ".claude", "skills", name, "SKILL.md") : "",
+          join(homedir(), ".claude", "skills", name, "SKILL.md"),
+        ].filter(Boolean);
+
+        let content: string | null = null;
+        for (const filePath of candidates) {
+          try {
+            content = readFileSync(filePath, "utf8");
+            logErr(`load_skill: loaded '${name}' from ${filePath}`);
+            break;
+          } catch {
+            // not at this path, try next
+          }
+        }
+
+        // For dev-mode, prepend workspace path so Claude has that context
+        if (content && name === "dev-mode" && workspace) {
+          content = `Workspace: ${workspace}\n\n${content}`;
+        }
+
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              content: [{
+                type: "text",
+                text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+              }],
+            },
           });
         }
       } else if (!isNotification) {

@@ -24,6 +24,9 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -358,7 +361,7 @@ async def get_conversations_via_integration(
             # Convert to dict with exclude_none=True to remove null values
             conversation_items.append(item)
         except Exception as e:
-            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            logger.error(f"Error parsing conversation {conv.get('id')}: {str(e)}")
             continue
 
     # Create response with exclude_none=True
@@ -488,7 +491,7 @@ async def search_conversations_via_integration(
 
             conversation_items.append(item)
         except Exception as e:
-            print(f"Error parsing conversation {conv.get('id')}: {str(e)}")
+            logger.error(f"Error parsing conversation {conv.get('id')}: {str(e)}")
             continue
 
     # Create response with pagination info

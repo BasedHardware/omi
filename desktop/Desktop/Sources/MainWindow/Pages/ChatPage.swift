@@ -188,10 +188,23 @@ struct ChatPage: View {
                     chatProvider.isClaudeAuthRequired = false
                     // Switch back to Mode A if auth cancelled
                     Task {
-                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.agentSDK)
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
                     }
                 }
             )
+        }
+        .alert("Omi AI Usage Limit Reached", isPresented: $chatProvider.showOmiThresholdAlert) {
+            Button("Connect Claude Account") {
+                chatProvider.showOmiThresholdAlert = false
+                if !chatProvider.isClaudeConnected {
+                    chatProvider.isClaudeAuthRequired = true
+                }
+            }
+            Button("Later", role: .cancel) {
+                chatProvider.showOmiThresholdAlert = false
+            }
+        } message: {
+            Text("You've used $50 of Omi AI credits. To keep chatting, connect your own Claude account (Pro or Max subscription).")
         }
         .overlay {
             // Loading overlay when fetching citation
@@ -488,8 +501,9 @@ struct ChatPage: View {
                     .padding(.horizontal, 40)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding()
+        .padding(.vertical, 80)
     }
 
     // MARK: - Input Area

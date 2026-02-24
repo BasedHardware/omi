@@ -38,6 +38,9 @@ from utils.other.storage import (
 )
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -102,7 +105,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 def delete_extra_speech_profile_sample(
     memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
-    print('delete_extra_speech_profile_sample', memory_id, segment_idx, person_id, uid)
+    logger.info(f'delete_extra_speech_profile_sample {memory_id} {segment_idx} {person_id} {uid}')
     file_name = f'{memory_id}_segment_{segment_idx}.wav'
     if person_id == 'null':
         person_id = None

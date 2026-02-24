@@ -63,6 +63,9 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -98,7 +101,7 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
         auth.delete_account(uid)
         return {'status': 'ok', 'message': 'Account deleted successfully'}
     except Exception as e:
-        print('delete_account', str(e))
+        logger.info(f'delete_account {str(e)}')
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -120,7 +123,7 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             cache_user_geolocation(uid, geolocation.dict())
         except Exception as e:
-            print(f"Error processing geolocation update, caching new location anyway. Error: {e}")
+            logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
             cache_user_geolocation(uid, geolocation.dict())
     else:
         # No previous location, so cache the new one
@@ -294,7 +297,7 @@ def get_single_person(
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
-    print('get_all_people', include_speech_samples)
+    logger.info(f'get_all_people {include_speech_samples}')
     people = get_people(uid)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
@@ -451,7 +454,7 @@ def set_chat_message_analytics(
                 )
     except Exception as e:
         # Don't fail the request if LangSmith feedback fails
-        print(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
+        logger.error(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
 
     return {'status': 'ok'}
 
@@ -603,7 +606,7 @@ def handle_batch_migration_requests(
                 errors.append(f"Unknown object type for migration: {req_type}")
         except Exception as e:
             error_detail = f"Failed to migrate batch of type {req_type}: {e}"
-            print(error_detail)
+            logger.info(error_detail)
             errors.append(error_detail)
 
     if errors:
@@ -639,7 +642,7 @@ def set_preferred_app_for_user(
     try:
         set_user_preferred_app(uid, app_id_to_set)
     except Exception as e:
-        print(f"Failed to set preferred app in Redis for user {uid}: {e}")
+        logger.error(f"Failed to set preferred app in Redis for user {uid}: {e}")
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
@@ -735,7 +738,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
                 subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
         except Exception as e:
-            print(f"Error retrieving current price ID: {e}")
+            logger.error(f"Error retrieving current price ID: {e}")
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
@@ -779,7 +782,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
             )
         except Exception as e:
-            print(f"Error retrieving monthly price from Stripe: {e}")
+            logger.error(f"Error retrieving monthly price from Stripe: {e}")
 
     if annual_price_id:
         try:
@@ -798,7 +801,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
             )
         except Exception as e:
-            print(f"Error retrieving annual price from Stripe: {e}")
+            logger.error(f"Error retrieving annual price from Stripe: {e}")
 
     if unlimited_plan_prices:
         available_plans.append(

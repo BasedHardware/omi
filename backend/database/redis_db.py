@@ -5,6 +5,9 @@ from typing import List, Union, Optional
 from datetime import datetime, timedelta, timezone
 
 import redis
+import logging
+
+logger = logging.getLogger(__name__)
 
 r = redis.Redis(
     host=os.getenv('REDIS_DB_HOST'),
@@ -20,7 +23,7 @@ def try_catch_decorator(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            print(f'Error calling {func.__name__}', e)
+            logger.error(f'Error calling {func.__name__} {e}')
             return None
 
     return wrapper

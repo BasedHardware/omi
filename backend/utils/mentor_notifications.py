@@ -68,7 +68,7 @@ class MessageBuffer:
                 del self.buffers[session_id]
             self.last_cleanup = current_time
             if expired_sessions:
-                logger.info(f"Cleaned up {len(expired_sessions)} expired mentor notification sessions")
+                logger.warning(f"Cleaned up {len(expired_sessions)} expired mentor notification sessions")
 
 
 # Global message buffer

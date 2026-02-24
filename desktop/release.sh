@@ -264,7 +264,7 @@ fi
 echo "  ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
 
 # -----------------------------------------------------------------------------
-# Step 1.6: Prepare Universal Node.js binary (for AI chat / Claude Agent Bridge)
+# Step 1.6: Prepare Universal Node.js binary (for AI chat / ACP Bridge)
 # -----------------------------------------------------------------------------
 echo "[1.6/12] Preparing universal Node.js binary..."
 
@@ -342,22 +342,29 @@ fi
 echo "  node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
 # -----------------------------------------------------------------------------
+# Step 1.7: Build ACP Bridge (TypeScript → JavaScript)
+# -----------------------------------------------------------------------------
+echo "[1.7/12] Building acp-bridge..."
+
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
+    npm install --no-fund --no-audit
+    npx tsc
+    cd - > /dev/null
+    echo "  ✓ acp-bridge built"
+else
+    echo "Error: acp-bridge directory not found at $ACP_BRIDGE_DIR"
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Step 2: Build Desktop App (Universal Binary: arm64 + x86_64)
 # -----------------------------------------------------------------------------
 echo "[2/12] Building $APP_NAME (Universal Binary)..."
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
-
-# Build agent-bridge (Node.js Claude Code integration)
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    echo "  Building agent-bridge..."
-    cd "$AGENT_BRIDGE_DIR"
-    npm install --no-fund --no-audit
-    npx tsc
-    cd - > /dev/null
-fi
 
 # Build for Apple Silicon (arm64)
 echo "  Building for arm64..."
@@ -430,6 +437,18 @@ else
     echo "Warning: Resource bundle not found at $SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
 fi
 
+# Copy acp-bridge to app bundle
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "  Copied acp-bridge to bundle"
+else
+    echo "Error: acp-bridge dist not found. Run npm install && npx tsc in acp-bridge/ first."
+    exit 1
+fi
+
 # Update Info.plist with version and bundle info
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
@@ -447,15 +466,6 @@ if [ -f ".env.app" ]; then
     echo "  Copied .env.app to bundle"
 else
     echo "  Warning: No .env.app file found"
-fi
-
-# Copy agent-bridge (Node.js Claude Code integration)
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    echo "  Copied agent-bridge to bundle"
 fi
 
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
@@ -497,14 +507,47 @@ if [ -f "$NODE_BUNDLE_PATH" ]; then
         "$NODE_BUNDLE_PATH"
 fi
 
-# Sign native binaries in agent-bridge node_modules
-AGENT_BRIDGE_RESOURCES="$APP_BUNDLE/Contents/Resources/agent-bridge/node_modules"
-if [ -d "$AGENT_BRIDGE_RESOURCES" ]; then
-    echo "  Signing agent-bridge native binaries..."
-    find "$AGENT_BRIDGE_RESOURCES" \( -name "*.node" -o -name "*.dylib" -o -name "rg" \) -type f | while read -r binary; do
-        codesign --force --options runtime --timestamp \
-            --sign "$SIGN_IDENTITY" \
-            "$binary" 2>/dev/null && echo "    Signed: $(basename "$binary")" || true
+# Sign ALL native binaries in acp-bridge node_modules
+# Apple notarization requires every binary/dylib/jnilib to be signed
+ACP_BRIDGE_BUNDLE="$APP_BUNDLE/Contents/Resources/acp-bridge"
+if [ -d "$ACP_BRIDGE_BUNDLE/node_modules" ]; then
+    echo "  Signing native binaries in acp-bridge/node_modules..."
+
+    # Remove vendor directories with JARs containing native libs we don't need
+    # (JetBrains plugin has .jnilib inside JARs which Apple scans and rejects)
+    if [ -d "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" ]; then
+        echo "    Removing unnecessary JetBrains plugin vendor directory..."
+        rm -rf "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin"
+    fi
+
+    # Sign all Mach-O binaries: .node, .dylib, executables (rg, etc.)
+    # Use a single find + file check to catch everything Apple cares about
+    echo "    Scanning for Mach-O binaries to sign..."
+    SIGNED_COUNT=0
+    find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+        \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
+        2>/dev/null | while read native_bin; do
+        if file "$native_bin" 2>/dev/null | grep -q "Mach-O"; then
+            echo "    Signing: $(echo "$native_bin" | sed "s|$ACP_BRIDGE_BUNDLE/||")"
+            codesign --force --options runtime --timestamp \
+                --sign "$SIGN_IDENTITY" \
+                "$native_bin"
+        fi
+    done
+
+    # Catch-all: find any remaining unsigned Mach-O binaries
+    find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+        ! -name "*.js" ! -name "*.json" ! -name "*.ts" ! -name "*.map" \
+        ! -name "*.md" ! -name "*.txt" ! -name "*.yml" ! -name "*.yaml" \
+        ! -name "*.css" ! -name "*.html" ! -name "*.jar" ! -name "*.d.ts" \
+        ! -name "*.node" ! -name "*.dylib" ! -name "*.jnilib" ! -name "*.so" ! -name "rg" \
+        2>/dev/null | while read candidate; do
+        if file "$candidate" 2>/dev/null | grep -q "Mach-O"; then
+            echo "    Signing (catch-all): $(echo "$candidate" | sed "s|$ACP_BRIDGE_BUNDLE/||")"
+            codesign --force --options runtime --timestamp \
+                --sign "$SIGN_IDENTITY" \
+                "$candidate"
+        fi
     done
 fi
 
@@ -812,6 +855,14 @@ fi
 echo ""
 echo "Creating local git tag..."
 git tag "v$VERSION" 2>/dev/null && echo "  ✓ Created tag v$VERSION" || echo "  Tag v$VERSION already exists"
+
+# -----------------------------------------------------------------------------
+# Sync to monorepo (omi-desktop -> BasedHardware/omi desktop/)
+# -----------------------------------------------------------------------------
+echo ""
+echo "[Sync] Syncing release to monorepo..."
+python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward
+echo "  ✓ Monorepo sync complete"
 
 # -----------------------------------------------------------------------------
 # Step 12: Trigger Installation Test

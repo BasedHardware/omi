@@ -15,19 +15,14 @@ class TaskChatState: ObservableObject {
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
 
-    /// Bridge mode — determines which bridge process to use
-    let useACPMode: Bool
-
     /// Own bridge process — completely independent from sidebar chat
-    private var claudeBridge: ClaudeAgentBridge?
     private var acpBridge: ACPBridge?
     private var bridgeStarted = false
 
-    /// Claude SDK session ID for resume (conversation continuity, Mode A only)
-    var claudeSessionId: String?
-
     /// Workspace path for file-system tools
     let workspacePath: String
+
+    @Published var currentSessionId: String?
 
     /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
@@ -50,10 +45,9 @@ class TaskChatState: ObservableObject {
     /// Whether persisted messages have been loaded from GRDB
     private var hasLoadedFromStorage = false
 
-    init(taskId: String, workspacePath: String, useACPMode: Bool = false) {
+    init(taskId: String, workspacePath: String) {
         self.taskId = taskId
         self.workspacePath = workspacePath
-        self.useACPMode = useACPMode
     }
 
     // MARK: - Persistence
@@ -69,9 +63,8 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            // Restore ACP session ID from stored messages
-            if claudeSessionId == nil {
-                claudeSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId)
+            if let sessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
+                currentSessionId = sessionId
             }
 
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
@@ -83,7 +76,7 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let sessionId = self.claudeSessionId
+        let sessionId = self.currentSessionId
         Task.detached {
             do {
                 try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: sessionId)
@@ -118,9 +111,6 @@ class TaskChatState: ObservableObject {
     }
 
     deinit {
-        if let bridge = claudeBridge {
-            Task { await bridge.stop() }
-        }
         if let bridge = acpBridge {
             Task { await bridge.stop() }
         }
@@ -130,31 +120,20 @@ class TaskChatState: ObservableObject {
 
     private func ensureBridgeStarted() async -> Bool {
         if bridgeStarted {
-            let alive: Bool
-            if useACPMode {
-                alive = await acpBridge?.isAlive ?? false
-            } else {
-                alive = await claudeBridge?.isAlive ?? false
-            }
+            let alive = await acpBridge?.isAlive ?? false
             if !alive {
                 log("TaskChatState[\(taskId)]: Bridge process died, will restart")
                 bridgeStarted = false
-                claudeSessionId = nil
             }
         }
         guard !bridgeStarted else { return true }
         do {
-            if useACPMode {
-                let bridge = ACPBridge()
-                try await bridge.start()
-                acpBridge = bridge
-            } else {
-                let bridge = ClaudeAgentBridge()
-                try await bridge.start()
-                claudeBridge = bridge
-            }
+            let useOmiKey = UserDefaults.standard.string(forKey: "chatBridgeMode") != "claudeCode"
+            let bridge = ACPBridge(passApiKey: useOmiKey)
+            try await bridge.start()
+            acpBridge = bridge
             bridgeStarted = true
-            log("TaskChatState[\(taskId)]: Bridge started (mode=\(useACPMode ? "ACP" : "Claude"))")
+            log("TaskChatState[\(taskId)]: ACP bridge started")
             return true
         } catch {
             logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
@@ -165,7 +144,7 @@ class TaskChatState: ObservableObject {
 
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false) async {
+    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
@@ -174,6 +153,13 @@ class TaskChatState: ObservableObject {
         }
 
         guard await ensureBridgeStarted() else { return }
+
+        // Re-check isSending after the async bridge start — another sendMessage call
+        // could have slipped through the initial guard while the bridge was starting.
+        guard !isSending else {
+            log("TaskChatState[\(taskId)]: sendMessage racing after bridge start, ignoring")
+            return
+        }
 
         isSending = true
         errorMessage = nil
@@ -236,55 +222,40 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            let queryResult: ACPBridge.QueryResult
-            if useACPMode, let bridge = acpBridge {
-                // ACP mode — session reuse handled internally by the bridge
-                queryResult = try await bridge.query(
-                    prompt: trimmedText,
-                    systemPrompt: systemPrompt,
-                    cwd: workspacePath.isEmpty ? nil : workspacePath,
-                    mode: chatMode.rawValue,
-                    onTextDelta: textDeltaHandler,
-                    onToolCall: toolCallHandler,
-                    onToolActivity: toolActivityHandler,
-                    onThinkingDelta: thinkingDeltaHandler,
-                    onToolResultDisplay: toolResultDisplayHandler,
-                    onAuthRequired: onAuthRequired ?? { _ in },
-                    onAuthSuccess: onAuthSuccess ?? { }
-                )
-            } else if let bridge = claudeBridge {
-                // Claude SDK mode — use resume for conversation continuity
-                let claudeResult = try await bridge.query(
-                    prompt: trimmedText,
-                    systemPrompt: systemPrompt,
-                    cwd: workspacePath.isEmpty ? nil : workspacePath,
-                    mode: chatMode.rawValue,
-                    resume: claudeSessionId,
-                    onTextDelta: textDeltaHandler,
-                    onToolCall: toolCallHandler,
-                    onToolActivity: toolActivityHandler,
-                    onThinkingDelta: thinkingDeltaHandler,
-                    onToolResultDisplay: toolResultDisplayHandler
-                )
-                queryResult = ACPBridge.QueryResult(
-                    text: claudeResult.text,
-                    costUsd: claudeResult.costUsd,
-                    sessionId: claudeResult.sessionId
-                )
-            } else {
+            guard let bridge = acpBridge else {
                 throw BridgeError.notRunning
             }
+            // If task context is provided (first message), prepend it to the prompt
+            // so the AI gets full task details. The user's displayed message stays clean.
+            let fullPrompt: String
+            if let ctx = taskContext {
+                fullPrompt = "# Task Context\n\n\(ctx)\n\n---\n\n# User Message\n\n\(trimmedText)"
+            } else {
+                fullPrompt = trimmedText
+            }
+
+            let queryResult = try await bridge.query(
+                prompt: fullPrompt,
+                systemPrompt: systemPrompt,
+                cwd: workspacePath.isEmpty ? nil : workspacePath,
+                mode: chatMode.rawValue,
+                resume: currentSessionId,
+                onTextDelta: textDeltaHandler,
+                onToolCall: toolCallHandler,
+                onToolActivity: toolActivityHandler,
+                onThinkingDelta: thinkingDeltaHandler,
+                onToolResultDisplay: toolResultDisplayHandler,
+                onAuthRequired: onAuthRequired ?? { _, _ in },
+                onAuthSuccess: onAuthSuccess ?? { }
+            )
+
+            // Store session ID so subsequent queries can resume
+            currentSessionId = queryResult.sessionId
 
             // Flush remaining streaming buffers
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
             flushStreamingBuffer()
-
-            // Capture session ID for resume on next message
-            if !queryResult.sessionId.isEmpty {
-                claudeSessionId = queryResult.sessionId
-                log("TaskChatState[\(taskId)]: captured sessionId=\(queryResult.sessionId)")
-            }
 
             // Finalize AI message
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
@@ -346,11 +317,7 @@ class TaskChatState: ObservableObject {
 
         // Queue follow-up and interrupt current query
         pendingFollowUpText = trimmedText
-        if useACPMode {
-            await acpBridge?.interrupt()
-        } else {
-            await claudeBridge?.interrupt()
-        }
+        await acpBridge?.interrupt()
         log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
@@ -360,11 +327,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            if useACPMode {
-                await acpBridge?.interrupt()
-            } else {
-                await claudeBridge?.interrupt()
-            }
+            await acpBridge?.interrupt()
         }
     }
 

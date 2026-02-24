@@ -153,21 +153,6 @@ if [ -n "$SWIFTPM_PID" ]; then
     done
 fi
 
-step "Building agent-bridge (npm install + tsc)..."
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    cd "$AGENT_BRIDGE_DIR"
-    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
-        substep "Installing npm dependencies"
-        npm install --no-fund --no-audit 2>&1 | tail -1
-    fi
-    substep "Compiling TypeScript"
-    npx tsc
-    cd - > /dev/null
-else
-    echo "Warning: agent-bridge directory not found at $AGENT_BRIDGE_DIR"
-fi
-
 step "Building acp-bridge (npm install + tsc)..."
 ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR" ]; then
@@ -182,6 +167,9 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
 else
     echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"
 fi
+
+step "Checking schema docs..."
+bash scripts/check_schema_docs.sh
 
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
@@ -232,14 +220,6 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
 fi
 
-substep "Copying agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-fi
-
 substep "Copying acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
@@ -249,7 +229,9 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
 fi
 
 substep "Copying .env.app"
-if [ -f ".env.app" ]; then
+if [ -f ".env.app.dev" ]; then
+    cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
+elif [ -f ".env.app" ]; then
     cp -f .env.app "$APP_BUNDLE/Contents/Resources/.env"
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
@@ -339,6 +321,9 @@ echo ""
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 open "$APP_BUNDLE" || "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" &
+
+# Sync omi-desktop -> omi/desktop/ in the monorepo (runs in background, doesn't block)
+python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward &
 
 # Wait for backend process (keeps script running and shows logs)
 echo "Press Ctrl+C to stop all services..."

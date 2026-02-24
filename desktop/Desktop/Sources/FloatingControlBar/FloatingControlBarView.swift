@@ -36,6 +36,22 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if state.showingAIConversation {
+                Button {
+                    onCloseAI()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {

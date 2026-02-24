@@ -18,6 +18,13 @@ struct AIUserProfileRecord: Codable, FetchableRecord, PersistableRecord, Identif
     }
 }
 
+// MARK: - TableDocumented
+
+extension AIUserProfileRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["ai_user_profiles"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["ai_user_profiles"] ?? [:] }
+}
+
 // MARK: - Service
 
 /// Service that generates and maintains an AI-generated user profile.

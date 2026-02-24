@@ -534,7 +534,7 @@ workflows:
         submit_to_app_store: false
 
   macos-prod-testflight:
-    name: Release macOS to Testflight
+    name: "[DISABLED] Flutter macOS to Testflight (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1030,7 +1030,7 @@ workflows:
           failure: false
 
   macos-desktop-release:
-    name: Release macOS Desktop Update (DMG)
+    name: "[DISABLED] Flutter macOS Desktop Release (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1050,27 +1050,7 @@ workflows:
       cache_paths:
         - $HOME/.pub-cache
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - tag
-        - push
-      tag_patterns:
-        # Only trigger on manual tags
-        - pattern: "v*-desktop-cm"
-          include: true
-        - pattern: "v*-macos-cm"
-          include: true
-        - pattern: "v*-desktop-auto"
-          include: false
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'app/lib/desktop/**'
-          - 'app/macos/**'
+    # DISABLED: Triggering removed — replaced by omi-desktop-swift-release workflow
     working_directory: app
     scripts:
       - name: Set up Firebase
@@ -1829,3 +1809,620 @@ workflows:
         notify:
           success: true
           failure: false
+
+  # ============================================
+  # OMI DESKTOP SWIFT RELEASE
+  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/.
+  # Source code is synced from the omi-desktop repo via git-dashboard.
+  #
+  # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
+  #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
+  #
+  # Required CodeMagic secret group "omi_desktop":
+  #   MACOS_DEVELOPER_ID_P12          — base64 .p12 (Developer ID Application: Matthew Diakonov S6DP5HF77G)
+  #   MACOS_DEVELOPER_ID_P12_PASSWORD — .p12 password
+  #   MACOS_DEVELOPER_ID_PROFILE      — base64 provisioning profile
+  #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
+  #   RELEASE_SECRET                  — shared secret for Firestore release registration API
+  #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
+  #                                     (needs: Cloud Run Admin, Storage Object Admin, GCR push)
+  #   OMI_DESKTOP_APP_ENV             — base64-encoded .env.app (runtime secrets bundled into .app)
+  #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
+  #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
+  #   RESEND_API_KEY
+  #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
+  #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #
+  # Re-uses from existing groups:
+  #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+  #   appstore_credentials: APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
+  #                         APP_STORE_CONNECT_ISSUER_ID (used for notarization)
+  # ============================================
+  omi-desktop-swift-release:
+    name: Release OMI Desktop (Swift)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - appstore_credentials
+        - omi_desktop
+      vars:
+        BINARY_NAME: "Omi Computer"
+        APP_NAME: "Omi Beta"
+        BUNDLE_ID: "com.omi.computer-macos"
+        BUILD_DIR: "build"
+        GITHUB_REPO: "BasedHardware/omi"
+        DESKTOP_BACKEND_URL: "https://desktop-backend-hhibjajaja-uc.a.run.app"
+        GCP_PROJECT: "based-hardware"
+        GCP_REGION: "us-central1"
+        CLOUD_RUN_SERVICE: "desktop-backend"
+        BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
+      xcode: 16.4
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*-macos"
+          include: true
+    working_directory: desktop
+    scripts:
+      - name: Extract version and build number from tag
+        script: |
+          # Tag format: v{version}+{build}-macos  e.g. v0.0.10+10-macos
+          VERSION=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\1/')
+          BUILD_NUMBER=$(echo "$CM_TAG" | sed -E 's/^v([0-9.]+)\+([0-9]+)-macos$/\2/')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$CM_TAG" ]; then
+            echo "ERROR: Could not parse version from tag: $CM_TAG"
+            echo "Expected format: v{version}+{build}-macos (e.g. v0.0.10+10-macos)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $CM_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+          echo "APP_BUNDLE=$BUILD_DIR/$APP_NAME.app" >> $CM_ENV
+          echo "DMG_PATH=$BUILD_DIR/$APP_NAME.dmg" >> $CM_ENV
+          echo "SPARKLE_ZIP_PATH=$BUILD_DIR/Omi.zip" >> $CM_ENV
+          echo "Building OMI Desktop v$VERSION (build $BUILD_NUMBER)"
+
+      - name: Set up keychain and import Developer ID certificate
+        script: |
+          keychain initialize
+          echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
+          KEYCHAIN_PATH=$(keychain get-default)
+          security import /tmp/developer_id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm /tmp/developer_id.p12
+          SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          if [ -z "$SIGN_IDENTITY" ]; then
+            echo "ERROR: Developer ID Application certificate not found in keychain"
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$SIGN_IDENTITY" >> $CM_ENV
+          echo "Found signing identity: $SIGN_IDENTITY"
+
+      - name: Install provisioning profile
+        script: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > /tmp/developer_id.provisionprofile
+          # Copy into Desktop/ so the bundle creation step can embed it
+          cp /tmp/developer_id.provisionprofile Desktop/embedded.provisionprofile
+          # Install system-wide for toolchain
+          security cms -D -i /tmp/developer_id.provisionprofile > /tmp/profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
+          cp /tmp/developer_id.provisionprofile \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
+
+      - name: Build acp-bridge (TypeScript → JavaScript)
+        script: |
+          cd acp-bridge
+          npm install --no-fund --no-audit
+          npx tsc
+          cd ..
+
+      - name: Prepare universal ffmpeg (arm64 + x86_64)
+        script: |
+          FFMPEG_RESOURCE="Desktop/Sources/Resources/ffmpeg"
+          if file "$FFMPEG_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
+            echo "ffmpeg already universal, skipping download"
+          else
+            echo "Creating universal ffmpeg..."
+            TEMP_DIR="/tmp/ffmpeg-universal-$$"
+            mkdir -p "$TEMP_DIR"
+            curl -L -o "$TEMP_DIR/arm64.zip" \
+              "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+            unzip -q -o "$TEMP_DIR/arm64.zip" -d "$TEMP_DIR/arm64/"
+            curl -L -o "$TEMP_DIR/x86_64.zip" \
+              "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
+            unzip -q -o "$TEMP_DIR/x86_64.zip" -d "$TEMP_DIR/x86_64/"
+            ARM64=$(find "$TEMP_DIR/arm64" -name "ffmpeg" -type f | head -1)
+            X86=$(find "$TEMP_DIR/x86_64" -name "ffmpeg" -type f | head -1)
+            lipo -create "$ARM64" "$X86" -output "$FFMPEG_RESOURCE"
+            chmod +x "$FFMPEG_RESOURCE"
+            xattr -cr "$FFMPEG_RESOURCE"
+            codesign -f -s - "$FFMPEG_RESOURCE"
+            rm -rf "$TEMP_DIR"
+          fi
+          echo "ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
+
+      - name: Prepare universal Node.js (arm64 + x86_64)
+        script: |
+          NODE_RESOURCE="Desktop/Sources/Resources/node"
+          NODE_VERSION="v22.14.0"
+          if file "$NODE_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
+            echo "Node.js already universal, skipping download"
+          else
+            echo "Creating universal Node.js $NODE_VERSION..."
+            TEMP_DIR="/tmp/node-universal-$$"
+            mkdir -p "$TEMP_DIR"
+            curl -L -o "$TEMP_DIR/arm64.tar.gz" \
+              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-arm64.tar.gz"
+            tar -xzf "$TEMP_DIR/arm64.tar.gz" -C "$TEMP_DIR"
+            ARM64=$(find "$TEMP_DIR" -name "node" -type f | head -1)
+            mv "$ARM64" "$TEMP_DIR/node-arm64"
+            curl -L -o "$TEMP_DIR/x86_64.tar.gz" \
+              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-x64.tar.gz"
+            tar -xzf "$TEMP_DIR/x86_64.tar.gz" -C "$TEMP_DIR"
+            X86=$(find "$TEMP_DIR" -name "node" -type f ! -name "node-arm64" | head -1)
+            lipo -create "$TEMP_DIR/node-arm64" "$X86" -output "$NODE_RESOURCE"
+            chmod +x "$NODE_RESOURCE"
+            xattr -cr "$NODE_RESOURCE"
+            codesign -f -s - "$NODE_RESOURCE"
+            rm -rf "$TEMP_DIR"
+          fi
+          echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
+
+      - name: Build Swift app (arm64 + x86_64)
+        script: |
+          mkdir -p "$BUILD_DIR"
+          # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
+          unset TOOLCHAINS
+          echo "Building arm64..."
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          echo "Building x86_64..."
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+
+      - name: Create universal app bundle
+        script: |
+          ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+
+          if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
+            echo "ERROR: Missing built binaries"
+            ls "Desktop/.build/" 2>/dev/null
+            exit 1
+          fi
+
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          mkdir -p "$APP_BUNDLE/Contents/Resources"
+          mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+
+          # Merge architectures into universal binary
+          lipo -create "$ARM64_BINARY" "$X86_64_BINARY" -output "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+          file "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" | grep -q "universal binary" || {
+            echo "ERROR: lipo failed to create universal binary"
+            exit 1
+          }
+
+          cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
+
+          # Copy Sparkle framework
+          SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
+          if [ ! -d "$SPARKLE_FW" ]; then
+            echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
+            exit 1
+          fi
+          cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
+
+          # Add rpath so Sparkle can be found at runtime
+          install_name_tool -add_rpath "@executable_path/../Frameworks" \
+            "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+
+          # Copy app icon
+          [ -f "omi_icon.icns" ] && cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
+
+          # Copy Firebase config
+          cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+
+          # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
+          SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
+          RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
+          if [ -d "$RESOURCE_BUNDLE" ]; then
+            cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+          else
+            echo "WARNING: SPM resource bundle not found (non-fatal)"
+          fi
+
+          # Copy acp-bridge (Claude Code integration)
+          if [ -d "acp-bridge/dist" ]; then
+            mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+            cp -Rf acp-bridge/dist        "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+            cp -f  acp-bridge/package.json "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+            cp -Rf acp-bridge/node_modules "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+          else
+            echo "ERROR: acp-bridge/dist not found"
+            exit 1
+          fi
+
+          # Update Info.plist metadata
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable   $BINARY_NAME"  "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier   $BUNDLE_ID"    "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName         $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName  $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0"        "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
+            "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" \
+            "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
+            "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" \
+            "$APP_BUNDLE/Contents/Info.plist"
+
+          printf "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
+
+          # Embed provisioning profile
+          [ -f "Desktop/embedded.provisionprofile" ] && \
+            cp Desktop/embedded.provisionprofile "$APP_BUNDLE/Contents/embedded.provisionprofile"
+
+          # Write runtime .env from OMI_DESKTOP_APP_ENV secret (base64-encoded .env.app contents)
+          echo "$OMI_DESKTOP_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          echo "App bundle created: $APP_BUNDLE"
+
+      - name: Sign app
+        script: |
+          xattr -cr "$APP_BUNDLE"
+
+          # Sign ffmpeg (inside SPM resource bundle)
+          FFMPEG_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/ffmpeg"
+          if [ -f "$FFMPEG_PATH" ]; then
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGN_IDENTITY" "$FFMPEG_PATH"
+          fi
+
+          # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
+          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+          if [ -f "$NODE_BUNDLE_PATH" ]; then
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGN_IDENTITY" \
+              --entitlements Desktop/Node.entitlements \
+              "$NODE_BUNDLE_PATH"
+          fi
+
+          # Sign acp-bridge native binaries
+          ACP_BRIDGE_BUNDLE="$APP_BUNDLE/Contents/Resources/acp-bridge"
+          if [ -d "$ACP_BRIDGE_BUNDLE/node_modules" ]; then
+            # Remove JetBrains plugin — its JARs contain .jnilib files Apple rejects during notarization
+            rm -rf "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" \
+              2>/dev/null || true
+
+            # Primary pass: sign known native binary extensions
+            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+              \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
+              2>/dev/null | while read native_bin; do
+              file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+            done
+
+            # Catch-all pass: any remaining unsigned Mach-O binaries
+            find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+              ! -name "*.js"   ! -name "*.json" ! -name "*.ts"   ! -name "*.map" \
+              ! -name "*.md"   ! -name "*.txt"  ! -name "*.yml"  ! -name "*.yaml" \
+              ! -name "*.css"  ! -name "*.html" ! -name "*.jar"  ! -name "*.d.ts" \
+              ! -name "*.node" ! -name "*.dylib" ! -name "*.jnilib" ! -name "*.so" ! -name "rg" \
+              2>/dev/null | while read candidate; do
+              file "$candidate" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$candidate"
+            done
+          fi
+
+          # Sign Sparkle components — innermost first (required order)
+          SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
+            "$SPARKLE_FW/Versions/B/XPCServices/Downloader.xpc"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
+            "$SPARKLE_FW/Versions/B/XPCServices/Installer.xpc"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
+            "$SPARKLE_FW/Versions/B/Autoupdate"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
+            "$SPARKLE_FW/Versions/B/Updater.app"
+          codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
+            "$SPARKLE_FW"
+
+          # Sign the main app bundle with release entitlements
+          codesign --force --options runtime --timestamp \
+            --sign "$SIGN_IDENTITY" \
+            --entitlements Desktop/Omi-Release.entitlements \
+            "$APP_BUNDLE"
+
+          codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
+          echo "App signed successfully"
+
+      - name: Notarize app
+        script: |
+          set -e
+          TEMP_ZIP="$BUILD_DIR/notarize-temp.zip"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$TEMP_ZIP"
+
+          mkdir -p ~/private_keys
+          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+
+          RESULT=$(xcrun notarytool submit "$TEMP_ZIP" \
+            --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --wait \
+            --output-format json)
+
+          STATUS=$(echo "$RESULT" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization failed: $STATUS"
+            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
+          rm -f "$TEMP_ZIP"
+          echo "App notarized"
+
+      - name: Staple app
+        script: |
+          xcrun stapler staple "$APP_BUNDLE"
+          echo "App stapled"
+
+      - name: Install create-dmg
+        script: |
+          brew install create-dmg || true
+
+      - name: Create DMG installer
+        script: |
+          set -e
+          STAGING_DIR="/tmp/omi-dmg-staging-$$"
+          mkdir -p "$STAGING_DIR"
+          # Use ditto to preserve the notarization staple ticket (cp -R drops it)
+          ditto "$APP_BUNDLE" "$STAGING_DIR/$APP_NAME.app"
+          # Re-staple in staging dir if needed
+          xcrun stapler validate "$STAGING_DIR/$APP_NAME.app" 2>/dev/null || \
+            xcrun stapler staple "$STAGING_DIR/$APP_NAME.app"
+
+          BG_ARGS=""
+          [ -f "dmg-assets/background.png" ] && BG_ARGS="--background dmg-assets/background.png"
+
+          create-dmg \
+            --volname "$APP_NAME" \
+            --volicon "$STAGING_DIR/$APP_NAME.app/Contents/Resources/OmiIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 610 365 \
+            --icon-size 80 \
+            --icon "$APP_NAME.app" 155 175 \
+            --hide-extension "$APP_NAME.app" \
+            --app-drop-link 455 175 \
+            --no-internet-enable \
+            --skip-jenkins \
+            $BG_ARGS \
+            "$DMG_PATH" \
+            "$STAGING_DIR/$APP_NAME.app"
+
+          rm -rf "$STAGING_DIR"
+          echo "DMG created"
+
+      - name: Sign, notarize, and staple DMG
+        script: |
+          set -e
+          codesign --force --sign "$SIGN_IDENTITY" "$DMG_PATH"
+
+          mkdir -p ~/private_keys
+          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+          echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+
+          RESULT=$(xcrun notarytool submit "$DMG_PATH" \
+            --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --wait \
+            --output-format json)
+
+          STATUS=$(echo "$RESULT" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
+          SUBMISSION_ID=$(echo "$RESULT" | python3 -c \
+            "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || echo "")
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "DMG notarization failed: $STATUS"
+            [ -n "$SUBMISSION_ID" ] && xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
+
+          xcrun stapler staple "$DMG_PATH"
+          echo "DMG signed, notarized, and stapled"
+
+      - name: Create Sparkle ZIP and sign
+        script: |
+          # Sparkle expects a ZIP of .app — not a DMG
+          ditto -c -k --keepParent "$APP_BUNDLE" "$SPARKLE_ZIP_PATH"
+
+          SPARKLE_BIN="Desktop/.build/artifacts/sparkle/Sparkle/bin"
+          ED_SIGNATURE=""
+          if [ -d "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN/sign_update" ]; then
+            if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+              ED_SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | \
+                "$SPARKLE_BIN/sign_update" "$SPARKLE_ZIP_PATH" --ed-key-file - 2>/dev/null | \
+                grep "sparkle:edSignature" | \
+                sed 's/.*edSignature="\([^"]*\)".*/\1/')
+            fi
+          fi
+
+          if [ -n "$ED_SIGNATURE" ]; then
+            echo "EdDSA signature: $ED_SIGNATURE"
+          else
+            echo "WARNING: Could not generate EdDSA signature — Sparkle auto-update will not work"
+          fi
+          echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
+
+      - name: Create GitHub release
+        script: |
+          DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
+
+          CHANGELOG_MD=$(python3 -c "
+          import json
+          try:
+            with open('CHANGELOG.json') as f:
+              data = json.load(f)
+            changes = data.get('releases', [{}])[0].get('changes', [])
+            print('\n'.join('- ' + c for c in changes))
+          except:
+            print('- Bug fixes and improvements')
+          ")
+
+          CHANGELOG_JSON=$(python3 -c "
+          import json
+          try:
+            with open('CHANGELOG.json') as f:
+              data = json.load(f)
+            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
+          except:
+            print('[]')
+          ")
+
+          # Store for Firestore step (base64 to survive env var export)
+          CHANGELOG_JSON_B64=$(echo "$CHANGELOG_JSON" | base64)
+          echo "CHANGELOG_JSON_B64=$CHANGELOG_JSON_B64" >> $CM_ENV
+          echo "DOWNLOAD_URL=$DOWNLOAD_URL" >> $CM_ENV
+
+          RELEASE_NOTES="## OMI Desktop v${VERSION}
+
+          ### What's New
+          ${CHANGELOG_MD}
+
+          ### Downloads
+          - **DMG Installer**: For fresh installs, download the DMG below
+          - **Auto-Update**: Existing users will receive this update automatically via Sparkle"
+
+          # Safe re-run: delete existing release if it exists
+          gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
+            gh release delete "$CM_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null || true
+
+          gh release create "$CM_TAG" \
+            --repo "$GITHUB_REPO" \
+            --title "Omi Desktop v${VERSION}" \
+            --notes "$RELEASE_NOTES" \
+            "$SPARKLE_ZIP_PATH" \
+            "$DMG_PATH"
+
+          echo "GitHub release created: $CM_TAG"
+
+      - name: Upload DMG to GCS
+        script: |
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          rm /tmp/gcp_key.json
+
+          GCS_BUCKET="gs://omi_macos_updates"
+          gsutil -h "Content-Disposition:attachment; filename=\"Omi Beta.dmg\"" \
+            cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
+          echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
+          echo "(Run promote_release.sh to update the latest/ pointer when promoting to stable)"
+
+      - name: Register release in Firestore
+        script: |
+          CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
+
+          RELEASE_JSON=$(python3 - <<PYEOF
+          import json, os
+          data = {
+            'version':      os.environ['VERSION'],
+            'build_number': int(os.environ['BUILD_NUMBER']),
+            'download_url': os.environ.get('DOWNLOAD_URL', ''),
+            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
+            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
+            'is_live':      True,
+            'is_critical':  False,
+            'channel':      'staging',
+          }
+          print(json.dumps(data))
+          PYEOF
+          )
+
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Release-Secret: $RELEASE_SECRET" \
+            -d "$RELEASE_JSON" \
+            "$DESKTOP_BACKEND_URL/updates/releases")
+
+          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+          if [ "$HTTP_CODE" = "201" ]; then
+            echo "Release registered in Firestore (channel: staging)"
+          else
+            echo "WARNING: Firestore registration returned HTTP $HTTP_CODE"
+            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
+            echo "Run local-scripts/add_release.py manually if needed"
+          fi
+
+      - name: Deploy Rust backend to Cloud Run
+        script: |
+          # Authenticate gcloud with service account
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          gcloud auth configure-docker gcr.io --quiet
+          rm /tmp/gcp_key.json
+
+          # Build linux/amd64 image and push directly to GCR using BuildKit
+          # (--push avoids loading the image locally on the arm64 runner)
+          export DOCKER_BUILDKIT=1
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            -t "$BACKEND_IMAGE:$VERSION" \
+            -t "$BACKEND_IMAGE:latest" \
+            Backend-Rust/
+
+          # Deploy to Cloud Run
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --image "$BACKEND_IMAGE:$VERSION" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,FIREBASE_API_KEY=$FIREBASE_API_KEY,GEMINI_API_KEY=$GEMINI_API_KEY,APPLE_CLIENT_ID=$APPLE_CLIENT_ID,APPLE_TEAM_ID=$APPLE_TEAM_ID,APPLE_KEY_ID=$APPLE_KEY_ID,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,RUST_LOG=info,RELEASE_SECRET=$RELEASE_SECRET,RESEND_API_KEY=$RESEND_API_KEY,SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN,SENTRY_ADMIN_UID=$SENTRY_ADMIN_UID,SENTRY_WEBHOOK_SECRET=$SENTRY_WEBHOOK_SECRET,REDIS_DB_HOST=$REDIS_DB_HOST,REDIS_DB_PORT=$REDIS_DB_PORT,REDIS_DB_PASSWORD=$REDIS_DB_PASSWORD" \
+            --quiet
+
+          # Update APPLE_PRIVATE_KEY separately — it's multiline, so use ^@^ as the separator
+          # to prevent gcloud from splitting on commas within the key value
+          gcloud run services update "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --update-env-vars "^@^APPLE_PRIVATE_KEY=$APPLE_PRIVATE_KEY" \
+            --quiet
+
+          echo "Backend deployed: $CLOUD_RUN_SERVICE @ $VERSION"
+
+    artifacts:
+      - build/*.app
+      - build/*.dmg
+      - build/*.zip
+    publishing:
+      email:
+        recipients:
+          - i@m13v.com
+        notify:
+          success: true
+          failure: true

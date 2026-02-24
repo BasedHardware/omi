@@ -11,6 +11,7 @@ pub mod focus_session;
 pub mod folder;
 pub mod goal;
 pub mod knowledge_graph;
+pub mod llm_usage;
 pub mod memory;
 pub mod message;
 pub mod person;
@@ -72,6 +73,7 @@ pub use persona::{
     PersonaDB, PersonaResponse, PersonaStatusResponse, UpdatePersonaRequest,
     UsernameAvailableResponse,
 };
+pub use llm_usage::{RecordLlmUsageRequest, RecordLlmUsageResponse};
 pub use knowledge_graph::{
     ExtractedKnowledge, KnowledgeGraphEdge,
     KnowledgeGraphNode, KnowledgeGraphResponse, KnowledgeGraphStatusResponse, NodeType,

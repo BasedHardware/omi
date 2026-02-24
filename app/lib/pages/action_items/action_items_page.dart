@@ -16,7 +16,7 @@ import 'widgets/action_item_form_sheet.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
-enum TaskCategory { today, tomorrow, noDeadline, later }
+enum TaskCategory { today, tomorrow, later, noDeadline }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;

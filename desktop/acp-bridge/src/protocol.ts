@@ -11,6 +11,7 @@ export interface QueryMessage {
   cwd?: string;
   mode?: "ask" | "act";
   model?: string;
+  resume?: string;
 }
 
 export interface ToolResultMessage {
@@ -73,6 +74,10 @@ export interface ResultMessage {
   text: string;
   sessionId: string;
   costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 export interface ToolActivityMessage {
@@ -104,6 +109,7 @@ export interface ErrorMessage {
 export interface AuthRequiredMessage {
   type: "auth_required";
   methods: AuthMethod[];
+  authUrl?: string;
 }
 
 export interface AuthMethod {

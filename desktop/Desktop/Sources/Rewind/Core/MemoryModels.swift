@@ -348,6 +348,13 @@ extension ServerMemory {
     }
 }
 
+// MARK: - TableDocumented
+
+extension MemoryRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["memories"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["memories"] ?? [:] }
+}
+
 // MARK: - Memory Storage Error
 
 enum MemoryStorageError: LocalizedError {

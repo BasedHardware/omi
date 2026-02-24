@@ -22,6 +22,9 @@ from utils import encryption
 from ._client import db
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
+import logging
+
+logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 
@@ -58,7 +61,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             else:
                 data['transcript_segments'] = json.loads(decrypted_payload)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
     # backward compatibility, will be removed soon
     elif isinstance(data['transcript_segments'], bytes):
@@ -68,7 +71,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
     return data
@@ -106,7 +109,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
             except (json.JSONDecodeError, TypeError, zlib.error) as e:
-                print(e)
+                logger.error(e)
                 pass
 
     return data
@@ -600,7 +603,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            print(f"Conversation {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
         conversation_data = doc_snapshot.to_dict()
@@ -908,7 +911,7 @@ def unlock_all_conversations(uid: str):
             count = 0
     if count > 0:
         batch.commit()
-    print(f"Unlocked all conversations for user {uid}")
+    logger.info(f"Unlocked all conversations for user {uid}")
 
 
 def get_public_conversations(data: List[Tuple[str, str]]):
@@ -1050,13 +1053,13 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     )
 
     conversations = [doc.to_dict() for doc in query.stream()]
-    print('get_closest_conversation_to_timestamps len(conversations)', len(conversations))
+    logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
 
-    print('get_closest_conversation_to_timestamps found:')
+    logger.info('get_closest_conversation_to_timestamps found:')
     for conversation in conversations:
-        print('-', conversation['id'], conversation['started_at'], conversation['finished_at'])
+        logger.info(f'- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}')
 
     # get the conversation that has the closest start timestamp or end timestamp
     closest_conversation = None
@@ -1070,7 +1073,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
             min_diff = min(diff1, diff2)
             closest_conversation = conversation
 
-    print('get_closest_conversation_to_timestamps closest_conversation:', closest_conversation['id'])
+    logger.info(f'get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}')
     return closest_conversation
 
 

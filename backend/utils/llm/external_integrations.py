@@ -8,6 +8,9 @@ from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_message_structure(
@@ -328,8 +331,8 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except json.JSONDecodeError as e:
-        print(f"Failed to parse LLM response as JSON: {e}")
-        print(f"Response was: {response}")
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
+        logger.info(f"Response was: {response}")
         # Return a basic summary on parse failure
         return {
             "id": str(uuid.uuid4()),

@@ -78,7 +78,13 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         if isUpToDate {
             logSync("Sparkle: Already up to date")
         } else {
-            logSync("Sparkle: Update check failed - \(message)")
+            logSync("Sparkle: Update check failed - \(message) [domain=\(nsError.domain) code=\(nsError.code)]")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                logSync("Sparkle: Underlying error - \(underlying.localizedDescription) [domain=\(underlying.domain) code=\(underlying.code)]")
+            }
+            for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
+                logSync("Sparkle: Error info [\(key)] = \(value)")
+            }
             Task { @MainActor in
                 AnalyticsManager.shared.updateCheckFailed(error: message)
             }
@@ -96,6 +102,49 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
             return Set(["beta"])
         default:
             return Set() // empty = default (stable) channel only
+        }
+    }
+
+    /// Called after Sparkle has launched the installer and submitted launchd jobs.
+    /// On macOS 26+, launchd may be in "on-demand-only mode" which prevents RunAtLoad
+    /// services from starting. We force-start them via launchctl kickstart as a backup
+    /// to Sparkle 2.9.0's built-in probe (PR #2852).
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        logSync("Sparkle: Installer launched for v\(item.displayVersionString), kickstarting services")
+        kickstartSparkleServices()
+    }
+
+    /// Force-start Sparkle's launchd services to work around macOS 26 on-demand-only mode.
+    /// Services submitted via SMJobSubmit with RunAtLoad=YES may not start immediately.
+    /// Using `launchctl kickstart` forces launchd to spawn them right away.
+    private func kickstartSparkleServices() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+
+        let updaterLabel = "\(bundleID)-sparkle-updater"
+        let progressLabel = "\(bundleID)-sparkle-progress"
+        let uid = getuid()
+
+        // Try multiple times to handle timing variance
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) {
+                for label in [progressLabel, updaterLabel] {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+                    process.arguments = ["kickstart", "-p", "gui/\(uid)/\(label)"]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
+                        if process.terminationStatus == 0 {
+                            logSync("Sparkle kickstart: started \(label) (delay=\(delay)s)")
+                        }
+                    } catch {
+                        // Best effort — service may not exist yet or already running
+                    }
+                }
+            }
         }
     }
 
@@ -155,6 +204,7 @@ final class UpdaterViewModel: ObservableObject {
     @Published var updateChannel: UpdateChannel {
         didSet {
             UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
+            activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
             if isInitialized {
                 AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
             }
@@ -225,4 +275,14 @@ final class UpdaterViewModel: ObservableObject {
     var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
     }
+
+    /// The active channel label, including the hidden "staging" option
+    @Published var activeChannelLabel: String = {
+        let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        switch raw {
+        case "staging": return "Staging"
+        case "beta": return "Beta"
+        default: return ""
+        }
+    }()
 }

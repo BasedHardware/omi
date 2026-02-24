@@ -31,7 +31,6 @@ import database.conversations as conversations_db
 import multiprocessing
 import matplotlib.pyplot as plt
 
-
 # Assuming get_users_uid() and conversations_db.get_conversations() are already defined
 
 

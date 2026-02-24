@@ -19,6 +19,9 @@ from database import user_usage as user_usage_db
 from models.conversation import Conversation
 from models.memories import MemoryDB
 from utils import encryption
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
 try:
@@ -33,10 +36,10 @@ try:
         cred = credentials.ApplicationDefault()
     firebase_admin.initialize_app(cred)
 except Exception as e:
-    print(
+    logger.error(
         "Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set for local dev or SERVICE_ACCOUNT_JSON for Modal."
     )
-    print(e)
+    logger.error(e)
     sys.exit(1)
 
 
@@ -61,7 +64,7 @@ def _decrypt_conversation_data(data: dict, uid: str) -> dict:
             else:
                 decrypted_data['transcript_segments'] = json.loads(decrypted_payload)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             decrypted_data['transcript_segments'] = []
     # backward compatibility, will be removed soon
     elif isinstance(decrypted_data['transcript_segments'], bytes):
@@ -71,7 +74,7 @@ def _decrypt_conversation_data(data: dict, uid: str) -> dict:
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 decrypted_data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            print(e, uid)
+            logger.error(f"{e} {uid}")
             decrypted_data['transcript_segments'] = []
 
     return decrypted_data
@@ -90,12 +93,12 @@ def get_all_conversations_for_user(uid: str) -> list[Conversation]:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
             except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-                print(f"Warning: Could not decompress transcript segments for user {uid}. Error: {e}")
+                logger.error(f"Warning: Could not decompress transcript segments for user {uid}. Error: {e}")
                 data['transcript_segments'] = []
         try:
             conversations.append(Conversation(**data))
         except Exception as e:
-            print(f"Warning: Could not parse conversation {doc.id} for user {uid}. Error: {e}")
+            logger.error(f"Warning: Could not parse conversation {doc.id} for user {uid}. Error: {e}")
     return conversations
 
 
@@ -121,13 +124,13 @@ def get_all_memories_for_user(uid: str) -> list[MemoryDB]:
         try:
             memories.append(MemoryDB(**data))
         except Exception as e:
-            print(f"Warning: Could not parse memory {doc.id} for user {uid}. Error: {e}")
+            logger.error(f"Warning: Could not parse memory {doc.id} for user {uid}. Error: {e}")
     return memories
 
 
 def delete_hourly_usage_for_user(uid: str):
     """Deletes all documents in the hourly_usage subcollection for a user to ensure idempotency."""
-    print(f"Deleting existing hourly usage data for user {uid}...")
+    logger.info(f"Deleting existing hourly usage data for user {uid}...")
     coll_ref = db.collection('users').document(uid).collection('hourly_usage')
     batch_size = 200
     while True:
@@ -140,13 +143,13 @@ def delete_hourly_usage_for_user(uid: str):
         batch.commit()
         if len(docs) < batch_size:
             break
-    print(f"Finished deleting hourly usage data for user {uid}.")
+    logger.info(f"Finished deleting hourly usage data for user {uid}.")
 
 
 def migrate_user_usage(uid: str):
     """Calculates and stores historical usage stats for a single user."""
     try:
-        print(f"Starting usage migration for user: {uid}")
+        logger.info(f"Starting usage migration for user: {uid}")
 
         delete_hourly_usage_for_user(uid)
 
@@ -157,7 +160,7 @@ def migrate_user_usage(uid: str):
         # Process Conversations
         conversations = get_all_conversations_for_user(uid)
         if conversations:
-            print(f"  Processing {len(conversations)} conversations for {uid}...")
+            logger.info(f"  Processing {len(conversations)} conversations for {uid}...")
             for conv in conversations:
                 if not conv.created_at or conv.discarded:
                     continue
@@ -196,7 +199,7 @@ def migrate_user_usage(uid: str):
         # Process Memories
         memories = get_all_memories_for_user(uid)
         if memories:
-            print(f"  Processing {len(memories)} memories for {uid}...")
+            logger.info(f"  Processing {len(memories)} memories for {uid}...")
             for mem in memories:
                 if not mem.created_at:
                     continue
@@ -204,15 +207,15 @@ def migrate_user_usage(uid: str):
                 hourly_updates[hour_key]['memories_created'] += 1
 
         if not hourly_updates:
-            print(f"No usage data found to migrate for user {uid}.")
+            logger.info(f"No usage data found to migrate for user {uid}.")
             return
 
-        print(f"  Storing {len(hourly_updates)} hourly usage records for user {uid}.")
+        logger.info(f"  Storing {len(hourly_updates)} hourly usage records for user {uid}.")
         user_usage_db.batch_update_hourly_usage(uid, hourly_updates)
-        print(f"  Finished storing hourly usage for user {uid}.")
+        logger.info(f"  Finished storing hourly usage for user {uid}.")
 
     except Exception as e:
-        print(f"ERROR migrating usage for user {uid}: {e}")
+        logger.error(f"ERROR migrating usage for user {uid}: {e}")
         raise
 
 
@@ -224,7 +227,7 @@ def load_ignore_uids(filepath: str) -> set:
         with open(filepath, 'r') as f:
             return {line.strip() for line in f if line.strip()}
     except FileNotFoundError:
-        print(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
+        logger.warning(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
         return set()
 
 
@@ -235,28 +238,28 @@ def main():
     parser.add_argument('--uids', type=str, help='A comma-separated list of specific UIDs to migrate.')
     args = parser.parse_args()
 
-    print("Starting migration of historical user usage data...")
+    logger.info("Starting migration of historical user usage data...")
 
     if args.uids:
         users_to_migrate = [uid.strip() for uid in args.uids.split(',')]
-        print(f"Migrating specific UIDs: {users_to_migrate}")
+        logger.info(f"Migrating specific UIDs: {users_to_migrate}")
     else:
         ignore_uids = load_ignore_uids(args.ignore_file)
         if ignore_uids:
-            print(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
+            logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
-        print("Fetching list of all users...")
+        logger.info("Fetching list of all users...")
         users_ref = db.collection('users')
         all_users = [user.id for user in users_ref.stream()]
         users_to_migrate = [uid for uid in all_users if uid not in ignore_uids]
-        print(f"Found {len(users_to_migrate)} users to migrate.")
+        logger.info(f"Found {len(users_to_migrate)} users to migrate.")
 
     if not users_to_migrate:
-        print("No users to migrate. Exiting.")
+        logger.debug("No users to migrate. Exiting.")
         return
 
     with ThreadPoolExecutor(max_workers=16) as executor:
-        print(f"\nStarting migration with 16 threads...")
+        logger.info(f"\nStarting migration with 16 threads...")
         futures = {executor.submit(migrate_user_usage, uid): uid for uid in users_to_migrate}
 
         completed_count = 0
@@ -265,11 +268,13 @@ def main():
             completed_count += 1
             try:
                 future.result()
-                print(f"({completed_count}/{len(users_to_migrate)}) COMPLETED: User {uid}")
+                logger.info(f"({completed_count}/{len(users_to_migrate)}) COMPLETED: User {uid}")
             except Exception as exc:
-                print(f"({completed_count}/{len(users_to_migrate)}) FAILED: User {uid} generated an exception: {exc}")
+                logger.error(
+                    f"({completed_count}/{len(users_to_migrate)}) FAILED: User {uid} generated an exception: {exc}"
+                )
 
-    print(f"\nMigration script finished. Processed {len(users_to_migrate)} users.")
+    logger.info(f"\nMigration script finished. Processed {len(users_to_migrate)} users.")
 
 
 if __name__ == '__main__':

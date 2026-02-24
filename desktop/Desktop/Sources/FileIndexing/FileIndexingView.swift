@@ -206,6 +206,46 @@ struct FileIndexingView: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 40)
             }
+
+            // Graph shortcut hints — bottom-left corner
+            VStack {
+                Spacer()
+                HStack {
+                    graphShortcutsHint
+                        .padding(.leading, 20)
+                        .padding(.bottom, 20)
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    // MARK: - Graph Shortcuts Hint
+
+    private var graphShortcutsHint: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            shortcutRow(icon: "cursorarrow.rays", label: "Drag to rotate")
+            shortcutRow(icon: "arrow.up.and.down.and.arrow.left.and.right", label: "Right-drag to pan")
+            shortcutRow(icon: "plus.magnifyingglass", label: "Scroll to zoom")
+            shortcutRow(icon: "arrow.counterclockwise", label: "Double-click to reset")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.black.opacity(0.45))
+        )
+    }
+
+    private func shortcutRow(icon: String, label: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.5))
+                .frame(width: 14)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.5))
         }
     }
 
