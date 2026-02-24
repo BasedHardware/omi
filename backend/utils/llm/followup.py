@@ -24,7 +24,5 @@ def followup_question_prompt(segments: List[TranscriptSegment], people: Optional
 
         Output your response in plain text, without markdown.
         Output only the question, without context, be concise and straight to the point.
-        """.replace(
-        '    ', ''
-    ).strip()
+        """.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content

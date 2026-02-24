@@ -40,18 +40,21 @@ from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 def filter_messages(messages, app_id):
-    print('filter_messages', len(messages), app_id)
+    logger.info(f'filter_messages {len(messages)} {app_id}')
     collected = []
     for message in messages:
         if message.sender == MessageSender.ai and message.plugin_id != app_id:
             break
         collected.append(message)
-    print('filter_messages output:', len(collected))
+    logger.info(f'filter_messages output: {len(collected)}')
     return collected
 
 
@@ -71,7 +74,7 @@ def send_message(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    print('send_message', data.text, compat_app_id, uid)
+    logger.info(f'send_message {data.text} {compat_app_id} {uid}')
 
     if compat_app_id in ['null', '']:
         compat_app_id = None
@@ -245,13 +248,13 @@ def clear_chat_messages(
 
 
 def initial_message_util(uid: str, app_id: Optional[str] = None):
-    print('initial_message_util', app_id)
+    logger.info(f'initial_message_util {app_id}')
 
     # init chat session
     chat_session = acquire_chat_session(uid, app_id=app_id)
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    print('initial_message_util returned', len(prev_messages), 'prev messages for', app_id)
+    logger.info(f'initial_message_util returned {len(prev_messages)} {'prev messages for'} {app_id}')
 
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
@@ -265,7 +268,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
         if prev_messages:
             prev_messages_str = 'Previous conversation history:\n'
             prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
-        print('initial_message_util', len(prev_messages_str), app_id)
+        logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
         text = initial_chat_message(uid, app, prev_messages_str)
 
     ai_message = Message(
@@ -306,14 +309,14 @@ def get_messages(
     messages = chat_db.get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
-    print('get_messages', len(messages), compat_app_id)
+    logger.info(f'get_messages {len(messages)} {compat_app_id}')
 
     # Debug: Check for messages with ratings
     rated_messages = [m for m in messages if m.get('rating') is not None]
     if rated_messages:
-        print(f'📊 Messages with ratings: {len(rated_messages)}')
+        logger.info(f'📊 Messages with ratings: {len(rated_messages)}')
         for m in rated_messages[:5]:  # Show first 5
-            print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
+            logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
@@ -391,7 +394,7 @@ async def transcribe_voice_message(
             if is_multi and detected_language:
                 detected_languages.append(detected_language)
         except Exception as e:
-            print(f"Error transcribing {wav_path}: {e}")
+            logger.error(f"Error transcribing {wav_path}: {e}")
             # Cleanup all remaining temp files before raising
             for p in wav_paths:
                 if p.startswith(f"/tmp/{uid}_"):

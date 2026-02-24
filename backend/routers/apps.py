@@ -115,6 +115,9 @@ from utils.social import (
     upsert_persona_from_twitter_profile,
     add_twitter_to_persona,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -1197,7 +1200,7 @@ Be creative, fun, and varied. No generic ideas."""
                 ]
             }
     except Exception as e:
-        print(f"Error generating prompts: {e}")
+        logger.error(f"Error generating prompts: {e}")
         return {
             "prompts": [
                 "Mind map generator from conversations",
@@ -1243,7 +1246,7 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
             },
         }
     except Exception as e:
-        print(f"Error generating app: {e}")
+        logger.error(f"Error generating app: {e}")
         raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
 
 
@@ -1275,7 +1278,7 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
 
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except Exception as e:
-        print(f"Error generating icon: {e}")
+        logger.error(f"Error generating icon: {e}")
         raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
 
 
@@ -1392,7 +1395,7 @@ async def update_omi_persona_connected_accounts(uid: str):
                 update_app_in_db(update_data)
                 delete_app_cache_by_id(persona['id'])
     except Exception as e:
-        print(f"Error updating persona connected accounts: {e}")
+        logger.error(f"Error updating persona connected accounts: {e}")
 
 
 # ******************************************************
@@ -1485,8 +1488,8 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             scopes=oauth_meta.get('scopes_supported'),
             code_challenge=code_challenge,
         )
-        print(f"[MCP OAuth] client_id={client_info['client_id']}, redirect_uri={redirect_uri}")
-        print(f"[MCP OAuth] auth_url={auth_url}")
+        logger.info(f"[MCP OAuth] client_id={client_info['client_id']}, redirect_uri={redirect_uri}")
+        logger.info(f"[MCP OAuth] auth_url={auth_url}")
 
         # Create app in pending state (no tools yet)
         app_dict = {
@@ -1731,7 +1734,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
-        print('enable_app_endpoint', res.status_code, res.content)
+        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
@@ -1910,7 +1913,7 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
     persona = get_personas_by_username_db(persona_id)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
-    print(persona)
+    logger.info(persona)
     return persona
 
 
@@ -1971,7 +1974,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
-    print(app_ids)
+    logger.info(app_ids)
     return {'app_ids': app_ids or []}
 
 

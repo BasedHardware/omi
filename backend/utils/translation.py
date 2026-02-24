@@ -7,6 +7,9 @@ from typing import List
 from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # LRU Cache for language detection
@@ -230,7 +233,7 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
             return detected_language
 
     except Exception as e:
-        print(f"Language detection error: {e}")
+        logger.error(f"Language detection error: {e}")
         return None
 
     return detected_language
@@ -312,5 +315,5 @@ class TranslationService:
             self.translation_cache[cache_key] = translated_text
             return translated_text
         except Exception as e:
-            print(f"Translation error: {e}")
+            logger.error(f"Translation error: {e}")
             return text  # Return original text if translation fails

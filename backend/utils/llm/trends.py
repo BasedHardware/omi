@@ -14,6 +14,9 @@ from models.trend import (
     TrendType,
 )
 from utils.llm.clients import llm_mini
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Item(BaseModel):
@@ -57,9 +60,7 @@ def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
 
     Conversation:
     {transcript}
-    '''.replace(
-        '    ', ''
-    ).strip()
+    '''.replace('    ', '').strip()
     try:
         with_parser = llm_mini.with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)
@@ -80,5 +81,5 @@ def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
         return filtered
 
     except Exception as e:
-        print(f'Error determining memory discard: {e}')
+        logger.error(f'Error determining memory discard: {e}')
         return []

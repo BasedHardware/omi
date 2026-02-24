@@ -4,6 +4,9 @@ from pydantic import BaseModel
 from firebase_admin import auth
 import os
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -53,5 +56,5 @@ def sign_in(credentials: UserCredentials):
             "exp": decoded_token["exp"],
         }
     except Exception as e:
-        print("error authenticating", e)
+        logger.error(f"error authenticating {e}")
         raise HTTPException(status_code=400, detail=str(e))

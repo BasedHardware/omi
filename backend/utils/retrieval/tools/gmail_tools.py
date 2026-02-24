@@ -18,6 +18,9 @@ from utils.retrieval.tools.integration_base import (
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import the context variable from agentic module
 try:
@@ -281,7 +284,7 @@ def get_gmail_messages_tool(
 
         return result.strip()
     except Exception as e:
-        print(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
+        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
         import traceback
 
         traceback.print_exc()

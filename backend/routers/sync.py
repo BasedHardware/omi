@@ -122,9 +122,9 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
             fill_gaps=fill_gaps,
             sample_rate=AUDIO_SAMPLE_RATE,
         )
-        print(f"Pre-cached audio file: {audio_file_id}")
+        logger.info(f"Pre-cached audio file: {audio_file_id}")
     except Exception as e:
-        print(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
+        logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
 
 
 @router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
@@ -146,7 +146,7 @@ def precache_conversation_audio_endpoint(
 
     # Start background parallel pre-caching for all audio files
     def _precache_all_parallel():
-        print(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
+        logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = [executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
             # Wait for all to complete
@@ -154,8 +154,8 @@ def precache_conversation_audio_endpoint(
                 try:
                     future.result()
                 except Exception as e:
-                    print(f"Error in parallel precache: {e}")
-        print(f"Completed pre-cache for conversation {conversation_id}")
+                    logger.error(f"Error in parallel precache: {e}")
+        logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
     thread = threading.Thread(target=_precache_all_parallel, daemon=True)
     thread.start()
@@ -251,7 +251,7 @@ def get_audio_signed_urls_endpoint(
                     try:
                         future.result()
                     except Exception as e:
-                        print(f"Error in parallel cache: {e}")
+                        logger.error(f"Error in parallel cache: {e}")
 
         thread = threading.Thread(target=_cache_uncached_parallel, daemon=True)
         thread.start()
@@ -329,7 +329,7 @@ def download_audio_file_endpoint(
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
     except Exception as e:
-        print(f"Error downloading audio file: {e}")
+        logger.error(f"Error downloading audio file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download audio file")
 
     # Create descriptive filename
@@ -390,6 +390,9 @@ def download_audio_file_endpoint(
 
 import shutil
 import wave
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
@@ -398,7 +401,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
     Writes directly to WAV file to avoid accumulating all PCM data in memory.
     """
     if not os.path.exists(opus_file_path):
-        print(f"File not found: {opus_file_path}")
+        logger.warning(f"File not found: {opus_file_path}")
         return False
 
     decoder = Decoder(sample_rate, channels)
@@ -413,36 +416,36 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
             while True:
                 length_bytes = f.read(4)
                 if not length_bytes:
-                    print("End of file reached.")
+                    logger.info("End of file reached.")
                     break
                 if len(length_bytes) < 4:
-                    print("Incomplete length prefix at the end of the file.")
+                    logger.info("Incomplete length prefix at the end of the file.")
                     break
 
                 frame_length = struct.unpack('<I', length_bytes)[0]
                 opus_data = f.read(frame_length)
                 if len(opus_data) < frame_length:
-                    print(f"Unexpected end of file at frame {frame_count}.")
+                    logger.error(f"Unexpected end of file at frame {frame_count}.")
                     break
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
                     wav_file.writeframes(pcm_frame)  # Write directly to file
                     frame_count += 1
                 except Exception as e:
-                    print(f"Error decoding frame {frame_count}: {e}")
+                    logger.error(f"Error decoding frame {frame_count}: {e}")
                     break
 
         if frame_count > 0:
-            print(f"Decoded audio saved to {wav_file_path}")
+            logger.info(f"Decoded audio saved to {wav_file_path}")
             return True
         else:
-            print("No PCM data was decoded.")
+            logger.info("No PCM data was decoded.")
             # Clean up empty/invalid wav file
             if os.path.exists(wav_file_path):
                 os.remove(wav_file_path)
             return False
     except Exception as e:
-        print(f"Error during decode: {e}")
+        logger.error(f"Error during decode: {e}")
         # Clean up on error
         if os.path.exists(wav_file_path):
             os.remove(wav_file_path)
@@ -496,7 +499,7 @@ def get_wav_duration(wav_path: str) -> float:
             rate = wav_file.getframerate()
             return frames / float(rate)
     except Exception as e:
-        print(f"Error reading WAV duration: {e}")
+        logger.error(f"Error reading WAV duration: {e}")
         return 0.0
 
 
@@ -510,9 +513,9 @@ def decode_files_to_wav(files_path: List[str]):
         if match:
             try:
                 frame_size = int(match.group(1))
-                print(f"Found frame size {frame_size} in filename: {filename}")
+                logger.info(f"Found frame size {frame_size} in filename: {filename}")
             except ValueError:
-                print(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
+                logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 
         success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
         if not success:
@@ -546,7 +549,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
     except Exception as e:
         error_msg = f"VAD failed for {path}: {str(e)}"
-        print(error_msg)
+        logger.info(error_msg)
         if errors is not None:
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
@@ -567,7 +570,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
         else:
             segments.append(segment)
 
-    print(path, len(segments))
+    logger.info(f"{path} {len(segments)}")
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
@@ -597,7 +600,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     if not conversation_data:
-        print(f'Conversation {conversation_id} not found for reprocessing')
+        logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
     # Convert to Conversation object
@@ -611,7 +614,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         is_reprocess=True,
     )
 
-    print(f'Successfully reprocessed conversation {conversation_id}')
+    logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
 def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
@@ -626,7 +629,7 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
     words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        print('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return
 
     timestamp = get_timestamp_from_path(path)
@@ -684,7 +687,7 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
 
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
-            print(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+            logger.info(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
             _reprocess_conversation_after_update(uid, closest_memory['id'], language)
 
 
@@ -695,7 +698,7 @@ def _cleanup_files(file_paths):
             if path and os.path.exists(path):
                 os.remove(path)
         except Exception as e:
-            print(f"Failed to cleanup file {path}: {e}")
+            logger.error(f"Failed to cleanup file {path}: {e}")
 
 
 @router.post("/v1/sync-local-files")
@@ -740,7 +743,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 error_detail += f" (and {len(vad_errors) - 3} more)"
             raise HTTPException(status_code=500, detail=error_detail)
 
-        print('sync_local_files len(segmented_paths)', len(segmented_paths))
+        logger.info(f'sync_local_files len(segmented_paths) {len(segmented_paths)}')
 
         response = {'updated_memories': set(), 'new_memories': set()}
         threads = [

@@ -7,6 +7,9 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, document_id_from_seed
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def is_exists_user(uid: str):
@@ -416,7 +419,7 @@ def delete_user_data(uid: str):
     batch_size = 450
 
     for cname in subcollections_to_delete:
-        print(f"Deleting subcollection: {cname} for user {uid}")
+        logger.info(f"Deleting subcollection: {cname} for user {uid}")
         collection_ref = user_ref.collection(cname)
 
         while True:
@@ -425,21 +428,21 @@ def delete_user_data(uid: str):
 
             if not docs:
                 # docs might not exists, try using {parent path / id}
-                print(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
+                logger.info(f"No more documents to delete in {collection_ref.parent.path}/{collection_ref.id}")
                 break
 
             batch = db.batch()
             for doc in docs:
-                print(f"Deleting document: {doc.reference.path}")
+                logger.info(f"Deleting document: {doc.reference.path}")
                 batch.delete(doc.reference)
             batch.commit()
 
             if len(docs) < batch_size:
-                print(f"Processed all documents in {collection_ref.path}")
+                logger.info(f"Processed all documents in {collection_ref.path}")
                 break
 
     # delete the user document itself
-    print(f"Deleting user document: {uid}")
+    logger.info(f"Deleting user document: {uid}")
     user_ref.delete()
     return {'status': 'ok', 'message': 'Account deleted successfully'}
 

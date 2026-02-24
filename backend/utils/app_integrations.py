@@ -34,6 +34,9 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _json_serialize_datetime(obj: Any) -> Any:
@@ -69,7 +72,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         response = requests.get(url, headers=headers)
 
         if response.status_code != 200:
-            print(f"Failed to fetch contents for {path}: {response.status_code}")
+            logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
             return
 
         contents = response.json()
@@ -135,7 +138,9 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
                 timeout=30,
             )  # TODO: failing?
             if response.status_code != 200:
-                print('App integration failed', app.id, 'status:', response.status_code, 'result:', response.text[:100])
+                logger.info(
+                    f'App integration failed {app.id} {'status:'} {response.status_code} {'result:'} {response.text[:100]}'
+                )
                 return
 
             if app.uid is not None:
@@ -155,7 +160,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             if message := response.json().get('message', ''):
                 results[app.id] = message
         except Exception as e:
-            print(f"Plugin integration error: {e}")
+            logger.error(f"Plugin integration error: {e}")
             return
 
     for app in filtered_apps:
@@ -173,13 +178,13 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
 
 
 async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
-    print("trigger_realtime_integrations", uid)
+    logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
     _trigger_realtime_integrations(uid, segments, conversation_id)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    print("trigger_realtime_audio_bytes", uid)
+    logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
     _trigger_realtime_audio_bytes(uid, sample_rate, data)
 
@@ -187,7 +192,7 @@ async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearr
 # proactive notification
 def _retrieve_contextual_memories(uid: str, user_context):
     vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
-    print("query_vectors vector:", vector[:5])
+    logger.info(f"query_vectors vector: {vector[:5]}")
 
     date_filters = {}  # not support yet
     filters = user_context.get('filters', {})
@@ -250,32 +255,32 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     # 2. Rate limit check (5 min gap)
     mentor_sent_at = mem_db.get_proactive_noti_sent_at(uid, 'mentor')
     if mentor_sent_at and time.time() - mentor_sent_at < MENTOR_RATE_LIMIT_SECONDS:
-        print(f"mentor_proactive rate_limited uid={uid}")
+        logger.info(f"mentor_proactive rate_limited uid={uid}")
         return None
     # Check remote rate limit
     remote_sent_at = redis_db.get_proactive_noti_sent_at(uid, 'mentor')
     if remote_sent_at and time.time() - remote_sent_at < MENTOR_RATE_LIMIT_SECONDS:
-        print(f"mentor_proactive rate_limited_remote uid={uid}")
+        logger.info(f"mentor_proactive rate_limited_remote uid={uid}")
         return None
 
     # 3. Daily cap check
     daily_count = get_daily_notification_count(uid) or 0
     if daily_count >= MAX_DAILY_NOTIFICATIONS:
-        print(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
+        logger.info(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
         return None
 
     # 4. Gather rich context
     try:
         user_name, user_facts = get_prompt_memories(uid)
     except Exception as e:
-        print(f"mentor_proactive memories_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive memories_failed uid={uid} error={e}")
         user_name, user_facts = 'User', ''
 
     # Goals
     try:
         goals = get_user_goals(uid, limit=3)
     except Exception as e:
-        print(f"mentor_proactive goals_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
         goals = []
 
     # Vector search for relevant past conversations
@@ -292,13 +297,13 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 if memories:
                     past_conversations_str = Conversation.conversations_to_string(memories)
     except Exception as e:
-        print(f"mentor_proactive vector_search_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
 
     # Recent notifications for LLM self-regulation
     try:
         recent_notifications = get_app_messages(uid, 'mentor', limit=20)
     except Exception as e:
-        print(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
         recent_notifications = []
 
     # 5. Single LLM call with structured output
@@ -313,29 +318,31 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             frequency=frequency,
         )
     except Exception as e:
-        print(f"mentor_proactive llm_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive llm_failed uid={uid} error={e}")
         return None
 
     # 6. Confidence gate
     if not result.has_advice or not result.advice:
-        print(f"mentor_proactive no_advice uid={uid} context={result.context_summary[:100]}")
+        logger.info(f"mentor_proactive no_advice uid={uid} context={result.context_summary[:100]}")
         return None
 
     confidence = result.advice.confidence
     if confidence < base_threshold:
-        print(f"mentor_proactive below_threshold uid={uid} confidence={confidence:.2f} threshold={base_threshold}")
+        logger.info(
+            f"mentor_proactive below_threshold uid={uid} confidence={confidence:.2f} threshold={base_threshold}"
+        )
         return None
 
     notification_text = result.advice.notification_text
     if not notification_text or len(notification_text) < 5:
-        print(f"mentor_proactive empty_text uid={uid}")
+        logger.info(f"mentor_proactive empty_text uid={uid}")
         return None
 
     if len(notification_text) > 150:
         notification_text = notification_text[:150]
 
     # 7. Send notification
-    print(
+    logger.info(
         f"mentor_proactive sending uid={uid} confidence={confidence:.2f} "
         f"category={result.advice.category} reasoning={result.advice.reasoning[:100]}"
     )
@@ -353,12 +360,12 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 def _process_proactive_notification(uid: str, app: App, data):
     """Process proactive notifications for external/third-party apps."""
     if not app.has_capability("proactive_notification") or not data:
-        print(f"App {app.id} is not proactive_notification or data invalid", uid)
+        logger.error(f"App {app.id} is not proactive_notification or data invalid {uid}")
         return None
 
     # rate limits
     if _hit_proactive_notification_rate_limits(uid, app):
-        print(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s", uid)
+        logger.info(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s {uid}")
         return None
 
     max_prompt_char_limit = 128000
@@ -372,7 +379,7 @@ def _process_proactive_notification(uid: str, app: App, data):
             app.id,
             f"Prompt too long: {len(prompt)}/{max_prompt_char_limit} characters. Please shorten.",
         )
-        print(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit}", uid)
+        logger.info(f"App {app.id}, prompt too long, length: {len(prompt)}/{max_prompt_char_limit} {uid}")
         return None
 
     filter_scopes = app.filter_proactive_notification_scopes(data.get('params', []))
@@ -407,7 +414,7 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     message = llm_mini.invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
-        print(f"Plugins {app.id}, message too short", uid)
+        logger.info(f"Plugins {app.id}, message too short {uid}")
         return None
 
     send_app_notification(uid, app.name, app.id, message)
@@ -433,9 +440,9 @@ def _trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
         url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
             response = requests.post(url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15)
-            print('trigger_realtime_audio_bytes', app.id, 'status:', response.status_code)
+            logger.info(f'trigger_realtime_audio_bytes {app.id} {'status:'} {response.status_code}')
         except Exception as e:
-            print(f"Plugin integration error: {e}")
+            logger.error(f"Plugin integration error: {e}")
             return
 
     for app in filtered_apps:
@@ -458,7 +465,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
         if mentor_message:
             mentor_results['mentor'] = mentor_message
-            print(f"Sent mentor notification to user {uid}")
+            logger.info(f"Sent mentor notification to user {uid}")
 
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
@@ -487,13 +494,8 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
         try:
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
             if response.status_code != 200:
-                print(
-                    'trigger_realtime_integrations',
-                    app.id,
-                    'status: ',
-                    response.status_code,
-                    'results:',
-                    response.text[:100],
+                logger.info(
+                    f'trigger_realtime_integrations {app.id} {'status: '} {response.status_code} {'results:'} {response.text[:100]}'
                 )
                 return
 
@@ -524,7 +526,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
                     results[app.id] = message
 
         except Exception as e:
-            print(f"App integration error: {e}")
+            logger.error(f"App integration error: {e}")
             return
 
     for app in filtered_apps:

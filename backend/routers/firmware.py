@@ -8,6 +8,9 @@ from enum import Enum
 import ast
 
 from database.redis_db import get_generic_cache, set_generic_cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceModel(int, Enum):
@@ -65,7 +68,7 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
         }
         response = await client.get(url, headers=headers)
         if response.status_code != 200:
-            print(f"Error fetching GitHub releases: {response.status_code} {response.text}")
+            logger.error(f"Error fetching GitHub releases: {response.status_code} {response.text}")
             raise HTTPException(status_code=500, detail="Failed to fetch release information")
         releases = response.json()
         # Cache successful response for 5 minutes
