@@ -56,6 +56,11 @@ class ActionItemsProvider extends ChangeNotifier {
   int get selectedCount => _selectedItems.length;
   bool get hasSelection => _selectedItems.isNotEmpty;
 
+  //edit tasks page
+  bool _isEditMode = false;
+  bool get isEditMode => _isEditMode;
+
+
   // Group action items by completion status
   List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
 
@@ -437,6 +442,11 @@ class ActionItemsProvider extends ChangeNotifier {
 
   void toggleShowCompletedView() {
     _showCompletedView = !_showCompletedView;
+    notifyListeners();
+  }
+  
+  void toggleEditMode() {
+    _isEditMode = !_isEditMode;
     notifyListeners();
   }
 
