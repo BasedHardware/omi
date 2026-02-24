@@ -678,7 +678,13 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
-      await for (var event in _agentChatService.sendQuery(text)) {
+      // Build prompt with recent conversation history so the agent has context
+      final history = messages.where((m) => m.text.isNotEmpty).toList().reversed.take(10).toList().reversed.toList();
+      final historyLines =
+          history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
+      final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
+
+      await for (var event in _agentChatService.sendQuery(prompt)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
             textBuffer += event.text;
