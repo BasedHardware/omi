@@ -59,29 +59,39 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
 ### Backend Service Map
 
 ```
-                  ┌───────────────────────────┐
-                  │  Firestore · Redis (shared)│
-                  └─────┬─────────────┬────────┘
-                        │             │
-              ┌─────────┴──┐   ┌──────┴──────┐
-              │  backend   │──▶│   pusher     │
-              │  main.py   │ ws│  pusher/     │
-              └─────┬──────┘   └──────┬───────┘
+              ┌───────────────────────────────┐
+              │  Firestore · Redis (shared)   │
+              └─────┬─────────────────┬───────┘
                     │                 │
-                    └────────┬────────┘
-                             ▼
-                  ┌─────────────────────┐
-                  │    GPU services     │
-                  │ diarizer/ · modal/  │
-                  └─────────────────────┘
+          ┌────────┴───┐       ┌─────┴──────┐
+          │  backend   │──ws──▶│  pusher     │
+          │  main.py   │       │  pusher/    │
+          └──┬───┬─────┘       └──┬───┬──────┘
+             │   │                │   │
+             │   └────┬───────────┘   │
+             │        ▼               │
+             │   ┌──────────┐         │
+             │   │ diarizer │         │
+             │   │ diarizer/│         │
+             │   └──────────┘         │
+             │                        │
+             └──────────┬─────────────┘
+                        ▼
+              ┌───────────────────┐
+              │   vad · speech-   │
+              │   profile         │
+              │   modal/          │
+              └───────────────────┘
 
-              notifications-job (modal/job.py)
-                  cron · Firestore · Redis
+          notifications-job (modal/job.py)
+              cron · Firestore · Redis
 ```
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls GPU services for speaker embeddings during transcription (`routers/transcribe.py`).
-- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Runs `process_conversation` which calls GPU services for VAD and speaker identification (`utils/conversations/postprocess_conversation.py`).
-- **GPU services** (`diarizer/`, `modal/`) — Stateless HTTP endpoints for speaker embeddings, VAD, and speaker identification. Called via `utils/stt/` using `HOSTED_*` env vars.
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings during transcription (`routers/transcribe.py`).
+- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Runs `process_conversation` which calls vad and speech-profile (`utils/conversations/postprocess_conversation.py`).
+- **diarizer** (`diarizer/main.py`) — Speaker embeddings. Called from backend via `utils/stt/speaker_embedding.py` (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
+- **vad** (`modal/main.py`) — Voice activity detection. Called via `utils/stt/vad.py` (`HOSTED_VAD_API_URL`). Results cached in Redis 24h.
+- **speech-profile** (`modal/main.py`) — Speaker identification. Called via `utils/stt/speech_profile.py` (`HOSTED_SPEECH_PROFILE_API_URL`).
 - **notifications-job** (`modal/job.py`) — Cron job that reads Firestore/Redis and sends push notifications.
 
 ## App (Flutter)
