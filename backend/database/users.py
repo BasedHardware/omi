@@ -993,6 +993,22 @@ def get_user_transcription_preferences(uid: str) -> dict:
     return {'single_language_mode': False, 'vocabulary': []}
 
 
+def get_agent_vm(uid: str) -> Optional[dict]:
+    """Get the user's agent VM info from Firestore.
+
+    Returns:
+        Dict with VM details (ip, auth_token, status, etc.) or None if no VM.
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('agentVm')
+
+    return None
+
+
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
     """
     Set the user's transcription preferences.
