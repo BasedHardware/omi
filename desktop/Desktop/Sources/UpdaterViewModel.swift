@@ -105,6 +105,49 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         }
     }
 
+    /// Called after Sparkle has launched the installer and submitted launchd jobs.
+    /// On macOS 26+, launchd may be in "on-demand-only mode" which prevents RunAtLoad
+    /// services from starting. We force-start them via launchctl kickstart as a backup
+    /// to Sparkle 2.9.0's built-in probe (PR #2852).
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        logSync("Sparkle: Installer launched for v\(item.displayVersionString), kickstarting services")
+        kickstartSparkleServices()
+    }
+
+    /// Force-start Sparkle's launchd services to work around macOS 26 on-demand-only mode.
+    /// Services submitted via SMJobSubmit with RunAtLoad=YES may not start immediately.
+    /// Using `launchctl kickstart` forces launchd to spawn them right away.
+    private func kickstartSparkleServices() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+
+        let updaterLabel = "\(bundleID)-sparkle-updater"
+        let progressLabel = "\(bundleID)-sparkle-progress"
+        let uid = getuid()
+
+        // Try multiple times to handle timing variance
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) {
+                for label in [progressLabel, updaterLabel] {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+                    process.arguments = ["kickstart", "-p", "gui/\(uid)/\(label)"]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
+                        if process.terminationStatus == 0 {
+                            logSync("Sparkle kickstart: started \(label) (delay=\(delay)s)")
+                        }
+                    } catch {
+                        // Best effort — service may not exist yet or already running
+                    }
+                }
+            }
+        }
+    }
+
     /// Called when an update will be installed (app may terminate immediately after)
     func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
         let version = item.displayVersionString

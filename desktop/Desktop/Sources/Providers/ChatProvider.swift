@@ -325,6 +325,11 @@ class ChatProvider: ObservableObject {
     @Published var isClaudeConnected = false
     /// Cumulative tokens used in the current session via Omi account
     @Published var sessionTokensUsed: Int = 0
+    /// Cumulative USD cost spent using the Omi account, persisted across sessions.
+    /// Used to enforce the $50 threshold for auto-switching to the user's Claude account.
+    @AppStorage("omiAICumulativeCostUsd") var omiAICumulativeCostUsd: Double = 0.0
+    /// Set to true when the $50 Omi account usage threshold is reached, triggering an alert.
+    @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
     private let maxMessagesInMemory = 200
@@ -1916,6 +1921,7 @@ class ChatProvider: ObservableObject {
 
             if bridgeMode == BridgeMode.omiAI.rawValue {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
+                omiAICumulativeCostUsd += queryResult.costUsd
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -1926,6 +1932,11 @@ class ChatProvider: ObservableObject {
                         totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
                         costUsd: r.costUsd
                     )
+                }
+                // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
+                if omiAICumulativeCostUsd >= 50.0 {
+                    showOmiThresholdAlert = true
+                    Task { await self.switchBridgeMode(to: .userClaude) }
                 }
             }
 

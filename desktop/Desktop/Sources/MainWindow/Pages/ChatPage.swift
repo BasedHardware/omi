@@ -193,6 +193,19 @@ struct ChatPage: View {
                 }
             )
         }
+        .alert("Free Usage Limit Reached", isPresented: $chatProvider.showOmiThresholdAlert) {
+            Button("Connect Claude Account") {
+                chatProvider.showOmiThresholdAlert = false
+                if !chatProvider.isClaudeConnected {
+                    chatProvider.isClaudeAuthRequired = true
+                }
+            }
+            Button("Later", role: .cancel) {
+                chatProvider.showOmiThresholdAlert = false
+            }
+        } message: {
+            Text("Please connect your Claude account to continue chatting.")
+        }
         .overlay {
             // Loading overlay when fetching citation
             if isLoadingCitation {
