@@ -320,7 +320,7 @@ def fal_whisperx(
             return words, language
         return words
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         if attempts < 2:
             return fal_whisperx(audio_url, speakers_count, attempts + 1, return_language)
         if return_language:

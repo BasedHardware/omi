@@ -153,7 +153,7 @@ def get_memories_tool(
     try:
         memories = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
 
     memories_count = len(memories) if memories else 0
     logger.info(f"📊 get_memories_tool - found {memories_count} memories")

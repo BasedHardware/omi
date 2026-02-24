@@ -63,7 +63,7 @@ def postprocess_conversation(
             aseg = aseg[max(0, (start - 1) * 1000) : min((end + 1) * 1000, aseg.duration_seconds * 1000)]
             aseg.export(file_path, format="wav")
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
 
     try:
         aseg = AudioSegment.from_wav(file_path)
@@ -121,7 +121,7 @@ def postprocess_conversation(
         if emotional_feedback:
             asyncio.run(_process_user_emotion(uid, conversation.language, conversation, [signed_url]))
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         conversations_db.set_postprocessing_status(
             uid, conversation.id, PostProcessingStatus.failed, fail_reason=str(e)
         )

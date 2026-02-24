@@ -192,7 +192,7 @@ def _get_structured(
             )
         return structured, False
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
 
 
@@ -804,7 +804,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     ok = get_hume().request_user_expression_mersurement(urls)
     if "error" in ok:
         err = ok["error"]
-        logger.info(err)
+        logger.error(err)
         return
     job = ok["result"]
     request_id = job.id

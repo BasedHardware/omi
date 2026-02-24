@@ -10,7 +10,7 @@ def get_user_from_uid(uid: str):
     try:
         user = auth.get_user(uid) if uid else None
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         user = None
     if not user:
         return None

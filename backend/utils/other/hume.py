@@ -192,7 +192,7 @@ class HumeClient:
                 },
             }
         if err is not None:
-            logger.info(err)
+            logger.error(err)
             return err
 
         return {"result": HumeJobResponseModel.from_dict(resp.json())}

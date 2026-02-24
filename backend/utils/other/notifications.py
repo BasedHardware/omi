@@ -102,7 +102,7 @@ def _send_summary_notification(user_data: tuple):
                 display_date = now_in_user_tz.date()
             date_str = display_date.strftime('%Y-%m-%d')
         except Exception as e:
-            logger.info(e)
+            logger.error(e)
 
     # Fallback to UTC if timezone not available
     if not start_date_utc or not end_date_utc:
@@ -175,7 +175,7 @@ async def send_daily_notification():
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
 
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         logger.error(f"Error sending message: {e}")
         return None
 

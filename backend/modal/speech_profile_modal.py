@@ -43,7 +43,7 @@ def sample_same_speaker_as_segment(sample_audio: str, segment: str) -> float:
             return float(score[0])
         return 0
     except Exception as e:
-        logger.info(e)
+        logger.error(e)
         return 0
 
 

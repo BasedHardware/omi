@@ -39,7 +39,7 @@ except Exception as e:
     logger.error(
         "Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set for local dev or SERVICE_ACCOUNT_JSON for Modal."
     )
-    logger.info(e)
+    logger.error(e)
     sys.exit(1)
 
 

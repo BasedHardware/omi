@@ -55,7 +55,7 @@ def get_current_user_uid(authorization: str = Header(None)):
         token = authorization.split(' ')[1]
         return verify_token(token)
     except InvalidIdTokenError as e:
-        logger.info(e)
+        logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
 

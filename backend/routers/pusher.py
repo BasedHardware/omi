@@ -120,7 +120,7 @@ async def _websocket_util_trigger(
     try:
         await websocket.accept()
     except RuntimeError as e:
-        logger.info(e)
+        logger.error(e)
         await websocket.close(code=1011, reason="Dirty state")
         return
 

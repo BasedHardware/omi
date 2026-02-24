@@ -109,7 +109,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
             except (json.JSONDecodeError, TypeError, zlib.error) as e:
-                logger.info(e)
+                logger.error(e)
                 pass
 
     return data

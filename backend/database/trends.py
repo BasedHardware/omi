@@ -42,7 +42,7 @@ def get_trends_data() -> List[Dict]:
             category_data['topics'] = cleaned_topics
             trends_data.append(category_data)
         except Exception as e:
-            logger.info(e)
+            logger.error(e)
             continue
 
     return trends_data
