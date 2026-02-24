@@ -24,36 +24,18 @@ Module hierarchy (lowest to highest):
 #### Backend Service Map
 
 ```
-              ┌───────────────────────────────┐
-              │   Firestore · Redis (shared)  │
-              └─────┬─────────────────┬───────┘
-                    │                 │
-          ┌────────┴───┐       ┌─────┴──────┐
-          │  backend   │──ws──▶│  pusher     │
-          │  main.py   │       │  pusher/    │
-          └──┬───┬─────┘       └──┬───┬──────┘
-             │   │                │   │
-             │   └────┬───────────┘   │
-             │        ▼               │
-             │  ┌───────────┐         │
-             │  │ diarizer  │         │
-             │  └───────────┘         │
-             │                        │
-             └──────────┬─────────────┘
-                        ▼
-                ┌──────────────┐
-                │ vad (modal/) │
-                │ /v1/vad      │
-                │ /v1/speaker- │
-                │ identification│
-                └──────────────┘
+Shared: Firestore, Redis
 
-          ┌──────────────────────────┐
-          │ deepgram-self-hosted     │
-          └──────────────────────────┘
+backend (main.py)
+  ├── ws ──► pusher (pusher/)
+  ├── ──────► diarizer (diarizer/)
+  ├── ──────► vad (modal/)
+  └── ──────► deepgram-self-hosted
 
-          notifications-job (modal/job.py)
-              cron · Firestore · Redis
+pusher
+  └── ──────► vad (modal/)
+
+notifications-job (modal/job.py)  [cron]
 ```
 
 Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted}/`
