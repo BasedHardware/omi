@@ -664,6 +664,8 @@ class MessageProvider extends ChangeNotifier {
     }
 
     Timer? silenceTimer;
+    Timer? rotateTimer;
+    int rotateIndex = 0;
 
     try {
       // Connect to agent proxy (authenticates via Firebase token)
@@ -687,8 +689,6 @@ class MessageProvider extends ChangeNotifier {
           history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
       final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
 
-      Timer? rotateTimer;
-      int rotateIndex = 0;
       const rotateMessages = [
         'Querying your data',
         'Analyzing activity',
