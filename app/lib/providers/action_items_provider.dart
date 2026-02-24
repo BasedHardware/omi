@@ -447,6 +447,9 @@ class ActionItemsProvider extends ChangeNotifier {
   
   void toggleEditMode() {
     _isEditMode = !_isEditMode;
+    if (!_isEditMode) {
+      clearSelection();
+    }
     notifyListeners();
   }
 
