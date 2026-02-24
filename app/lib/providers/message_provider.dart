@@ -663,30 +663,27 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      // Connect (or reconnect) to the agent VM
-      if (!_agentChatService.isConnected) {
-        final ip = SharedPreferencesUtil().cachedAgentVmIp;
-        final token = SharedPreferencesUtil().cachedAgentVmAuthToken;
-        if (ip.isEmpty || token.isEmpty) {
-          message.text = 'Agent VM not configured. Please toggle Claude Agent off and on again.';
+      // Always open a fresh connection per query — the VM closes the WebSocket after each response
+      final ip = SharedPreferencesUtil().cachedAgentVmIp;
+      final token = SharedPreferencesUtil().cachedAgentVmAuthToken;
+      if (ip.isEmpty || token.isEmpty) {
+        message.text = 'Agent VM not configured. Please toggle Claude Agent off and on again.';
+        notifyListeners();
+        setShowTypingIndicator(false);
+        setSendingMessage(false);
+        return;
+      }
+      final connected = await _agentChatService.connect(ip, token);
+      if (!connected) {
+        // Retry once before giving up
+        await Future.delayed(const Duration(seconds: 1));
+        final retried = await _agentChatService.connect(ip, token);
+        if (!retried) {
+          message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
           notifyListeners();
           setShowTypingIndicator(false);
           setSendingMessage(false);
           return;
-        }
-        // Use connect() which now closes any stale channel before opening a new one
-        final connected = await _agentChatService.connect(ip, token);
-        if (!connected) {
-          // Retry once before giving up
-          await Future.delayed(const Duration(seconds: 1));
-          final retried = await _agentChatService.connect(ip, token);
-          if (!retried) {
-            message.text = 'Failed to connect to agent VM. Check that your desktop is running.';
-            notifyListeners();
-            setShowTypingIndicator(false);
-            setSendingMessage(false);
-            return;
-          }
         }
       }
 
