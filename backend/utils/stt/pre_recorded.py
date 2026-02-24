@@ -231,7 +231,7 @@ def deepgram_prerecorded_from_bytes(
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
     """
-    logger.info(f'deepgram_prerecorded_from_bytes {f'bytes_len={len(audio_bytes)}'} {sample_rate} {diarize} {attempts}')
+    logger.info(f'deepgram_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
     try:
         options = {
