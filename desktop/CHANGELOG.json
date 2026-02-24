@@ -4,6 +4,7 @@
       "version": "11.0",
       "date": "2026-02-23",
       "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
         "Task chat session history: resume previous AI conversations about tasks across app restarts",
         "Dedicated task chat side panel with better layout isolation and session ID display",
         "Add task button in toolbar (⌘N) for quick inline task creation",
