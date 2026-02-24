@@ -216,6 +216,14 @@ class TaskChatCoordinator: ObservableObject {
         // doesn't re-fire this task every 60 seconds (dedup check is chatSessionId != nil)
         try? await ActionItemStorage.shared.updateChatSessionId(taskId: task.id, sessionId: task.id)
 
+        // Record investigation start time so shouldReinvestigateDaily() can throttle re-fires.
+        // Without this, agentStartedAt stays nil and the scheduler re-triggers every 60s.
+        try? await ActionItemStorage.shared.updateAgentState(
+            taskId: task.id, status: "running", sessionName: nil,
+            prompt: nil, plan: nil, startedAt: Date(),
+            completedAt: nil, editedFilesJson: nil
+        )
+
         // Advance dueAt for recurring tasks so getDueRecurringTasks() won't keep returning them
         if let currentDueAt = task.dueAt, task.recurrenceRule == "daily" {
             let nextDueAt = currentDueAt.addingTimeInterval(86400) // +1 day

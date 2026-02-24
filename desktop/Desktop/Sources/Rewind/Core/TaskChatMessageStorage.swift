@@ -343,6 +343,13 @@ actor TaskChatMessageStorage {
     }
 }
 
+// MARK: - TableDocumented
+
+extension TaskChatMessageRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["task_chat_messages"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["task_chat_messages"] ?? [:] }
+}
+
 // MARK: - Error
 
 enum TaskChatMessageStorageError: LocalizedError {

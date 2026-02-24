@@ -436,7 +436,7 @@ private struct PageContentView: View {
             case 3:
                 MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
             case 4:
-                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
+                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatCoordinator: viewModelContainer.taskChatCoordinator, chatProvider: viewModelContainer.chatProvider)
             case 5:
                 FocusPage()
             case 6:

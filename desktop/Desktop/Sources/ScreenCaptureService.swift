@@ -8,10 +8,20 @@ final class ScreenCaptureService: Sendable {
     private let maxSize: CGFloat = 3000
     private let jpegQuality: CGFloat = 1.0
 
+    /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
+    /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
+    /// thread pool (captureActiveWindowCGImage runs non-isolated), so a lock is required.
+    nonisolated(unsafe) private static let axStateLock = NSLock()
     /// Tracks consecutive AX cannotComplete failures per bundle ID.
     /// Apps that consistently fail (Qt, OpenGL, etc.) are skipped for AX after the threshold.
+    /// Must be accessed only while holding axStateLock.
     nonisolated(unsafe) private static var axFailureCountByBundleID: [String: Int] = [:]
     private static let axSkipThreshold = 3
+
+    /// When the AX API is disabled system-wide (apiDisabled error), skip all AX attempts
+    /// to avoid spamming a failing call on every capture cycle (every ~1 second).
+    /// Must be accessed only while holding axStateLock.
+    nonisolated(unsafe) private static var axSystemwideDisabled = false
 
     init() {}
 
@@ -280,8 +290,10 @@ final class ScreenCaptureService: Sendable {
         }
 
         // Try Accessibility API first (most accurate - gets actual focused window).
-        // Skip if this app has exceeded the cannotComplete failure threshold (e.g. Qt/OpenGL apps).
-        let skipAX = !bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold
+        // Skip if AX is disabled system-wide (apiDisabled) or this app exceeded the cannotComplete threshold.
+        let skipAX = axStateLock.withLock {
+            axSystemwideDisabled || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
+        }
         if !skipAX, let axResult = getWindowInfoViaAccessibility(pid: activePID, bundleID: bundleID, windowList: windowList) {
             return (appName, axResult.title, axResult.windowID)
         }
@@ -322,13 +334,24 @@ final class ScreenCaptureService: Sendable {
 
         guard focusResult == .success, let windowElement = focusedWindow else {
             if focusResult == .apiDisabled {
-                // System-wide AX permission issue — always log
-                log("ACCESSIBILITY_AX: apiDisabled (\(focusResult.rawValue)) for \(bundleID) — system permission broken")
+                // System-wide AX permission issue. Set a flag so we stop attempting
+                // AX on every capture cycle — avoids spinning on a known-broken call.
+                let wasAlreadyDisabled = axStateLock.withLock {
+                    let prev = axSystemwideDisabled
+                    axSystemwideDisabled = true
+                    return prev
+                }
+                if !wasAlreadyDisabled {
+                    log("ACCESSIBILITY_AX: apiDisabled (\(focusResult.rawValue)) — disabling AX attempts until next launch")
+                }
             } else if focusResult == .cannotComplete {
                 // App-specific failure (Qt, OpenGL, Python-based apps often don't implement AX).
                 // Track per bundle ID and suppress logs after the threshold to avoid spam.
-                let count = (axFailureCountByBundleID[bundleID] ?? 0) + 1
-                axFailureCountByBundleID[bundleID] = count
+                let count = axStateLock.withLock {
+                    let c = (axFailureCountByBundleID[bundleID] ?? 0) + 1
+                    axFailureCountByBundleID[bundleID] = c
+                    return c
+                }
                 if count == 1 {
                     log("ACCESSIBILITY_AX: cannotComplete for \(bundleID) (1st failure, will suppress after \(axSkipThreshold))")
                 } else if count == axSkipThreshold {
@@ -340,7 +363,7 @@ final class ScreenCaptureService: Sendable {
 
         // On success, reset failure count in case the app's AX state recovered
         if !bundleID.isEmpty {
-            axFailureCountByBundleID[bundleID] = 0
+            axStateLock.withLock { axFailureCountByBundleID[bundleID] = 0 }
         }
 
         // Get window title from AX

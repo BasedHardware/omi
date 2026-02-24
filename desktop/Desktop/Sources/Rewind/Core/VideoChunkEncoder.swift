@@ -24,6 +24,11 @@ actor VideoChunkEncoder {
     /// Threshold for aspect ratio change that triggers a new chunk (20% difference)
     private let aspectRatioChangeThreshold: CGFloat = 0.2
 
+    /// Seconds the new aspect ratio must remain stable before switching chunks.
+    /// Prevents rapid app switching from spawning bursts of short-lived ffmpeg processes
+    /// that hang the hevc_videotoolbox hardware encoder during finalization (10s stall each).
+    private let aspectRatioStabilityDelay: TimeInterval = 2.0
+
     /// Maximum frames to buffer before forcing a flush (memory safety)
     /// Calculated from chunk duration + frame rate + padding so the normal
     /// duration-based finalization always fires before this safety limit.
@@ -42,6 +47,10 @@ actor VideoChunkEncoder {
 
     /// Track consecutive ffmpeg write failures for recovery
     private var consecutiveWriteFailures = 0
+
+    /// Pending aspect ratio debounce state
+    private var pendingAspectRatioSize: CGSize?
+    private var pendingAspectRatioSince: Date?
     private var currentChunkStartTime: Date?
     private(set) var currentChunkPath: String?
     private var frameOffsetInChunk: Int = 0
@@ -101,12 +110,38 @@ actor VideoChunkEncoder {
             try await emergencyReset()
         }
 
-        // Check if aspect ratio changed significantly - if so, start a new chunk
-        // This prevents frames from different window sizes being squished together
+        // Check if aspect ratio changed significantly.
+        // Debounce: require the new ratio to be stable for aspectRatioStabilityDelay before
+        // switching chunks. Rapid app switching (e.g. Firefox ↔ terminal) previously caused
+        // bursts of 1-3 frame chunks whose hevc_videotoolbox encoder hung on finalization,
+        // blocking the actor for 10s per event and chaining into a cascade.
         if let currentInputSize = currentChunkInputSize,
            hasSignificantAspectRatioChange(from: currentInputSize, to: newFrameSize) {
-            log("VideoChunkEncoder: Aspect ratio changed significantly (\(currentInputSize) -> \(newFrameSize)), starting new chunk")
-            try await finalizeCurrentChunk()
+            let now = Date()
+            let pendingMatches = pendingAspectRatioSize.map {
+                !hasSignificantAspectRatioChange(from: $0, to: newFrameSize)
+            } ?? false
+
+            if pendingMatches,
+               let since = pendingAspectRatioSince,
+               now.timeIntervalSince(since) >= aspectRatioStabilityDelay {
+                // New aspect ratio has been stable for the required delay — commit the switch
+                log("VideoChunkEncoder: Aspect ratio changed significantly (\(currentInputSize) -> \(newFrameSize)), starting new chunk")
+                pendingAspectRatioSize = nil
+                pendingAspectRatioSince = nil
+                try await finalizeCurrentChunk()
+            } else {
+                // Not yet stable — record/refresh the pending candidate and drop this frame
+                if !pendingMatches {
+                    pendingAspectRatioSize = newFrameSize
+                    pendingAspectRatioSince = now
+                }
+                return nil
+            }
+        } else {
+            // Aspect ratio matches current chunk — clear any pending transition
+            pendingAspectRatioSize = nil
+            pendingAspectRatioSince = nil
         }
 
         // Start new chunk if needed
@@ -339,6 +374,8 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+        pendingAspectRatioSize = nil
+        pendingAspectRatioSince = nil
     }
 
     // MARK: - Staleness Detection

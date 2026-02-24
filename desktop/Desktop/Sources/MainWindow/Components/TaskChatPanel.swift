@@ -140,6 +140,13 @@ struct TaskChatPanel: View {
                         .scaledFont(size: 10)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                    if let sessionId = taskState.currentSessionId {
+                        Text("·")
+                            .scaledFont(size: 10)
+                        Text(String(sessionId.prefix(8)))
+                            .scaledFont(size: 10)
+                            .fontDesign(.monospaced)
+                    }
                     Spacer()
                 }
                 .foregroundColor(OmiColors.textTertiary.opacity(0.7))
@@ -194,8 +201,9 @@ struct TaskChatPanel: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding()
+        .padding(.vertical, 60)
     }
 }
 

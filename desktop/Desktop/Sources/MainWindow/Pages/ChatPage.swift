@@ -488,8 +488,9 @@ struct ChatPage: View {
                     .padding(.horizontal, 40)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding()
+        .padding(.vertical, 80)
     }
 
     // MARK: - Input Area
