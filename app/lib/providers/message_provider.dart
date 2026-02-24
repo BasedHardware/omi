@@ -695,6 +695,9 @@ class MessageProvider extends ChangeNotifier {
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
             flushBuffer();
+            if (message.text.isNotEmpty) {
+              agentThinkingAfterText = true;
+            }
             message.thinkings.add(event.text);
             notifyListeners();
             break;
@@ -723,6 +726,7 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      agentThinkingAfterText = false;
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
