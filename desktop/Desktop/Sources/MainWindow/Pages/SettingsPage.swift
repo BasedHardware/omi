@@ -1408,26 +1408,6 @@ struct SettingsContentView: View {
                     }
                     .padding(.leading, 14)
 
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .frame(width: 20)
-
-                        Text("End-to-end encryption")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-
-                        Text("Coming Soon")
-                            .scaledFont(size: 10, weight: .semibold)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(OmiColors.backgroundQuaternary.opacity(0.5))
-                            .cornerRadius(3)
-                    }
-                    .padding(.leading, 14)
-
                     Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
