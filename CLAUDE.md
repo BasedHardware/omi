@@ -96,6 +96,16 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 cd app && flutter gen-l10n
 ```
 
+### Simulator Hot Restart
+
+When the iOS Simulator is running, trigger a hot restart after finishing edits — do not wait for the user to do it manually:
+
+```bash
+kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)
+```
+
+Use `SIGUSR1` for hot reload (widget/UI-only changes) or `SIGUSR2` for hot restart (logic, state, provider changes). When in doubt, use `SIGUSR2`.
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
