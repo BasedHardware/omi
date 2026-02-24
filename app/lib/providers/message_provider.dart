@@ -685,11 +685,25 @@ class MessageProvider extends ChangeNotifier {
           history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
       final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
 
+      Timer? silenceTimer;
+
+      void startSilenceTimer() {
+        silenceTimer?.cancel();
+        if (message.text.isNotEmpty) {
+          silenceTimer = Timer(const Duration(seconds: 2), () {
+            agentThinkingAfterText = true;
+            if (!message.thinkings.any((t) => t == 'Thinking')) {
+              message.thinkings.add('Thinking');
+            }
+            notifyListeners();
+          });
+        }
+      }
+
       await for (var event in _agentChatService.sendQuery(prompt)) {
-        print(
-            '[DEBUG] agent event: type=${event.type}, text="${event.text.length > 50 ? event.text.substring(0, 50) : event.text}"');
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            silenceTimer?.cancel();
             if (agentThinkingAfterText) {
               textBuffer += '\n\n';
               agentThinkingAfterText = false;
@@ -699,11 +713,11 @@ class MessageProvider extends ChangeNotifier {
             timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
               flushBuffer();
             });
+            startSilenceTimer();
             break;
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
-            print(
-                '[DEBUG] toolActivity: text="${event.text}", msgText.isEmpty=${message.text.isEmpty}, agentThinkingAfterText=$agentThinkingAfterText');
+            silenceTimer?.cancel();
             flushBuffer();
             if (message.text.isNotEmpty) {
               agentThinkingAfterText = true;
@@ -711,11 +725,10 @@ class MessageProvider extends ChangeNotifier {
             if (event.text.isNotEmpty) {
               message.thinkings.add(event.text);
             }
-            print(
-                '[DEBUG] after toolActivity: agentThinkingAfterText=$agentThinkingAfterText, thinkings=${message.thinkings.length}');
             notifyListeners();
             break;
           case AgentChatEventType.result:
+            silenceTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -725,6 +738,7 @@ class MessageProvider extends ChangeNotifier {
             notifyListeners();
             break;
           case AgentChatEventType.error:
+            silenceTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -738,6 +752,7 @@ class MessageProvider extends ChangeNotifier {
       message.text = message.text.isEmpty ? 'Failed to get response from agent.' : message.text;
       notifyListeners();
     } finally {
+      silenceTimer?.cancel();
       timer?.cancel();
       flushBuffer();
       agentThinkingAfterText = false;
