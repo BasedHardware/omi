@@ -58,10 +58,29 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
 
 ### Backend Service Map
 
-Four services, all sharing Firestore and Redis:
+```
+                  ┌───────────────────────────┐
+                  │  Firestore · Redis (shared)│
+                  └─────┬─────────────┬────────┘
+                        │             │
+              ┌─────────┴──┐   ┌──────┴──────┐
+              │  backend   │──▶│   pusher     │
+              │  main.py   │ ws│  pusher/     │
+              └─────┬──────┘   └──────┬───────┘
+                    │                 │
+                    └────────┬────────┘
+                             ▼
+                  ┌─────────────────────┐
+                  │    GPU services     │
+                  │ diarizer/ · modal/  │
+                  └─────────────────────┘
+
+              notifications-job (modal/job.py)
+                  cron · Firestore · Redis
+```
 
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls GPU services for speaker embeddings during transcription (`routers/transcribe.py`).
-- **pusher** (`pusher/main.py`) — Receives audio from backend via binary WebSocket protocol. Runs `process_conversation` which calls GPU services for VAD and speaker identification (`utils/conversations/postprocess_conversation.py`).
+- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Runs `process_conversation` which calls GPU services for VAD and speaker identification (`utils/conversations/postprocess_conversation.py`).
 - **GPU services** (`diarizer/`, `modal/`) — Stateless HTTP endpoints for speaker embeddings, VAD, and speaker identification. Called via `utils/stt/` using `HOSTED_*` env vars.
 - **notifications-job** (`modal/job.py`) — Cron job that reads Firestore/Redis and sends push notifications.
 
