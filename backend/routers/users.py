@@ -1133,3 +1133,43 @@ def get_llm_top_features(
     Returns the top N features sorted by total token consumption.
     """
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
+
+
+@router.get('/v1/users/export', tags=['v1'])
+def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+    """Export all user data for GDPR/CCPA compliance."""
+    from database.action_items import get_action_items as get_standalone_action_items
+
+    profile = get_user_profile(uid)
+
+    conversations = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
+
+    memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+
+    people = get_people(uid)
+
+    action_items = get_standalone_action_items(uid, limit=10000, offset=0)
+
+    # Get chat messages (all, no app_id filter)
+    chat_messages = []
+    try:
+        from google.cloud import firestore as _fs
+        user_ref = chat_db.db.collection('users').document(uid)
+        msgs_ref = user_ref.collection('messages').order_by(
+            'created_at', direction=_fs.Query.DESCENDING
+        ).limit(10000)
+        for doc in msgs_ref.stream():
+            msg = doc.to_dict()
+            msg['id'] = doc.id
+            chat_messages.append(msg)
+    except Exception as e:
+        logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
+
+    return {
+        'profile': profile if profile else {},
+        'conversations': conversations,
+        'memories': memories_list,
+        'people': people,
+        'action_items': action_items,
+        'chat_messages': chat_messages,
+    }
