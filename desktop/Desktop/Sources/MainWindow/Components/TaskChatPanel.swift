@@ -32,9 +32,12 @@ struct TaskChatPanel: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Messages area — .frame(maxHeight: .infinity) marks this as the flexible
-            // child so the VStack doesn't try to measure the LazyVStack content eagerly,
-            // which would cause recursive StackLayout sizing (layout loop at 100% CPU).
+                // Messages area fills all remaining space.
+                // ChatInputView lives in .safeAreaInset so its height changes (editorHeight,
+                // Wispr Flow insertions, etc.) never trigger re-measurement of ChatMessagesView.
+                // Putting both in the same VStack caused a recursive StackLayout sizing loop
+                // (FlexFrame → ZStack → StackLayout → FlexFrame at 100% CPU) every time the
+                // input field changed height.
                 ChatMessagesView(
                     messages: taskState.messages,
                     isSending: taskState.isSending,
@@ -47,57 +50,61 @@ struct TaskChatPanel: View {
                     welcomeContent: { taskWelcome }
                 )
                 .frame(maxHeight: .infinity)
-
-                // Error banner
-                if let error = taskState.errorMessage {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(OmiColors.warning)
-                            .scaledFont(size: 14)
-                        Text(error)
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textSecondary)
-                        Spacer()
-                        Button {
-                            taskState.errorMessage = nil
-                        } label: {
-                            Image(systemName: "xmark")
-                                .scaledFont(size: 11)
-                                .foregroundColor(OmiColors.textTertiary)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    VStack(spacing: 0) {
+                        // Error banner
+                        if let error = taskState.errorMessage {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(OmiColors.warning)
+                                    .scaledFont(size: 14)
+                                Text(error)
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textSecondary)
+                                Spacer()
+                                Button {
+                                    taskState.errorMessage = nil
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .scaledFont(size: 11)
+                                        .foregroundColor(OmiColors.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(OmiColors.backgroundSecondary)
                         }
-                        .buttonStyle(.plain)
+
+                        // Input area
+                        ChatInputView(
+                            onSend: { text in
+                                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
+                                Task {
+                                    // On the first message, include full task details so the AI
+                                    // has complete context (same data the Investigate button sends).
+                                    let isFirstMessage = taskState.messages.isEmpty
+                                    let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
+                                    await taskState.sendMessage(text, taskContext: taskContext)
+                                }
+                            },
+                            onFollowUp: { text in
+                                Task { await taskState.sendFollowUp(text) }
+                            },
+                            onStop: {
+                                taskState.stopAgent()
+                            },
+                            isSending: taskState.isSending,
+                            isStopping: taskState.isStopping,
+                            placeholder: "Ask about this task...",
+                            mode: $taskState.chatMode,
+                            pendingText: $coordinator.pendingInputText,
+                            inputText: $taskState.draftText
+                        )
+                        .padding(12)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(OmiColors.backgroundSecondary)
+                    .background(OmiColors.backgroundPrimary)
                 }
-
-                // Input area
-                ChatInputView(
-                    onSend: { text in
-                        AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
-                        Task {
-                            // On the first message, include full task details so the AI
-                            // has complete context (same data the Investigate button sends).
-                            let isFirstMessage = taskState.messages.isEmpty
-                            let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
-                            await taskState.sendMessage(text, taskContext: taskContext)
-                        }
-                    },
-                    onFollowUp: { text in
-                        Task { await taskState.sendFollowUp(text) }
-                    },
-                    onStop: {
-                        taskState.stopAgent()
-                    },
-                    isSending: taskState.isSending,
-                    isStopping: taskState.isStopping,
-                    placeholder: "Ask about this task...",
-                    mode: $taskState.chatMode,
-                    pendingText: $coordinator.pendingInputText,
-                    inputText: $taskState.draftText
-                )
-                .padding(12)
             }
         }
         .background(OmiColors.backgroundPrimary)

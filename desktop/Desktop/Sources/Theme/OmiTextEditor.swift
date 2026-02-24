@@ -140,6 +140,27 @@ struct OmiTextEditor: NSViewRepresentable {
         }
     }
 
+    /// Return a concrete size to SwiftUI's layout engine so it doesn't have to
+    /// recurse through the parent hierarchy to infer the editor's height.
+    /// Without this, NSViewRepresentable reports no intrinsic size and SwiftUI
+    /// keeps propagating unconstrained proposals upward, contributing to the
+    /// recursive StackLayout sizing loop seen in the task chat panel.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+        guard let minH = minHeight, let maxH = maxHeight else {
+            return nil  // no height tracking — let SwiftUI use default NSView sizing
+        }
+        guard let textView = nsView.documentView as? NSTextView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return CGSize(width: proposal.width ?? nsView.bounds.width, height: minH)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let contentHeight = usedRect.height + textView.textContainerInset.height * 2
+        let constrainedHeight = min(max(contentHeight, minH), maxH)
+        return CGSize(width: proposal.width ?? nsView.bounds.width, height: constrainedHeight)
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(
             text: $text,
