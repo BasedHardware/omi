@@ -738,22 +738,26 @@ async def _stream_handler(
                 gate_mode = VAD_GATE_MODE
                 if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
                     gate_mode = 'shadow'  # Shadow during profile, activate later
-                vad_gate = VADStreamingGate(
-                    sample_rate=sample_rate,
-                    channels=1,  # DG always receives mono (encoding=linear16, channels=1)
-                    mode=gate_mode,
-                    uid=uid,
-                    session_id=session_id,
-                )
-                logger.info(
-                    'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
-                    gate_mode,
-                    speech_profile_preseconds,
-                    codec,
-                    sample_rate,
-                    uid,
-                    session_id,
-                )
+                try:
+                    vad_gate = VADStreamingGate(
+                        sample_rate=sample_rate,
+                        channels=1,  # DG always receives mono (encoding=linear16, channels=1)
+                        mode=gate_mode,
+                        uid=uid,
+                        session_id=session_id,
+                    )
+                    logger.info(
+                        'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
+                        gate_mode,
+                        speech_profile_preseconds,
+                        codec,
+                        sample_rate,
+                        uid,
+                        session_id,
+                    )
+                except Exception:
+                    logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
+                    vad_gate = None
 
             # DEEPGRAM
             if stt_service == STTService.deepgram:
