@@ -221,6 +221,10 @@ function startAcpProcess(): void {
   // If absent (Mode B), ACP will use user's own OAuth.
   const env = { ...process.env };
   delete env.CLAUDE_CODE_USE_VERTEX;
+  // Remove CLAUDECODE so the ACP subprocess (and the Claude Code it spawns) don't
+  // inherit the nested-session guard. Without this, `--resume` silently fails when
+  // Claude Code detects it's being launched from inside another Claude Code session.
+  delete env.CLAUDECODE;
   env.NODE_NO_WARNINGS = "1";
 
   // Use our patched ACP entry point (adds model selection support)
@@ -662,7 +666,25 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       }
     }
 
-    // Reuse existing session if alive, otherwise create a new one
+    // Reuse existing session if alive, resume a persisted one, or create a new one
+    if (msg.resume && !sessionId) {
+      // Resume a persisted session by ID (survives process restarts via ~/.claude/projects/)
+      // Fall back to session/new if the session file is gone or resume fails
+      try {
+        await acpRequest("session/resume", {
+          sessionId: msg.resume,
+          cwd: requestedCwd,
+          mcpServers: buildMcpServers(mode, requestedCwd),
+        });
+        sessionId = msg.resume;
+        sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
+        isNewSession = false;
+        logErr(`ACP session resumed: ${sessionId}`);
+      } catch (resumeErr) {
+        logErr(`ACP session resume failed (will create new session): ${resumeErr}`);
+        // Fall through to session/new below
+      }
+    }
     if (!sessionId) {
       const sessionParams: Record<string, unknown> = {
         cwd: requestedCwd,

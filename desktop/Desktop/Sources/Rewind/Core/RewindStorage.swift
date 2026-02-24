@@ -248,6 +248,12 @@ actor RewindStorage {
         let image = imageData.flatMap { NSImage(data: $0) }
 
         guard let imageData, let image else {
+            // ffmpeg exited 0 but produced no output — seek was beyond video duration.
+            // Treat as missing frame (not a real error) so the backfill silently skips it.
+            if !fileExists || fileSize == 0 {
+                throw RewindError.screenshotNotFound
+            }
+            // File exists but couldn't be loaded/decoded — genuine error worth logging.
             let memoryMB = ProcessInfo.processInfo.physicalMemory > 0
                 ? Int(Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576)
                 : -1

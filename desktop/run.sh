@@ -168,6 +168,9 @@ else
     echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"
 fi
 
+step "Checking schema docs..."
+bash scripts/check_schema_docs.sh
+
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
 
@@ -318,6 +321,9 @@ echo ""
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 open "$APP_BUNDLE" || "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" &
+
+# Sync omi-desktop -> omi/desktop/ in the monorepo (runs in background, doesn't block)
+python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward &
 
 # Wait for backend process (keeps script running and shows logs)
 echo "Press Ctrl+C to stop all services..."

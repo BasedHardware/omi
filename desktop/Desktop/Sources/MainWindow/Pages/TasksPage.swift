@@ -2021,7 +2021,7 @@ struct TasksPage: View {
     var chatProvider: ChatProvider?
 
     // Chat panel state
-    @StateObject private var chatCoordinator: TaskChatCoordinator
+    @ObservedObject var chatCoordinator: TaskChatCoordinator
     @State private var showChatPanel = false
     @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
     /// The window width before the chat panel was opened, so we can restore it exactly.
@@ -2047,11 +2047,10 @@ struct TasksPage: View {
     @State private var isDraggingDivider = false
     @State private var dragStartWidth: Double = 0
 
-    init(viewModel: TasksViewModel, chatProvider: ChatProvider? = nil) {
+    init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
         self.viewModel = viewModel
+        self._chatCoordinator = ObservedObject(wrappedValue: chatCoordinator)
         self.chatProvider = chatProvider
-        let provider = chatProvider ?? ChatProvider()
-        _chatCoordinator = StateObject(wrappedValue: TaskChatCoordinator(chatProvider: provider))
     }
 
     var body: some View {
@@ -2126,8 +2125,11 @@ struct TasksPage: View {
         .background(Color.clear)
         // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
-            // Wire coordinator so delete operations can purge in-memory chat states
-            viewModel.chatCoordinator = chatCoordinator
+            // Restore panel UI if coordinator was open when we navigated away
+            if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
+                showChatPanel = true
+                adjustWindowWidth(expand: true)
+            }
             // If tasks are already loaded, notify sidebar to clear loading indicator
             if !viewModel.isLoading {
                 NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
@@ -2144,11 +2146,12 @@ struct TasksPage: View {
             }
         }
         .onDisappear {
-            // Reset chat state and shrink window when navigating away from Tasks tab
+            // Shrink window when navigating away, but keep coordinator alive
+            // so streaming state and unread dots persist across tab switches.
             if showChatPanel {
                 adjustWindowWidth(expand: false)
                 showChatPanel = false
-                chatCoordinator.closeChat()
+                // Do NOT call chatCoordinator.closeChat() — coordinator state persists at app level
             }
         }
     }
@@ -2320,7 +2323,12 @@ struct TasksPage: View {
     private func installKeyboardMonitor() {
         guard keyboardMonitor == nil else { return }
         let vm = viewModel
-        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak chatCoordinator] event in
+            // Don't intercept keyboard shortcuts when the chat panel is open —
+            // the chat input may briefly lose first-responder status (e.g. after
+            // sending a message) and we don't want Enter to trigger task-list
+            // actions (inline create / inline edit) in that window.
+            if chatCoordinator?.isPanelOpen == true { return event }
             return vm.handleKeyDown(event) ? nil : event
         }
     }
@@ -2447,6 +2455,7 @@ struct TasksPage: View {
                 if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
                     chatToggleButton
                 }
+                addTaskButton
                 taskSettingsButton
             }
         }
@@ -2485,6 +2494,23 @@ struct TasksPage: View {
         }
         .buttonStyle(.plain)
         .help("Save current filters as a view")
+    }
+
+    private var addTaskButton: some View {
+        Button {
+            viewModel.inlineCreateAfterTaskId = nil
+            viewModel.isInlineCreating = true
+        } label: {
+            Image(systemName: "plus")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .help("Add task (⌘N)")
     }
 
     // MARK: - Filter Dropdown
@@ -3353,10 +3379,9 @@ struct TaskCategorySection: View {
 
 // MARK: - Conditional Drag & Drop (reduces gesture graph depth when disabled)
 
-/// Conditionally applies .draggable + .dropDestination to avoid deep ExclusiveGesture nesting.
-/// When disabled (e.g. multi-select mode), the view has fewer gesture modifiers, preventing hangs.
-/// Uses closures instead of the full orderedTasks array to avoid gesture graph rebuilds
-/// when the array identity changes during recomputes (every 30s auto-refresh).
+/// Applies .dropDestination to a task row for reorder drop targets.
+/// The .draggable is handled by the drag handle inside TaskRow to avoid conflicts with swipe gestures.
+/// When disabled (e.g. multi-select mode), no drop modifiers are applied.
 struct TaskDragDropModifier: ViewModifier {
     let isEnabled: Bool
     let taskId: String
@@ -3381,21 +3406,27 @@ struct TaskDragDropModifier: ViewModifier {
                             .transition(.opacity)
                     }
                 }
-                .draggable(taskId) {
-                    TaskDragPreviewSimple(taskId: taskId, description: taskDescription)
-                }
                 .dropDestination(for: String.self) { droppedIds, _ in
+                    log("DROP: Received drop on task \(taskId), droppedIds=\(droppedIds)")
                     onDragEnded?()
                     guard let droppedId = droppedIds.first,
-                          droppedId != taskId,
-                          let targetIndex = findTargetIndex?() else {
+                          droppedId != taskId else {
+                        log("DROP: Rejected — same task or empty droppedIds")
+                        return false
+                    }
+                    guard let targetIndex = findTargetIndex?() else {
+                        log("DROP: Rejected — findTargetIndex returned nil")
                         return false
                     }
                     if let droppedTask = findTask?(droppedId) {
+                        log("DROP: Moving task \(droppedId) to index \(targetIndex)")
                         onMoveTask?(droppedTask, targetIndex)
+                    } else {
+                        log("DROP: Could not find task for id \(droppedId)")
                     }
                     return true
                 } isTargeted: { isTargeted in
+                    log("DROP: isTargeted=\(isTargeted) on task \(taskId)")
                     if isTargeted {
                         onHoverChanged?(taskId, true)
                     } else {
@@ -3737,7 +3768,22 @@ struct TaskRow: View {
     }
 
     private var taskRowContent: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 0) {
+            // Drag handle (visible on hover, only in categorized view)
+            if category != nil && !isMultiSelectMode && !isDeletedTask {
+                Image(systemName: "line.3.horizontal")
+                    .scaledFont(size: 10)
+                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+                    .frame(width: 16, height: 24)
+                    .contentShape(Rectangle())
+                    .draggable(task.id) {
+                        log("DRAG: Started dragging task \(task.id) — \(task.description.prefix(40))")
+                        return TaskDragPreviewSimple(taskId: task.id, description: task.description)
+                    }
+                    .help("Drag to reorder")
+            }
+
+            HStack(alignment: .center, spacing: 12) {
             // Indent visual (vertical line for indented tasks)
             if indentLevel > 0 {
                 HStack(spacing: 0) {
@@ -3922,24 +3968,42 @@ struct TaskRow: View {
                             AgentStatusIndicator(task: task)
                         }
 
-                        // Investigate button (background AI chat)
+                        // Investigate / View chat button (background AI chat)
                         if let coordinator = chatCoordinator,
                            TaskAgentSettings.shared.isChatEnabled,
                            !coordinator.streamingTaskIds.contains(task.id),
                            !coordinator.unreadTaskIds.contains(task.id) {
-                            Button {
-                                onInvestigate?(task)
-                            } label: {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "magnifyingglass")
-                                        .scaledFont(size: 9)
-                                    Text("Investigate")
-                                        .scaledFont(size: 10, weight: .medium)
+                            if task.chatSessionId != nil {
+                                // Previous session exists but is no longer active — let user view/resume it
+                                Button {
+                                    onOpenChat?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "bubble.left")
+                                            .scaledFont(size: 9)
+                                        Text("View chat")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.purplePrimary)
                                 }
-                                .foregroundColor(OmiColors.textSecondary)
+                                .buttonStyle(.plain)
+                                .help("View previous AI investigation")
+                            } else {
+                                // No prior session — start fresh investigation
+                                Button {
+                                    onInvestigate?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "magnifyingglass")
+                                            .scaledFont(size: 9)
+                                        Text("Investigate")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Start AI investigation in background")
                             }
-                            .buttonStyle(.plain)
-                            .help("Start AI investigation in background")
                         }
 
                         // Chat session status (streaming indicator or unread dot)
@@ -3962,6 +4026,7 @@ struct TaskRow: View {
                 }
             }
 
+            } // end inner HStack(spacing: 12)
         }
         .overlay(alignment: .trailing) {
             // Hover actions overlaid on trailing edge (no layout shift)

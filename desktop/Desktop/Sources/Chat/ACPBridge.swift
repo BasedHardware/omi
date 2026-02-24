@@ -311,6 +311,9 @@ actor ACPBridge {
         if let model = model {
             queryDict["model"] = model
         }
+        if let resume = resume {
+            queryDict["resume"] = resume
+        }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
@@ -326,9 +329,12 @@ actor ACPBridge {
         }
         sendLine(jsonString)
 
-        // Read messages until we get a result or error
+        // Read messages until we get a result or error.
+        // No per-message timeout — rely on process termination (handleTermination) to
+        // detect a dead bridge. A per-message timeout (like Zed's old low_speed_timeout)
+        // fires prematurely during long-running tools (sentry-logs, slow API calls, etc.).
         while true {
-            let message = try await waitForMessage(timeout: 90.0)
+            let message = try await waitForMessage()
 
             switch message {
             case .`init`:
@@ -370,7 +376,7 @@ actor ACPBridge {
                         }
                     }
                     while true {
-                        let msg = try await waitForMessage(timeout: 10.0)
+                        let msg = try await waitForMessage()
                         switch msg {
                         case .result(let text, let sessionId, let costUsd, let inputTokens, let outputTokens, let cacheReadTokens, let cacheWriteTokens):
                             return QueryResult(text: text, costUsd: costUsd ?? 0, sessionId: sessionId, inputTokens: inputTokens, outputTokens: outputTokens, cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens)

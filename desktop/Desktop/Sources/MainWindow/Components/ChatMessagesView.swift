@@ -148,18 +148,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
                         if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
                             VStack(spacing: 12) {
-                                Spacer()
                                 ProgressView()
                                     .scaleEffect(0.8)
                                 Text("Loading...")
                                     .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textTertiary)
-                                Spacer()
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 80)
                         } else if let error = sessionsLoadError, messages.isEmpty {
                             VStack(spacing: 16) {
-                                Spacer()
                                 Image(systemName: "exclamationmark.triangle")
                                     .scaledFont(size: 40)
                                     .foregroundColor(OmiColors.warning)
@@ -187,10 +185,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                                     }
                                     .buttonStyle(.plain)
                                 }
-                                Spacer()
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .frame(maxWidth: .infinity)
                             .padding(32)
+                            .padding(.vertical, 48)
                         } else if messages.isEmpty {
                             welcomeContent()
                         } else {

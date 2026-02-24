@@ -24,8 +24,11 @@ class PostHogManager {
 
         let config = PostHogConfig(apiKey: apiKey, host: host)
 
-        // Enable automatic event capture
-        config.captureApplicationLifecycleEvents = true
+        // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
+        // synchronously on the main thread (via NSApplicationDidFinishLaunchingNotification), which XPCs to the
+        // mds (Spotlight) daemon and can hang for 2000ms+ when the daemon is slow. We already track lifecycle
+        // events manually via AnalyticsManager.shared.appLaunched() / appBecameActive() etc.
+        config.captureApplicationLifecycleEvents = false
         config.captureScreenViews = true
         config.preloadFeatureFlags = true
 

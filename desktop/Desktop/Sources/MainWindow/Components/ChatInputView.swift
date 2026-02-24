@@ -82,6 +82,7 @@ struct ChatInputView: View {
                         .padding(.trailing, 8)
                 }
             }
+            .frame(height: editorHeight)
 
             // Send/Stop button — inline to the right of the input
             if isSending && !hasText {
@@ -122,6 +123,11 @@ struct ChatInputView: View {
             if !newValue.isEmpty {
                 inputText = newValue
                 pendingText?.wrappedValue = ""
+            }
+        }
+        .onChange(of: inputText) { _, newValue in
+            if newValue.isEmpty {
+                editorHeight = inputMinHeight
             }
         }
         .onChange(of: askModeEnabled) { _, enabled in

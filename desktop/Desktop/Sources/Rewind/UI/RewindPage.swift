@@ -512,10 +512,10 @@ struct RewindPage: View {
 
     private var timelineContentBody: some View {
         VStack(spacing: 0) {
-            // Main frame display
-            Spacer()
+            // Main frame display - fills available space without Spacers to avoid SwiftUI layout loops
+            // (GeometryReader + Spacer inside VStack causes recursive StackLayout sizing)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls at bottom
             bottomControls
@@ -578,10 +578,9 @@ struct RewindPage: View {
 
     private var timelineWithSearch: some View {
         VStack(spacing: 0) {
-            // Frame display
-            Spacer()
+            // Frame display - fills available space (no Spacers to avoid layout loop)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls
             bottomControls
