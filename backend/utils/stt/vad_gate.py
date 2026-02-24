@@ -303,6 +303,11 @@ class VADStreamingGate:
         self.mode = mode
         self.uid = uid
         self.session_id = session_id
+        # All audio reaching the gate MUST be PCM16 LE (2 bytes/sample).
+        # Codecs (opus, aac, lc3) are decoded to int16 before buffering;
+        # pcm8/pcm16 are already linear16 at 8/16kHz from the hardware.
+        # Callers must pass channels=1 when DG is configured for mono.
+        self._sample_width = 2  # bytes per sample, always int16
 
         # VAD setup — always resample to 16kHz for best accuracy
         # Uses raw model probability (not VADIterator events) for continuous
@@ -461,7 +466,7 @@ class VADStreamingGate:
         self._bytes_received += len(pcm_data)
 
         # Track audio time
-        n_samples = len(pcm_data) // (2 * self.channels)
+        n_samples = len(pcm_data) // (self._sample_width * self.channels)
         chunk_ms = (n_samples * 1000.0) / self.sample_rate
         self._audio_cursor_ms += chunk_ms
 
@@ -505,7 +510,7 @@ class VADStreamingGate:
     def _update_state(self, pcm_data: bytes, is_speech: bool, wall_time: float) -> GateOutput:
         """State machine transition logic."""
         wall_rel = wall_time - self._first_audio_wall_time if self._first_audio_wall_time else 0.0
-        chunk_duration_sec = len(pcm_data) / (2.0 * self.channels * self.sample_rate)
+        chunk_duration_sec = len(pcm_data) / (self._sample_width * self.channels * self.sample_rate)
         chunk_ms = chunk_duration_sec * 1000.0
 
         if self._state == GateState.SILENCE:
@@ -514,7 +519,7 @@ class VADStreamingGate:
             self._pre_roll_total_ms += chunk_ms
             while self._pre_roll_total_ms > self._pre_roll_ms and len(self._pre_roll) > 1:
                 evicted = self._pre_roll.popleft()
-                evicted_ms = (len(evicted) / (2.0 * self.channels * self.sample_rate)) * 1000.0
+                evicted_ms = (len(evicted) / (self._sample_width * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms -= evicted_ms
 
             if is_speech:
@@ -526,7 +531,7 @@ class VADStreamingGate:
                 self._pre_roll_total_ms = 0.0
 
                 # Record mapper checkpoint for pre-roll start
-                pre_roll_duration = len(pre_roll_audio) / (2.0 * self.channels * self.sample_rate)
+                pre_roll_duration = len(pre_roll_audio) / (self._sample_width * self.channels * self.sample_rate)
                 pre_roll_wall_rel = max(0.0, wall_rel - pre_roll_duration + chunk_duration_sec)
                 self.dg_wall_mapper.on_audio_sent(pre_roll_duration, pre_roll_wall_rel)
                 self._bytes_sent += len(pre_roll_audio)
@@ -588,7 +593,7 @@ class VADStreamingGate:
                 self._pre_roll.clear()
                 self._pre_roll_total_ms = 0.0
                 self._pre_roll.append(pcm_data)
-                chunk_ms_local = (len(pcm_data) / (2.0 * self.channels * self.sample_rate)) * 1000.0
+                chunk_ms_local = (len(pcm_data) / (self._sample_width * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms = chunk_ms_local
                 # pcm_data is buffered in pre-roll and will count as skipped if never sent
                 self.dg_wall_mapper.on_silence_skipped()
