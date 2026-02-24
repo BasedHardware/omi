@@ -50,6 +50,7 @@ class MessageProvider extends ChangeNotifier {
   bool showTypingIndicator = false;
   bool sendingMessage = false;
   double aiStreamProgress = 1.0;
+  bool agentThinkingAfterText = false;
 
   String firstTimeLoadingText = '';
 
@@ -681,6 +682,11 @@ class MessageProvider extends ChangeNotifier {
       await for (var event in _agentChatService.sendQuery(text)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            if (agentThinkingAfterText) {
+              textBuffer += '\n\n';
+              agentThinkingAfterText = false;
+              notifyListeners();
+            }
             textBuffer += event.text;
             timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
               flushBuffer();
