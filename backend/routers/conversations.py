@@ -38,6 +38,9 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -125,7 +128,7 @@ def get_conversations(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('get_conversations', uid, limit, offset, statuses, folder_id, starred)
+    logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
@@ -154,7 +157,7 @@ def get_conversations(
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    print('get_conversation_by_id', uid, conversation_id)
+    logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     return _get_valid_conversation_by_id(uid, conversation_id)
 
 
@@ -199,7 +202,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 
 @router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    print('delete_conversation', conversation_id, uid)
+    logger.info(f'delete_conversation {conversation_id} {uid}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
     return {"status": "Ok"}
@@ -282,7 +285,7 @@ def set_action_item_status(
                 action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
     except Exception as e:
         # Don't break conversation route if mirrored update fails
-        print('Failed to mirror action item status update:', e)
+        logger.info(f'Failed to mirror action item status update: {e}')
     return {"status": "Ok"}
 
 
@@ -317,7 +320,7 @@ def update_action_item_description(
             if ai.get('description') == data.old_description:
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
     except Exception as e:
-        print('Failed to mirror action item description update:', e)
+        logger.info(f'Failed to mirror action item description update: {e}')
     return {"status": "Ok"}
 
 
@@ -338,7 +341,7 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
     except Exception as e:
-        print('Failed to mirror action item deletion:', e)
+        logger.info(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
 
 
@@ -373,14 +376,8 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
-    print(
-        'set_assignee_conversation_segment',
-        conversation_id,
-        segment_idx,
-        assign_type,
-        value,
-        use_for_speech_training,
-        uid,
+    logger.info(
+        f'set_assignee_conversation_segment {conversation_id} {segment_idx} {assign_type} {value} {use_for_speech_training} {uid}'
     )
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
@@ -397,7 +394,7 @@ def set_assignee_conversation_segment(
         conversation.transcript_segments[segment_idx].is_user = False
         conversation.transcript_segments[segment_idx].person_id = value
     else:
-        print(assign_type)
+        logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
@@ -448,14 +445,8 @@ def set_assignee_conversation_segment(
 
     :return: The updated conversation.
     """
-    print(
-        'set_assignee_conversation_segment',
-        conversation_id,
-        speaker_id,
-        assign_type,
-        value,
-        use_for_speech_training,
-        uid,
+    logger.info(
+        f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
     )
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = Conversation(**conversation)
@@ -473,11 +464,11 @@ def set_assignee_conversation_segment(
     elif assign_type == 'person_id':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
-                print(segment.speaker_id, speaker_id, value)
+                logger.info(f"{segment.speaker_id} {speaker_id} {value}")
                 segment.is_user = False
                 segment.person_id = value
     else:
-        print(assign_type)
+        logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
@@ -563,7 +554,7 @@ def assign_segments_bulk(
 def set_conversation_visibility(
     conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
-    print('update_conversation_visibility', conversation_id, value, uid)
+    logger.info(f'update_conversation_visibility {conversation_id} {value} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_visibility(uid, conversation_id, value)
     if value == ConversationVisibility.private:
@@ -578,7 +569,7 @@ def set_conversation_visibility(
 
 @router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
-    print('update_conversation_starred', conversation_id, starred, uid)
+    logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.set_conversation_starred(uid, conversation_id, starred)
     return {"status": "Ok"}

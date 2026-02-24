@@ -12,6 +12,9 @@ import httpx
 import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -123,7 +126,7 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         state_data = ast.literal_eval(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
         return state_data
     except Exception as e:
-        print(f"Error parsing state data: {e}")
+        logger.error(f"Error parsing state data: {e}")
         return None
 
 
@@ -387,7 +390,7 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
             return updated_integration
         else:
             error_text = token_response.text
-            print(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            logger.info(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
             if token_response.status_code == 400:
                 should_disconnect = False
                 try:
@@ -416,7 +419,7 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
     except HTTPException:
         raise
     except Exception as e:
-        print(f'{app_key}: Error refreshing token: {e}')
+        logger.error(f'{app_key}: Error refreshing token: {e}')
         raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
 
 
@@ -463,7 +466,7 @@ async def perform_request_with_token_retry(
                 new_access_token = integration.get('access_token') or ''
                 response = await request_fn(client, new_access_token)
             except Exception as e:
-                print(f'{app_key}: Token refresh failed during retry: {e}')
+                logger.info(f'{app_key}: Token refresh failed during retry: {e}')
                 return response, integration, e
     return response, integration, None
 
@@ -637,7 +640,7 @@ async def _create_task_internal(
             return {"success": False, "error": f"Unsupported integration: {app_key}", "error_code": "unsupported"}
 
     except Exception as e:
-        print(f"Error creating task in {app_key}: {e}")
+        logger.error(f"Error creating task in {app_key}: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -982,7 +985,7 @@ async def handle_oauth_callback(
             expires_in = token_data.get('expires_in')  # Seconds until expiry
 
             if not access_token:
-                print(f'{app_key}: No access token received in response')
+                logger.info(f'{app_key}: No access token received in response')
                 deep_link = f'omi://{app_key}/callback?error=no_access_token'
                 return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -1003,14 +1006,14 @@ async def handle_oauth_callback(
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
                 integration_data.update(additional_data)
             except Exception as e:
-                print(f'{app_key}: Error fetching additional data: {e}')
+                logger.error(f'{app_key}: Error fetching additional data: {e}')
 
             # Store in Firebase
             try:
                 users_db.set_task_integration(uid, app_key, integration_data)
-                print(f'{app_key}: Successfully stored tokens for user {uid}')
+                logger.info(f'{app_key}: Successfully stored tokens for user {uid}')
             except Exception as e:
-                print(f'{app_key}: Error storing tokens in Firebase: {e}')
+                logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
                 deep_link = f'omi://{app_key}/callback?error=storage_failed'
                 return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -1019,12 +1022,12 @@ async def handle_oauth_callback(
 
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
         else:
-            print(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
+            logger.info(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
             deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
     except Exception as e:
-        print(f'{app_key}: Unexpected error during OAuth callback: {e}')
+        logger.error(f'{app_key}: Unexpected error during OAuth callback: {e}')
         deep_link = f'omi://{app_key}/callback?error=server_error'
         return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -1094,7 +1097,7 @@ async def asana_oauth_callback(
                     user_gid = user_data.get('data', {}).get('gid')
                     return {'user_gid': user_gid} if user_gid else {}
             except Exception as e:
-                print(f'asana: Failed to fetch user GID: {e}')
+                logger.info(f'asana: Failed to fetch user GID: {e}')
             return {}
 
     config = AsanaConfig(
@@ -1151,7 +1154,7 @@ async def google_tasks_oauth_callback(
                             'default_list_title': items[0].get('title'),
                         }
             except Exception as e:
-                print(f'google_tasks: Failed to fetch task lists: {e}')
+                logger.info(f'google_tasks: Failed to fetch task lists: {e}')
             return {}
 
     config = GoogleTasksConfig(

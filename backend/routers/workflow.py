@@ -10,6 +10,9 @@ import models.integrations as integration_models
 import models.conversation as conversation_models
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -71,5 +74,5 @@ def get_memory(request: Request, uid: str, api_key: Annotated[str | None, Header
     # max 12
     limit = min(limit, 12)
 
-    print('get_memories', uid, limit)
+    logger.info(f'get_memories {uid} {limit}')
     return conversations_db.get_conversations(uid, limit, 0, include_discarded=False)
