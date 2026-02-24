@@ -25,6 +25,14 @@ class AgentChatService {
   bool get isConnected => _connected;
 
   Future<bool> connect(String ip, String authToken) async {
+    // Close any existing channel before opening a new one
+    if (_channel != null) {
+      try {
+        await _channel!.sink.close();
+      } catch (_) {}
+      _channel = null;
+    }
+    _connected = false;
     _ip = ip;
     _authToken = authToken;
     try {
