@@ -22,6 +22,9 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var isUserDragging = false
+    /// Set by ResizeHandleNSView while the user is manually dragging the corner.
+    /// Prevents the response-height observer from fighting manual resize.
+    var isUserResizing = false
     /// Suppresses hover resizes during close animation to prevent position drift.
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
@@ -533,8 +536,10 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
         let maxHeight = baseHeight * 2
 
-        // Start at a modest height; the content observer will grow it as tokens stream in.
-        let initialSize = NSSize(width: Self.expandedWidth, height: Self.minResponseHeight)
+        // Start at the larger of minResponseHeight or current frame height so we never
+        // shrink the window (e.g. during follow-up exchanges where it's already expanded).
+        let startHeight = max(Self.minResponseHeight, frame.height)
+        let initialSize = NSSize(width: Self.expandedWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
         setupResponseHeightObserver(maxHeight: maxHeight)
     }
@@ -549,6 +554,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             .sink { [weak self] contentHeight in
                 guard let self = self,
                       self.state.showingAIResponse,
+                      !self.isUserResizing,
                       contentHeight > 0
                 else { return }
                 let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
@@ -660,7 +666,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        if !isResizingProgrammatically && state.showingAIResponse {
+        if !isResizingProgrammatically && !isUserResizing && state.showingAIResponse {
             UserDefaults.standard.set(
                 NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
             )
@@ -951,6 +957,7 @@ class FloatingControlBarManager {
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
         barWindow.state.isAILoading = true
+        var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak barWindow] messages in
@@ -964,9 +971,12 @@ class FloatingControlBarManager {
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
-                    if let barWindow = barWindow, !barWindow.state.showingAIResponse {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            barWindow.state.showingAIResponse = true
+                    if let barWindow = barWindow, !hasSetUpResponseHeight {
+                        hasSetUpResponseHeight = true
+                        if !barWindow.state.showingAIResponse {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                barWindow.state.showingAIResponse = true
+                            }
                         }
                         barWindow.resizeToResponseHeightPublic(animated: true)
                     }
@@ -975,14 +985,12 @@ class FloatingControlBarManager {
                 }
             }
 
-        // Build prompt with screenshot context if available
-        var fullMessage = message
-        if let url = latestScreenshot {
-            fullMessage = "[Screenshot of user's screen attached: \(url.path)]\n\n\(message)"
-        }
+        // Load screenshot as image data for the ACP image content block
+        let screenshotData = latestScreenshot.flatMap { try? Data(contentsOf: $0) }
 
-        let floatingBarSuffix = "<response_style_override>This query comes from the floating quick-access bar. Respond in 1–3 sentences maximum. Be direct and concise — no lists, no headers, no lengthy explanations.</response_style_override>"
-        await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: floatingBarSuffix)
+        let concisePrefix = "[IMPORTANT: Reply in 1 sentence only. No lists, no headers. Be extremely concise.]\n\n"
+        let floatingBarSuffix = "<response_style_override>Respond in 1 sentence maximum. Be direct and concise — no lists, no headers.</response_style_override><image_usage>A screenshot of the user's current screen may be attached. Only use it if the user's question is about the screen or a visible app. Never mention the screenshot, reference it, or say you are or aren't using it — just answer directly.</image_usage>"
+        await provider.sendMessage(concisePrefix + message, model: ShortcutSettings.shared.selectedModel, systemPromptSuffix: floatingBarSuffix, imageData: screenshotData)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false

@@ -284,6 +284,7 @@ actor ACPBridge {
         mode: String? = nil,
         model: String? = nil,
         resume: String? = nil,
+        imageData: Data? = nil,
         onTextDelta: @escaping TextDeltaHandler,
         onToolCall: @escaping ToolCallHandler,
         onToolActivity: @escaping ToolActivityHandler,
@@ -313,6 +314,9 @@ actor ACPBridge {
         }
         if let resume = resume {
             queryDict["resume"] = resume
+        }
+        if let imageData = imageData {
+            queryDict["imageBase64"] = imageData.base64EncodedString()
         }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)

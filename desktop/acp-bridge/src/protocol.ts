@@ -12,6 +12,7 @@ export interface QueryMessage {
   mode?: "ask" | "act";
   model?: string;
   resume?: string;
+  imageBase64?: string;
 }
 
 export interface ToolResultMessage {

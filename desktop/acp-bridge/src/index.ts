@@ -726,9 +726,15 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
     // Send the prompt — retry with fresh session if stale
     const sendPrompt = async (): Promise<void> => {
+      const promptBlocks: Array<Record<string, unknown>> = [];
+      if (msg.imageBase64) {
+        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/jpeg" });
+      }
+      promptBlocks.push({ type: "text", text: fullPrompt });
+
       const promptResult = (await acpRequest("session/prompt", {
         sessionId,
-        prompt: [{ type: "text", text: fullPrompt }],
+        prompt: promptBlocks,
       })) as {
         stopReason: string;
         // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess

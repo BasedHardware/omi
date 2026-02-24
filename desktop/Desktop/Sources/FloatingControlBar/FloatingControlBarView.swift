@@ -69,6 +69,19 @@ struct FloatingControlBarView: View {
                 .transition(.opacity)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
+            }
+        }
         .clipped()
         .onHover { hovering in
             // Resize window BEFORE updating SwiftUI state on expand so the expanded
