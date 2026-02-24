@@ -56,6 +56,53 @@ from database.redis_db import r
 
 Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
+### Backend Service Map
+
+The backend has 7 services. Here's how they talk to each other:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Shared State                             │
+│  Firestore (users, conversations, memories, action_items, …)   │
+│  Redis (cache, rate limits, pub/sub on 'cache_invalidation')    │
+└──────────┬──────────────────────────────────┬───────────────────┘
+           │                                  │
+   ┌───────┴────────┐               ┌────────┴────────┐
+   │ backend        │  WebSocket    │ pusher           │
+   │ backend-sync   ├──────────────►│ /v1/trigger/…    │
+   │ backend-integ. │  (binary      │                  │
+   │ backend-listen │   protocol)   │ Also calls:      │
+   │                │               │ → diarizer       │
+   │ Calls:         │               │ → vad            │
+   │ → diarizer     │               │ → speech-profile │
+   │ → vad          │               └─────────────────-┘
+   │ → speech-prof. │
+   └────────────────┘
+           │
+   ┌───────┴──────────────────────────────────────────────────────┐
+   │                   GPU Services (HTTP POST)                   │
+   │  diarizer  /v2/embedding          (speaker embeddings)       │
+   │  vad       /v1/vad                (voice activity detection) │
+   │  speech-profile /v1/speaker-identification                   │
+   └──────────────────────────────────────────────────────────────┘
+
+   notifications-job: cron job, reads Firestore + Redis, sends push
+```
+
+**Communication protocols:**
+- **backend-listen → pusher**: WebSocket with custom binary protocol (struct-packed headers, message types 101-105). See `utils/pusher.py` → `connect_to_trigger_pusher()`.
+- **backend/pusher → diarizer**: HTTP POST to `HOSTED_SPEAKER_EMBEDDING_API_URL`. See `utils/stt/speaker_embedding.py`.
+- **backend/pusher → vad**: HTTP POST to `HOSTED_VAD_API_URL` (results cached in Redis 24h). See `utils/stt/vad.py`.
+- **backend/pusher → speech-profile**: HTTP POST to `HOSTED_SPEECH_PROFILE_API_URL`. See `utils/stt/speech_profile.py`.
+- **All services → Firestore**: Shared database via `database/_client.py`.
+- **All services → Redis**: Shared cache + pub/sub for cache invalidation via `database/redis_db.py` and `database/redis_pubsub.py`.
+
+**Service discovery env vars:**
+- `HOSTED_PUSHER_API_URL` — pusher WebSocket endpoint
+- `HOSTED_VAD_API_URL` — VAD service
+- `HOSTED_SPEAKER_EMBEDDING_API_URL` — diarizer
+- `HOSTED_SPEECH_PROFILE_API_URL` — speaker identification
+
 ## App (Flutter)
 
 ### Localization Required
