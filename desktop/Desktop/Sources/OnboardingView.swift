@@ -928,22 +928,6 @@ struct OnboardingPrivacySheet: View {
                                     .cornerRadius(3)
                             }
 
-                            HStack(spacing: 8) {
-                                Image(systemName: "lock.fill")
-                                    .scaledFont(size: 11)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                Text("End-to-end encryption")
-                                    .scaledFont(size: 12)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                Text("Coming Soon")
-                                    .scaledFont(size: 10, weight: .semibold)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(OmiColors.backgroundQuaternary.opacity(0.5))
-                                    .cornerRadius(3)
-                            }
-
                             Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
                                 .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)

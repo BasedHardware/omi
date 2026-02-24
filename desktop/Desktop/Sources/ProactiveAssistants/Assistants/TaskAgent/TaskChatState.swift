@@ -144,7 +144,7 @@ class TaskChatState: ObservableObject {
 
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false) async {
+    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
@@ -225,8 +225,17 @@ class TaskChatState: ObservableObject {
             guard let bridge = acpBridge else {
                 throw BridgeError.notRunning
             }
+            // If task context is provided (first message), prepend it to the prompt
+            // so the AI gets full task details. The user's displayed message stays clean.
+            let fullPrompt: String
+            if let ctx = taskContext {
+                fullPrompt = "# Task Context\n\n\(ctx)\n\n---\n\n# User Message\n\n\(trimmedText)"
+            } else {
+                fullPrompt = trimmedText
+            }
+
             let queryResult = try await bridge.query(
-                prompt: trimmedText,
+                prompt: fullPrompt,
                 systemPrompt: systemPrompt,
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,

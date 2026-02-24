@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 // MARK: - Task Category (by due date)
 
@@ -966,7 +967,7 @@ class TasksViewModel: ObservableObject {
     }
 
     /// Handle a key-down event. Returns true if the event was consumed.
-    func handleKeyDown(_ event: NSEvent) -> Bool {
+    func handleKeyDown(_ event: NSEvent, chatOpen: Bool = false) -> Bool {
         // Don't intercept keys when a text field has focus
         if let firstResponder = NSApp.keyWindow?.firstResponder,
            firstResponder is NSTextView || firstResponder is NSTextField {
@@ -1042,7 +1043,9 @@ class TasksViewModel: ObservableObject {
         }
 
         // Enter: inline create or double-enter for edit
-        if keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
+        // Skip when chat panel is open — the input may briefly lose focus after
+        // sending a message and we don't want Enter to accidentally trigger here.
+        if !chatOpen && keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
             if !searchText.isEmpty { return false }
 
             let now = Date()
@@ -2317,12 +2320,8 @@ struct TasksPage: View {
         guard keyboardMonitor == nil else { return }
         let vm = viewModel
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak chatCoordinator] event in
-            // Don't intercept keyboard shortcuts when the chat panel is open —
-            // the chat input may briefly lose first-responder status (e.g. after
-            // sending a message) and we don't want Enter to trigger task-list
-            // actions (inline create / inline edit) in that window.
-            if chatCoordinator?.isPanelOpen == true { return event }
-            return vm.handleKeyDown(event) ? nil : event
+            let chatOpen = chatCoordinator?.isPanelOpen == true
+            return vm.handleKeyDown(event, chatOpen: chatOpen) ? nil : event
         }
     }
 
@@ -3321,19 +3320,26 @@ struct TaskCategorySection: View {
                                 .frame(height: 2)
                         }
                     }
-                    .dropDestination(for: String.self) { droppedIds, _ in
-                        log("DROP-TOP: Received drop at top of \(category.rawValue), ids=\(droppedIds)")
-                        isTopDropTargeted = false
-                        guard let droppedId = droppedIds.first,
-                              let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) else {
-                            log("DROP-TOP: Could not find dropped task")
-                            return false
+                    .onDrop(of: [.plainText], isTargeted: Binding(
+                        get: { isTopDropTargeted },
+                        set: { targeted in
+                            log("DROP-TOP: isTargeted=\(targeted) on \(category.rawValue)")
+                            isTopDropTargeted = targeted
                         }
-                        onMoveTask?(droppedTask, 0, category)
+                    )) { providers in
+                        log("DROP-TOP: Received drop at top of \(category.rawValue)")
+                        isTopDropTargeted = false
+                        guard let provider = providers.first else { return false }
+                        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                            guard let data = data as? Data,
+                                  let droppedId = String(data: data, encoding: .utf8) else { return }
+                            DispatchQueue.main.async {
+                                if let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) {
+                                    onMoveTask?(droppedTask, 0, category)
+                                }
+                            }
+                        }
                         return true
-                    } isTargeted: { targeted in
-                        log("DROP-TOP: isTargeted=\(targeted) on \(category.rawValue)")
-                        isTopDropTargeted = targeted
                     }
             }
 
@@ -3406,9 +3412,9 @@ struct TaskCategorySection: View {
 
 // MARK: - Conditional Drag & Drop (reduces gesture graph depth when disabled)
 
-/// Applies .dropDestination to a task row for reorder drop targets.
-/// The .draggable is handled by the drag handle inside TaskRow to avoid conflicts with swipe gestures.
-/// When disabled (e.g. multi-select mode), no drop modifiers are applied.
+/// Applies .onDrop to a task row for reorder drop targets.
+/// Uses onDrag/onDrop (NSItemProvider) instead of draggable/dropDestination for reliable macOS support.
+/// The .onDrag is handled by the drag handle inside TaskRow to avoid conflicts with swipe gestures.
 struct TaskDragDropModifier: ViewModifier {
     let isEnabled: Bool
     let taskId: String
@@ -3433,32 +3439,44 @@ struct TaskDragDropModifier: ViewModifier {
                             .transition(.opacity)
                     }
                 }
-                .dropDestination(for: String.self) { droppedIds, _ in
-                    log("DROP: Received drop on task \(taskId), droppedIds=\(droppedIds)")
+                .onDrop(of: [.plainText], isTargeted: Binding(
+                    get: { isDropTarget },
+                    set: { targeted in
+                        log("DROP: isTargeted=\(targeted) on task \(taskId)")
+                        if targeted {
+                            onHoverChanged?(taskId, true)
+                        } else {
+                            onHoverChanged?(taskId, false)
+                        }
+                    }
+                )) { providers in
+                    log("DROP: Received drop on task \(taskId), providers=\(providers.count)")
                     onDragEnded?()
-                    guard let droppedId = droppedIds.first,
-                          droppedId != taskId else {
-                        log("DROP: Rejected — same task or empty droppedIds")
+                    guard let provider = providers.first else {
+                        log("DROP: No providers")
                         return false
                     }
-                    guard let targetIndex = findTargetIndex?() else {
-                        log("DROP: Rejected — findTargetIndex returned nil")
-                        return false
-                    }
-                    if let droppedTask = findTask?(droppedId) {
-                        log("DROP: Moving task \(droppedId) to index \(targetIndex)")
-                        onMoveTask?(droppedTask, targetIndex)
-                    } else {
-                        log("DROP: Could not find task for id \(droppedId)")
+                    provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                        guard let data = data as? Data,
+                              let droppedId = String(data: data, encoding: .utf8),
+                              droppedId != taskId else {
+                            log("DROP: Rejected — same task or failed to decode")
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            guard let targetIndex = findTargetIndex?() else {
+                                log("DROP: findTargetIndex returned nil")
+                                return
+                            }
+                            if let droppedTask = findTask?(droppedId) {
+                                log("DROP: Moving task \(droppedId) to index \(targetIndex)")
+                                onMoveTask?(droppedTask, targetIndex)
+                            } else {
+                                log("DROP: Could not find task for id \(droppedId)")
+                            }
+                        }
                     }
                     return true
-                } isTargeted: { isTargeted in
-                    log("DROP: isTargeted=\(isTargeted) on task \(taskId)")
-                    if isTargeted {
-                        onHoverChanged?(taskId, true)
-                    } else {
-                        onHoverChanged?(taskId, false)
-                    }
                 }
         } else {
             content
@@ -3618,28 +3636,44 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        swipeableContent
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                onSelect?(task)
-                if isChatActive, !isActiveChatTask {
-                    onOpenChat?(task)
-                }
+        HStack(alignment: .center, spacing: 0) {
+            // Drag handle OUTSIDE swipeableContent so DragGesture doesn't intercept it
+            if category != nil && !isMultiSelectMode && !isDeletedTask {
+                Image(systemName: "line.3.horizontal")
+                    .scaledFont(size: 10)
+                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+                    .frame(width: 16, height: 24)
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
+                        return NSItemProvider(object: task.id as NSString)
+                    }
+                    .help("Drag to reorder")
             }
-            .sheet(isPresented: $showTaskDetail) {
-                TaskDetailView(
-                    task: task,
-                    onDismiss: { showTaskDetail = false }
+
+            swipeableContent
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
                 )
-            }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelect?(task)
+                    if isChatActive, !isActiveChatTask {
+                        onOpenChat?(task)
+                    }
+                }
+        }
+        .sheet(isPresented: $showTaskDetail) {
+            TaskDetailView(
+                task: task,
+                onDismiss: { showTaskDetail = false }
+            )
+        }
     }
 
     // MARK: - Swipeable Content
@@ -3795,22 +3829,7 @@ struct TaskRow: View {
     }
 
     private var taskRowContent: some View {
-        HStack(alignment: .center, spacing: 0) {
-            // Drag handle (visible on hover, only in categorized view)
-            if category != nil && !isMultiSelectMode && !isDeletedTask {
-                Image(systemName: "line.3.horizontal")
-                    .scaledFont(size: 10)
-                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
-                    .frame(width: 16, height: 24)
-                    .contentShape(Rectangle())
-                    .draggable(task.id) {
-                        log("DRAG: Started dragging task \(task.id) — \(task.description.prefix(40))")
-                        return TaskDragPreviewSimple(taskId: task.id, description: task.description)
-                    }
-                    .help("Drag to reorder")
-            }
-
-            HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             // Indent visual (vertical line for indented tasks)
             if indentLevel > 0 {
                 HStack(spacing: 0) {
@@ -4053,7 +4072,6 @@ struct TaskRow: View {
                 }
             }
 
-            } // end inner HStack(spacing: 12)
         }
         .overlay(alignment: .trailing) {
             // Hover actions overlaid on trailing edge (no layout shift)

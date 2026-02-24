@@ -76,7 +76,13 @@ struct TaskChatPanel: View {
                 ChatInputView(
                     onSend: { text in
                         AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
-                        Task { await taskState.sendMessage(text) }
+                        Task {
+                            // On the first message, include full task details so the AI
+                            // has complete context (same data the Investigate button sends).
+                            let isFirstMessage = taskState.messages.isEmpty
+                            let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
+                            await taskState.sendMessage(text, taskContext: taskContext)
+                        }
                     },
                     onFollowUp: { text in
                         Task { await taskState.sendFollowUp(text) }
