@@ -30,6 +30,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database.vector_db import upsert_memory_vector, MEMORIES_NAMESPACE
 from models.memories import LEGACY_TO_NEW_CATEGORY
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize Firebase Admin SDK
 try:
@@ -39,8 +42,8 @@ except ValueError:
     # App already initialized
     pass
 except Exception as e:
-    print("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    print(e)
+    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+    logger.info(e)
     sys.exit(1)
 
 db = firestore.client()
@@ -123,16 +126,16 @@ def process_memory(uid: str, memory: dict, dry_run: bool = False) -> dict:
 
 def process_user(uid: str, dry_run: bool = False, batch_size: int = 100) -> dict:
     """Process all memories for a user."""
-    print(f"\nProcessing user: {uid}")
+    logger.info(f"\nProcessing user: {uid}")
 
     memories = get_user_memories(uid)
     total = len(memories)
 
     if total == 0:
-        print(f"  No memories found for user {uid}")
+        logger.info(f"  No memories found for user {uid}")
         return {'uid': uid, 'total': 0, 'processed': 0, 'errors': 0}
 
-    print(f"  Found {total} memories")
+    logger.info(f"  Found {total} memories")
 
     processed = 0
     errors = 0
@@ -147,19 +150,19 @@ def process_user(uid: str, dry_run: bool = False, batch_size: int = 100) -> dict
                 category_updates += 1
         elif result['status'] == 'error':
             errors += 1
-            print(f"    Error processing memory {result['memory_id']}: {result.get('error')}")
+            logger.error(f"    Error processing memory {result['memory_id']}: {result.get('error')}")
         elif result['status'] == 'dry_run':
             processed += 1
 
         # Progress update every batch_size memories
         if (i + 1) % batch_size == 0:
-            print(f"    Processed {i + 1}/{total} memories...")
+            logger.info(f"    Processed {i + 1}/{total} memories...")
 
         # Rate limiting to avoid overwhelming the APIs
         if not dry_run and (i + 1) % 10 == 0:
             time.sleep(0.1)
 
-    print(f"  Completed: {processed} processed, {errors} errors, {category_updates} category updates")
+    logger.info(f"  Completed: {processed} processed, {errors} errors, {category_updates} category updates")
 
     return {
         'uid': uid,
@@ -179,27 +182,27 @@ def main():
 
     args = parser.parse_args()
 
-    print("=" * 60)
-    print("Memory Vector Backfill Migration")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Memory Vector Backfill Migration")
+    logger.info("=" * 60)
 
     if args.dry_run:
-        print("DRY RUN MODE - No changes will be made")
+        logger.info("DRY RUN MODE - No changes will be made")
 
-    print(f"Pinecone namespace: {MEMORIES_NAMESPACE}")
-    print()
+    logger.info(f"Pinecone namespace: {MEMORIES_NAMESPACE}")
+    logger.info("")
 
     # Get users to process
     if args.uid:
         user_ids = [args.uid]
     else:
-        print("Fetching all user IDs...")
+        logger.info("Fetching all user IDs...")
         user_ids = get_all_user_ids()
-        print(f"Found {len(user_ids)} users")
+        logger.info(f"Found {len(user_ids)} users")
 
         if args.limit:
             user_ids = user_ids[: args.limit]
-            print(f"Limiting to {args.limit} users")
+            logger.info(f"Limiting to {args.limit} users")
 
     # Process users
     total_stats = {
@@ -221,25 +224,25 @@ def main():
             total_stats['total_errors'] += result['errors']
             total_stats['total_category_updates'] += result.get('category_updates', 0)
         except Exception as e:
-            print(f"Error processing user {uid}: {e}")
+            logger.error(f"Error processing user {uid}: {e}")
             total_stats['total_errors'] += 1
 
     elapsed_time = time.time() - start_time
 
     # Summary
-    print()
-    print("=" * 60)
-    print("Migration Summary")
-    print("=" * 60)
-    print(f"Users processed: {total_stats['users_processed']}")
-    print(f"Total memories: {total_stats['total_memories']}")
-    print(f"Successfully processed: {total_stats['total_processed']}")
-    print(f"Errors: {total_stats['total_errors']}")
-    print(f"Category updates: {total_stats['total_category_updates']}")
-    print(f"Elapsed time: {elapsed_time:.2f} seconds")
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("Migration Summary")
+    logger.info("=" * 60)
+    logger.info(f"Users processed: {total_stats['users_processed']}")
+    logger.info(f"Total memories: {total_stats['total_memories']}")
+    logger.info(f"Successfully processed: {total_stats['total_processed']}")
+    logger.info(f"Errors: {total_stats['total_errors']}")
+    logger.info(f"Category updates: {total_stats['total_category_updates']}")
+    logger.info(f"Elapsed time: {elapsed_time:.2f} seconds")
 
     if args.dry_run:
-        print("\nThis was a DRY RUN. Run without --dry-run to apply changes.")
+        logger.info("\nThis was a DRY RUN. Run without --dry-run to apply changes.")
 
 
 if __name__ == '__main__':

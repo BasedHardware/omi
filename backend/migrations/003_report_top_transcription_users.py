@@ -7,6 +7,9 @@ from datetime import datetime, timedelta, timezone
 
 import firebase_admin
 from firebase_admin import auth, credentials, firestore
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -24,10 +27,10 @@ try:
         cred = credentials.ApplicationDefault()
     firebase_admin.initialize_app(cred)
 except Exception as e:
-    print(
+    logger.error(
         "Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set for local dev or SERVICE_ACCOUNT_JSON for Modal."
     )
-    print(e)
+    logger.info(e)
     sys.exit(1)
 
 
@@ -82,7 +85,7 @@ def get_user_usage(uid: str) -> tuple[str, dict | None]:
 
         return uid, final_data
     except Exception as e:
-        print(f"ERROR calculating usage for user {uid}: {e}")
+        logger.error(f"ERROR calculating usage for user {uid}: {e}")
 
     return uid, None
 
@@ -95,7 +98,7 @@ def load_ignore_uids(filepath: str) -> set:
         with open(filepath, 'r') as f:
             return {line.strip() for line in f if line.strip()}
     except FileNotFoundError:
-        print(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
+        logger.warning(f"Warning: Ignore file not found at {filepath}. Continuing without ignoring any UIDs.")
         return set()
 
 
@@ -107,28 +110,28 @@ def main():
     parser.add_argument('--output', type=str, default='user_usage_report.csv', help='Path to the output CSV file.')
     args = parser.parse_args()
 
-    print("Starting user usage analytics export for the last 24 hours...")
+    logger.info("Starting user usage analytics export for the last 24 hours...")
 
     if args.uids:
         uids_to_process = [uid.strip() for uid in args.uids.split(',')]
-        print(f"Processing specific UIDs: {uids_to_process}")
+        logger.info(f"Processing specific UIDs: {uids_to_process}")
     else:
         ignore_uids = load_ignore_uids(args.ignore_file)
         if ignore_uids:
-            print(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
+            logger.info(f"Loaded {len(ignore_uids)} UIDs to ignore from {args.ignore_file}.")
 
-        print("Fetching list of all users from Firestore...")
+        logger.info("Fetching list of all users from Firestore...")
         users_ref = db.collection('users')
         all_uids = [user.id for user in users_ref.stream()]
         uids_to_process = [uid for uid in all_uids if uid not in ignore_uids]
-        print(f"Found {len(uids_to_process)} users to process.")
+        logger.info(f"Found {len(uids_to_process)} users to process.")
 
     if not uids_to_process:
-        print("No users to process. Exiting.")
+        logger.info("No users to process. Exiting.")
         return
 
     # Calculate usage and filter for users with recent activity
-    print(f"\nCalculating usage for {len(uids_to_process)} users...")
+    logger.info(f"\nCalculating usage for {len(uids_to_process)} users...")
     all_user_usage = []
     with ThreadPoolExecutor(max_workers=32) as executor:
         futures = {executor.submit(get_user_usage, uid): uid for uid in uids_to_process}
@@ -141,18 +144,20 @@ def main():
                 user_uid, usage = future.result()
                 if usage:
                     all_user_usage.append((user_uid, usage))
-                    print(f"({completed_count}/{len(uids_to_process)}) COMPLETED: Found usage for user {uid}")
+                    logger.info(f"({completed_count}/{len(uids_to_process)}) COMPLETED: Found usage for user {uid}")
                 else:
-                    print(f"({completed_count}/{len(uids_to_process)}) COMPLETED: No recent usage for user {uid}")
+                    logger.info(f"({completed_count}/{len(uids_to_process)}) COMPLETED: No recent usage for user {uid}")
             except Exception as exc:
-                print(f"({completed_count}/{len(uids_to_process)}) FAILED: User {uid} generated an exception: {exc}")
+                logger.error(
+                    f"({completed_count}/{len(uids_to_process)}) FAILED: User {uid} generated an exception: {exc}"
+                )
 
     if not all_user_usage:
-        print("\nNo users with recent usage found. Exiting.")
+        logger.info("\nNo users with recent usage found. Exiting.")
         return
 
     # For users with usage, fetch email addresses
-    print(f"\nFound {len(all_user_usage)} users with recent usage. Fetching their emails...")
+    logger.info(f"\nFound {len(all_user_usage)} users with recent usage. Fetching their emails...")
     uids_with_usage = [uid for uid, usage in all_user_usage]
     user_emails = {}
     # get_users can take a list of up to 100 identifiers
@@ -163,10 +168,10 @@ def main():
             for user in get_users_result.users:
                 user_emails[user.uid] = user.email or 'N/A'
             for user_identifier in get_users_result.not_found:
-                print(f"Warning: User with UID {user_identifier.uid} not found in Firebase Auth.")
+                logger.warning(f"Warning: User with UID {user_identifier.uid} not found in Firebase Auth.")
                 user_emails[user_identifier.uid] = 'Not Found'
         except Exception as e:
-            print(f"Error fetching users batch: {e}")
+            logger.error(f"Error fetching users batch: {e}")
             for uid in chunk:
                 if uid not in user_emails:
                     user_emails[uid] = "Error fetching email"
@@ -193,9 +198,9 @@ def main():
                 email = user_emails.get(uid, 'N/A')
                 writer.writerow({'uid': uid, 'email': email, **usage})
 
-        print(f"\nScript finished. Usage data for {len(all_user_usage)} users exported to {args.output}")
+        logger.info(f"\nScript finished. Usage data for {len(all_user_usage)} users exported to {args.output}")
     except IOError as e:
-        print(f"Error writing to file {args.output}: {e}")
+        logger.error(f"Error writing to file {args.output}: {e}")
 
 
 if __name__ == '__main__':

@@ -5,6 +5,9 @@ import firebase_admin
 import asyncio
 
 from utils.other.jobs import start_job
+import logging
+
+logger = logging.getLogger(__name__)
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -13,5 +16,5 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 else:
     firebase_admin.initialize_app()
 
-print('Starting job...')
+logger.info('Starting job...')
 asyncio.run(start_job())

@@ -20,6 +20,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -29,8 +32,8 @@ try:
     cred = credentials.ApplicationDefault()
     firebase_admin.initialize_app(cred)
 except Exception as e:
-    print("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
-    print(e)
+    logger.error("Error initializing Firebase Admin SDK. Make sure GOOGLE_APPLICATION_CREDENTIALS is set.")
+    logger.info(e)
     sys.exit(1)
 
 db = firestore.client()
@@ -53,7 +56,7 @@ lock = threading.Lock()
 def log_progress(message: str):
     """Thread-safe logging with timestamp"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {message}")
+    logger.info(f"[{timestamp}] {message}")
 
 
 def retry_with_backoff(func, max_retries=3, base_delay=1.0, max_delay=60.0):
