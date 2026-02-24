@@ -254,7 +254,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None):
     chat_session = acquire_chat_session(uid, app_id=app_id)
 
     prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    logger.info(f'initial_message_util returned {len(prev_messages)} {'prev messages for'} {app_id}')
+    logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
 
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None

@@ -80,7 +80,7 @@ def postprocess_conversation(
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text.strip() for segment in conversation.transcript_segments]))
         new_count = len(''.join([segment.text.strip() for segment in fal_segments]))
-        logger.info(f'Prev characters count: {count} {'New characters count:'} {new_count}')
+        logger.info(f'Prev characters count: {count} New characters count: {new_count}')
 
         fal_failed = not fal_segments or new_count < (count * 0.85)
 

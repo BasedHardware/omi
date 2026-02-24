@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:
     result = query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp, k=k)
-    logger.info(f'retrieve_for_topic {topic} {[start_timestamp, end_timestamp]} {'found:'} {len(result)} {'vectors'}')
+    logger.info(f'retrieve_for_topic {topic} {[start_timestamp, end_timestamp]} found: {len(result)} vectors')
     for memory_id in result:
         memories_id[memory_id].append(topic)
     return result

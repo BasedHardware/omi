@@ -493,7 +493,7 @@ graph_stream = workflow.compile()
 def execute_graph_chat(
     uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Conversation]]:
-    logger.info(f'execute_graph_chat app    : {app.id if app else '<none>'}')
+    logger.info(f'execute_graph_chat app    : {app.id if app else "<none>"}')
     tz = notification_db.get_user_time_zone(uid)
 
     # Get per-request LangSmith tracer callbacks (enables tracing without global env)
@@ -538,7 +538,7 @@ async def execute_graph_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
-    logger.info(f'execute_graph_chat_stream app:  {app.id if app else '<none>'}')
+    logger.info(f'execute_graph_chat_stream app:  {app.id if app else "<none>"}')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 

@@ -136,7 +136,7 @@ async def _stream_handler(
     """
     session_id = str(uuid.uuid4())
     logger.info(
-        f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} {f'custom_stt={custom_stt_mode}'} {f'onboarding={onboarding_mode}'}'
+        f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
