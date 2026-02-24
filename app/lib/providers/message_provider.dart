@@ -704,7 +704,9 @@ class MessageProvider extends ChangeNotifier {
             if (message.text.isNotEmpty) {
               agentThinkingAfterText = true;
             }
-            message.thinkings.add(event.text);
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
+            }
             notifyListeners();
             break;
           case AgentChatEventType.result:
