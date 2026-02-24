@@ -42,12 +42,19 @@ ingress:
 
 env:
   - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/secrets/google-credentials.json"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+
+volumes:
+  - name: gcp-credentials
+    secret:
+      secretName: agent-proxy-gcp-credentials
+
+volumeMounts:
+  - name: gcp-credentials
+    mountPath: /secrets
+    readOnly: true
 
 resources:
   requests:
