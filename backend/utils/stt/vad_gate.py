@@ -383,7 +383,7 @@ class VADStreamingGate:
         # Convert to mono if stereo
         data = pcm_data
         if self.channels == 2:
-            data = audioop.tomono(data, 2, 0.5, 0.5)
+            data = audioop.tomono(data, self._sample_width, 0.5, 0.5)
 
         data_int16 = np.frombuffer(data, dtype=np.int16)
 
