@@ -604,25 +604,23 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (currentAppId != null) ...[
+                  _buildAppIcon(context, currentAppId, size: 15),
+                  const SizedBox(width: 6),
+                ] else ...[
+                  _buildThinkingIconWidget(displayThinkingText, size: 15),
+                  const SizedBox(width: 6),
+                ],
                 Flexible(
                   child: ShimmerWithTimeout(
                     baseColor: Colors.white,
                     highlightColor: Colors.grey,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildThinkingIconWidget(thinkingText ?? 'Thinking', size: 15),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            overflow: TextOverflow.fade,
-                            maxLines: 1,
-                            softWrap: false,
-                            thinkingText ?? 'Thinking',
-                            style: const TextStyle(color: Colors.white, fontSize: 15),
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      overflow: TextOverflow.fade,
+                      maxLines: 1,
+                      softWrap: false,
+                      displayThinkingText,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
                     ),
                   ),
                 ),
