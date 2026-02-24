@@ -663,6 +663,8 @@ class MessageProvider extends ChangeNotifier {
       }
     }
 
+    Timer? silenceTimer;
+
     try {
       // Connect to agent proxy (authenticates via Firebase token)
       final connected = await _agentChatService.connect();
@@ -684,8 +686,6 @@ class MessageProvider extends ChangeNotifier {
       final historyLines =
           history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
       final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
-
-      Timer? silenceTimer;
 
       void startSilenceTimer() {
         silenceTimer?.cancel();
