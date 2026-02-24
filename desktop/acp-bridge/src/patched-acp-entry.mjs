@@ -66,8 +66,9 @@ ClaudeAcpAgent.prototype.prompt = async function (params) {
     // Total = new input + cache writes + cache reads + output
     const totalTokens = inputTokens + cacheWrite + cacheRead + outputTokens;
 
+    const modelKeys = Object.keys(session._lastModelUsage ?? {});
     console.error(
-      `[patched-acp] Usage: cost=$${costUsd}, ` +
+      `[patched-acp] Usage: model=${modelKeys.join(",") || "unknown"}, cost=$${costUsd}, ` +
       `input=${inputTokens}, output=${outputTokens}, ` +
       `cacheWrite=${cacheWrite}, cacheRead=${cacheRead}, ` +
       `total=${totalTokens}`
