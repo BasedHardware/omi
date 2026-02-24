@@ -635,15 +635,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   if (isRepeat) {
                                     _scrollToTop(index);
                                   } else {
-                                    if (index != 1) {
-                                      final actionItemsProvider = Provider.of<ActionItemsProvider>(context, listen: false);
-                                      if (actionItemsProvider.isEditMode) {
-                                        actionItemsProvider.toggleEditMode();
+                                      // Only reset if we are switching AWAY from Checklist
+                                      if (index != 1) { 
+                                        final actionItemsProvider = Provider.of<ActionItemsProvider>(context, listen: false);
+                                        
+                                        // Reset Edit Mode
+                                        if (actionItemsProvider.isEditMode) {
+                                          actionItemsProvider.toggleEditMode();
+                                        }
+                                        
+                                        // Reset Completed View
+                                        if (actionItemsProvider.showCompletedView) {
+                                          actionItemsProvider.toggleShowCompletedView();
+                                        }
                                       }
+                                      home.setIndex(index);
                                     }
-                                    home.setIndex(index);
-                                  }
-                                },
+                                  },
                               ),
                               if (home.selectedIndex == 0)
                                 Positioned(
