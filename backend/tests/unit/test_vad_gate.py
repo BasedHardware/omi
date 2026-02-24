@@ -1508,6 +1508,8 @@ class TestFailOpen:
         # Gate should be disabled for rest of session
         assert gated._gate is None
         assert not gated.is_gated
+        # Mode set to 'off' to prevent stale timestamp remapping
+        assert gate.mode == 'off'
 
     def test_gated_socket_sends_normally_after_fallback(self):
         """After fallback, subsequent sends go directly to DG (no gate)."""
