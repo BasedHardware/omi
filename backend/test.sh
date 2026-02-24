@@ -29,3 +29,4 @@ pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_task_sharing.py -v
+pytest tests/unit/test_speaker_identification.py -v

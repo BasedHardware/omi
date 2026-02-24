@@ -8,6 +8,7 @@ import av
 import numpy as np
 
 from database import conversations as conversations_db
+from utils.speaker_identification_names import COMMON_FIRST_NAMES
 from database import users as users_db
 from utils.other.storage import (
     download_audio_chunks_and_merge,
@@ -139,8 +140,13 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
         r"\b(Είμαι|είμαι|Με λένε|με λένε|Το όνομά μου είναι|το όνομά μου είναι)\s+([\u0370-\u03ff\u1f00-\u1fff]+)\b",
     ],
     'en': [  # English
-        r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*)\b",
-        r"\b([A-Z][a-zA-Z]*)\s+is my name\b",
+        r"\b(I am|I'm|i am|i'm|My name is|my name is)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
+        r"\b([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\s+is my name\b",
+        r"\b(?:[Tt]his is|[Ii]t's|[Ii]t is)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
+        r"\b(?:[Hh]ey,?\s*it's|[Hh]i,?\s*it's)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
+        r"\b(?:[Cc]all me|[Yy]ou can call me)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
+        r"\b(?:[Yy]ou're speaking with|[Yy]ou're talking to|[Yy]ou've reached)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
+        r"\b(?:[Tt]he name's|[Nn]ame's)\s+([A-Z][a-zA-Z]*(?:\s+[A-Z][a-zA-Z]*)?)\b",
     ],
     'es': [  # Spanish
         r"\b(soy|Soy|me llamo|Me llamo|mi nombre es|Mi nombre es)\s+([A-Z][a-zA-Z]*)\b",
@@ -226,14 +232,56 @@ patterns_to_check = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
+# Pre-compiled context patterns for gazetteer-based detection (handles lowercased ASR).
+# Used in Phase 2 to verify that a name candidate appears in an introduction context.
+_INTRO_PREFIX_PATTERNS = [
+    re.compile(r"(?:this is|it's|it is)\s*$", re.IGNORECASE),
+    re.compile(r"(?:call me|you can call me)\s*$", re.IGNORECASE),
+    re.compile(r"(?:the name's|name's)\s*$", re.IGNORECASE),
+    re.compile(r"(?:hey,?\s*it's|hi,?\s*it's)\s*$", re.IGNORECASE),
+    re.compile(r"(?:you're speaking with|you're talking to|you've reached)\s*$", re.IGNORECASE),
+    re.compile(r"(?:i'm|i am|my name is)\s*$", re.IGNORECASE),
+]
+
+_INTRO_SUFFIX_PATTERNS = [
+    re.compile(r"^\s*here\b", re.IGNORECASE),
+    re.compile(r"^\s*speaking\b", re.IGNORECASE),
+    re.compile(r"^\s*calling\b", re.IGNORECASE),
+]
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize a detected name to title case for consistent output."""
+    return ' '.join(w.capitalize() for w in name.split())
+
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
+    # Phase 1: Regex (fast, multilingual, handles capitalized input)
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
             if name and len(name) >= 2:
                 return name.capitalize()
+
+    # Phase 2: Name gazetteer + context patterns (handles lowercased ASR, ambiguous patterns)
+    words = text.split()
+    for i, word in enumerate(words):
+        cleaned = word.strip('.,!?:;()[]"\'').lower()
+        if len(cleaned) < 2 or cleaned not in COMMON_FIRST_NAMES:
+            continue
+
+        before = ' '.join(words[:i]).lower().rstrip()
+        after = ' '.join(words[i + 1 :]).lower().lstrip()
+
+        for pattern in _INTRO_PREFIX_PATTERNS:
+            if pattern.search(before):
+                return _normalize_name(cleaned)
+
+        for pattern in _INTRO_SUFFIX_PATTERNS:
+            if pattern.search(after):
+                return _normalize_name(cleaned)
+
     return None
 
 
