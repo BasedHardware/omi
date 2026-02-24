@@ -7,6 +7,8 @@ import asyncio
 from utils.other.jobs import start_job
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):

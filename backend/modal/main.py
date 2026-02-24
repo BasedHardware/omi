@@ -6,6 +6,8 @@ from speech_profile_modal import ResponseItem, endpoint as speaker_identificatio
 from vad_modal import vad_endpoint
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
