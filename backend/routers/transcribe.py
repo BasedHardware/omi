@@ -726,6 +726,10 @@ async def _stream_handler(
                 speech_profile_complete.set()
 
             # Initialize VAD gate for all eligible DG sessions.
+            # Guard: gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
+            # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
+            # (the "8"/"16" refers to sample rate kHz, not bit depth).
+            # DG always receives mono (channels=1), so clamp gate channels to 1.
             # When speech profile is active (preseconds > 0), start in shadow mode
             # so preseconds filtering uses uncompressed DG timestamps. After profile
             # completes, switch to active mode to start saving cost.
@@ -736,13 +740,19 @@ async def _stream_handler(
                     gate_mode = 'shadow'  # Shadow during profile, activate later
                 vad_gate = VADStreamingGate(
                     sample_rate=sample_rate,
-                    channels=channels,
+                    channels=1,  # DG always receives mono (encoding=linear16, channels=1)
                     mode=gate_mode,
                     uid=uid,
                     session_id=session_id,
                 )
-                print(
-                    f'VAD gate initialized mode={gate_mode} preseconds={speech_profile_preseconds} uid={uid} session={session_id}'
+                logger.info(
+                    'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
+                    gate_mode,
+                    speech_profile_preseconds,
+                    codec,
+                    sample_rate,
+                    uid,
+                    session_id,
                 )
 
             # DEEPGRAM
@@ -1785,7 +1795,7 @@ async def _stream_handler(
                         # Activate VAD gate now that speech profile phase is done
                         if vad_gate is not None and VAD_GATE_MODE == 'active' and vad_gate.mode == 'shadow':
                             vad_gate.activate()
-                            print(f'VAD gate activated after speech profile uid={uid} session={session_id}')
+                            logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
 
                         async def close_dg_profile():
                             await asyncio.sleep(5)
