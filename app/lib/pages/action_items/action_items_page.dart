@@ -185,7 +185,38 @@ Widget _buildFab() {
             heroTag: 'action_items_fab',
             onPressed: () async {
               HapticFeedback.mediumImpact();
-              await provider.deleteSelectedItems();
+
+              // --- START CONFIRMATION BOX ---
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: const Color(0xFF1F1F25),
+                  title: Text(
+                    'Delete ${provider.selectedCount} items', 
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  content: Text(
+                    'Are you sure you want to permanently delete these ${provider.selectedCount} tasks?',
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              // --- END CONFIRMATION BOX ---
+
+              if (confirm == true) {
+                await provider.deleteSelectedItems();
+              }
             },
             backgroundColor: Colors.red[600],
             icon: const Icon(Icons.delete, color: Colors.white),
@@ -196,6 +227,8 @@ Widget _buildFab() {
           ),
         );
       }
+      
+      // ... rest of your _buildFab logic (completed view, etc.)
       if (provider.isEditMode) {
         return const SizedBox.shrink();
       }
