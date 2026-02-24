@@ -20,6 +20,9 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
+import logging
+
+logger = logging.getLogger(__name__)
 
 MCP_CLIENT_NAME = "Omi"
 MCP_CLIENT_VERSION = "1.0.0"
@@ -76,7 +79,7 @@ async def register_oauth_client(registration_endpoint: str, redirect_uri: str, s
         resp = await client.post(registration_endpoint, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        print(f"[MCP OAuth] Registration response: {data}")
+        logger.info(f"[MCP OAuth] Registration response: {data}")
         return {
             "client_id": data["client_id"],
             "client_secret": data.get("client_secret"),
@@ -145,7 +148,7 @@ async def exchange_oauth_code(
         has_access = bool(data.get("access_token"))
         has_refresh = bool(data.get("refresh_token"))
         expires_in = data.get("expires_in")
-        print(
+        logger.info(
             f"[MCP OAuth] Token exchange OK: type={token_type}, has_access={has_access}, has_refresh={has_refresh}, expires_in={expires_in}"
         )
         return {
@@ -333,7 +336,7 @@ async def _sse_send_and_receive_inner(
                     response=httpx.Response(stream.status_code),
                 )
 
-            print(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
+            logger.info(f"[MCP SSE] Connected to {sse_url}, status={stream.status_code}")
             buf = ""
             event_type = ""
             event_data_lines: list[str] = []
@@ -359,7 +362,7 @@ async def _sse_send_and_receive_inner(
                                 post_endpoint = data_str
                             else:
                                 post_endpoint = origin + data_str
-                            print(f"[MCP SSE] Got endpoint: {post_endpoint}")
+                            logger.info(f"[MCP SSE] Got endpoint: {post_endpoint}")
 
                             # Now send all payloads
                             post_headers = {"Content-Type": "application/json"}
@@ -378,7 +381,7 @@ async def _sse_send_and_receive_inner(
                                 msg = json.loads(data_str)
                                 if isinstance(msg, dict) and ("result" in msg or "error" in msg):
                                     responses.append(msg)
-                                    print(f"[MCP SSE] Got response {len(responses)}/{expected_responses}")
+                                    logger.info(f"[MCP SSE] Got response {len(responses)}/{expected_responses}")
                             except (json.JSONDecodeError, ValueError):
                                 pass
 
@@ -478,7 +481,7 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
     # --- Attempt 1: Streamable HTTP transport ---
     for url in candidates:
         try:
-            print(f"[MCP Discovery] Trying Streamable HTTP at {url}")
+            logger.info(f"[MCP Discovery] Trying Streamable HTTP at {url}")
             session_id = await _initialize_session(url, access_token)
 
             tools_req = _jsonrpc_request("tools/list", params={}, req_id=2)
@@ -489,10 +492,10 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
             if not mcp_tools:
                 raise Exception(f"No tools returned from {url}")
 
-            print(f"[MCP Discovery] Success via Streamable HTTP at {url}, found {len(mcp_tools)} tools")
+            logger.info(f"[MCP Discovery] Success via Streamable HTTP at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="streamable_http")
         except Exception as e:
-            print(f"[MCP Discovery] Streamable HTTP failed at {url}: {e}")
+            logger.info(f"[MCP Discovery] Streamable HTTP failed at {url}: {e}")
             errors.append(f"HTTP {url}: {e}")
             continue
 
@@ -500,15 +503,15 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
     sse_candidates = _resolve_sse_url(server_url)
     for url in sse_candidates:
         try:
-            print(f"[MCP Discovery] Trying SSE at {url}")
+            logger.info(f"[MCP Discovery] Trying SSE at {url}")
             mcp_tools = await _discover_tools_via_sse(url, access_token)
             if not mcp_tools:
                 raise Exception(f"No tools returned from SSE at {url}")
 
-            print(f"[MCP Discovery] Success via SSE at {url}, found {len(mcp_tools)} tools")
+            logger.info(f"[MCP Discovery] Success via SSE at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="sse")
         except Exception as e:
-            print(f"[MCP Discovery] SSE failed at {url}: {e}")
+            logger.info(f"[MCP Discovery] SSE failed at {url}: {e}")
             errors.append(f"SSE {url}: {e}")
             continue
 

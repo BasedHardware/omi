@@ -8,11 +8,14 @@ from fastapi import HTTPException
 from pydub import AudioSegment
 
 from database import redis_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
-(get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
+get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks = utils
 
 
 class SpeechState(str, Enum):
@@ -76,12 +79,12 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
             redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
         if return_segments:
             return segments
-        print('vad_is_empty', len(segments) == 0)
+        logger.info(f'vad_is_empty {len(segments) == 0}')
         return len(segments) == 0
 
 
 def apply_vad_for_speech_profile(file_path: str):
-    print('apply_vad_for_speech_profile', file_path)
+    logger.info(f'apply_vad_for_speech_profile {file_path}')
     voice_segments = vad_is_empty(file_path, return_segments=True)
     if len(voice_segments) == 0:  # TODO: front error on post-processing, audio sent is bad.
         raise HTTPException(status_code=400, detail="Audio is empty")

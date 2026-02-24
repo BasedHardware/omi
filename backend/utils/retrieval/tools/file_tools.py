@@ -11,6 +11,9 @@ from typing import List, Optional
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat, Message
 from utils.other.chat_file import FileChatTool
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
 try:
@@ -48,20 +51,20 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 search_files_tool - got config from context variable")
+                logger.info(f"🔧 search_files_tool - got config from context variable")
         except LookupError:
-            print(f"❌ search_files_tool - config not found in context variable")
+            logger.info(f"❌ search_files_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ search_files_tool - config is None")
+        logger.info(f"❌ search_files_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
         chat_session_id = config['configurable'].get('chat_session_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ search_files_tool - error accessing config: {e}")
+        logger.error(f"❌ search_files_tool - error accessing config: {e}")
         import traceback
 
         traceback.print_exc()
@@ -106,6 +109,6 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
     except Exception as e:
         import traceback
 
-        print(f"Error in search_files_tool: {e}")
+        logger.error(f"Error in search_files_tool: {e}")
         traceback.print_exc()
         return f"I encountered an error while searching the files. Please try again or rephrase your question."

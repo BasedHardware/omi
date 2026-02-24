@@ -1,6 +1,9 @@
 import os
 
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class HumePredictionEmotionResponseModel:
@@ -189,7 +192,7 @@ class HumeClient:
                 },
             }
         if err is not None:
-            print(err)
+            logger.info(err)
             return err
 
         return {"result": HumeJobResponseModel.from_dict(resp.json())}

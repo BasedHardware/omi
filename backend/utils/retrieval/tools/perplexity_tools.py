@@ -6,6 +6,9 @@ import os
 
 import requests
 from langchain_core.tools import tool
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -38,11 +41,11 @@ def perplexity_web_search_tool(
         query="What are the latest developments in AI in 2025?"
         Returns web search results with citations about recent AI developments
     """
-    print(f"🔍 perplexity_web_search_tool called - query: {query}")
+    logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
 
     api_key = os.getenv('PERPLEXITY_API_KEY')
     if not api_key:
-        print("❌ perplexity_web_search_tool - PERPLEXITY_API_KEY not found in environment")
+        logger.info("❌ perplexity_web_search_tool - PERPLEXITY_API_KEY not found in environment")
         return "Error: Perplexity API key not configured"
 
     try:
@@ -60,7 +63,7 @@ def perplexity_web_search_tool(
         response = requests.post(url, json=payload, headers=headers, timeout=30)
 
         if response.status_code != 200:
-            print(f"❌ perplexity_web_search_tool - API error: {response.status_code} - {response.text[:200]}")
+            logger.error(f"❌ perplexity_web_search_tool - API error: {response.status_code} - {response.text[:200]}")
             return f"Error: Perplexity API returned status {response.status_code}. Please try again later."
 
         result = response.json()
@@ -87,18 +90,18 @@ def perplexity_web_search_tool(
                     elif isinstance(citation, str):
                         formatted_result += f"{i}. {citation}\n"
 
-            print(f"✅ perplexity_web_search_tool - Successfully retrieved search results")
+            logger.info(f"✅ perplexity_web_search_tool - Successfully retrieved search results")
             return formatted_result.strip()
         else:
-            print(f"⚠️ perplexity_web_search_tool - Unexpected response format: {result}")
+            logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {result}")
             return "Error: Unexpected response format from Perplexity API"
 
     except requests.exceptions.Timeout:
-        print("❌ perplexity_web_search_tool - Request timeout")
+        logger.info("❌ perplexity_web_search_tool - Request timeout")
         return "Error: Request to Perplexity API timed out. Please try again later."
     except requests.exceptions.RequestException as e:
-        print(f"❌ perplexity_web_search_tool - Request error: {e}")
+        logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")
         return f"Error: Failed to connect to Perplexity API. {str(e)}"
     except Exception as e:
-        print(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
+        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
         return f"Error: An unexpected error occurred while searching: {str(e)}"

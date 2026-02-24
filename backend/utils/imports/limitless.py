@@ -27,6 +27,9 @@ from models.conversation import (
 from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
@@ -231,8 +234,8 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
         # Open and scan the ZIP file
         with ZipFile(zip_path, 'r') as zf:
             all_files = zf.namelist()
-            print(f"[Limitless Import] ZIP contains {len(all_files)} entries")
-            print(f"[Limitless Import] First 20 entries: {all_files[:20]}")
+            logger.info(f"[Limitless Import] ZIP contains {len(all_files)} entries")
+            logger.info(f"[Limitless Import] First 20 entries: {all_files[:20]}")
 
             # Find all lifelog markdown files
             # Handle both "lifelogs/..." and "something/lifelogs/..." structures
@@ -242,9 +245,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                 if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
             ]
 
-            print(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
+            logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
             if lifelog_files:
-                print(f"[Limitless Import] First 5 lifelog files: {lifelog_files[:5]}")
+                logger.info(f"[Limitless Import] First 5 lifelog files: {lifelog_files[:5]}")
 
             total_files = len(lifelog_files)
             import_jobs_db.update_import_job(job_id, {'total_files': total_files})
@@ -252,9 +255,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             if total_files == 0:
                 # Log more details about what we found
                 md_files = [name for name in all_files if name.endswith('.md')]
-                print(f"[Limitless Import] Total .md files found: {len(md_files)}")
+                logger.info(f"[Limitless Import] Total .md files found: {len(md_files)}")
                 if md_files:
-                    print(f"[Limitless Import] Sample .md files: {md_files[:10]}")
+                    logger.info(f"[Limitless Import] Sample .md files: {md_files[:10]}")
 
                 import_jobs_db.update_import_job(
                     job_id,
@@ -334,7 +337,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
                 except Exception as e:
                     error_msg = f"Error processing {lifelog_path}: {str(e)}"
-                    print(error_msg)
+                    logger.info(error_msg)
                     errors.append(error_msg)
 
                 processed_files += 1
@@ -391,7 +394,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                 )
 
     except Exception as e:
-        print(f"Import job {job_id} failed: {str(e)}")
+        logger.info(f"Import job {job_id} failed: {str(e)}")
         traceback.print_exc()
         import_jobs_db.update_import_job(
             job_id,
@@ -416,7 +419,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             if os.path.exists(zip_path):
                 os.remove(zip_path)
         except Exception as e:
-            print(f"Failed to clean up ZIP file {zip_path}: {e}")
+            logger.info(f"Failed to clean up ZIP file {zip_path}: {e}")
 
 
 def create_import_job(uid: str, source_type: ImportSourceType = ImportSourceType.limitless) -> ImportJob:

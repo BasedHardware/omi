@@ -59,6 +59,9 @@ import subprocess
 from database.redis_db import get_user_has_soniox_speech_profile, set_user_has_soniox_speech_profile
 from utils.other.endpoints import timeit
 from utils.other.storage import get_profile_audio_if_exists
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 #
@@ -199,7 +202,7 @@ def set_json_speech_profiles(result):
 def _script():
     result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--list'], capture_output=True)
     uids = set_json_speech_profiles(result)
-    print(uids)
+    logger.info(uids)
 
 
 # _script()
@@ -226,10 +229,10 @@ def _train_user_speech_profile(uid: str):
             capture_output=True,
         )
         completed = result.returncode == 0
-        print('_train_user_speech_profile:', completed)
+        logger.info(f'_train_user_speech_profile: {completed}')
         return completed
     except Exception as e:
-        print(f'Error in _train_user_speech_profile: {e}')
+        logger.error(f'Error in _train_user_speech_profile: {e}')
         return False
 
 
@@ -239,10 +242,10 @@ def _create_user_speech_profile(uid: str):
             ['python', '-m', 'soniox.manage_speakers', '--add_speaker', '--speaker_name', uid], capture_output=True
         )
         completed = result.returncode == 0
-        print('_create_user_speech_profile successful:', completed, result.stdout)
+        logger.info(f'_create_user_speech_profile successful: {completed} {result.stdout}')
         return completed
     except Exception as e:
-        print(f'_create_user_speech_profile failed: {e}')
+        logger.info(f'_create_user_speech_profile failed: {e}')
         return False
 
 
@@ -250,10 +253,10 @@ def _remove_user_speech_profile(uid: str):
     try:
         result = subprocess.run(['python', '-m', 'soniox.manage_speakers', '--remove_speaker', '--speaker_name', uid])
         completed = result.returncode == 0
-        print('_remove_user_speech_profile successful:', completed)
+        logger.info(f'_remove_user_speech_profile successful: {completed}')
         return completed
     except Exception as e:
-        print(f'_remove_user_speech_profile failed: {e}')
+        logger.info(f'_remove_user_speech_profile failed: {e}')
         return False
 
 
@@ -270,5 +273,5 @@ def create_user_speech_profile(uid: str):
             set_user_has_soniox_speech_profile(uid)
         return result
     except Exception as e:
-        print(f'Error in create_speaker_profile: {e}')
+        logger.error(f'Error in create_speaker_profile: {e}')
         return False

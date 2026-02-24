@@ -57,6 +57,9 @@ from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.observability.langsmith import get_chat_tracer_callbacks
 from utils.other.endpoints import timeit
+import logging
+
+logger = logging.getLogger(__name__)
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # OpenAI serializes tools before the system prompt.  If the tool definitions are
@@ -193,7 +196,7 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     async def on_llm_error(self, error: Exception, **kwargs) -> None:
         """Handle LLM errors."""
-        print(f"Error on LLM: {error}")
+        logger.error(f"Error on LLM: {error}")
         await self.end()
 
 
@@ -236,7 +239,7 @@ def execute_agentic_chat(
 
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
-        print(f"⚠️ Could not get prompt metadata: {e}")
+        logger.info(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Core tools (fixed order) + dynamic app tools appended at end
@@ -247,9 +250,9 @@ def execute_agentic_chat(
         app_tools = load_app_tools(uid)
         tools.extend(app_tools)
         if app_tools:
-            print(f"🔧 Added {len(app_tools)} app tools to chat")
+            logger.info(f"🔧 Added {len(app_tools)} app tools to chat")
     except Exception as e:
-        print(f"⚠️ Error loading app tools: {e}")
+        logger.error(f"⚠️ Error loading app tools: {e}")
 
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
@@ -347,7 +350,7 @@ async def execute_agentic_chat_stream(
 
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
-        print(f"⚠️ Could not get prompt metadata: {e}")
+        logger.info(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Core tools (fixed order) + dynamic app tools appended at end
@@ -358,9 +361,9 @@ async def execute_agentic_chat_stream(
         app_tools = load_app_tools(uid)
         tools.extend(app_tools)
         if app_tools:
-            print(f"🔧 Added {len(app_tools)} app tools to chat")
+            logger.info(f"🔧 Added {len(app_tools)} app tools to chat")
     except Exception as e:
-        print(f"⚠️ Error loading app tools: {e}")
+        logger.error(f"⚠️ Error loading app tools: {e}")
 
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
@@ -481,13 +484,13 @@ async def execute_agentic_chat_stream(
             chart_data_from_config = config.get('configurable', {}).get('chart_data')
             if chart_data_from_config:
                 callback_data['chart_data'] = chart_data_from_config
-            print(f"📚 Collected {len(callback_data['memories_found'])} conversations for citation")
+            logger.info(f"📚 Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.CancelledError:
         task.cancel()
         raise
     except Exception as e:
-        print(f"❌ Error in execute_agentic_chat_stream: {e}")
+        logger.error(f"❌ Error in execute_agentic_chat_stream: {e}")
         import traceback
 
         traceback.print_exc()
@@ -538,7 +541,7 @@ async def _run_agent_stream(
             elif kind == "on_tool_start":
                 tool_name = event.get("name", "unknown")
                 tool_input = event.get("data", {}).get("input", {})
-                print(f"🔧 Tool started: {tool_name}")
+                logger.info(f"🔧 Tool started: {tool_name}")
 
                 # Extract app_id from tool name if it's from an app tool
                 # App tools have format: app_id_tool_name
@@ -596,7 +599,7 @@ async def _run_agent_stream(
                         # Send friendly error message to user (no technical jargon)
                         error_msg = f"\n\n{str(e)}"
                         await callback.put_data(error_msg)
-                        print(f"🛡️ Safety Guard blocked tool call: {e}")
+                        logger.info(f"🛡️ Safety Guard blocked tool call: {e}")
                         # Signal completion and stop processing
                         await callback.end()
                         return
@@ -613,7 +616,7 @@ async def _run_agent_stream(
                 else:
                     output = str(output_raw)
 
-                print(f"✅ Tool ended: {tool_name}")
+                logger.info(f"✅ Tool ended: {tool_name}")
 
                 # Send completion message for calendar tools to update status
                 if 'calendar' in tool_name.lower():
@@ -659,7 +662,7 @@ async def _run_agent_stream(
                         # Send friendly error message to user (no technical jargon)
                         error_msg = f"\n\n{str(e)}"
                         await callback.put_data(error_msg)
-                        print(f"🛡️ Safety Guard blocked due to context size: {e}")
+                        logger.info(f"🛡️ Safety Guard blocked due to context size: {e}")
                         # Signal completion and stop processing
                         await callback.end()
                         return
@@ -667,17 +670,17 @@ async def _run_agent_stream(
             elif kind == "on_tool_error":
                 tool_name = event.get("name", "unknown")
                 error = event.get("data", {}).get("error", "")
-                print(f"❌ Tool error: {tool_name}")
-                print(f"   Error: {error}")
+                logger.error(f"❌ Tool error: {tool_name}")
+                logger.error(f"   Error: {error}")
 
             elif kind == "on_chain_error":
                 error = event.get("data", {}).get("error", "")
-                print(f"❌ Chain error: {error}")
+                logger.error(f"❌ Chain error: {error}")
 
         # Log final stats
         if safety_guard:
             stats = safety_guard.get_stats()
-            print(f"🛡️ Safety Guard final stats: {stats}")
+            logger.info(f"🛡️ Safety Guard final stats: {stats}")
 
         # Signal completion
         await callback.end()
@@ -686,10 +689,10 @@ async def _run_agent_stream(
         # Send friendly error message to user (no technical jargon)
         error_msg = f"\n\n{str(e)}"
         await callback.put_data(error_msg)
-        print(f"🛡️ Safety Guard stopped execution: {e}")
+        logger.info(f"🛡️ Safety Guard stopped execution: {e}")
         await callback.end()
     except Exception as e:
-        print(f"❌ Error in _run_agent_stream: {e}")
+        logger.error(f"❌ Error in _run_agent_stream: {e}")
         import traceback
 
         traceback.print_exc()

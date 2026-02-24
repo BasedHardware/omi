@@ -5,6 +5,9 @@ import struct
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Load the master secret from environment variables. This must be a securely managed 32-byte key.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -73,7 +76,7 @@ def decrypt(encrypted_data: str, uid: str) -> str:
         # If decryption fails (e.g., wrong key, corrupted data), return the original encrypted data
         # to avoid data loss and to make debugging easier. In a production system, you might want
         # to log this error.
-        print(f"Decryption failed for user {uid}: {e}")
+        logger.info(f"Decryption failed for user {uid}: {e}")
         return encrypted_data
 
 

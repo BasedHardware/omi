@@ -15,6 +15,9 @@ from utils.llm.external_integrations import get_conversation_summary, generate_c
 from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def should_run_job():
@@ -29,7 +32,7 @@ async def start_cron_job():
     """
     Main cron job entry point. Runs at the top of every UTC hour.
     """
-    print(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
+    logger.info(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
     await send_daily_notification()
     await send_daily_summary_notification()
 
@@ -50,11 +53,11 @@ async def send_daily_summary_notification():
             users = await notification_db.get_users_for_daily_summary(timezones, target_hour)
 
             if users:
-                print(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
+                logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
                 await _send_bulk_summary_notification(users)
 
     except Exception as e:
-        print(f"Error sending daily summary: {e}")
+        logger.error(f"Error sending daily summary: {e}")
         return None
 
 
@@ -99,7 +102,7 @@ def _send_summary_notification(user_data: tuple):
                 display_date = now_in_user_tz.date()
             date_str = display_date.strftime('%Y-%m-%d')
         except Exception as e:
-            print(e)
+            logger.info(e)
 
     # Fallback to UTC if timezone not available
     if not start_date_utc or not end_date_utc:
@@ -172,15 +175,15 @@ async def send_daily_notification():
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)
 
     except Exception as e:
-        print(e)
-        print("Error sending message:", e)
+        logger.info(e)
+        logger.error(f"Error sending message: {e}")
         return None
 
 
 async def _send_notification_for_time(target_time: str, title: str, body: str):
     user_in_time_zone = await _get_users_in_timezone(target_time)
     if not user_in_time_zone:
-        print("No users found in time zone")
+        logger.info("No users found in time zone")
         return None
     await send_bulk_notification(user_in_time_zone, title, body)
     return user_in_time_zone

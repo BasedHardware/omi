@@ -12,6 +12,9 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
 try:
@@ -84,7 +87,7 @@ def get_memories_tool(
     Returns:
         Formatted list of facts about the user with categories, dates, and emoji representations.
     """
-    print(
+    logger.info(
         f"🔧 get_memories_tool called - limit: {limit}, offset: {offset}, start_date: {start_date}, end_date: {end_date}"
     )
 
@@ -93,32 +96,32 @@ def get_memories_tool(
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 get_memories_tool - got config from context variable")
+                logger.info(f"🔧 get_memories_tool - got config from context variable")
         except LookupError:
-            print(f"❌ get_memories_tool - config not found in context variable")
+            logger.info(f"❌ get_memories_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ get_memories_tool - config is None")
+        logger.info(f"❌ get_memories_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ get_memories_tool - error accessing config: {e}")
+        logger.error(f"❌ get_memories_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ get_memories_tool - no user_id in config")
+        logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    print(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
+    logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
     # Get safety guard from config if available
     safety_guard = config['configurable'].get('safety_guard')
 
     # Cap at 5000 per call to prevent overloading context
     if limit > 5000:
-        print(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
+        logger.info(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
         limit = 5000
 
     # Parse dates if provided (must be ISO format with timezone)
@@ -131,7 +134,7 @@ def get_memories_tool(
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
@@ -141,7 +144,7 @@ def get_memories_tool(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
@@ -150,14 +153,14 @@ def get_memories_tool(
     try:
         memories = memory_db.get_memories(uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt)
     except Exception as e:
-        print(e)
+        logger.info(e)
 
     memories_count = len(memories) if memories else 0
-    print(f"📊 get_memories_tool - found {memories_count} memories")
+    logger.info(f"📊 get_memories_tool - found {memories_count} memories")
 
     # Log warning if large number of memories retrieved
     if memories_count >= 500:
-        print(f"⚠️ Large number of memories retrieved ({memories_count}). Consider if all are needed.")
+        logger.info(f"⚠️ Large number of memories retrieved ({memories_count}). Consider if all are needed.")
 
     if not memories:
         date_info = ""
@@ -169,7 +172,7 @@ def get_memories_tool(
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
         msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
-        print(f"⚠️ get_memories_tool - {msg}")
+        logger.info(f"⚠️ get_memories_tool - {msg}")
         return msg
 
     # Convert dictionaries to MemoryDB objects for proper formatting
@@ -178,7 +181,7 @@ def get_memories_tool(
         try:
             memory_objects.append(MemoryDB(**memory_data))
         except Exception as e:
-            print(f"Error creating MemoryDB object: {e}")
+            logger.error(f"Error creating MemoryDB object: {e}")
             continue
 
     if not memory_objects:
@@ -225,32 +228,32 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    print(f"🔧 search_memories_tool called with query: {query}")
+    logger.info(f"🔧 search_memories_tool called with query: {query}")
 
     # Get config from parameter or context variable
     if config is None:
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 search_memories_tool - got config from context variable")
+                logger.info(f"🔧 search_memories_tool - got config from context variable")
         except LookupError:
-            print(f"❌ search_memories_tool - config not found in context variable")
+            logger.info(f"❌ search_memories_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ search_memories_tool - config is None")
+        logger.info(f"❌ search_memories_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ search_memories_tool - error accessing config: {e}")
+        logger.error(f"❌ search_memories_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ search_memories_tool - no user_id in config")
+        logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    print(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
 
     # Cap limit at 20
     limit = min(limit, 20)
@@ -259,13 +262,13 @@ def search_memories_tool(
         # Perform vector search on memories (no threshold, just return top matches)
         matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
 
-        print(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
+        logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
 
         if not matches:
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
             )
-            print(f"⚠️ search_memories_tool - {msg}")
+            logger.info(f"⚠️ search_memories_tool - {msg}")
             return msg
 
         memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
@@ -284,13 +287,13 @@ def search_memories_tool(
                 score = scores_by_id.get(memory_data.get('id'), 0)
                 memory_objects.append({'memory': memory_obj, 'score': score})
             except Exception as e:
-                print(f"Error creating MemoryDB object: {e}")
+                logger.error(f"Error creating MemoryDB object: {e}")
                 continue
 
         if not memory_objects:
             return f"Found matches but could not retrieve memory details for query: '{query}'"
 
-        print(f"🔍 search_memories_tool - Loaded {len(memory_objects)} full memories")
+        logger.info(f"🔍 search_memories_tool - Loaded {len(memory_objects)} full memories")
 
         # Format results with relevance scores
         result = f"Found {len(memory_objects)} memories matching '{query}':\n\n"
@@ -302,13 +305,13 @@ def search_memories_tool(
                 f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
             )
 
-        print(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
+        logger.info(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
 
         return result.strip()
 
     except Exception as e:
         error_msg = f"Error performing memory search: {str(e)}"
-        print(f"❌ search_memories_tool - {error_msg}")
+        logger.info(f"❌ search_memories_tool - {error_msg}")
         import traceback
 
         traceback.print_exc()

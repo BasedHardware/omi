@@ -10,6 +10,9 @@ from PIL import Image
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class File:
@@ -113,9 +116,9 @@ class FileChatTool:
             # Try to retrieve existing thread
             try:
                 thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)
-                print(f"Retrieved existing thread: {thread.id}")
+                logger.info(f"Retrieved existing thread: {thread.id}")
             except Exception as e:
-                print(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
+                logger.error(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
                 self.thread_id = None
 
         if not self.thread_id:
@@ -123,7 +126,7 @@ class FileChatTool:
                 thread = openai.beta.threads.create(timeout=timeout)
                 self.thread_id = thread.id
                 created_new = True
-                print(f"Created new thread: {self.thread_id}")
+                logger.info(f"Created new thread: {self.thread_id}")
             except Exception as e:
                 raise Exception(f"Failed to create OpenAI thread: {e}")
 
@@ -132,9 +135,9 @@ class FileChatTool:
             # Try to retrieve existing assistant
             try:
                 assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)
-                print(f"Retrieved existing assistant: {assistant.id}")
+                logger.info(f"Retrieved existing assistant: {assistant.id}")
             except Exception as e:
-                print(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
+                logger.error(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
                 self.assistant_id = None
 
         if not self.assistant_id:
@@ -148,7 +151,7 @@ class FileChatTool:
                 )
                 self.assistant_id = assistant.id
                 created_new = True
-                print(f"Created new assistant: {self.assistant_id}")
+                logger.info(f"Created new assistant: {self.assistant_id}")
             except Exception as e:
                 raise Exception(f"Failed to create OpenAI assistant: {e}")
 
@@ -159,7 +162,7 @@ class FileChatTool:
                     self.uid, self.chat_session_id, self.thread_id, self.assistant_id
                 )
             except Exception as e:
-                print(f"Failed to save thread/assistant IDs to database: {e}")
+                logger.info(f"Failed to save thread/assistant IDs to database: {e}")
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid, question, file_ids: List[str], thread_id: str):
@@ -235,7 +238,7 @@ class FileChatTool:
 
     def cleanup(self):
         """Cleanup chat session files, thread, and assistant"""
-        print("start cleanup thread chat with file")
+        logger.info("start cleanup thread chat with file")
         files = chat_db.get_chat_files(self.uid)
         # delete file in db
         if files:
@@ -247,15 +250,15 @@ class FileChatTool:
                 try:
                     openai.files.delete(file.openai_file_id, timeout=30.0)
                 except Exception as e:
-                    print(f"Failed to delete file {file.openai_file_id}: {e}")
+                    logger.info(f"Failed to delete file {file.openai_file_id}: {e}")
 
         if self.thread_id:
             try:
                 openai.beta.threads.delete(self.thread_id, timeout=30.0)
             except Exception as e:
-                print(f"Failed to delete thread {self.thread_id}: {e}")
+                logger.info(f"Failed to delete thread {self.thread_id}: {e}")
         if self.assistant_id:
             try:
                 openai.beta.assistants.delete(self.assistant_id, timeout=30.0)
             except Exception as e:
-                print(f"Failed to delete assistant {self.assistant_id}: {e}")
+                logger.info(f"Failed to delete assistant {self.assistant_id}: {e}")

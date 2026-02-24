@@ -4,6 +4,9 @@ from typing import Optional
 import database.users as users_db
 import database.action_items as action_items_db
 from utils.notifications import send_apple_reminders_sync_push
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def auto_sync_action_item(uid: str, action_item: dict) -> dict:
@@ -36,7 +39,7 @@ async def auto_sync_action_item(uid: str, action_item: dict) -> dict:
             return await _sync_to_cloud_service(uid, default_app, integration, action_item)
 
     except Exception as e:
-        print(f"Auto-sync failed for user {uid}: {e}")
+        logger.info(f"Auto-sync failed for user {uid}: {e}")
         return {"synced": False, "error": str(e)}
 
 
@@ -114,5 +117,5 @@ async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
         return results
 
     except Exception as e:
-        print(f"Auto-sync batch failed for user {uid}: {e}")
+        logger.info(f"Auto-sync batch failed for user {uid}: {e}")
         return [{"synced": False, "error": str(e)}] * len(action_items)
