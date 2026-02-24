@@ -83,6 +83,8 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
 - **notifications-job** (`modal/job.py`) — Cron job that reads Firestore/Redis and sends push notifications.
 
+**Keep this map up to date.** When adding, removing, or changing inter-service calls (HTTP, WebSocket, new env vars), update this section and the matching section in `AGENTS.md`.
+
 ## App (Flutter)
 
 ### Localization Required
