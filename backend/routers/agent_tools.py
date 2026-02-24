@@ -24,6 +24,7 @@ router = APIRouter()
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
+    logger.info(f"[vm-status] uid={uid} vm={vm}")
     if not vm or vm.get("status") != "ready":
         return {"has_vm": False}
     return {
