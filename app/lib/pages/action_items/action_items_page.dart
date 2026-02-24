@@ -879,6 +879,9 @@ Widget _buildFab() {
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
+    if (provider.isEditMode) {
+      return taskContent;
+    }
     // If at indent 0, allow swipe-right to indent and swipe-left to delete.
     if (indentLevel == 0) {
       return Dismissible(
@@ -1054,7 +1057,14 @@ Widget _buildFab() {
     final goalTitle = _getGoalTitleForTask(item);
 
     return GestureDetector(
-      onTap: () => _showEditSheet(item),
+      onTap: () {
+        if (provider.isEditMode) {
+          HapticFeedback.lightImpact();
+          provider.toggleItemSelection(item.id);
+        } else {
+          _showEditSheet(item);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
         child: Padding(
