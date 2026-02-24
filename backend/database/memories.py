@@ -344,7 +344,7 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            logger.info(f"Memory {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Memory {doc_snapshot.id} not found, skipping.")
             continue
 
         memory_data = doc_snapshot.to_dict()

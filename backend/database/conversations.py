@@ -61,7 +61,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
             else:
                 data['transcript_segments'] = json.loads(decrypted_payload)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            logger.info(f"{e} {uid}")
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
     # backward compatibility, will be removed soon
     elif isinstance(data['transcript_segments'], bytes):
@@ -71,7 +71,7 @@ def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str) -> D
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            logger.info(f"{e} {uid}")
+            logger.error(f"{e} {uid}")
             data['transcript_segments'] = []
 
     return data
@@ -603,7 +603,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            logger.info(f"Conversation {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
         conversation_data = doc_snapshot.to_dict()

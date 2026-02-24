@@ -399,7 +399,7 @@ def connect_to_deepgram_with_backoff(
             if attempt == retries - 1:  # Last attempt
                 raise
         backoff_delay = calculate_backoff_with_jitter(attempt)
-        logger.info(f"Waiting {backoff_delay:.0f}ms before next retry...")
+        logger.warning(f"Waiting {backoff_delay:.0f}ms before next retry...")
         time.sleep(backoff_delay / 1000)  # Convert ms to seconds for sleep
 
     raise Exception(f'Could not open socket: All retry attempts failed.')

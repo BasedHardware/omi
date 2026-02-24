@@ -64,7 +64,7 @@ def _decrypt_conversation_data(data: dict, uid: str) -> dict:
             else:
                 decrypted_data['transcript_segments'] = json.loads(decrypted_payload)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            logger.info(f"{e} {uid}")
+            logger.error(f"{e} {uid}")
             decrypted_data['transcript_segments'] = []
     # backward compatibility, will be removed soon
     elif isinstance(decrypted_data['transcript_segments'], bytes):
@@ -74,7 +74,7 @@ def _decrypt_conversation_data(data: dict, uid: str) -> dict:
                 decompressed_json = zlib.decompress(compressed_bytes).decode('utf-8')
                 decrypted_data['transcript_segments'] = json.loads(decompressed_json)
         except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-            logger.info(f"{e} {uid}")
+            logger.error(f"{e} {uid}")
             decrypted_data['transcript_segments'] = []
 
     return decrypted_data
@@ -255,7 +255,7 @@ def main():
         logger.info(f"Found {len(users_to_migrate)} users to migrate.")
 
     if not users_to_migrate:
-        logger.info("No users to migrate. Exiting.")
+        logger.debug("No users to migrate. Exiting.")
         return
 
     with ThreadPoolExecutor(max_workers=16) as executor:

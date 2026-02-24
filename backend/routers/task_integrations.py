@@ -390,7 +390,7 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
             return updated_integration
         else:
             error_text = token_response.text
-            logger.info(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            logger.error(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
             if token_response.status_code == 400:
                 should_disconnect = False
                 try:
@@ -466,7 +466,7 @@ async def perform_request_with_token_retry(
                 new_access_token = integration.get('access_token') or ''
                 response = await request_fn(client, new_access_token)
             except Exception as e:
-                logger.info(f'{app_key}: Token refresh failed during retry: {e}')
+                logger.error(f'{app_key}: Token refresh failed during retry: {e}')
                 return response, integration, e
     return response, integration, None
 
@@ -1022,7 +1022,7 @@ async def handle_oauth_callback(
 
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
         else:
-            logger.info(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
+            logger.error(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
             deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
             return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
 
@@ -1097,7 +1097,7 @@ async def asana_oauth_callback(
                     user_gid = user_data.get('data', {}).get('gid')
                     return {'user_gid': user_gid} if user_gid else {}
             except Exception as e:
-                logger.info(f'asana: Failed to fetch user GID: {e}')
+                logger.error(f'asana: Failed to fetch user GID: {e}')
             return {}
 
     config = AsanaConfig(
@@ -1154,7 +1154,7 @@ async def google_tasks_oauth_callback(
                             'default_list_title': items[0].get('title'),
                         }
             except Exception as e:
-                logger.info(f'google_tasks: Failed to fetch task lists: {e}')
+                logger.error(f'google_tasks: Failed to fetch task lists: {e}')
             return {}
 
     config = GoogleTasksConfig(

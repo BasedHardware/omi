@@ -103,7 +103,7 @@ def query_vectors_by_metadata(
     if not xc['matches']:
         if len(filter_data['$and']) == 3:
             filter_data['$and'].pop(1)
-            logger.info(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
+            logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(
                 vector=vector,
                 filter=filter_data,
@@ -158,7 +158,7 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
     Upsert a memory embedding to Pinecone.
     """
     if index is None:
-        logger.info('Pinecone index not initialized, skipping memory vector upsert')
+        logger.warning('Pinecone index not initialized, skipping memory vector upsert')
         return None
 
     vector = embeddings.embed_query(content)
@@ -184,7 +184,7 @@ def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit
     Used for duplicate detection and semantic search.
     """
     if index is None:
-        logger.info('Pinecone index not initialized, skipping similarity search')
+        logger.warning('Pinecone index not initialized, skipping similarity search')
         return []
 
     vector = embeddings.embed_query(content)
@@ -215,7 +215,7 @@ def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> d
     """
     similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
     if similar:
-        logger.info(f'Found duplicate memory: {similar[0]}')
+        logger.warning(f'Found duplicate memory: {similar[0]}')
         return similar[0]
     return None
 
@@ -226,7 +226,7 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     Returns list of memory_ids ordered by relevance.
     """
     if index is None:
-        logger.info('Pinecone index not initialized, skipping memory search')
+        logger.warning('Pinecone index not initialized, skipping memory search')
         return []
 
     vector = embeddings.embed_query(query)
@@ -244,7 +244,7 @@ def delete_memory_vector(uid: str, memory_id: str):
     Delete a memory vector from Pinecone.
     """
     if index is None:
-        logger.info('Pinecone index not initialized, skipping memory vector delete')
+        logger.warning('Pinecone index not initialized, skipping memory vector delete')
         return
 
     vector_id = f'{uid}-{memory_id}'

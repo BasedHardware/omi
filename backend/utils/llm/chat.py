@@ -417,7 +417,9 @@ def _get_agentic_qa_prompt(
         current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
         current_datetime_iso = current_datetime_user.isoformat()
         tz = "UTC"
-        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}")
+        logger.warning(
+            f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}"
+        )
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
@@ -1066,7 +1068,7 @@ def retrieve_metadata_fields_from_transcript(
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
-        logger.info(f'e {e}')
+        logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:

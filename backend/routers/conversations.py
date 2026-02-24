@@ -285,7 +285,7 @@ def set_action_item_status(
                 action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
     except Exception as e:
         # Don't break conversation route if mirrored update fails
-        logger.info(f'Failed to mirror action item status update: {e}')
+        logger.error(f'Failed to mirror action item status update: {e}')
     return {"status": "Ok"}
 
 
@@ -320,7 +320,7 @@ def update_action_item_description(
             if ai.get('description') == data.old_description:
                 action_items_db.update_action_item(uid, ai['id'], {'description': data.description})
     except Exception as e:
-        logger.info(f'Failed to mirror action item description update: {e}')
+        logger.error(f'Failed to mirror action item description update: {e}')
     return {"status": "Ok"}
 
 
@@ -341,7 +341,7 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
     except Exception as e:
-        logger.info(f'Failed to mirror action item deletion: {e}')
+        logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
 
 

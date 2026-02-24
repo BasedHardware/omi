@@ -53,7 +53,7 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
             if config:
                 logger.info(f"🔧 search_files_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ search_files_tool - config not found in context variable")
+            logger.warning(f"❌ search_files_tool - config not found in context variable")
             config = None
 
     if config is None:

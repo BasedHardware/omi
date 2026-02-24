@@ -39,7 +39,7 @@ async def auto_sync_action_item(uid: str, action_item: dict) -> dict:
             return await _sync_to_cloud_service(uid, default_app, integration, action_item)
 
     except Exception as e:
-        logger.info(f"Auto-sync failed for user {uid}: {e}")
+        logger.error(f"Auto-sync failed for user {uid}: {e}")
         return {"synced": False, "error": str(e)}
 
 
@@ -117,5 +117,5 @@ async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
         return results
 
     except Exception as e:
-        logger.info(f"Auto-sync batch failed for user {uid}: {e}")
+        logger.error(f"Auto-sync batch failed for user {uid}: {e}")
         return [{"synced": False, "error": str(e)}] * len(action_items)

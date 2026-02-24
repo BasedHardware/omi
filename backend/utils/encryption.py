@@ -76,7 +76,7 @@ def decrypt(encrypted_data: str, uid: str) -> str:
         # If decryption fails (e.g., wrong key, corrupted data), return the original encrypted data
         # to avoid data loss and to make debugging easier. In a production system, you might want
         # to log this error.
-        logger.info(f"Decryption failed for user {uid}: {e}")
+        logger.error(f"Decryption failed for user {uid}: {e}")
         return encrypted_data
 
 

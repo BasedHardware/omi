@@ -460,7 +460,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
             if existing_subscription and existing_subscription.stripe_subscription_id:
                 # If user already has a Stripe subscription, verify it's not the same one
                 if existing_subscription.stripe_subscription_id == session.get('subscription'):
-                    logger.info(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
+                    logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
                 else:
                     logger.info(
@@ -492,7 +492,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             if plan_type == PlanType.unlimited:
                                 await send_subscription_paid_personalized_notification(uid)
                         except ValueError:
-                            logger.info(f"Ignoring checkout session for subscription with unknown price_id: {price_id}")
+                            logger.warning(
+                                f"Ignoring checkout session for subscription with unknown price_id: {price_id}"
+                            )
 
     if event['type'] in [
         'customer.subscription.updated',

@@ -394,7 +394,7 @@ async def _stream_handler(
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
     async def send_heartbeat():
-        logger.info(f"send_heartbeat {uid} {session_id}")
+        logger.debug(f"send_heartbeat {uid} {session_id}")
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal started_at
@@ -410,7 +410,9 @@ async def _stream_handler(
 
                 # Inactivity timeout
                 if last_activity_time and time.time() - last_activity_time > inactivity_timeout_seconds:
-                    logger.info(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s) {uid} {session_id}")
+                    logger.warning(
+                        f"Session timeout due to inactivity ({inactivity_timeout_seconds}s) {uid} {session_id}"
+                    )
                     websocket_close_code = 1001
                     websocket_active = False
                     break
@@ -795,7 +797,7 @@ async def _stream_handler(
                 file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
 
                 if not file_path:
-                    logger.info(f"Speech profile file not found for {uid} {session_id}")
+                    logger.warning(f"Speech profile file not found for {uid} {session_id}")
                     return
 
                 # Send to appropriate STT socket with fixed duration padding
@@ -889,7 +891,7 @@ async def _stream_handler(
                 logger.info(f"Sent process_conversation request to pusher: {conversation_id} {uid} {session_id}")
                 return True
             except Exception as e:
-                logger.info(f"Failed to send process_conversation request: {e} {uid} {session_id}")
+                logger.error(f"Failed to send process_conversation request: {e} {uid} {session_id}")
                 pending_conversation_requests.discard(conversation_id)
                 return False
 
@@ -910,10 +912,10 @@ async def _stream_handler(
                     segment_buffers.clear()  # reset
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
-                    logger.info(f"Pusher transcripts Connection closed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher transcripts Connection closed: {e} {uid} {session_id}")
                     pusher_connected = False
                 except Exception as e:
-                    logger.info(f"Pusher transcripts failed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher transcripts failed: {e} {uid} {session_id}")
             if auto_reconnect and pusher_connected is False and websocket_active:
                 await connect()
 
@@ -968,10 +970,10 @@ async def _stream_handler(
                     await pusher_ws.send(data)
                     last_synced_conversation_id = current_conversation_id
                 except ConnectionClosed as e:
-                    logger.info(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
                     pusher_connected = False
                 except Exception as e:
-                    logger.info(f"Failed to send conversation_id to pusher: {e} {uid} {session_id}")
+                    logger.error(f"Failed to send conversation_id to pusher: {e} {uid} {session_id}")
 
             # Send audio bytes
             if pusher_connected and pusher_ws and audio_total_size > 0:
@@ -996,10 +998,10 @@ async def _stream_handler(
                     del audio_data  # Free immediately
                     await pusher_ws.send(data)
                 except ConnectionClosed as e:
-                    logger.info(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher audio_bytes Connection closed: {e} {uid} {session_id}")
                     pusher_connected = False
                 except Exception as e:
-                    logger.info(f"Pusher audio_bytes failed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher audio_bytes failed: {e} {uid} {session_id}")
             if auto_reconnect and pusher_connected is False and websocket_active:
                 await connect()
 
@@ -1054,7 +1056,7 @@ async def _stream_handler(
                 except asyncio.CancelledError:
                     break
                 except ConnectionClosed as e:
-                    logger.info(f"Pusher receive connection closed: {e} {uid} {session_id}")
+                    logger.error(f"Pusher receive connection closed: {e} {uid} {session_id}")
                     pusher_connected = False
                 except Exception as e:
                     logger.error(f"Pusher receive error: {e} {uid} {session_id}")
@@ -1081,7 +1083,7 @@ async def _stream_handler(
                         await pusher_ws.close()
                         pusher_ws = None
                     except Exception as e:
-                        logger.info(f"Pusher draining failed: {e} {uid} {session_id}")
+                        logger.error(f"Pusher draining failed: {e} {uid} {session_id}")
                 # connect
                 await _connect()
 
@@ -1135,7 +1137,7 @@ async def _stream_handler(
                     f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {uid} {session_id}"
                 )
             except Exception as e:
-                logger.info(f"Failed to send speaker sample request: {e} {uid} {session_id}")
+                logger.error(f"Failed to send speaker sample request: {e} {uid} {session_id}")
 
         def is_connected():
             return pusher_connected
@@ -1303,7 +1305,7 @@ async def _stream_handler(
                     }
             logger.info(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings {uid} {session_id}")
         except Exception as e:
-            logger.info(f"Speaker ID: failed to load embeddings: {e} {uid} {session_id}")
+            logger.error(f"Speaker ID: failed to load embeddings: {e} {uid} {session_id}")
             return
 
         if not person_embeddings_cache:
@@ -1383,7 +1385,7 @@ async def _stream_handler(
             # Extract only the needed bytes directly from ring buffer
             pcm_data = audio_ring_buffer.extract(extract_start, extract_end)
             if not pcm_data:
-                logger.info(f"Speaker ID: failed to extract audio {uid} {session_id}")
+                logger.error(f"Speaker ID: failed to extract audio {uid} {session_id}")
                 return
 
             # Convert PCM to numpy for WAV encoding
@@ -1655,7 +1657,7 @@ async def _stream_handler(
         expired = [tid for tid, data in image_chunks.items() if now - data['created_at'] > IMAGE_CHUNK_TTL]
         for tid in expired:
             del image_chunks[tid]
-            logger.info(f"Expired incomplete image upload: {tid} {uid} {session_id}")
+            logger.warning(f"Expired incomplete image upload: {tid} {uid} {session_id}")
 
     async def process_photo(uid: str, image_b64: str, temp_id: str, send_event_func, photo_buffer):
         from utils.llm.openglass import describe_image
@@ -1964,7 +1966,7 @@ async def _stream_handler(
             # Pusher connection
             await pusher_connect()
             if not pusher_is_connected():
-                logger.info(f"Pusher connection failed after retries {uid} {session_id}")
+                logger.error(f"Pusher connection failed after retries {uid} {session_id}")
                 await websocket.close(code=1011, reason="Pusher connection failed")
                 return
 

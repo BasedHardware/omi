@@ -115,7 +115,7 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
             template_text = prompt
 
         if not template_text:
-            logger.info(f"❌ Could not extract template text from LangSmith prompt: {prompt_name}")
+            logger.error(f"❌ Could not extract template text from LangSmith prompt: {prompt_name}")
             return None
 
         # Try to get commit hash from different places
@@ -155,7 +155,7 @@ def get_agentic_system_prompt_template() -> CachedPrompt:
         if _is_cache_valid(cached):
             return cached
         else:
-            logger.info(f"🔄 Cache expired for prompt: {prompt_name}")
+            logger.warning(f"🔄 Cache expired for prompt: {prompt_name}")
 
     # Try to fetch from LangSmith
     fetched = _fetch_prompt_from_langsmith(prompt_name)
@@ -165,7 +165,7 @@ def get_agentic_system_prompt_template() -> CachedPrompt:
         return fetched
 
     # Fallback to hardcoded prompt
-    logger.info(f"⚠️  Using fallback hardcoded prompt for: {prompt_name}")
+    logger.warning(f"⚠️  Using fallback hardcoded prompt for: {prompt_name}")
     fallback = CachedPrompt(
         template_text=_get_fallback_agentic_prompt_template(),
         prompt_name=prompt_name,

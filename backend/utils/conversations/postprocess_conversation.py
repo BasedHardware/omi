@@ -149,7 +149,7 @@ def _delete_postprocessing_audio(file_path):
 
 async def _process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):
     if not any(segment.is_user for segment in conversation.transcript_segments):
-        logger.info(f"_process_user_emotion skipped for {conversation.id}")
+        logger.warning(f"_process_user_emotion skipped for {conversation.id}")
         return
 
     process_user_emotion(uid, language_code, conversation, urls)

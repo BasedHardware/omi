@@ -331,7 +331,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except json.JSONDecodeError as e:
-        logger.info(f"Failed to parse LLM response as JSON: {e}")
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
         logger.info(f"Response was: {response}")
         # Return a basic summary on parse failure
         return {

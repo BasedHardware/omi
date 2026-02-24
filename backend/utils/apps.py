@@ -469,7 +469,7 @@ def upsert_app_payment_link(
 
     app_data = get_app_by_id_db(app_id)
     if not app_data:
-        logger.info(f"App is not found, app_id: {app_id}")
+        logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
     app = App(**app_data)
@@ -1335,7 +1335,7 @@ def fetch_app_chat_tools_from_manifest(
         )
 
         if response.status_code != 200:
-            logger.info(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
+            logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
             return None
 
         data = response.json()
@@ -1385,7 +1385,7 @@ def fetch_app_chat_tools_from_manifest(
         return result
 
     except requests.Timeout:
-        logger.info(f"⚠️ Manifest fetch timed out: {manifest_url}")
+        logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
         return None
     except requests.RequestException as e:
         logger.error(f"⚠️ Manifest fetch request error: {e}")
@@ -1416,15 +1416,15 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     endpoint = tool.get('endpoint')
 
     if not name or not isinstance(name, str):
-        logger.info(f"⚠️ Tool missing required 'name' field")
+        logger.warning(f"⚠️ Tool missing required 'name' field")
         return None
 
     if not description or not isinstance(description, str):
-        logger.info(f"⚠️ Tool '{name}' missing required 'description' field")
+        logger.warning(f"⚠️ Tool '{name}' missing required 'description' field")
         return None
 
     if not endpoint or not isinstance(endpoint, str):
-        logger.info(f"⚠️ Tool '{name}' missing required 'endpoint' field")
+        logger.warning(f"⚠️ Tool '{name}' missing required 'endpoint' field")
         return None
 
     # Build normalized tool definition

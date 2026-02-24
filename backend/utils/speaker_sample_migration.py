@@ -85,7 +85,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             try:
                 audio_bytes = await asyncio.to_thread(download_sample_audio, sample_path)
             except NotFound:
-                logger.info(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
+                logger.warning(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
                 # Mark for removal from Firestore (blob already gone)
                 samples_to_delete.append(sample_path)
                 continue
@@ -102,7 +102,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
                 valid_transcripts.append(transcript)
             elif reason.startswith("transcription_failed"):
                 # Transient API failure - keep sample, don't migrate yet
-                logger.info(f"Transcription failed for {sample_path}, keeping sample: {reason} {uid} {person_id}")
+                logger.error(f"Transcription failed for {sample_path}, keeping sample: {reason} {uid} {person_id}")
                 has_transient_failures = True
             else:
                 # Quality issue - mark for deletion (defer actual delete)
@@ -111,7 +111,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
         # Don't commit changes if there were transient failures - retry next time
         if has_transient_failures:
-            logger.info(f"Migration incomplete due to transient failures, will retry later {uid} {person_id}")
+            logger.warning(f"Migration incomplete due to transient failures, will retry later {uid} {person_id}")
             return person
 
         # Now safe to delete blobs - no transient failures
@@ -119,7 +119,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
             try:
                 await asyncio.to_thread(delete_sample_from_storage, sample_path)
             except Exception as e:
-                logger.info(f"Failed to delete sample {sample_path}: {e} {uid} {person_id}")
+                logger.error(f"Failed to delete sample {sample_path}: {e} {uid} {person_id}")
 
         new_embedding = None
         if valid_samples:
@@ -197,7 +197,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
             new_embedding = embedding.flatten().tolist()
         except NotFound:
             # Sample missing - don't advance to v3 to avoid caching stale v1 embedding
-            logger.info(f"First sample not found during v2→v3 migration, skipping: {samples[0]} {uid} {person_id}")
+            logger.warning(f"First sample not found during v2→v3 migration, skipping: {samples[0]} {uid} {person_id}")
             return person
         except Exception as e:
             logger.error(f"Error extracting speaker embedding during v2→v3 migration: {e} {uid} {person_id}")

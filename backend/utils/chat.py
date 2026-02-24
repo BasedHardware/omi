@@ -83,7 +83,7 @@ def transcribe_voice_message_segment(
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        logger.info('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return None, detected_language
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
@@ -118,7 +118,7 @@ def process_voice_message_segment(
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        logger.info('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return []
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
@@ -197,7 +197,7 @@ async def process_voice_message_segment_stream(
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        logger.info('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()

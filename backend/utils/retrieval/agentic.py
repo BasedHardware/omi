@@ -239,7 +239,7 @@ def execute_agentic_chat(
 
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
-        logger.info(f"⚠️ Could not get prompt metadata: {e}")
+        logger.error(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Core tools (fixed order) + dynamic app tools appended at end
@@ -350,7 +350,7 @@ async def execute_agentic_chat_stream(
 
         prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
-        logger.info(f"⚠️ Could not get prompt metadata: {e}")
+        logger.error(f"⚠️ Could not get prompt metadata: {e}")
         prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Core tools (fixed order) + dynamic app tools appended at end
@@ -599,7 +599,7 @@ async def _run_agent_stream(
                         # Send friendly error message to user (no technical jargon)
                         error_msg = f"\n\n{str(e)}"
                         await callback.put_data(error_msg)
-                        logger.info(f"🛡️ Safety Guard blocked tool call: {e}")
+                        logger.error(f"🛡️ Safety Guard blocked tool call: {e}")
                         # Signal completion and stop processing
                         await callback.end()
                         return
@@ -662,7 +662,7 @@ async def _run_agent_stream(
                         # Send friendly error message to user (no technical jargon)
                         error_msg = f"\n\n{str(e)}"
                         await callback.put_data(error_msg)
-                        logger.info(f"🛡️ Safety Guard blocked due to context size: {e}")
+                        logger.error(f"🛡️ Safety Guard blocked due to context size: {e}")
                         # Signal completion and stop processing
                         await callback.end()
                         return
@@ -689,7 +689,7 @@ async def _run_agent_stream(
         # Send friendly error message to user (no technical jargon)
         error_msg = f"\n\n{str(e)}"
         await callback.put_data(error_msg)
-        logger.info(f"🛡️ Safety Guard stopped execution: {e}")
+        logger.error(f"🛡️ Safety Guard stopped execution: {e}")
         await callback.end()
     except Exception as e:
         logger.error(f"❌ Error in _run_agent_stream: {e}")

@@ -495,7 +495,7 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
             logger.info(f"[MCP Discovery] Success via Streamable HTTP at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="streamable_http")
         except Exception as e:
-            logger.info(f"[MCP Discovery] Streamable HTTP failed at {url}: {e}")
+            logger.error(f"[MCP Discovery] Streamable HTTP failed at {url}: {e}")
             errors.append(f"HTTP {url}: {e}")
             continue
 
@@ -511,7 +511,7 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
             logger.info(f"[MCP Discovery] Success via SSE at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="sse")
         except Exception as e:
-            logger.info(f"[MCP Discovery] SSE failed at {url}: {e}")
+            logger.error(f"[MCP Discovery] SSE failed at {url}: {e}")
             errors.append(f"SSE {url}: {e}")
             continue
 

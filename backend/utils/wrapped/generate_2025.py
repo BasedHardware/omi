@@ -393,7 +393,7 @@ Pick something genuinely funny and retell it in an entertaining way. Make the us
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
-        logger.info(f"[Wrapped]     - Successfully parsed funniest event: {result.get('title', 'Unknown')}")
+        logger.warning(f"[Wrapped]     - Successfully parsed funniest event: {result.get('title', 'Unknown')}")
         return result
 
     except Exception as e:
@@ -453,7 +453,7 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
-        logger.info(f"[Wrapped]     - Successfully parsed embarrassing event: {result.get('title', 'Unknown')}")
+        logger.warning(f"[Wrapped]     - Successfully parsed embarrassing event: {result.get('title', 'Unknown')}")
         return result
 
     except Exception as e:

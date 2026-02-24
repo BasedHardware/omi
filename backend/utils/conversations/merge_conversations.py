@@ -116,7 +116,7 @@ def perform_merge_async(
                 conversations.append(conv)
 
         if len(conversations) < 2:
-            logger.info(f"Merge failed: Not enough conversations found for uid={uid}")
+            logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
             _handle_merge_failure(uid, conversation_ids)
             return
 
@@ -464,7 +464,7 @@ def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
     Since source conversations were set to 'merging' status, we need to
     reset them back to 'completed' so the user can try again or continue using them.
     """
-    logger.info(f"Merge failed for conversations: {conversation_ids}")
+    logger.error(f"Merge failed for conversations: {conversation_ids}")
     for conv_id in conversation_ids:
         try:
             conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.completed)

@@ -72,7 +72,7 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
                     email = email_addresses[0].get('value')
                     return email
         elif response.status_code == 401:
-            logger.info(f"❌ Google Contacts API 401 - token expired")
+            logger.warning(f"❌ Google Contacts API 401 - token expired")
             return None
         elif response.status_code == 403:
             # Will try Other Contacts
@@ -102,7 +102,7 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             # Wait a moment for cache to update (not strictly necessary but recommended)
             time.sleep(0.5)
         except Exception as warmup_error:
-            logger.info(f"⚠️ Other Contacts warm-up failed (non-critical): {warmup_error}")
+            logger.error(f"⚠️ Other Contacts warm-up failed (non-critical): {warmup_error}")
 
         # Now perform the actual search
         response = requests.get(
@@ -136,7 +136,7 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             else:
                 logger.info(f"⚠️ No contacts found in Other Contacts for: {query}")
         elif response.status_code == 401:
-            logger.info(f"❌ Google Contacts API 401 - token expired")
+            logger.warning(f"❌ Google Contacts API 401 - token expired")
             return None
         elif response.status_code == 403:
             logger.info(f"❌ Google Contacts API 403 - insufficient permissions (Other Contacts access required)")
@@ -656,7 +656,7 @@ def get_calendar_events_tool(
                         traceback.print_exc()
                         return f"Error fetching calendar events: {str(retry_error)}"
                 else:
-                    logger.info(f"❌ Token refresh failed")
+                    logger.error(f"❌ Token refresh failed")
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                     )
@@ -909,7 +909,7 @@ def create_calendar_event_tool(
                         traceback.print_exc()
                         return f"Error creating calendar event: {str(retry_error)}"
                 else:
-                    logger.info(f"❌ Token refresh failed")
+                    logger.error(f"❌ Token refresh failed")
                     return (
                         "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
                     )
@@ -1083,7 +1083,7 @@ def delete_calendar_event_tool(
                 event_title_found = event.get('summary', 'Untitled')
 
                 if not event_id:
-                    logger.info(f"⚠️ Event missing ID, skipping: {event_title_found}")
+                    logger.warning(f"⚠️ Event missing ID, skipping: {event_title_found}")
                     continue
 
                 try:
@@ -1091,7 +1091,7 @@ def delete_calendar_event_tool(
                     deleted_count += 1
                 except Exception as e:
                     error_msg = str(e)
-                    logger.info(f"❌ Failed to delete {event_title_found}: {error_msg}")
+                    logger.error(f"❌ Failed to delete {event_title_found}: {error_msg}")
                     failed_deletions.append((event_title_found, error_msg))
 
             # Build result message

@@ -344,7 +344,7 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         )
 
         if token_response.status_code != 200:
-            logger.info(f"Apple token exchange failed: {token_response.text}")
+            logger.error(f"Apple token exchange failed: {token_response.text}")
             raise HTTPException(status_code=400, detail="Failed to exchange Apple authorization code")
 
         token_json = token_response.json()
@@ -409,7 +409,7 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         response = requests.post(sign_in_url, json=payload)
 
         if response.status_code != 200:
-            logger.info(f"Firebase sign-in failed: {response.text}")
+            logger.error(f"Firebase sign-in failed: {response.text}")
             raise Exception(f"Firebase sign-in failed: {response.text}")
 
         result = response.json()

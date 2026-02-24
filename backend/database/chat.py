@@ -264,7 +264,7 @@ def report_message(uid: str, msg_doc_id: str):
         message_ref.update({'reported': True})
         return {"message": "Message reported"}
     except Exception as e:
-        logger.info(f"Update failed: {e}")
+        logger.error(f"Update failed: {e}")
         return {"message": f"Update failed: {e}"}
 
 
@@ -281,7 +281,7 @@ def update_message_rating(uid: str, message_id: str, rating: int | None):
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
     if not message_doc:
-        logger.info(f"⚠️ Message {message_id} not found for user {uid}")
+        logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
         return False
 
     try:
@@ -289,7 +289,7 @@ def update_message_rating(uid: str, message_id: str, rating: int | None):
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
         return True
     except Exception as e:
-        logger.info(f"❌ Failed to update message rating: {e}")
+        logger.error(f"❌ Failed to update message rating: {e}")
         return False
 
 
@@ -515,7 +515,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
-            logger.info(f"Message {doc_snapshot.id} not found, skipping.")
+            logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
             continue
 
         message_data = doc_snapshot.to_dict()

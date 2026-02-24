@@ -192,7 +192,7 @@ async def _websocket_util_trigger(
                         # Re-queue with incremented retry count
                         chunk_info['retries'] = retries + 1
                         private_cloud_queue.append(chunk_info)
-                        logger.info(f"Private cloud upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
+                        logger.error(f"Private cloud upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                     else:
                         logger.info(
                             f"Private cloud upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping chunk: {e} {uid} {conv_id}"

@@ -245,7 +245,7 @@ def _create_user_speech_profile(uid: str):
         logger.info(f'_create_user_speech_profile successful: {completed} {result.stdout}')
         return completed
     except Exception as e:
-        logger.info(f'_create_user_speech_profile failed: {e}')
+        logger.error(f'_create_user_speech_profile failed: {e}')
         return False
 
 
@@ -256,7 +256,7 @@ def _remove_user_speech_profile(uid: str):
         logger.info(f'_remove_user_speech_profile successful: {completed}')
         return completed
     except Exception as e:
-        logger.info(f'_remove_user_speech_profile failed: {e}')
+        logger.error(f'_remove_user_speech_profile failed: {e}')
         return False
 
 

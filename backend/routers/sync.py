@@ -401,7 +401,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
     Writes directly to WAV file to avoid accumulating all PCM data in memory.
     """
     if not os.path.exists(opus_file_path):
-        logger.info(f"File not found: {opus_file_path}")
+        logger.warning(f"File not found: {opus_file_path}")
         return False
 
     decoder = Decoder(sample_rate, channels)
@@ -600,7 +600,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # Fetch the updated conversation with all segments
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     if not conversation_data:
-        logger.info(f'Conversation {conversation_id} not found for reprocessing')
+        logger.warning(f'Conversation {conversation_id} not found for reprocessing')
         return
 
     # Convert to Conversation object
@@ -629,7 +629,7 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
     words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        logger.info('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return
 
     timestamp = get_timestamp_from_path(path)
@@ -698,7 +698,7 @@ def _cleanup_files(file_paths):
             if path and os.path.exists(path):
                 os.remove(path)
         except Exception as e:
-            logger.info(f"Failed to cleanup file {path}: {e}")
+            logger.error(f"Failed to cleanup file {path}: {e}")
 
 
 @router.post("/v1/sync-local-files")

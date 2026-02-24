@@ -325,7 +325,7 @@ def _trigger_apps(
                 if app_to_run:
                     logger.info(f"Using first suggested app: {app_to_run.name}")
                 else:
-                    logger.info(f"First suggested app '{first_suggested_app_id}' not found in apps.")
+                    logger.warning(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
@@ -836,7 +836,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     task_data = tasks_db.get_task_by_action_request(task_action, request_id)
     if task_data is None:
-        logger.info(f"Task not found. Action: {task_action}, Request ID: {request_id}")
+        logger.warning(f"Task not found. Action: {task_action}, Request ID: {request_id}")
         return
 
     task = Task(**task_data)
@@ -876,7 +876,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     # Conversation
     conversation_data = conversations_db.get_conversation(uid, task.memory_id)
     if conversation_data is None:
-        logger.info(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
+        logger.warning(f"Conversation is not found. Uid: {uid}. Conversation: {task.memory_id}")
         return
 
     conversation = Conversation(**conversation_data)

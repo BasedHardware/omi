@@ -98,7 +98,7 @@ def get_memories_tool(
             if config:
                 logger.info(f"🔧 get_memories_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ get_memories_tool - config not found in context variable")
+            logger.warning(f"❌ get_memories_tool - config not found in context variable")
             config = None
 
     if config is None:
@@ -237,7 +237,7 @@ def search_memories_tool(
             if config:
                 logger.info(f"🔧 search_memories_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ search_memories_tool - config not found in context variable")
+            logger.warning(f"❌ search_memories_tool - config not found in context variable")
             config = None
 
     if config is None:

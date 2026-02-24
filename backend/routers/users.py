@@ -642,7 +642,7 @@ def set_preferred_app_for_user(
     try:
         set_user_preferred_app(uid, app_id_to_set)
     except Exception as e:
-        logger.info(f"Failed to set preferred app in Redis for user {uid}: {e}")
+        logger.error(f"Failed to set preferred app in Redis for user {uid}: {e}")
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}

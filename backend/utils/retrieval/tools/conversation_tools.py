@@ -107,7 +107,7 @@ def get_conversations_tool(
             if config:
                 logger.info(f"🔧 get_conversations_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ get_conversations_tool - config not found in context variable")
+            logger.warning(f"❌ get_conversations_tool - config not found in context variable")
             config = None
 
     if config is None:
@@ -211,7 +211,7 @@ def get_conversations_tool(
                 people = [Person(**p) for p in people_data]
                 logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
         else:
-            logger.info(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
+            logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
@@ -329,7 +329,7 @@ def search_conversations_tool(
             if config:
                 logger.info(f"🔧 search_conversations_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ search_conversations_tool - config not found in context variable")
+            logger.warning(f"❌ search_conversations_tool - config not found in context variable")
             config = None
 
     if config is None:
@@ -426,7 +426,7 @@ def search_conversations_tool(
                 people = [Person(**p) for p in people_data]
                 logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
-            logger.info(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
+            logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []

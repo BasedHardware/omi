@@ -566,7 +566,7 @@ def get_or_create_merged_audio(
                     logger.info(f"Serving merged audio from cache: {cache_path}")
                     return cache_blob.download_as_bytes(), True
                 else:
-                    logger.info(f"Cache expired for: {cache_path}")
+                    logger.warning(f"Cache expired for: {cache_path}")
             except (ValueError, TypeError):
                 pass
 

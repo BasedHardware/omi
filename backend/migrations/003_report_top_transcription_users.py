@@ -127,7 +127,7 @@ def main():
         logger.info(f"Found {len(uids_to_process)} users to process.")
 
     if not uids_to_process:
-        logger.info("No users to process. Exiting.")
+        logger.debug("No users to process. Exiting.")
         return
 
     # Calculate usage and filter for users with recent activity
@@ -153,7 +153,7 @@ def main():
                 )
 
     if not all_user_usage:
-        logger.info("\nNo users with recent usage found. Exiting.")
+        logger.debug("\nNo users with recent usage found. Exiting.")
         return
 
     # For users with usage, fetch email addresses

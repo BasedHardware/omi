@@ -77,7 +77,7 @@ def with_retry(operation_name: str, func: Callable[[], T]) -> T:
             if attempt == max_retries - 1:
                 raise
             logger.error(f"Error in {operation_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
-            logger.info(f"Retrying in {delay} seconds...")
+            logger.warning(f"Retrying in {delay} seconds...")
             time.sleep(delay)
     raise Exception("Maximum retries exceeded")
 

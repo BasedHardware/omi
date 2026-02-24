@@ -262,13 +262,13 @@ async def extract_speaker_samples(
         # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 1:
-            logger.info(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
+            logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
             return
 
         # Fetch conversation to get started_at and segment details
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if not conversation:
-            logger.info(f"Conversation {conversation_id} not found {uid}")
+            logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
 
         started_at = conversation.get('started_at')
@@ -285,7 +285,7 @@ async def extract_speaker_samples(
         # Get chunks from audio_files instead of storage listing
         audio_files = conversation.get('audio_files', [])
         if not audio_files:
-            logger.info(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
+            logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
             return
 
         # Collect all chunk timestamps from audio files
@@ -295,7 +295,7 @@ async def extract_speaker_samples(
             all_timestamps.extend(timestamps)
 
         if not all_timestamps:
-            logger.info(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
+            logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
             return
 
         # Build chunks list in expected format
@@ -314,7 +314,7 @@ async def extract_speaker_samples(
 
             seg = segment_map.get(seg_id)
             if not seg:
-                logger.info(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
+                logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
                 continue
 
             segment_start = seg.get('start')
@@ -420,7 +420,7 @@ async def extract_speaker_samples(
             # Verify sample quality and get transcript using centralized function
             transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
             if not is_valid:
-                logger.info(f"Sample failed quality check: {reason} {uid} {conversation_id}")
+                logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment
 
             # Upload and store
@@ -446,9 +446,9 @@ async def extract_speaker_samples(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )
                 except Exception as emb_err:
-                    logger.info(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
             else:
-                logger.info(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
+                logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
                 break  # Likely hit limit
 
     except Exception as e:

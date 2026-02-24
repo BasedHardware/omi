@@ -124,7 +124,7 @@ def main():
         total_user_count += 1
         uid = user_doc.id
         if uid in ignore_uids:
-            logger.info(f"User {uid} is in the ignore list. Skipping.")
+            logger.warning(f"User {uid} is in the ignore list. Skipping.")
             skipped_user_count += 1
             continue
 
@@ -134,15 +134,15 @@ def main():
         if current_level == 'standard':
             users_to_migrate.append(uid)
         else:
-            logger.info(f"User {uid} is already at '{current_level}' protection level. Skipping.")
+            logger.warning(f"User {uid} is already at '{current_level}' protection level. Skipping.")
             skipped_user_count += 1
 
     logger.info(f"\nChecked {total_user_count} total users.")
     logger.info(f"Found {len(users_to_migrate)} users to migrate.")
-    logger.info(f"{skipped_user_count} users will be skipped.")
+    logger.warning(f"{skipped_user_count} users will be skipped.")
 
     if not users_to_migrate:
-        logger.info("No users to migrate. Exiting.")
+        logger.debug("No users to migrate. Exiting.")
         return
 
     with ThreadPoolExecutor(max_workers=64) as executor:

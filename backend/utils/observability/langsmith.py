@@ -133,7 +133,7 @@ def get_chat_tracer_callbacks(
         return [tracer]
 
     except Exception as e:
-        logger.info(f"⚠️  Failed to create LangSmith tracer: {e}")
+        logger.error(f"⚠️  Failed to create LangSmith tracer: {e}")
         return []
 
 
@@ -159,7 +159,7 @@ def submit_langsmith_feedback(
     The run_id must be from a traced run (e.g., chat requests with per-request tracing).
     """
     if not has_langsmith_api_key():
-        logger.info(f"⚠️  LangSmith feedback skipped: API key not configured")
+        logger.warning(f"⚠️  LangSmith feedback skipped: API key not configured")
         return False
 
     try:

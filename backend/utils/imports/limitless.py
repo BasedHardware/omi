@@ -394,7 +394,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                 )
 
     except Exception as e:
-        logger.info(f"Import job {job_id} failed: {str(e)}")
+        logger.error(f"Import job {job_id} failed: {str(e)}")
         traceback.print_exc()
         import_jobs_db.update_import_job(
             job_id,
@@ -419,7 +419,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             if os.path.exists(zip_path):
                 os.remove(zip_path)
         except Exception as e:
-            logger.info(f"Failed to clean up ZIP file {zip_path}: {e}")
+            logger.error(f"Failed to clean up ZIP file {zip_path}: {e}")
 
 
 def create_import_job(uid: str, source_type: ImportSourceType = ImportSourceType.limitless) -> ImportJob:

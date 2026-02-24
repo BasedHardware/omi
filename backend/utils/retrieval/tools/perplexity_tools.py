@@ -45,7 +45,7 @@ def perplexity_web_search_tool(
 
     api_key = os.getenv('PERPLEXITY_API_KEY')
     if not api_key:
-        logger.info("❌ perplexity_web_search_tool - PERPLEXITY_API_KEY not found in environment")
+        logger.warning("❌ perplexity_web_search_tool - PERPLEXITY_API_KEY not found in environment")
         return "Error: Perplexity API key not configured"
 
     try:
@@ -97,7 +97,7 @@ def perplexity_web_search_tool(
             return "Error: Unexpected response format from Perplexity API"
 
     except requests.exceptions.Timeout:
-        logger.info("❌ perplexity_web_search_tool - Request timeout")
+        logger.warning("❌ perplexity_web_search_tool - Request timeout")
         return "Error: Request to Perplexity API timed out. Please try again later."
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ perplexity_web_search_tool - Request error: {e}")

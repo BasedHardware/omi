@@ -162,7 +162,7 @@ class FileChatTool:
                     self.uid, self.chat_session_id, self.thread_id, self.assistant_id
                 )
             except Exception as e:
-                logger.info(f"Failed to save thread/assistant IDs to database: {e}")
+                logger.error(f"Failed to save thread/assistant IDs to database: {e}")
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid, question, file_ids: List[str], thread_id: str):
@@ -250,15 +250,15 @@ class FileChatTool:
                 try:
                     openai.files.delete(file.openai_file_id, timeout=30.0)
                 except Exception as e:
-                    logger.info(f"Failed to delete file {file.openai_file_id}: {e}")
+                    logger.error(f"Failed to delete file {file.openai_file_id}: {e}")
 
         if self.thread_id:
             try:
                 openai.beta.threads.delete(self.thread_id, timeout=30.0)
             except Exception as e:
-                logger.info(f"Failed to delete thread {self.thread_id}: {e}")
+                logger.error(f"Failed to delete thread {self.thread_id}: {e}")
         if self.assistant_id:
             try:
                 openai.beta.assistants.delete(self.assistant_id, timeout=30.0)
             except Exception as e:
-                logger.info(f"Failed to delete assistant {self.assistant_id}: {e}")
+                logger.error(f"Failed to delete assistant {self.assistant_id}: {e}")

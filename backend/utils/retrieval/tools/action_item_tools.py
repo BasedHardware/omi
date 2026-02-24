@@ -104,7 +104,7 @@ def get_action_items_tool(
             if config:
                 logger.info(f"🔧 get_action_items_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ get_action_items_tool - config not found in context variable")
+            logger.warning(f"❌ get_action_items_tool - config not found in context variable")
             config = None
 
     # Safely access config
@@ -335,7 +335,7 @@ def create_action_item_tool(
             if config:
                 logger.info(f"🔧 create_action_item_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ create_action_item_tool - config not found in context variable")
+            logger.warning(f"❌ create_action_item_tool - config not found in context variable")
             config = None
 
     if config is None:
@@ -410,13 +410,13 @@ def create_action_item_tool(
                     due_at=due.isoformat(),
                 )
             except Exception as notif_error:
-                logger.info(f"⚠️ Failed to send notification: {notif_error}")
+                logger.error(f"⚠️ Failed to send notification: {notif_error}")
 
         # Send immediate notification that task was created
         try:
             send_action_item_created_notification(uid, task_desc)
         except Exception as notif_error:
-            logger.info(f"⚠️ Failed to send creation notification: {notif_error}")
+            logger.error(f"⚠️ Failed to send creation notification: {notif_error}")
 
         return result
 
@@ -476,7 +476,7 @@ def update_action_item_tool(
             if config:
                 logger.info(f"🔧 update_action_item_tool - got config from context variable")
         except LookupError:
-            logger.info(f"❌ update_action_item_tool - config not found in context variable")
+            logger.warning(f"❌ update_action_item_tool - config not found in context variable")
             config = None
 
     if config is None:
@@ -548,7 +548,7 @@ def update_action_item_tool(
             try:
                 send_action_item_completed_notification(uid, updated_item.get('description', 'Task'))
             except Exception as notif_error:
-                logger.info(f"⚠️ Failed to send completion notification: {notif_error}")
+                logger.error(f"⚠️ Failed to send completion notification: {notif_error}")
                 # Don't fail the update if notification fails
 
         return result

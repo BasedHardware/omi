@@ -72,7 +72,7 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
         response = requests.get(url, headers=headers)
 
         if response.status_code != 200:
-            logger.info(f"Failed to fetch contents for {path}: {response.status_code}")
+            logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
             return
 
         contents = response.json()
