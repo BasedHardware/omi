@@ -96,6 +96,23 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 cd app && flutter gen-l10n
 ```
 
+### Running the iOS Simulator
+
+```bash
+xcrun simctl list devices | grep Booted  # get device ID
+cd app && flutter run -d <device-id> --flavor prod
+```
+
+### Firebase Prod Config
+
+Never run `flutterfire configure` — it will overwrite prod credentials with the wrong project.
+
+Prod credential files (already correct, do not regenerate):
+- `app/ios/Config/Prod/GoogleService-Info.plist`
+- `app/lib/firebase_options_prod.dart`
+- `app/android/app/src/prod/google-services.json`
+- `app/ios/Flutter/prod{Debug,Release,Profile}.xcconfig`
+
 ### Simulator Hot Restart
 
 When the iOS Simulator is running, trigger a hot restart after finishing edits — do not wait for the user to do it manually:
