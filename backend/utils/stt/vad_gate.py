@@ -689,6 +689,7 @@ class GatedDeepgramSocket:
             gate_out = self._gate.process_audio(data, now)
         except Exception:
             logger.exception('VAD gate process error, falling back to direct send uid=%s', self._gate.uid)
+            self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
             return self._conn.send(data)
         if gate_out.audio_to_send:
