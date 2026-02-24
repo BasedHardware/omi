@@ -29,8 +29,6 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
         return {"has_vm": False}
     return {
         "has_vm": True,
-        "ip": vm.get("ip"),
-        "auth_token": vm.get("authToken"),
         "status": vm.get("status"),
     }
 
