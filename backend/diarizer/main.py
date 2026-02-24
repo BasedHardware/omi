@@ -6,6 +6,8 @@ from diarization import diarization_endpoint
 from embedding import embedding_endpoint, embedding_endpoint_v2
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
