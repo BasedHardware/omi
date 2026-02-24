@@ -77,7 +77,7 @@ async def execute_agent_chat_stream(
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[str, None]:
-    logger.info(f"execute_agent_chat_stream app:  {app.id if app else "<none>"}")
+    logger.info(f'execute_agent_chat_stream app:  {app.id if app else "<none>"}')
     callback = AsyncStreamingCallback()
 
     async with MCPServerStdio(
