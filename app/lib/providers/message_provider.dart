@@ -687,16 +687,33 @@ class MessageProvider extends ChangeNotifier {
           history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
       final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
 
+      Timer? rotateTimer;
+      int rotateIndex = 0;
+      const rotateMessages = [
+        'Querying your data',
+        'Analyzing activity',
+        'Processing results',
+        'Pulling context',
+        'Searching records',
+      ];
+
       void startSilenceTimer() {
         silenceTimer?.cancel();
+        rotateTimer?.cancel();
         if (message.text.isNotEmpty || textBuffer.isNotEmpty) {
           silenceTimer = Timer(const Duration(seconds: 2), () {
             flushBuffer();
             agentThinkingAfterText = true;
-            if (!message.thinkings.any((t) => t == 'Thinking')) {
-              message.thinkings.add('Thinking');
-            }
+            rotateIndex = 0;
+            message.thinkings.add(rotateMessages[rotateIndex]);
             notifyListeners();
+            rotateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+              rotateIndex = (rotateIndex + 1) % rotateMessages.length;
+              if (message.thinkings.isNotEmpty) {
+                message.thinkings[message.thinkings.length - 1] = rotateMessages[rotateIndex];
+              }
+              notifyListeners();
+            });
           });
         }
       }
@@ -705,6 +722,7 @@ class MessageProvider extends ChangeNotifier {
         switch (event.type) {
           case AgentChatEventType.textDelta:
             silenceTimer?.cancel();
+            rotateTimer?.cancel();
             if (agentThinkingAfterText) {
               textBuffer += '\n\n';
               agentThinkingAfterText = false;
@@ -719,6 +737,7 @@ class MessageProvider extends ChangeNotifier {
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
             silenceTimer?.cancel();
+            rotateTimer?.cancel();
             flushBuffer();
             if (message.text.isNotEmpty) {
               agentThinkingAfterText = true;
@@ -730,6 +749,7 @@ class MessageProvider extends ChangeNotifier {
             break;
           case AgentChatEventType.result:
             silenceTimer?.cancel();
+            rotateTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -740,6 +760,7 @@ class MessageProvider extends ChangeNotifier {
             break;
           case AgentChatEventType.error:
             silenceTimer?.cancel();
+            rotateTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -754,6 +775,7 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     } finally {
       silenceTimer?.cancel();
+      rotateTimer?.cancel();
       timer?.cancel();
       flushBuffer();
       agentThinkingAfterText = false;
