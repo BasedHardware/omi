@@ -163,20 +163,24 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def should_discard_conversation(transcript: str, photos: List[ConversationPhoto] = None) -> bool:
+def should_discard_conversation(
+    transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
+) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
     if transcript and len(transcript.split(' ')) > 100:
         return False
 
+    word_count = len(transcript.split()) if transcript and transcript.strip() else 0
+    has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
+
     context_parts = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
-    if photos:
+    if has_photos:
         photo_descriptions = ConversationPhoto.photos_as_string(photos)
-        if photo_descriptions != 'None':
-            context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
+        context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
     # If there is no content to process (e.g., empty transcript and no photo descriptions), discard.
     if not context_parts:
@@ -184,15 +188,28 @@ def should_discard_conversation(transcript: str, photos: List[ConversationPhoto]
 
     full_context = "\n\n".join(context_parts)
 
+    # Add duration metadata so the LLM can make duration-aware decisions
+    duration_context = ""
+    if duration_seconds is not None:
+        duration_context = f"\nConversation duration: {int(duration_seconds)} seconds. Word count: {word_count} words."
+        if duration_seconds < 120:
+            duration_context += (
+                "\nNote: This is a very short conversation (under 2 minutes). "
+                "Apply a higher bar for keeping — only KEEP if the content is clearly actionable "
+                "(a specific task, reminder, name/person, appointment, or meaningful request like 'call mom' or 'buy milk'). "
+                "Generic filler words, acknowledgments, or incomplete thoughts in short conversations should be discarded."
+            )
+
     custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
     prompt = ChatPromptTemplate.from_messages(
         [
-            '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory. Length is never a reason to discard.
+            '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
 
 Task: Decide if the content should be saved as conversation summary.
+{duration_context}
 
 KEEP (output: discard = False) if the content contains any of the following:
-• A task, request, or action item.
+• A task, request, or action item (e.g., "call John before 5", "buy groceries", "remind me to email Sarah").
 • A decision, commitment, or plan.
 • A question that requires follow-up.
 • Personal facts, preferences, or details likely useful later (e.g., remembering a person, place, or object).
@@ -203,7 +220,8 @@ KEEP (output: discard = False) if the content contains any of the following:
 DISCARD (output: discard = True) if the content is:
 • Trivial conversation snippets (e.g., brief apologies, casual remarks, single-sentence comments without context).
 • Very brief interactions (5-10 seconds) that lack actionable content or meaningful context.
-• Casual acknowledgments, greetings, or passing comments that don't contain useful information.
+• Casual acknowledgments, greetings, or passing comments that don't contain useful information (e.g., "okay", "hmm", "yeah sure", "sorry", "hello", "alright").
+• Incomplete or fragmented speech that doesn't convey a clear meaning.
 • Blurry photos, uninteresting scenery with no context, or content that doesn't meet the KEEP criteria above.
 • Feels like asking Siri or other AI assistant something in 1-2 sentences or using voice to type something in a chat for 5-10 seconds.
 
@@ -223,6 +241,7 @@ Content:
         response: DiscardConversation = chain.invoke(
             {
                 'full_context': full_context,
+                'duration_context': duration_context,
                 'format_instructions': custom_parser.get_format_instructions(),
             }
         )
