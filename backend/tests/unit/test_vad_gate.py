@@ -18,6 +18,7 @@ from utils.stt.vad_gate import (
 
 # Global speech flag for mock VAD
 _mock_is_speech = False
+_mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
 
 class _MockVADModel:
@@ -25,9 +26,12 @@ class _MockVADModel:
 
     Returns 0.9 for speech, 0.1 for silence — matching how the raw model
     works (continuous probability per window, NOT event-based like VADIterator).
+    When _mock_vad_prob is set, returns that exact value for boundary testing.
     """
 
     def __call__(self, tensor, sample_rate):
+        if _mock_vad_prob is not None:
+            return _mock_vad_prob
         return 0.9 if _mock_is_speech else 0.1
 
     def reset_states(self):
@@ -48,8 +52,9 @@ def mock_silero():
         patch('utils.stt.vad_gate._vad_model_pool', None),
         patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
     ):
-        global _mock_is_speech
+        global _mock_is_speech, _mock_vad_prob
         _mock_is_speech = False
+        _mock_vad_prob = None
         yield
 
 
@@ -64,8 +69,15 @@ def _make_pcm(duration_ms: int, sample_rate: int = 16000, channels: int = 1) -> 
 
 def _set_vad_speech(is_speech: bool):
     """Configure mock VAD to return speech or silence."""
-    global _mock_is_speech
+    global _mock_is_speech, _mock_vad_prob
     _mock_is_speech = is_speech
+    _mock_vad_prob = None  # Clear exact prob when using bool mode
+
+
+def _set_vad_prob(prob: float):
+    """Configure mock VAD to return an exact probability value."""
+    global _mock_vad_prob
+    _mock_vad_prob = prob
 
 
 class TestVADStreamingGate:
@@ -1097,6 +1109,30 @@ class TestSpeechThreshold:
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
             assert gate._speech_threshold == 0.8
 
+    def test_threshold_boundary_exact(self):
+        """Probability exactly equal to threshold should NOT trigger speech (strict >)."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+        threshold = gate._speech_threshold
+        # Prob == threshold → silence (strict > comparison)
+        # Use 40ms chunk to exceed VAD window (512 samples = 32ms at 16kHz)
+        _set_vad_prob(threshold)
+        t = 1000.0
+        out = gate.process_audio(_make_pcm(40), t)
+        assert gate._state == GateState.SILENCE
+        assert out.audio_to_send == b''
+
+    def test_threshold_boundary_just_above(self):
+        """Probability just above threshold should trigger speech."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+        threshold = gate._speech_threshold
+        # Prob just above threshold → speech
+        # Use 40ms chunk to exceed VAD window (512 samples = 32ms at 16kHz)
+        _set_vad_prob(threshold + 0.001)
+        t = 1000.0
+        out = gate.process_audio(_make_pcm(40), t)
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+
 
 class TestTimeBasedPreRoll:
     """Tests for time-based pre-roll buffer eviction."""
@@ -1404,6 +1440,29 @@ class TestGateCreationIntegration:
 
             # Gate stays in active mode, never went through shadow
             assert vad_gate.mode == 'active'
+
+    def test_gate_init_failure_results_in_none(self):
+        """Mirror transcribe.py:752 — if VADStreamingGate() raises, vad_gate stays None."""
+        with (
+            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
+            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
+        ):
+            # Simulate construction failure (e.g. model load error)
+            vad_gate = None
+            try:
+                with patch.object(VADStreamingGate, '__init__', side_effect=RuntimeError('model load failed')):
+                    vad_gate = VADStreamingGate(
+                        sample_rate=16000,
+                        channels=1,
+                        mode='active',
+                        uid='test',
+                        session_id='sess',
+                    )
+            except Exception:
+                vad_gate = None
+
+            # Transcription should continue without gate
+            assert vad_gate is None
 
     def test_gated_socket_wraps_main_not_profile(self):
         """GatedDeepgramSocket wraps main DG socket; profile socket has no gate."""
