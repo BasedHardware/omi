@@ -518,15 +518,23 @@ class ActionItemsProvider extends ChangeNotifier {
     // TODO: Add analytics for completed action items toggle
   }
 
+// Update toggleShowCompletedView to turn off Edit Mode
   void toggleShowCompletedView() {
     _showCompletedView = !_showCompletedView;
+    if (_showCompletedView) {
+      _isEditMode = false; // Turn off edit mode when viewing completed tasks
+      _selectedItems.clear();
+    }
     notifyListeners();
   }
   
+// Update toggleEditMode to turn off Completed View
   void toggleEditMode() {
     _isEditMode = !_isEditMode;
-    if (!_isEditMode) {
-      clearSelection();
+    if (_isEditMode) {
+      _showCompletedView = false; // Turn off completed tasks when entering edit mode
+    } else {
+      _selectedItems.clear();
     }
     notifyListeners();
   }
