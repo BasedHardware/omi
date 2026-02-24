@@ -1129,17 +1129,24 @@ if (provider.showCompletedView) {
                     ),
                   ),
                 ),
-              // Checkbox
-              GestureDetector(
-                onTap: () async {
-                  HapticFeedback.lightImpact();
-                  await provider.updateActionItemState(item, !item.completed);
-                  if (!item.completed) _onActionItemCompleted();
-                },
-                child: _buildCheckbox(item.completed),
-              ),
-              const SizedBox(width: 12),
-// Task text
+              // LEFT CHECKBOX: Source of Truth (Disappears in Edit Mode)
+              if (!provider.isEditMode)
+                GestureDetector(
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    await provider.updateActionItemState(item, !item.completed);
+                    if (!item.completed) _onActionItemCompleted();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: _buildCheckbox(item.completed),
+                  ),
+                ),
+
+              // Reduced spacing to allow text to shift left in edit mode
+              SizedBox(width: provider.isEditMode ? 0 : 4),
+
+              // Task text
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,7 +1172,8 @@ if (provider.showCompletedView) {
                   ],
                 ),
               ),
-              // Selection circle in edit mode
+
+              // RIGHT CHECKBOX: Matches Left (Visible only in Edit Mode)
               if (provider.isEditMode)
                 GestureDetector(
                   onTap: () {
@@ -1174,20 +1182,8 @@ if (provider.showCompletedView) {
                   },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: provider.isItemSelected(item.id) ? Colors.red[400]! : Colors.grey[600]!,
-                          width: 2,
-                        ),
-                        color: provider.isItemSelected(item.id) ? Colors.red[400] : Colors.transparent,
-                      ),
-                      child: provider.isItemSelected(item.id)
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
-                          : null,
+                    child: _buildRightSelectionCheckbox(
+                      provider.isItemSelected(item.id),
                     ),
                   ),
                 ),
@@ -1210,6 +1206,22 @@ if (provider.showCompletedView) {
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
       child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
+    );
+  }
+
+  Widget _buildRightSelectionCheckbox(bool isSelected) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? Colors.red[400]! : Colors.grey[600]!,
+          width: 2,
+        ),
+        color: isSelected ? Colors.red[400] : Colors.transparent,
+      ),
+      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
     );
   }
 
