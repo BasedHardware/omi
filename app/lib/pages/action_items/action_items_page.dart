@@ -173,23 +173,49 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildFab() {
-    return Positioned(
-      right: 20,
-      bottom: 100,
-      child: FloatingActionButton(
-        heroTag: 'action_items_fab',
-        onPressed: () {
-          HapticFeedback.lightImpact();
-          _showCreateActionItemSheet(
-            defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-          );
-        },
-        backgroundColor: Colors.deepPurple,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
+Widget _buildFab() {
+  return Consumer<ActionItemsProvider>(
+    builder: (context, provider, _) {
+      if (provider.isEditMode && provider.hasSelection) {
+        return Positioned(
+          right: 20,
+          bottom: 100,
+          child: FloatingActionButton.extended(
+            heroTag: 'action_items_fab',
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              await provider.deleteSelectedItems();
+            },
+            backgroundColor: Colors.red[600],
+            icon: const Icon(Icons.delete, color: Colors.white),
+            label: Text(
+              'Delete (${provider.selectedCount})',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        );
+      }
+      if (provider.isEditMode) {
+        return const SizedBox.shrink(); // hide FAB when in edit mode with no selection
+      }
+      return Positioned(
+        right: 20,
+        bottom: 100,
+        child: FloatingActionButton(
+          heroTag: 'action_items_fab',
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            _showCreateActionItemSheet(
+              defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+            );
+          },
+          backgroundColor: Colors.deepPurple,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      );
+    },
+  );
+}
 
   // Categorize items by deadline
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
@@ -1059,7 +1085,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 child: _buildCheckbox(item.completed),
               ),
               const SizedBox(width: 12),
-              // Task text
+// Task text
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1085,13 +1111,38 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ],
                 ),
               ),
+              // Selection circle in edit mode
+              if (provider.isEditMode)
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    provider.toggleItemSelection(item.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: provider.isItemSelected(item.id) ? Colors.red[400]! : Colors.grey[600]!,
+                          width: 2,
+                        ),
+                        color: provider.isItemSelected(item.id) ? Colors.red[400] : Colors.transparent,
+                      ),
+                      child: provider.isItemSelected(item.id)
+                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          : null,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
-
   Widget _buildCheckbox(bool isCompleted) {
     return Container(
       width: 22,
