@@ -32,7 +32,9 @@ struct TaskChatPanel: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Messages area
+                // Messages area — .frame(maxHeight: .infinity) marks this as the flexible
+            // child so the VStack doesn't try to measure the LazyVStack content eagerly,
+            // which would cause recursive StackLayout sizing (layout loop at 100% CPU).
                 ChatMessagesView(
                     messages: taskState.messages,
                     isSending: taskState.isSending,
@@ -44,6 +46,7 @@ struct TaskChatPanel: View {
                     onRate: { _, _ in },
                     welcomeContent: { taskWelcome }
                 )
+                .frame(maxHeight: .infinity)
 
                 // Error banner
                 if let error = taskState.errorMessage {

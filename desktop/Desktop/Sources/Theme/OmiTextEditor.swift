@@ -119,9 +119,13 @@ struct OmiTextEditor: NSViewRepresentable {
             }
 
             // Re-focus the text view when content changes programmatically
-            // (e.g. switching between task chats reuses this NSView)
-            if focusOnAppear, let window = scrollView.window {
+            // (e.g. switching between task chats reuses this NSView).
+            // Guard: skip if the text view already has focus to avoid a
+            // focus-thrash loop with SwiftUI's SelectionOverlay.
+            if focusOnAppear, let window = scrollView.window,
+               window.firstResponder !== textView {
                 DispatchQueue.main.async {
+                    guard window.firstResponder !== textView else { return }
                     window.makeFirstResponder(textView)
                 }
             }
