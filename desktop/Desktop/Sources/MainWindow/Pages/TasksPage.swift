@@ -3515,41 +3515,68 @@ struct TaskDragPreviewSimple: View {
 
 /// Shows streaming activity or unread dot for a task's chat session.
 /// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+///
+/// Uses @State + .onReceive instead of @ObservedObject so that only this
+/// specific task's indicator re-renders when coordinator state changes —
+/// not every task row simultaneously (which caused the 822-level layout
+/// traversal on every coordinator publish).
 struct ChatSessionStatusIndicator: View {
     let task: TaskActionItem
-    @ObservedObject var coordinator: TaskChatCoordinator
+    let coordinator: TaskChatCoordinator
     var onOpenChat: ((TaskActionItem) -> Void)?
 
+    @State private var isStreaming = false
+    @State private var streamingStatus: String? = nil
+    @State private var hasUnread = false
+
     var body: some View {
-        if coordinator.streamingTaskIds.contains(task.id) {
-            // Streaming: spinning indicator + status text
-            HStack(spacing: 4) {
-                ProgressView()
-                    .scaleEffect(0.5)
-                    .frame(width: 10, height: 10)
-
-                Text(coordinator.streamingStatuses[task.id] ?? "Responding...")
-                    .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .lineLimit(1)
-            }
-        } else if coordinator.unreadTaskIds.contains(task.id) {
-            // Unread: purple dot
-            Button {
-                onOpenChat?(task)
-            } label: {
+        Group {
+            if isStreaming {
+                // Streaming: spinning indicator + status text
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 8, height: 8)
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 10, height: 10)
 
-                    Text("New reply")
+                    Text(streamingStatus ?? "Responding...")
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .lineLimit(1)
                 }
+            } else if hasUnread {
+                // Unread: purple dot
+                Button {
+                    onOpenChat?(task)
+                } label: {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(OmiColors.purplePrimary)
+                            .frame(width: 8, height: 8)
+
+                        Text("New reply")
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Open chat — new reply available")
             }
-            .buttonStyle(.plain)
-            .help("Open chat — new reply available")
+        }
+        // Subscribe to coordinator publishers to update task-local @State.
+        // .onReceive fires for all tasks but only mutates state when the
+        // value for THIS task changes, so re-renders stay task-local and
+        // don't trigger a full-tree layout pass on every coordinator publish.
+        .onReceive(coordinator.$streamingTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if isStreaming != new { isStreaming = new }
+        }
+        .onReceive(coordinator.$streamingStatuses) { statuses in
+            let new = statuses[task.id]
+            if streamingStatus != new { streamingStatus = new }
+        }
+        .onReceive(coordinator.$unreadTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if hasUnread != new { hasUnread = new }
         }
     }
 }
@@ -3647,19 +3674,13 @@ struct TaskRow: View {
                     .onDrag {
                         log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
                         return NSItemProvider(object: task.id as NSString)
+                    } preview: {
+                        TaskDragPreviewSimple(taskId: task.id, description: task.description)
                     }
                     .help("Drag to reorder")
             }
 
             swipeableContent
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
-                )
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onSelect?(task)
@@ -3668,6 +3689,14 @@ struct TaskRow: View {
                     }
                 }
         }
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
         .sheet(isPresented: $showTaskDetail) {
             TaskDetailView(
                 task: task,
