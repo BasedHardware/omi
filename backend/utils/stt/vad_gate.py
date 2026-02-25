@@ -35,8 +35,9 @@ logger = logging.getLogger('vad_gate')
 # ---------------------------------------------------------------------------
 VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
 VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
-VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
+VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '4000'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
+VAD_GATE_FINALIZE_SILENCE_MS = int(os.getenv('VAD_GATE_FINALIZE_SILENCE_MS', '300'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
 try:
     VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
@@ -311,6 +312,8 @@ class VADStreamingGate:
         self._last_speech_ms: float = 0.0
         self._pre_roll_ms = VAD_GATE_PRE_ROLL_MS
         self._hangover_ms = VAD_GATE_HANGOVER_MS
+        self._finalize_silence_ms = VAD_GATE_FINALIZE_SILENCE_MS
+        self._hangover_finalized = False  # True once finalize sent during current hangover
 
         # Pre-roll buffer: stores recent audio chunks for playback on speech onset.
         # Tracks accumulated duration to respect _pre_roll_ms regardless of chunk size.
@@ -345,6 +348,7 @@ class VADStreamingGate:
             self._state = GateState.SILENCE
             self._pre_roll.clear()
             self._pre_roll_total_ms = 0.0
+            self._hangover_finalized = False
             # Sync mapper cursor: DG received all audio during shadow phase
             self.dg_wall_mapper._dg_cursor_sec = self._audio_cursor_ms / 1000.0
             logger.info(
@@ -548,6 +552,7 @@ class VADStreamingGate:
             if not is_speech:
                 # Transition: SPEECH → HANGOVER
                 self._state = GateState.HANGOVER
+                self._hangover_finalized = False
 
             return GateOutput(
                 audio_to_send=pcm_data,
@@ -562,6 +567,7 @@ class VADStreamingGate:
             if is_speech:
                 # Speech resumed: HANGOVER → SPEECH (no finalize needed)
                 self._state = GateState.SPEECH
+                self._hangover_finalized = False
                 self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
                 self._bytes_sent += len(pcm_data)
                 self._last_send_wall_time = wall_time
@@ -573,9 +579,12 @@ class VADStreamingGate:
                 )
 
             if time_since_speech_ms > self._hangover_ms:
-                # Hangover expired: HANGOVER → SILENCE + finalize
+                # Hangover expired: HANGOVER → SILENCE
                 self._state = GateState.SILENCE
-                self._finalize_count += 1
+                need_finalize = not self._hangover_finalized
+                if need_finalize:
+                    self._finalize_count += 1
+                self._hangover_finalized = False
                 self._pre_roll.clear()
                 self._pre_roll_total_ms = 0.0
                 self._pre_roll.append(pcm_data)
@@ -585,10 +594,17 @@ class VADStreamingGate:
                 self.dg_wall_mapper.on_silence_skipped()
                 return GateOutput(
                     audio_to_send=b'',
-                    should_finalize=True,
+                    should_finalize=need_finalize,
                     state=GateState.SILENCE,
                     is_speech=False,
                 )
+
+            # Mid-hangover finalize: flush DG transcript early while keeping audio flowing
+            should_finalize_now = False
+            if not self._hangover_finalized and time_since_speech_ms >= self._finalize_silence_ms:
+                should_finalize_now = True
+                self._hangover_finalized = True
+                self._finalize_count += 1
 
             # Still in hangover: send audio
             self.dg_wall_mapper.on_audio_sent(chunk_duration_sec, wall_rel)
@@ -596,7 +612,7 @@ class VADStreamingGate:
             self._last_send_wall_time = wall_time
             return GateOutput(
                 audio_to_send=pcm_data,
-                should_finalize=False,
+                should_finalize=should_finalize_now,
                 state=GateState.HANGOVER,
                 is_speech=False,
             )
