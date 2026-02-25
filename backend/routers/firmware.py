@@ -23,6 +23,13 @@ class DeviceModel(int, Enum):
 
 router = APIRouter()
 
+# Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.
+FIRMWARE_TAG_PATTERN = re.compile(
+    r'^(?:Omi_CV1|Omi_DK2|OmiGlass|OpenGlass|Friend)_v[0-9]+(?:\.[0-9]+){1,2}$',
+    re.IGNORECASE,
+)
+MAX_PAGES = 20  # Safety cap to prevent runaway pagination
+
 
 # Device Model Number
 # - DK2: Omi DevKit 2
@@ -51,29 +58,53 @@ def _get_device_by_model_number(device_model: str):
 
 
 async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
-    """Fetch releases from GitHub API with caching"""
+    """Fetch firmware releases from GitHub API with pagination and caching.
+
+    Paginates through GitHub releases, keeping only firmware-tagged releases
+    (non-Desktop). Stops when enough firmware releases are collected or all
+    pages are exhausted. Caches only firmware releases to keep Redis small.
+    """
 
     # Check cache first
     cached_releases = get_generic_cache(cache_key)
     if cached_releases:
         return cached_releases
 
-    # Make GitHub API request if not cached
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
+    }
+
+    firmware_releases = []
+    page = 1
+
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/BasedHardware/omi/releases?per_page=100"
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
-        }
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            logger.error(f"Error fetching GitHub releases: {response.status_code} {response.text}")
-            raise HTTPException(status_code=500, detail="Failed to fetch release information")
-        releases = response.json()
-        # Cache successful response for 5 minutes
-        set_generic_cache(cache_key, releases, ttl=300)
-        return releases
+        while page <= MAX_PAGES:
+            url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error("Error fetching GitHub releases page %d: %d %s", page, response.status_code, response.text)
+                raise HTTPException(status_code=500, detail="Failed to fetch release information")
+
+            page_releases = response.json()
+            if not page_releases:
+                break
+
+            for release in page_releases:
+                tag_name = release.get("tag_name", "")
+                if FIRMWARE_TAG_PATTERN.match(tag_name):
+                    firmware_releases.append(release)
+
+            # Stop if this was the last page
+            if len(page_releases) < 100:
+                break
+
+            page += 1
+
+    # Cache firmware releases for 5 minutes (even if empty, to avoid hammering GitHub)
+    set_generic_cache(cache_key, firmware_releases, ttl=300)
+    return firmware_releases
 
 
 def _parse_firmware_version(version_str: Optional[str]) -> Tuple[int, ...]:
