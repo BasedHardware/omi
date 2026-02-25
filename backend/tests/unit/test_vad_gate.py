@@ -1,6 +1,8 @@
 """Unit tests for VAD Streaming Gate (Issue #4644)."""
 
+import os
 import struct
+import tempfile
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -2004,3 +2006,87 @@ class TestGatedSocketRemapDelegation:
         socket.remap_segments(segments)
         assert segments[0]['start'] == 1.0
         assert segments[0]['end'] == 2.0
+
+
+class TestAudioCapture:
+    """Tests for audio capture in GatedDeepgramSocket (transcript quality validation)."""
+
+    def _make_gate(self, mode='active', session_id='test-session'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id=session_id,
+        )
+
+    def test_capture_writes_raw_and_gated_files(self):
+        """Both raw and gated PCM files should be written with correct content."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {'VAD_GATE_AUDIO_CAPTURE_DIR': tmpdir}):
+                mock_conn = MagicMock()
+                gate = self._make_gate()
+                socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+                t = 1000.0
+                speech_chunk = _make_pcm_with_amplitude(30, 0.5)
+                silent_chunk = _make_pcm(30)
+
+                # Send speech chunks (will be in both raw and gated)
+                _set_vad_speech(True)
+                for i in range(5):
+                    socket.send(speech_chunk, wall_time=t + i * 0.03)
+
+                # Send silence chunks past hangover (700ms default) — need >24 chunks of 30ms
+                _set_vad_speech(False)
+                for i in range(30):
+                    socket.send(silent_chunk, wall_time=t + 0.15 + i * 0.03)
+
+                socket.finish()
+
+                raw_path = os.path.join(tmpdir, 'test-session_raw.pcm')
+                gated_path = os.path.join(tmpdir, 'test-session_gated.pcm')
+
+                assert os.path.exists(raw_path), 'Raw capture file should exist'
+                assert os.path.exists(gated_path), 'Gated capture file should exist'
+
+                raw_size = os.path.getsize(raw_path)
+                gated_size = os.path.getsize(gated_path)
+
+                # Raw should have all 35 chunks, gated should have fewer (speech + hangover only)
+                assert raw_size == len(speech_chunk) * 5 + len(silent_chunk) * 30
+                assert gated_size > 0, 'Gated file should have some speech audio'
+                assert gated_size < raw_size, 'Gated file should be smaller than raw'
+
+    def test_capture_disabled_when_no_dir(self):
+        """No capture files should be created when env var is empty."""
+        with patch.dict(os.environ, {'VAD_GATE_AUDIO_CAPTURE_DIR': ''}):
+            mock_conn = MagicMock()
+            gate = self._make_gate()
+            socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+            assert socket._raw_file is None
+            assert socket._gated_file is None
+
+            # Should still work without capture
+            _set_vad_speech(True)
+            socket.send(_make_pcm(30), wall_time=1000.0)
+            socket.finish()
+
+    def test_capture_files_closed_on_finish(self):
+        """Capture files should be properly closed after finish()."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(os.environ, {'VAD_GATE_AUDIO_CAPTURE_DIR': tmpdir}):
+                mock_conn = MagicMock()
+                gate = self._make_gate()
+                socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+                assert socket._raw_file is not None
+                assert socket._gated_file is not None
+                assert not socket._raw_file.closed
+                assert not socket._gated_file.closed
+
+                socket.finish()
+
+                assert socket._raw_file.closed
+                assert socket._gated_file.closed
