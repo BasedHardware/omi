@@ -1155,20 +1155,7 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         people = get_people(uid)
         action_items = get_standalone_action_items(uid, limit=10000, offset=0)
 
-        chat_messages = []
-        try:
-            user_ref = chat_db.db.collection('users').document(uid)
-            msgs_ref = (
-                user_ref.collection('messages')
-                .order_by('created_at', direction=cloud_firestore.Query.DESCENDING)
-                .limit(10000)
-            )
-            for doc in msgs_ref.stream():
-                msg = doc.to_dict()
-                msg['id'] = doc.id
-                chat_messages.append(msg)
-        except Exception as e:
-            logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
+        chat_messages = chat_db.get_all_messages(uid, limit=10000)
 
         # Fetch all conversations in one query (no offset pagination which can miss docs)
         conversations = conversations_db.get_conversations_without_photos(
