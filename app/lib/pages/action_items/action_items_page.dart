@@ -188,7 +188,6 @@ Widget _buildFab() {
               // --- BULK COMPLETE (Top - Green Mini FAB) ---
               FloatingActionButton(
                 heroTag: 'bulk_complete_fab',
-                mini: true, 
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   final selectedIds = List<String>.from(provider.selectedItems);
