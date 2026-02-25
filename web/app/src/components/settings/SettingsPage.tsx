@@ -2848,9 +2848,7 @@ export function SettingsPage() {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const data = await exportAllData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
+      const blob = await exportAllData();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -3029,6 +3027,15 @@ export function SettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Export in-progress banner */}
+      {isExporting && (
+        <div className="bg-purple-primary/10 border-b border-purple-primary/30 px-4 py-3 flex items-center justify-center gap-3">
+          <Loader2 className="w-4 h-4 text-purple-primary animate-spin" />
+          <span className="text-sm font-medium text-purple-primary">Exporting your data...</span>
+          <span className="text-xs text-text-tertiary">Please don&apos;t close this tab</span>
+        </div>
+      )}
+
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 
