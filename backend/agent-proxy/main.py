@@ -2,7 +2,7 @@
 agent-proxy — WebSocket proxy that bridges the mobile app to a user's agent VM.
 
 Auth: Firebase ID token in Authorization header (Bearer <token>) during WS upgrade.
-Flow: validate token → fetch VM from Firestore → connect to VM WS → bidirectional pump.
+Flow: validate token → fetch VM from Firestore → if stopped, restart → connect to VM WS → bidirectional pump.
 History: fetches last 10 agent messages from Firestore and prepends to prompt.
 """
 
@@ -15,6 +15,9 @@ import uuid
 from datetime import datetime, timezone
 
 import firebase_admin
+import google.auth
+import google.auth.transport.requests
+import httpx
 import websockets
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -38,6 +41,8 @@ db = firestore.client()
 app = FastAPI()
 
 HISTORY_LIMIT = 10
+GCE_PROJECT = "based-hardware"
+VM_KEEPALIVE_INTERVAL = 120  # seconds — ping VM every 2 min during active WS
 
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -56,6 +61,130 @@ def _get_user_context(uid: str) -> tuple:
         data = doc.to_dict()
         return data.get('agentVm'), data.get('data_protection_level', 'enhanced')
     return None, 'enhanced'
+
+
+def _refresh_vm(uid: str) -> dict | None:
+    """Re-read the VM info from Firestore (called after restart to get new IP)."""
+    doc = db.collection('users').document(uid).get()
+    if doc.exists:
+        return doc.to_dict().get('agentVm')
+    return None
+
+
+# --------------- GCE helpers ---------------
+
+
+def _get_gce_access_token() -> str:
+    """Get a GCE access token via Application Default Credentials."""
+    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])
+    creds.refresh(google.auth.transport.requests.Request())
+    return creds.token
+
+
+async def _check_gce_status(vm_name: str, zone: str) -> str:
+    """Check the actual GCE instance status."""
+    token = _get_gce_access_token()
+    url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+        if resp.status_code != 200:
+            return "UNKNOWN"
+        return resp.json().get("status", "UNKNOWN")
+
+
+async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
+    """Start a stopped/terminated GCE VM and return the new IP."""
+    token = _get_gce_access_token()
+    start_url = (
+        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
+    )
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
+        if resp.status_code not in (200, 204):
+            raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+
+        op_name = resp.json().get("name")
+        if not op_name:
+            raise Exception("Missing operation name in GCE start response")
+
+        op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
+        for _ in range(24):
+            await asyncio.sleep(5)
+            token = _get_gce_access_token()
+            status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
+            status = status_resp.json()
+            if status.get("status") == "DONE":
+                if "error" in status:
+                    raise Exception(f"GCE start operation failed: {status['error']}")
+                break
+
+        instance_url = (
+            f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
+        )
+        token = _get_gce_access_token()
+        inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+        instance = inst_resp.json()
+        try:
+            return instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+        except (KeyError, IndexError):
+            return "unknown"
+
+
+def _update_firestore_vm(uid: str, ip: str | None, status: str):
+    """Update the user's agentVm fields in Firestore."""
+    update = {"agentVm.status": status}
+    if ip:
+        update["agentVm.ip"] = ip
+    db.collection('users').document(uid).update(update)
+
+
+async def _ensure_vm_running(uid: str, vm: dict) -> dict | None:
+    """If VM is stopped, restart it and return updated VM info. Returns None on failure."""
+    vm_name = vm.get("vmName")
+    zone = vm.get("zone", "us-central1-a")
+    fs_status = vm.get("status", "")
+
+    if fs_status == "ready":
+        # Verify it's actually running
+        try:
+            gce_status = await _check_gce_status(vm_name, zone)
+        except Exception:
+            return vm  # Can't check, assume it's fine
+
+        if gce_status == "RUNNING":
+            return vm
+        if gce_status not in ("TERMINATED", "STOPPED"):
+            return vm  # STAGING, etc. — let it be
+
+    # VM needs restart
+    logger.info(f"[agent-proxy] VM {vm_name} needs restart, starting...")
+    _update_firestore_vm(uid, None, "provisioning")
+
+    try:
+        ip = await _start_vm_and_wait(vm_name, zone)
+        _update_firestore_vm(uid, ip, "ready")
+        logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
+        return _refresh_vm(uid)
+    except Exception as e:
+        logger.error(f"[agent-proxy] Failed to restart VM {vm_name}: {e}")
+        _update_firestore_vm(uid, None, "error")
+        return None
+
+
+async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:
+    """Poll the VM's /health endpoint until it responds OK."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    async with httpx.AsyncClient(timeout=5) as client:
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                resp = await client.get(f"http://{vm_ip}:8080/health")
+                if resp.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(3)
+    return False
 
 
 # --------------- encryption helpers ---------------
@@ -202,19 +331,55 @@ async def agent_ws(websocket: WebSocket):
 
     # Look up the user's agent VM and data protection level
     vm, data_protection_level = _get_user_context(uid)
-    if not vm or vm.get("status") != "ready":
+    if not vm:
         await websocket.close(code=4002, reason="No agent VM available")
         return
+
+    # Accept WebSocket first so we can send status messages during VM startup
+    await websocket.accept()
+
+    # If VM is not ready, try to restart it
+    vm_status = vm.get("status", "")
+    if vm_status != "ready" or not vm.get("ip"):
+        await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+        vm = await _ensure_vm_running(uid, vm)
+        if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+            await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+            await websocket.close(code=4002, reason="VM startup failed")
+            return
+    else:
+        # VM says ready — verify GCE status in case it auto-stopped
+        vm_name = vm.get("vmName")
+        zone = vm.get("zone", "us-central1-a")
+        try:
+            gce_status = await _check_gce_status(vm_name, zone)
+            if gce_status in ("TERMINATED", "STOPPED"):
+                await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+                vm = await _ensure_vm_running(uid, vm)
+                if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+                    await websocket.close(code=4002, reason="VM startup failed")
+                    return
+        except Exception as e:
+            logger.warning(f"[agent-proxy] uid={uid} GCE status check failed, proceeding: {e}")
 
     vm_ip = vm["ip"]
     vm_token = vm["authToken"]
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
 
+    # Wait for VM to be healthy before connecting WebSocket
+    await websocket.send_text(json.dumps({"type": "status", "message": "Connecting to your agent..."}))
+    healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
+    if not healthy:
+        logger.error(f"[agent-proxy] uid={uid} VM {vm_ip} never became healthy")
+        await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
+        await websocket.close(code=4003, reason="VM not healthy")
+        return
+
     # Get or create the default chat session so messages are linked properly
     chat_session = await asyncio.to_thread(_get_or_create_chat_session, uid)
     chat_session_id = chat_session['id']
 
-    await websocket.accept()
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
 
     try:
@@ -283,9 +448,20 @@ async def agent_ws(websocket: WebSocket):
                         except Exception as e:
                             logger.warning(f"[agent-proxy] failed to save AI response: {e}")
 
+            async def keepalive_pinger():
+                """Periodically ping the VM to prevent idle auto-stop during active WS."""
+                async with httpx.AsyncClient(timeout=5) as client:
+                    while True:
+                        await asyncio.sleep(VM_KEEPALIVE_INTERVAL)
+                        try:
+                            await client.post(f"http://{vm_ip}:8080/ping?token={vm_token}")
+                        except Exception:
+                            pass
+
             t1 = asyncio.create_task(phone_to_vm())
             t2 = asyncio.create_task(vm_to_phone())
-            _, pending = await asyncio.wait([t1, t2], return_when=asyncio.FIRST_COMPLETED)
+            t3 = asyncio.create_task(keepalive_pinger())
+            _, pending = await asyncio.wait([t1, t2, t3], return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
