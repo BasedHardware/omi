@@ -589,6 +589,7 @@ class MessageProvider extends ChangeNotifier {
 
     // Route through agent VM if Claude Agent is enabled
     if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
