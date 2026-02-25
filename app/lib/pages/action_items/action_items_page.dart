@@ -276,9 +276,6 @@ Widget _buildFab() {
       }
 
       // 3. NORMAL VIEW (Add Task FAB)
-      // Hide standard FAB if in edit mode but nothing is selected
-      if (provider.isEditMode) return const SizedBox.shrink();
-      
       return Positioned(
         right: 20,
         bottom: 100,
