@@ -109,13 +109,90 @@ class ActionItemsProvider extends ChangeNotifier {
     }).toList();
   }
 
+
+//DELETE WHEN GO LIVE
+  void injectTestData() {
+    final now = DateTime.now();
+
+    _actionItems = [
+      // --- INCOMPLETE TASKS ---
+      ActionItemWithMetadata(
+        id: 'test_1',
+        description: 'Review Q1 TSLA stock performance',
+        completed: false,
+        createdAt: now.subtract(const Duration(days: 1)),
+        updatedAt: now,
+        dueAt: now, // Will show in "Today"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_2',
+        description: 'Follow up with Gabriel regarding Feb 2nd email',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: now.add(const Duration(days: 1)), // Will show in "Tomorrow"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_3',
+        description: 'Setup local Whisper transcription server',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: null, // Will show in "No Deadline"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_4',
+        description: 'Renew US Mobile annual plan before May 2026',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: now.add(const Duration(days: 5)), // Will show in "Later"
+      ),
+
+      // --- COMPLETED TASKS ---
+      ActionItemWithMetadata(
+        id: 'test_5',
+        description: 'Take 2-year-old to Sacramento ice skating rink',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 3)),
+        updatedAt: now.subtract(const Duration(days: 1)),
+        dueAt: now.subtract(const Duration(days: 2)),
+      ),
+      ActionItemWithMetadata(
+        id: 'test_6',
+        description: 'Fix Omi Flutter UI bug in action_items_page',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 2)),
+        updatedAt: now.subtract(const Duration(days: 1)),
+        dueAt: null,
+      ),
+      ActionItemWithMetadata(
+        id: 'test_7',
+        description: 'Install The Longest Journey on PC',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 5)),
+        updatedAt: now.subtract(const Duration(days: 4)),
+        dueAt: now.subtract(const Duration(days: 4)),
+      ),
+    ];
+    
+    notifyListeners();
+  }
+//DELETE WHEN GO LIVE
+  
   
   ActionItemsProvider() {
     _preload();
   }
 
   void _preload() async {
-    await fetchActionItems(); 
+    // 1. Temporarily bypass the real API fetch - Restore this Go Live
+    // await fetchActionItems(); 
+
+    //DELETE WHEN GO LIVE
+    // 2. Load the fake data instead - 
+    injectTestData();
+    // DELETE WHEN GO LIVE
     _migrateCategoryOrderFromPrefs();
   }
 
