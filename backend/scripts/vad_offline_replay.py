@@ -94,7 +94,6 @@ def main():
     parser.add_argument('--input', required=True, help='Input WAV file')
     parser.add_argument('--ground-truth', help='Optional ground truth transcript file')
     parser.add_argument('--chunk-ms', type=int, default=40, help='Chunk size in ms (default: 40)')
-    parser.add_argument('--energy-threshold', type=float, default=None, help='Override energy threshold')
     parser.add_argument('--speech-threshold', type=float, default=None, help='Override Silero speech threshold')
     parser.add_argument('--pass-threshold', type=float, default=0.20, help='WER pass threshold (default: 0.20)')
     parser.add_argument('--verbose', action='store_true', help='Print per-chunk VAD decisions')
@@ -120,20 +119,10 @@ def main():
     )
 
     # Override thresholds if specified
-    if args.energy_threshold is not None:
-        gate._energy_threshold = args.energy_threshold
-        if args.energy_threshold > 0.0:
-            gate._onset_confirm = int(os.getenv('VAD_GATE_ONSET_CONFIRM', '3'))
-            gate._onset_window = int(os.getenv('VAD_GATE_ONSET_WINDOW', '5'))
-        else:
-            gate._onset_confirm = 1
-            gate._onset_window = 1
     if args.speech_threshold is not None:
         gate._speech_threshold = args.speech_threshold
 
-    print(f'  Energy threshold: {gate._energy_threshold}')
     print(f'  Speech threshold: {gate._speech_threshold}')
-    print(f'  Onset confirm: {gate._onset_confirm}/{gate._onset_window}')
     print(f'  Pre-roll: {gate._pre_roll_ms}ms, Hangover: {gate._hangover_ms}ms')
     print()
 
