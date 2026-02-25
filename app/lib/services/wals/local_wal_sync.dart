@@ -224,7 +224,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (wal.storage == WalStorage.mem) {
         String? filePath = await Wal.getFilePath(wal.getFileName());
         if (filePath == null) {
-          DebugLogManager.logError('Flush failed: cannot get file path', null, 'LocalWalSync flush error', {
+          DebugLogManager.logError('LocalWalSync flush error: Flush failed: cannot get file path', null, null, {
             'walId': wal.id,
             'timerStart': wal.timerStart,
           });
@@ -422,7 +422,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.status = WalStatus.corrupted;
           corruptedCount++;
           Logger.debug(e.toString());
-          DebugLogManager.logError(e, null, 'WAL corrupted: unexpected error', {'walId': wal.id});
+          DebugLogManager.logError(e, null, 'WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
         }
       }
 
@@ -458,7 +458,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       } catch (e) {
         Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
         batchesFailed++;
-        DebugLogManager.logError(e, null, 'Local upload batch failed', {
+        DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
           'batchIndex': (wals.length - 1 - i) ~/ steps,
           'filesInBatch': files.length,
         });
@@ -531,7 +531,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     } catch (e) {
       wal.status = WalStatus.corrupted;
       Logger.debug(e.toString());
-      DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error', {'walId': wal.id});
+      DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
     listener.onWalUpdated();
@@ -552,7 +552,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       listener.onWalSynced(wal);
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
-      DebugLogManager.logError(e, null, 'Single WAL upload failed', {'walId': wal.id});
+      DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
