@@ -240,8 +240,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } catch (e) {
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
-      DebugLogManager.logError(e, null, 'SyncProvider: $context failed', {
-        'errorMessage': errorMessage,
+      DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
         if (failedWal != null) 'walId': failedWal.id,
         if (failedWal != null) 'walStorage': failedWal.storage.toString(),
       });
