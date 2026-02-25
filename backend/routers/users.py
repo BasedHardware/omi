@@ -63,6 +63,8 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
+from database.action_items import get_action_items as get_standalone_action_items
+from google.cloud import firestore as cloud_firestore
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1138,8 +1140,6 @@ def get_llm_top_features(
 @router.get('/v1/users/export', tags=['v1'])
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance."""
-    from database.action_items import get_action_items as get_standalone_action_items
-
     profile = get_user_profile(uid)
 
     conversations = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
@@ -1153,10 +1153,9 @@ def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     # Get chat messages (all, no app_id filter)
     chat_messages = []
     try:
-        from google.cloud import firestore as _fs
         user_ref = chat_db.db.collection('users').document(uid)
         msgs_ref = user_ref.collection('messages').order_by(
-            'created_at', direction=_fs.Query.DESCENDING
+            'created_at', direction=cloud_firestore.Query.DESCENDING
         ).limit(10000)
         for doc in msgs_ref.stream():
             msg = doc.to_dict()
