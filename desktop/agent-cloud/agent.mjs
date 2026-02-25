@@ -829,6 +829,20 @@ function startServer() {
       return;
     }
 
+    // Keepalive ping — resets idle timer so VM doesn't auto-stop
+    if (req.url?.startsWith("/ping") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      lastActivityAt = Date.now();
+      log("Keepalive ping received");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+
     // Incremental sync endpoint — desktop pushes new/changed rows
     if (req.url?.startsWith("/sync") && req.method === "POST") {
       if (!verifyAuth(req)) {
