@@ -57,17 +57,18 @@ def _get_device_by_model_number(device_model: str):
     return None
 
 
-async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
-    """Fetch firmware releases from GitHub API with pagination and caching.
+async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Pattern] = None) -> Optional[List[Dict]]:
+    """Fetch releases from GitHub API with caching.
 
-    Paginates through GitHub releases, keeping only firmware-tagged releases
-    (non-Desktop). Stops when enough firmware releases are collected or all
-    pages are exhausted. Caches only firmware releases to keep Redis small.
+    When tag_filter is provided, paginates through all pages and returns only
+    releases whose tag_name matches the filter. Without tag_filter, returns
+    the first page of releases unfiltered (sufficient for desktop releases
+    which are always recent).
     """
 
-    # Check cache first
+    # Check cache first (use `is not None` so cached empty list is a hit)
     cached_releases = get_generic_cache(cache_key)
-    if cached_releases:
+    if cached_releases is not None:
         return cached_releases
 
     headers = {
@@ -76,7 +77,7 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
         "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
     }
 
-    firmware_releases = []
+    collected = []
     page = 1
 
     async with httpx.AsyncClient() as client:
@@ -91,10 +92,17 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
             if not page_releases:
                 break
 
-            for release in page_releases:
-                tag_name = release.get("tag_name", "")
-                if FIRMWARE_TAG_PATTERN.match(tag_name):
-                    firmware_releases.append(release)
+            if tag_filter:
+                for release in page_releases:
+                    tag_name = release.get("tag_name", "")
+                    if tag_filter.match(tag_name):
+                        collected.append(release)
+            else:
+                collected.extend(page_releases)
+
+            # Without filter, single page is enough (desktop releases are recent)
+            if not tag_filter:
+                break
 
             # Stop if this was the last page
             if len(page_releases) < 100:
@@ -102,9 +110,9 @@ async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
 
             page += 1
 
-    # Cache firmware releases for 5 minutes (even if empty, to avoid hammering GitHub)
-    set_generic_cache(cache_key, firmware_releases, ttl=300)
-    return firmware_releases
+    # Cache for 5 minutes (even if empty, to avoid hammering GitHub)
+    set_generic_cache(cache_key, collected, ttl=300)
+    return collected
 
 
 def _parse_firmware_version(version_str: Optional[str]) -> Tuple[int, ...]:
@@ -144,7 +152,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="Device not found")
 
     cache_key = "github_releases_omi"
-    releases = await get_omi_github_releases(cache_key)
+    releases = await get_omi_github_releases(cache_key, tag_filter=FIRMWARE_TAG_PATTERN)
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
