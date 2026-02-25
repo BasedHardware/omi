@@ -645,9 +645,9 @@ class AnalyticsManager {
         PostHogManager.shared.updateNotFound()
     }
 
-    func updateCheckFailed(error: String) {
-        MixpanelManager.shared.updateCheckFailed(error: error)
-        PostHogManager.shared.updateCheckFailed(error: error)
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        MixpanelManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
+        PostHogManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
     }
 
     // MARK: - Notification Events

@@ -306,7 +306,7 @@ actor RewindStorage {
            let offset = screenshot.frameOffset
         {
             return try await loadVideoFrame(videoPath: videoPath, frameOffset: offset)
-        } else if let imagePath = screenshot.imagePath {
+        } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
             return try await loadScreenshotImage(relativePath: imagePath)
         } else {
             throw RewindError.screenshotNotFound
@@ -328,7 +328,7 @@ actor RewindStorage {
                 throw RewindError.invalidImage
             }
             return jpegData
-        } else if let imagePath = screenshot.imagePath {
+        } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
             return try await loadScreenshot(relativePath: imagePath)
         } else {
             throw RewindError.screenshotNotFound

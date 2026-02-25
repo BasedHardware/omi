@@ -165,6 +165,9 @@ struct RewindPage: View {
                 isPageFocused = true
             }
         }
+        .onChange(of: isTranscriptExpanded) { _, expanded in
+            viewModel.isTranscriptExpanded = expanded
+        }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
             if !oldScreenshots.isEmpty,

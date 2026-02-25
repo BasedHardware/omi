@@ -2,12 +2,28 @@
  * ACP Bridge — translates between OMI's JSON-lines protocol and the
  * Agent Client Protocol (ACP) used by claude-code-acp.
  *
- * Flow:
+ * THIS IS THE DESKTOP APP FLOW. It is unrelated to the VM/agent-cloud flow
+ * (agent-cloud/agent.mjs), which runs Claude Code SDK on a remote VM for
+ * the Omi Agent feature. This bridge runs locally on the user's Mac.
+ *
+ * Session lifecycle:
+ * 1. warmup  → session/new (system prompt applied here, once)
+ * 2. query   → session reused; systemPrompt field in the message is ignored
+ *              unless the session was invalidated (cwd change → new session/new)
+ * 3. The ACP SDK owns conversation history after session/new — do not inject
+ *    it into the system prompt.
+ *
+ * Token counts:
+ * session/prompt drives one or more internal Anthropic API calls (initial
+ * response + one per tool-use round). The usage returned in the result is
+ * the AGGREGATE across all those rounds. There are no separate sub-agents.
+ *
+ * Implementation flow:
  * 1. Create Unix socket server for omi-tools relay
  * 2. Spawn claude-code-acp as subprocess (JSON-RPC over stdio)
  * 3. Initialize ACP connection
  * 4. Handle auth if required (forward to Swift, wait for user action)
- * 5. On query: create session, send prompt, translate notifications → JSON-lines
+ * 5. On query: reuse or create session, send prompt, translate notifications → JSON-lines
  * 6. On interrupt: cancel the session
  */
 
@@ -363,8 +379,8 @@ class AcpError extends Error {
 
 // --- State ---
 
-/** Pre-warmed sessions keyed by model name */
-const sessions = new Map<string, { sessionId: string; cwd: string }>();
+/** Pre-warmed sessions keyed by sessionKey (e.g. "main", "floating", or model name for backward compat) */
+const sessions = new Map<string, { sessionId: string; cwd: string; model?: string }>();
 /** The session currently being used by an active query (for interrupt) */
 let activeSessionId = "";
 let activeAbort: AbortController | null = null;
@@ -561,54 +577,59 @@ function buildMcpServers(mode: string, cwd?: string): McpServerConfig[] {
 const DEFAULT_MODEL = "claude-opus-4-6";
 const SONNET_MODEL = "claude-sonnet-4-6";
 
-async function preWarmSession(cwd?: string, models?: string[]): Promise<void> {
+interface WarmupSessionConfig {
+  key: string;
+  model: string;
+  systemPrompt?: string;
+}
+
+async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig[], models?: string[]): Promise<void> {
   const warmCwd = cwd || process.env.HOME || "/";
-  const warmModels = models && models.length > 0 ? models : [DEFAULT_MODEL, SONNET_MODEL];
+
+  // Build the list of sessions to warm: new format (sessionConfigs) takes priority over legacy (models array)
+  const toWarm: WarmupSessionConfig[] = sessionConfigs && sessionConfigs.length > 0
+    ? sessionConfigs.filter((s) => !sessions.has(s.key))
+    : (models && models.length > 0 ? models : [DEFAULT_MODEL, SONNET_MODEL])
+        .filter((m) => !sessions.has(m))
+        .map((m) => ({ key: m, model: m }));
+
+  if (toWarm.length === 0) {
+    logErr("All requested sessions already pre-warmed");
+    return;
+  }
 
   try {
     await initializeAcp();
 
-    // Pre-warm each model that doesn't already have a session, in parallel
-    const toWarm = warmModels.filter((m) => !sessions.has(m));
-    if (toWarm.length === 0) {
-      logErr("All requested models already have pre-warmed sessions");
-      return;
-    }
-
     await Promise.all(
-      toWarm.map(async (warmModel) => {
+      toWarm.map(async (cfg) => {
         try {
           const sessionParams: Record<string, unknown> = {
             cwd: warmCwd,
             mcpServers: buildMcpServers("act", warmCwd),
+            ...(cfg.systemPrompt ? { _meta: { systemPrompt: cfg.systemPrompt } } : {}),
           };
 
           // Retry once after a short delay if session/new fails
-          // (ACP subprocess may not be fully ready immediately after initialize)
           let result: { sessionId: string };
           try {
             result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
           } catch (firstErr) {
-            logErr(`Pre-warm session/new failed for ${warmModel}, retrying in 2s: ${firstErr}`);
+            logErr(`Pre-warm session/new failed for ${cfg.key}, retrying in 2s: ${firstErr}`);
             await new Promise((r) => setTimeout(r, 2000));
             result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
           }
 
-          sessions.set(warmModel, { sessionId: result.sessionId, cwd: warmCwd });
-          // Set the model via the proper ACP method (model field is stripped from session/new by schema)
-          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: warmModel });
-          logErr(
-            `Pre-warmed session: ${result.sessionId} (cwd=${warmCwd}, model=${warmModel})`
-          );
+          sessions.set(cfg.key, { sessionId: result.sessionId, cwd: warmCwd, model: cfg.model });
+          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: cfg.model });
+          logErr(`Pre-warmed session: ${result.sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
         } catch (err) {
-          // If pre-warm fails with auth error, start OAuth flow.
-          // Only -32000 is AUTH_REQUIRED; -32603 is a generic error (credit balance, API error, etc.)
           if (err instanceof AcpError && err.code === -32000) {
             logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
             await startAuthFlow();
-            return; // After auth, warmup will happen on next query
+            return;
           }
-          logErr(`Pre-warm failed for ${warmModel}: ${err}`);
+          logErr(`Pre-warm failed for ${cfg.key}: ${err}`);
         }
       })
     );
@@ -650,17 +671,18 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     // Ensure ACP is initialized
     await initializeAcp();
 
-    // Look up a pre-warmed session for the requested model
+    // Look up a pre-warmed session by sessionKey (falls back to model name for backward compat)
     const requestedModel = msg.model || DEFAULT_MODEL;
+    const sessionKey = msg.sessionKey ?? requestedModel;
     const requestedCwd = msg.cwd || process.env.HOME || "/";
     let sessionId = "";
 
-    const existing = sessions.get(requestedModel);
+    const existing = sessions.get(sessionKey);
     if (existing) {
       // If cwd changed, invalidate this specific session
       if (existing.cwd !== requestedCwd) {
-        logErr(`Cwd changed for ${requestedModel} (${existing.cwd} -> ${requestedCwd}), creating new session`);
-        sessions.delete(requestedModel);
+        logErr(`Cwd changed for ${sessionKey} (${existing.cwd} -> ${requestedCwd}), creating new session`);
+        sessions.delete(sessionKey);
       } else {
         sessionId = existing.sessionId;
       }
@@ -689,28 +711,24 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       const sessionParams: Record<string, unknown> = {
         cwd: requestedCwd,
         mcpServers: buildMcpServers(mode, requestedCwd),
+        ...(msg.systemPrompt ? { _meta: { systemPrompt: msg.systemPrompt } } : {}),
       };
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
 
       sessionId = sessionResult.sessionId;
-      sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
+      sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
       isNewSession = true;
-      // Set the model via the proper ACP method (model field is stripped from session/new by schema)
       if (requestedModel) {
         await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
       }
-      logErr(`ACP session created: ${sessionId} (model=${requestedModel || "default"}, cwd=${requestedCwd})`);
+      logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
     } else {
       isNewSession = false;
-      logErr(`Reusing existing ACP session: ${sessionId} (model=${requestedModel})`);
+      logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
     }
     activeSessionId = sessionId;
 
-    // Only prepend system prompt on the first message in a new session.
-    // On subsequent messages the session already has the context.
-    fullPrompt = isNewSession && msg.systemPrompt
-      ? `<system>\n${msg.systemPrompt}\n</system>\n\n${msg.prompt}`
-      : msg.prompt;
+    fullPrompt = msg.prompt;
 
     // Set up notification handler for this query
     acpNotificationHandler = (method: string, params: unknown) => {
@@ -726,10 +744,18 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
     // Send the prompt — retry with fresh session if stale
     const sendPrompt = async (): Promise<void> => {
-      const promptResult = (await acpRequest("session/prompt", {
+      const promptBlocks: Array<Record<string, unknown>> = [];
+      if (msg.imageBase64) {
+        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: "image/jpeg" });
+      }
+      promptBlocks.push({ type: "text", text: fullPrompt });
+
+      const sessionPromptPayload = {
         sessionId,
-        prompt: [{ type: "text", text: fullPrompt }],
-      })) as {
+        prompt: promptBlocks,
+      };
+
+      const promptResult = (await acpRequest("session/prompt", sessionPromptPayload)) as {
         stopReason: string;
         // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess
         usage?: { inputTokens: number; outputTokens: number; cachedReadTokens?: number | null; cachedWriteTokens?: number | null; totalTokens: number };
@@ -1087,10 +1113,15 @@ async function main(): Promise<void> {
 
       case "warmup": {
         const wm = msg as WarmupMessage;
-        // Support both single model (backward compat) and models array
-        const models = wm.models ?? (wm.model ? [wm.model] : undefined);
-        logErr(`Warmup requested (cwd=${wm.cwd || "default"}, models=${JSON.stringify(models) || "default"})`);
-        preWarmPromise = preWarmSession(wm.cwd, models);
+        if (wm.sessions && wm.sessions.length > 0) {
+          logErr(`Warmup requested (cwd=${wm.cwd || "default"}, sessions=${wm.sessions.map(s => s.key).join(", ")})`);
+          preWarmPromise = preWarmSession(wm.cwd, wm.sessions);
+        } else {
+          // Backward compat: models array or single model
+          const models = wm.models ?? (wm.model ? [wm.model] : undefined);
+          logErr(`Warmup requested (cwd=${wm.cwd || "default"}, models=${JSON.stringify(models) || "default"})`);
+          preWarmPromise = preWarmSession(wm.cwd, undefined, models);
+        }
         break;
       }
 

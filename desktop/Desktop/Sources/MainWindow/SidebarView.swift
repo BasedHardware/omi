@@ -97,6 +97,8 @@ struct SidebarView: View {
     @State private var isMonitoring = false
     @State private var isTogglingMonitoring = false
     @State private var isTogglingTranscription = false
+    @State private var monitoringAutoRestartAttempts = 0
+    private let maxAutoRestartAttempts = 3
 
     // Page loading states (show spinner in place of icon)
     @State private var isRewindPageLoading = false
@@ -413,8 +415,31 @@ struct SidebarView: View {
                 await TierManager.shared.checkTierIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { notification in
             syncMonitoringState()
+            let isNowMonitoring = (notification.userInfo?["isMonitoring"] as? Bool) ?? ProactiveAssistantsPlugin.shared.isMonitoring
+            if isNowMonitoring {
+                // Reset retry counter on successful start
+                monitoringAutoRestartAttempts = 0
+            } else if screenAnalysisEnabled && !isTogglingMonitoring && monitoringAutoRestartAttempts < maxAutoRestartAttempts {
+                // Auto-restart: monitoring stopped but user's setting says it should be on.
+                // Try to restart after a delay (handles transient failures, sleep/wake, etc.)
+                monitoringAutoRestartAttempts += 1
+                let attempt = monitoringAutoRestartAttempts
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    let plugin = ProactiveAssistantsPlugin.shared
+                    guard !plugin.isMonitoring && screenAnalysisEnabled else { return }
+                    plugin.refreshScreenRecordingPermission()
+                    if plugin.hasScreenRecordingPermission {
+                        log("SidebarView: Auto-restarting monitoring (attempt \(attempt)/\(maxAutoRestartAttempts))")
+                        plugin.startMonitoring { success, _ in
+                            if !success {
+                                log("SidebarView: Auto-restart attempt \(attempt) failed")
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh permissions when app becomes active (user may have changed them in System Settings)
@@ -830,7 +855,7 @@ struct SidebarView: View {
     private var screenRecordingPermissionRow: some View {
         let isDenied = appState.isScreenRecordingPermissionDenied()
         let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
-        let needsFix = isBroken  // Show fix when broken
+        let needsReset = isBroken  // Show reset when broken
         let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
@@ -841,7 +866,7 @@ struct SidebarView: View {
                 .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Screen Recording (Fix Required)" : "Screen Recording")
+                Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -849,12 +874,11 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    if needsFix {
-                        // Track fix button click
+                    if needsReset {
+                        // Track reset button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
-                        // Soft recovery + restart: re-register with Launch Services and restart
-                        // to refresh permission state without wiping TCC
-                        ScreenCaptureService.softRecoveryAndRestart()
+                        // Reset and restart to fix broken ScreenCaptureKit state
+                        ScreenCaptureService.resetScreenCapturePermissionAndRestart()
                     } else {
                         // Request both traditional TCC and ScreenCaptureKit permissions
                         ScreenCaptureService.requestAllScreenCapturePermissions()
@@ -862,7 +886,7 @@ struct SidebarView: View {
                         ScreenCaptureService.openScreenRecordingPreferences()
                     }
                 }) {
-                    Text(needsFix ? "Fix" : "Grant")
+                    Text(needsReset ? "Reset" : "Grant")
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -1144,11 +1168,8 @@ struct SidebarView: View {
     private func syncMonitoringState() {
         let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
         isMonitoring = pluginState
-        // Keep persistent setting in sync when monitoring stops due to errors
-        if !pluginState && screenAnalysisEnabled {
-            screenAnalysisEnabled = false
-            AssistantSettings.shared.screenAnalysisEnabled = false
-        }
+        // Don't touch screenAnalysisEnabled here — it represents the user's preference,
+        // not the current monitoring state. Auto-restart below will handle recovery.
     }
 
     // MARK: - Page Loading Helpers

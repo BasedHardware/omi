@@ -10,6 +10,29 @@ import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkS
 import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
+// --- Global error handlers: prevent SDK abort errors from crashing the process ---
+process.on('unhandledRejection', (err) => {
+  // Claude Agent SDK throws "Operation aborted" when we abort a query (e.g. client disconnect).
+  // This surfaces as an unhandled rejection from internal async paths. Safe to ignore.
+  const msg = err?.message || String(err);
+  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
+    console.log(`[server] Suppressed abort error: ${msg}`);
+    return;
+  }
+  console.error(`[server] Unhandled rejection:`, err);
+});
+
+process.on('uncaughtException', (err) => {
+  const msg = err?.message || String(err);
+  if (msg.includes('Operation aborted') || msg.includes('aborted')) {
+    console.log(`[server] Suppressed uncaught abort error: ${msg}`);
+    return;
+  }
+  console.error(`[server] Uncaught exception:`, err);
+  // For non-abort errors, exit so systemd can restart us
+  process.exit(1);
+});
+
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";

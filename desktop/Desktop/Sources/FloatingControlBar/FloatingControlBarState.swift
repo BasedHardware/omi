@@ -25,7 +25,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var displayedQuery: String = ""
     @Published var inputViewHeight: CGFloat = 120
     @Published var responseContentHeight: CGFloat = 0
-    @Published var screenshotURL: URL? = nil
     @Published var chatHistory: [FloatingChatExchange] = []
 
     /// Convenience accessor for plain-text response (used by window geometry and error handling).

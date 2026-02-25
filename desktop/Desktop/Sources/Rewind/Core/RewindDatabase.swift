@@ -2082,6 +2082,25 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
         }
 
+        // Clean up orphan screenshot records that have no valid storage path.
+        // These were created when VideoChunkEncoder dropped frames (e.g. aspect ratio debounce)
+        // but processFrame still inserted a DB record with imagePath="" and no videoChunkPath.
+        migrator.registerMigration("deleteOrphanScreenshots") { db in
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM screenshots
+                WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                AND (imagePath IS NULL OR imagePath = '')
+            """) ?? 0
+            if count > 0 {
+                try db.execute(sql: """
+                    DELETE FROM screenshots
+                    WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                    AND (imagePath IS NULL OR imagePath = '')
+                """)
+                log("RewindDatabase: Cleaned up \(count) orphan screenshot records with no storage path")
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
