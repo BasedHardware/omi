@@ -490,7 +490,7 @@ class PushToTalkManager: ObservableObject {
 
   private func startMicCapture(batchMode: Bool = false) {
     if audioCaptureService == nil {
-      audioCaptureService = AudioCaptureService()
+      audioCaptureService = AudioCaptureService(preferredDeviceUID: AudioSourceManager.shared.preferredMicrophoneUID)
     }
     guard let capture = audioCaptureService else { return }
 
