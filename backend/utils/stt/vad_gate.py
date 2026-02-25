@@ -41,6 +41,11 @@ VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
 VAD_GATE_ENERGY_THRESHOLD = float(os.getenv('VAD_GATE_ENERGY_THRESHOLD', '0.0'))
+# Onset confirmation: require N speech windows out of last M before SILENCE→SPEECH.
+# Only active when energy filter is enabled (threshold > 0). Prevents ambient noise
+# spikes from triggering false speech onset. Default 3/5 = robust to <40% false positive rate.
+VAD_GATE_ONSET_CONFIRM = int(os.getenv('VAD_GATE_ONSET_CONFIRM', '3'))
+VAD_GATE_ONSET_WINDOW = int(os.getenv('VAD_GATE_ONSET_WINDOW', '5'))
 try:
     VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
 except ValueError:
@@ -340,6 +345,10 @@ class VADStreamingGate:
         self._energy_threshold = VAD_GATE_ENERGY_THRESHOLD
         self._rms_ema: Optional[float] = None
         self._chunks_energy_filtered = 0
+        # Onset confirmation: ring buffer of recent VAD decisions (True/False)
+        self._onset_confirm = VAD_GATE_ONSET_CONFIRM if self._energy_threshold > 0.0 else 1
+        self._onset_window = VAD_GATE_ONSET_WINDOW if self._energy_threshold > 0.0 else 1
+        self._recent_speech: deque = deque(maxlen=self._onset_window)
 
         # Metrics
         self._chunks_total = 0
@@ -408,6 +417,15 @@ class VADStreamingGate:
         """Compute RMS energy of float32 audio data."""
         return float(np.sqrt(np.mean(float_data * float_data)))
 
+    def _onset_confirmed(self) -> bool:
+        """Check if enough recent VAD windows are speech to confirm onset.
+
+        Used in SILENCE state to prevent ambient noise spikes from triggering
+        false speech onset. Requires onset_confirm out of onset_window recent
+        windows to be classified as speech.
+        """
+        return sum(self._recent_speech) >= self._onset_confirm
+
     def _run_vad(self, pcm_data: bytes) -> bool:
         """Run Silero VAD on audio chunk. Returns True if speech detected.
 
@@ -425,16 +443,8 @@ class VADStreamingGate:
         with self._vad_inference_lock:
             float_data = self._convert_for_vad(pcm_data)
 
-            # Energy pre-filter: skip Silero if audio is below threshold
-            if self._energy_threshold > 0.0:
-                rms = self._compute_rms(float_data)
-                self._rms_ema = rms if self._rms_ema is None else 0.1 * rms + 0.9 * self._rms_ema
-                if rms < self._energy_threshold:
-                    self._chunks_energy_filtered += 1
-                    del float_data
-                    return False
-
-            # Append to buffer
+            # Always append to buffer (energy filter checks per-window, not per-chunk,
+            # to avoid concentrating noise spikes in Silero's input)
             self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
             del float_data
 
@@ -448,6 +458,18 @@ class VADStreamingGate:
                         window = self._vad_buffer[: self._vad_window_samples]
                         self._vad_buffer = self._vad_buffer[self._vad_window_samples :]
 
+                        # Energy pre-filter: check per-window RMS before Silero.
+                        # Quiet windows are classified as silence without neural inference.
+                        if self._energy_threshold > 0.0:
+                            window_rms = self._compute_rms(window)
+                            self._rms_ema = (
+                                window_rms if self._rms_ema is None else 0.1 * window_rms + 0.9 * self._rms_ema
+                            )
+                            if window_rms < self._energy_threshold:
+                                self._chunks_energy_filtered += 1
+                                self._recent_speech.append(False)
+                                continue
+
                         # Convert to tensor for production Silero; mock accepts numpy
                         if _vad_torch is not None:
                             tensor = _vad_torch.from_numpy(window.copy())
@@ -457,7 +479,9 @@ class VADStreamingGate:
                         # Silero returns tensor; mock returns float
                         if hasattr(prob, 'item'):
                             prob = prob.item()
-                        if prob > self._speech_threshold:
+                        window_is_speech = prob > self._speech_threshold
+                        self._recent_speech.append(window_is_speech)
+                        if window_is_speech:
                             speech_detected = True
                     self._vad_state = _capture_model_state(model)
                 finally:
@@ -491,7 +515,14 @@ class VADStreamingGate:
         self._audio_cursor_ms += chunk_ms
 
         # Run VAD
-        is_speech = self._run_vad(pcm_data)
+        raw_is_speech = self._run_vad(pcm_data)
+
+        # Apply onset confirmation: require N of M speech windows to count as speech.
+        # Prevents ambient noise spikes from triggering or sustaining speech state.
+        if self._onset_confirm > 1 and raw_is_speech:
+            is_speech = self._onset_confirmed()
+        else:
+            is_speech = raw_is_speech
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
@@ -543,7 +574,7 @@ class VADStreamingGate:
                 self._pre_roll_total_ms -= evicted_ms
 
             if is_speech:
-                # Transition: SILENCE → SPEECH
+                # Transition: SILENCE → SPEECH (onset confirmed via process_audio)
                 self._state = GateState.SPEECH
                 # Emit pre-roll + current chunk
                 pre_roll_audio = b''.join(self._pre_roll)
@@ -610,6 +641,7 @@ class VADStreamingGate:
                 # Hangover expired: HANGOVER → SILENCE + finalize
                 self._state = GateState.SILENCE
                 self._finalize_count += 1
+                self._recent_speech.clear()
                 self._pre_roll.clear()
                 self._pre_roll_total_ms = 0.0
                 self._pre_roll.append(pcm_data)
