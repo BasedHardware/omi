@@ -155,7 +155,7 @@ class TestVADStreamingGate:
         assert len(total_sent) == len(total_input)
 
     def test_hangover_then_finalize(self):
-        """After speech ends, hangover sends audio, then exactly one finalize fires."""
+        """After speech ends, mid-hangover finalize fires at finalize_silence_ms, then hangover expires."""
         gate = self._make_gate()
         t = time.time()
 
@@ -171,14 +171,14 @@ class TestVADStreamingGate:
         assert out.audio_to_send != b''
         assert not out.should_finalize
 
-        # Continue silence past hangover (700ms default)
+        # Continue silence past hangover (4000ms default)
         finalize_count = 0
-        for i in range(30):  # 900ms of silence
+        for i in range(140):  # 4200ms of silence
             out = gate.process_audio(_make_pcm(30), t + 0.18 + i * 0.03)
             if out.should_finalize:
                 finalize_count += 1
 
-        # Exactly one finalize event on hangover→silence transition
+        # Mid-hangover finalize at 300ms + hangover expiry skips duplicate = 1 finalize
         assert finalize_count == 1
         assert out.state == GateState.SILENCE
 
@@ -195,16 +195,15 @@ class TestVADStreamingGate:
         # Silence starts
         _set_vad_speech(False)
 
-        # Feed silence just under hangover (700ms): 22 chunks = 660ms since last speech
-        for i in range(22):
+        # Feed silence just under hangover (4000ms): 132 chunks = 3960ms since last speech
+        for i in range(132):
             out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
-        assert out.state == GateState.HANGOVER, "Should still be in HANGOVER at 660ms"
-        assert not out.should_finalize
+        assert out.state == GateState.HANGOVER, "Should still be in HANGOVER at 3960ms"
 
-        # Next chunk pushes past 700ms: 23rd = 690ms, 24th = 720ms
-        out = gate.process_audio(_make_pcm(30), t + 0.15 + 22 * 0.03)
-        out = gate.process_audio(_make_pcm(30), t + 0.15 + 23 * 0.03)
-        assert out.should_finalize or out.state == GateState.SILENCE
+        # Next chunks push past 4000ms: 133rd = 3990ms, 134th = 4020ms
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 132 * 0.03)
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 133 * 0.03)
+        assert out.state == GateState.SILENCE
 
     def test_hangover_exact_boundary_stays_in_hangover(self):
         """At exactly hangover_ms, gate should still be in HANGOVER (uses > not >=)."""
@@ -216,20 +215,18 @@ class TestVADStreamingGate:
         for i in range(5):
             gate.process_audio(_make_pcm(30), t + i * 0.03)
 
-        # Silence: feed chunks until exactly 700ms since last speech
-        # Last speech at 150ms cursor, hangover=700ms, so 700/30 = 23.33 chunks
-        # 23 silence chunks = 690ms since last speech → still HANGOVER
-        # 24th chunk pushes cursor to 720ms → should finalize
+        # Silence: feed chunks until exactly 4000ms since last speech
+        # Last speech at 150ms cursor, hangover=4000ms, so 4000/30 = 133.33 chunks
+        # 133 silence chunks = 3990ms since last speech → still HANGOVER
+        # 134th chunk pushes cursor to 4020ms → should transition to SILENCE
         _set_vad_speech(False)
-        for i in range(23):
+        for i in range(133):
             out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
-        # At 23 silence chunks (690ms since last speech), still in HANGOVER
+        # At 133 silence chunks (3990ms since last speech), still in HANGOVER
         assert out.state == GateState.HANGOVER
-        assert not out.should_finalize
 
-        # 24th chunk: 720ms since last speech > 700ms → finalize
-        out = gate.process_audio(_make_pcm(30), t + 0.15 + 23 * 0.03)
-        assert out.should_finalize
+        # 134th chunk: 4020ms since last speech > 4000ms → transition to SILENCE
+        out = gate.process_audio(_make_pcm(30), t + 0.15 + 133 * 0.03)
         assert out.state == GateState.SILENCE
 
     def test_hangover_cancelled_by_speech(self):
@@ -253,6 +250,85 @@ class TestVADStreamingGate:
         assert out.state == GateState.SPEECH
         assert not out.should_finalize
         assert out.audio_to_send != b''
+
+    def test_mid_hangover_finalize(self):
+        """Finalize fires at finalize_silence_ms during hangover, audio keeps flowing."""
+        gate = self._make_gate()
+        t = time.time()
+
+        # Speech for 5 chunks
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Silence — enter hangover
+        _set_vad_speech(False)
+        finalize_seen = False
+        finalize_chunk = None
+        still_sending_after_finalize = False
+
+        # Feed 50 chunks (1500ms) — should see finalize at ~300ms, still in HANGOVER
+        for i in range(50):
+            out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+            if out.should_finalize and not finalize_seen:
+                finalize_seen = True
+                finalize_chunk = i
+                assert out.state == GateState.HANGOVER, "Should still be in HANGOVER when mid-hangover finalize fires"
+                assert out.audio_to_send != b'', "Audio should still flow during mid-hangover finalize"
+            elif finalize_seen and out.audio_to_send != b'':
+                still_sending_after_finalize = True
+
+        assert finalize_seen, "Mid-hangover finalize should have fired"
+        assert finalize_chunk <= 12, "Finalize should fire within ~360ms (12 chunks of 30ms)"
+        assert still_sending_after_finalize, "Audio should keep flowing after mid-hangover finalize"
+
+    def test_mid_hangover_finalize_only_once(self):
+        """Mid-hangover finalize fires exactly once per hangover period."""
+        gate = self._make_gate()
+        t = time.time()
+
+        # Speech
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+
+        # Silence through full hangover
+        _set_vad_speech(False)
+        finalize_count = 0
+        for i in range(140):  # 4200ms
+            out = gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+            if out.should_finalize:
+                finalize_count += 1
+
+        # Mid-hangover finalize at ~300ms, hangover expiry skips since already finalized
+        assert finalize_count == 1
+
+    def test_mid_hangover_finalize_reset_on_speech_resume(self):
+        """If speech resumes after mid-hangover finalize, next hangover gets its own finalize."""
+        gate = self._make_gate()
+        t = time.time()
+
+        # Speech → silence (past 300ms finalize threshold but within 4000ms hangover)
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+        _set_vad_speech(False)
+        for i in range(20):  # 600ms silence → mid-hangover finalize fires
+            gate.process_audio(_make_pcm(30), t + 0.15 + i * 0.03)
+
+        # Speech resumes (within hangover)
+        _set_vad_speech(True)
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + 0.75 + i * 0.03)
+
+        # Silence again — should get another mid-hangover finalize
+        _set_vad_speech(False)
+        second_finalize = False
+        for i in range(20):  # 600ms silence
+            out = gate.process_audio(_make_pcm(30), t + 0.90 + i * 0.03)
+            if out.should_finalize:
+                second_finalize = True
+        assert second_finalize, "Second hangover should get its own finalize"
 
     def test_continuous_speech_no_mid_utterance_drop(self):
         """Continuous speech must never transition to SILENCE mid-utterance.
@@ -686,9 +762,9 @@ class TestGatedDeepgramSocket:
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
 
-        # Silence to trigger hangover then SILENCE state
+        # Silence to trigger hangover then SILENCE state (need >4000ms)
         _set_vad_speech(False)
-        for i in range(30):
+        for i in range(140):
             socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
 
         # Now in SILENCE state. Set _last_send_wall_time directly for clarity
@@ -1234,12 +1310,12 @@ class TestKeepaliveBoundary:
         socket = GatedDeepgramSocket(mock_conn, gate=gate)
 
         t = 1000.0
-        # Feed speech then silence
+        # Feed speech then silence past hangover (>4000ms)
         _set_vad_speech(True)
         for i in range(5):
             socket.send(_make_pcm(30), wall_time=t + i * 0.03)
         _set_vad_speech(False)
-        for i in range(30):
+        for i in range(140):
             socket.send(_make_pcm(30), wall_time=t + 0.15 + i * 0.03)
 
         last_send = gate._last_send_wall_time
@@ -1709,9 +1785,10 @@ class TestAudioCapture:
                 for i in range(5):
                     socket.send(speech_chunk, wall_time=t + i * 0.03)
 
-                # Send silence chunks past hangover (700ms default) — need >24 chunks of 30ms
+                # Send silence chunks past hangover (4000ms default) — need >134 chunks of 30ms
                 _set_vad_speech(False)
-                for i in range(30):
+                n_silence = 150
+                for i in range(n_silence):
                     socket.send(silent_chunk, wall_time=t + 0.15 + i * 0.03)
 
                 socket.finish()
@@ -1725,8 +1802,8 @@ class TestAudioCapture:
                 raw_size = os.path.getsize(raw_path)
                 gated_size = os.path.getsize(gated_path)
 
-                # Raw should have all 35 chunks, gated should have fewer (speech + hangover only)
-                assert raw_size == len(speech_chunk) * 5 + len(silent_chunk) * 30
+                # Raw should have all chunks, gated should have fewer (speech + hangover only)
+                assert raw_size == len(speech_chunk) * 5 + len(silent_chunk) * n_silence
                 assert gated_size > 0, 'Gated file should have some speech audio'
                 assert gated_size < raw_size, 'Gated file should be smaller than raw'
 
