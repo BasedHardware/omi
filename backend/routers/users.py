@@ -1155,31 +1155,35 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         people = get_people(uid)
         action_items = get_standalone_action_items(uid, limit=10000, offset=0)
 
-        chat_messages = chat_db.get_all_messages(uid, limit=10000)
-
-        # Fetch all conversations in one query (no offset pagination which can miss docs)
-        conversations = conversations_db.get_conversations_without_photos(
-            uid, limit=10000, offset=0, include_discarded=True
-        )
-
-        # Stream pretty-printed JSON object one conversation at a time
+        # Stream pretty-printed JSON, yielding conversations and messages one at a time
         yield '{\n'
         yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
+
+        # Stream conversations via generator (batched internally, never all in memory)
         yield '  "conversations": [\n'
-
-        for i, conv in enumerate(conversations):
-            if i > 0:
+        first = True
+        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+            if not first:
                 yield ',\n'
+            first = False
             yield '    ' + json.dumps(conv, default=_json_default, indent=4)
-
         yield '\n  ],\n'
+
         yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
         yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
         yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
-        yield '  "chat_messages": ' + json.dumps(chat_messages, default=_json_default, indent=2) + '\n'
-        yield '}\n'
 
-        del conversations
+        # Stream chat messages via generator (batched internally, never all in memory)
+        yield '  "chat_messages": [\n'
+        first = True
+        for msg in chat_db.iter_all_messages(uid):
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + json.dumps(msg, default=_json_default, indent=4)
+        yield '\n  ]\n'
+
+        yield '}\n'
 
     return StreamingResponse(
         generate(),
