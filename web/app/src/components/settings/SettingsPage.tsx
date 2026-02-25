@@ -2848,9 +2848,7 @@ export function SettingsPage() {
     if (isExporting) return;
     setIsExporting(true);
     try {
-      const data = await exportAllData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
+      const blob = await exportAllData();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -3029,6 +3027,30 @@ export function SettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Export in-progress dialog */}
+      {isExporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="p-3 rounded-full bg-purple-500/10">
+                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Exporting Your Data</h3>
+                <p className="text-text-secondary mt-2 text-sm">
+                  This may take a moment depending on the amount of data in your account.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-yellow-500/10 rounded-xl px-4 py-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                <span className="text-xs text-yellow-400">Please don&apos;t close this tab</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 

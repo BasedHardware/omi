@@ -1,3 +1,4 @@
+import json
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -6,6 +7,7 @@ import os
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database import (
@@ -1137,38 +1139,54 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
 @router.get('/v1/users/export', tags=['v1'])
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance."""
-    profile = get_user_profile(uid)
+async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+    """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
 
-    conversations = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
+    def generate():
+        profile = get_user_profile(uid)
+        memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+        people = get_people(uid)
+        action_items = get_standalone_action_items(uid, limit=10000, offset=0)
 
-    memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+        # Stream pretty-printed JSON, yielding conversations and messages one at a time
+        yield '{\n'
+        yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
 
-    people = get_people(uid)
+        # Stream conversations via generator (batched internally, never all in memory)
+        yield '  "conversations": [\n'
+        first = True
+        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + json.dumps(conv, default=_json_default, indent=4)
+        yield '\n  ],\n'
 
-    action_items = get_standalone_action_items(uid, limit=10000, offset=0)
+        yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
+        yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
+        yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
 
-    # Get chat messages (all, no app_id filter)
-    chat_messages = []
-    try:
-        user_ref = chat_db.db.collection('users').document(uid)
-        msgs_ref = user_ref.collection('messages').order_by(
-            'created_at', direction=cloud_firestore.Query.DESCENDING
-        ).limit(10000)
-        for doc in msgs_ref.stream():
-            msg = doc.to_dict()
-            msg['id'] = doc.id
-            chat_messages.append(msg)
-    except Exception as e:
-        logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
+        # Stream chat messages via generator (batched internally, never all in memory)
+        yield '  "chat_messages": [\n'
+        first = True
+        for msg in chat_db.iter_all_messages(uid):
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + json.dumps(msg, default=_json_default, indent=4)
+        yield '\n  ]\n'
 
-    return {
-        'profile': profile if profile else {},
-        'conversations': conversations,
-        'memories': memories_list,
-        'people': people,
-        'action_items': action_items,
-        'chat_messages': chat_messages,
-    }
+        yield '}\n'
+
+    return StreamingResponse(
+        generate(),
+        media_type='application/json',
+        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+    )
