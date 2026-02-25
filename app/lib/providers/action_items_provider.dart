@@ -297,7 +297,7 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
+        //_findAndUpdateItemState(item.id, !newState); //disabled for demo
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
       } else {
@@ -307,7 +307,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _findAndUpdateItemState(item.id, !newState); 
+      //_findAndUpdateItemState(item.id, !newState); //disabled for demo
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
     }
