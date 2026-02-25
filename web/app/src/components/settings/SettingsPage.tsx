@@ -51,6 +51,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -1914,6 +1915,7 @@ function DeveloperSection({
   onDeleteMcpKey,
   onWebhookChange,
   onExportData,
+  isExporting,
   onDeleteKnowledgeGraph,
 }: {
   apiKeys: DeveloperApiKey[];
@@ -1925,6 +1927,7 @@ function DeveloperSection({
   onDeleteMcpKey: (keyId: string) => void;
   onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
   onExportData: () => void;
+  isExporting?: boolean;
   onDeleteKnowledgeGraph: () => void;
 }) {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
@@ -2285,16 +2288,26 @@ function DeveloperSection({
         <Card>
           <button
             onClick={onExportData}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "w-full flex items-center gap-4 py-3 transition-colors",
+              isExporting ? "text-text-tertiary cursor-not-allowed" : "text-text-primary hover:text-purple-400"
+            )}
           >
             <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Download className="w-5 h-5 text-text-tertiary" />
+              {isExporting ? (
+                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+              ) : (
+                <Download className="w-5 h-5 text-text-tertiary" />
+              )}
             </div>
             <div className="flex-1 text-left">
-              <p className="font-medium">Export All Data</p>
-              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
+              <p className="font-medium">{isExporting ? 'Exporting...' : 'Export All Data'}</p>
+              <p className="text-xs text-text-tertiary">
+                {isExporting ? 'This may take a moment' : 'Export conversations to a JSON file'}
+              </p>
             </div>
-            <ExternalLink className="w-4 h-4 text-text-quaternary" />
+            {!isExporting && <ExternalLink className="w-4 h-4 text-text-quaternary" />}
           </button>
         </Card>
         <Card className="border-red-500/20">
@@ -2578,6 +2591,8 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
+  const { showToast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'profile'
   const sectionParam = searchParams.get('section');
@@ -2830,6 +2845,8 @@ export function SettingsPage() {
   };
 
   const handleExportData = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
       const data = await exportAllData();
       const json = JSON.stringify(data, null, 2);
@@ -2842,8 +2859,12 @@ export function SettingsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('Data exported successfully', 'success');
     } catch (error) {
       console.error('Failed to export data:', error);
+      showToast('Failed to export data. Please try again.', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -2953,6 +2974,7 @@ export function SettingsPage() {
             onDeleteMcpKey={handleDeleteMcpKey}
             onWebhookChange={handleWebhookChange}
             onExportData={handleExportData}
+            isExporting={isExporting}
             onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
           />
         );
