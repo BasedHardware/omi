@@ -8,7 +8,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-enum AgentChatEventType { textDelta, toolActivity, result, error }
+enum AgentChatEventType { textDelta, toolActivity, result, error, status }
 
 class AgentChatEvent {
   final AgentChatEventType type;
@@ -86,6 +86,10 @@ class AgentChatService {
               final status = msg['status'] as String? ?? 'started';
               final displayText = status == 'started' ? _toolDisplayName(toolName) : '';
               _eventController?.add(AgentChatEvent(AgentChatEventType.toolActivity, displayText));
+              break;
+            case 'status':
+              final message = msg['message'] as String? ?? text;
+              _eventController?.add(AgentChatEvent(AgentChatEventType.status, message));
               break;
             case 'result':
               _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
