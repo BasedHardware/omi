@@ -1743,8 +1743,8 @@ export async function deleteMcpApiKey(keyId: string): Promise<void> {
 /**
  * Export all conversations as JSON
  */
-export async function exportAllData(): Promise<{ conversations: unknown[] }> {
-  return fetchWithAuth<{ conversations: unknown[] }>('/v1/conversations?limit=10000&offset=0');
+export async function exportAllData(): Promise<Record<string, unknown>> {
+  return fetchWithAuth<Record<string, unknown>>('/v1/users/export');
 }
 
 /**
