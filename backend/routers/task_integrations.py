@@ -360,14 +360,16 @@ def _build_refresh_request(app_key: str, refresh_token: str) -> dict:
     raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
 
 
-async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict:
+async def refresh_oauth_token(
+    uid: str, app_key: str, integration: dict, client: Optional[httpx.AsyncClient] = None
+) -> dict:
     name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
         raise HTTPException(status_code=401, detail=f"No refresh token available for {name}")
     try:
         req = _build_refresh_request(app_key, refresh_token)
-        client = get_http_client()
+        client = client or get_http_client()
         if req['type'] == 'form':
             token_response = await client.post(req['url'], headers=req.get('headers', {}), data=req.get('data', {}))
         else:
@@ -424,7 +426,11 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
 
 
 async def ensure_valid_oauth_token(
-    uid: str, app_key: str, integration: dict, refresh_if_missing_expires_at: bool = False
+    uid: str,
+    app_key: str,
+    integration: dict,
+    refresh_if_missing_expires_at: bool = False,
+    client: Optional[httpx.AsyncClient] = None,
 ) -> dict:
     supports_refresh = app_key in ['google_tasks', 'asana']
     if not supports_refresh:
@@ -432,21 +438,21 @@ async def ensure_valid_oauth_token(
     expires_at_str = integration.get('expires_at')
     if not expires_at_str:
         if refresh_if_missing_expires_at or integration.get('refresh_token'):
-            return await refresh_oauth_token(uid, app_key, integration)
+            return await refresh_oauth_token(uid, app_key, integration, client=client)
         return integration
     try:
         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
         buffer_time = timedelta(minutes=5)
         if datetime.now(timezone.utc) + buffer_time >= expires_at:
             if integration.get('refresh_token'):
-                return await refresh_oauth_token(uid, app_key, integration)
+                return await refresh_oauth_token(uid, app_key, integration, client=client)
             updated_integration = integration.copy()
             updated_integration['connected'] = False
             users_db.set_task_integration(uid, app_key, updated_integration)
             return updated_integration
     except Exception:
         if integration.get('refresh_token'):
-            return await refresh_oauth_token(uid, app_key, integration)
+            return await refresh_oauth_token(uid, app_key, integration, client=client)
     return integration
 
 
@@ -483,6 +489,7 @@ async def _create_task_internal(
     title: str,
     description: Optional[str] = None,
     due_date: Optional[datetime] = None,
+    client: Optional[httpx.AsyncClient] = None,
 ) -> dict:
     """
     Internal function to create task in external service.
@@ -495,6 +502,7 @@ async def _create_task_internal(
         title: Task title
         description: Optional task description/notes
         due_date: Optional due date
+        client: Optional httpx.AsyncClient to use (for daemon thread contexts)
 
     Returns:
         dict: {"success": bool, "external_task_id": str, "error": str, "error_code": str}
@@ -509,7 +517,11 @@ async def _create_task_internal(
     """
     if app_key in ['google_tasks', 'asana']:
         integration = await ensure_valid_oauth_token(
-            uid, app_key, integration, refresh_if_missing_expires_at=(app_key == 'google_tasks')
+            uid,
+            app_key,
+            integration,
+            refresh_if_missing_expires_at=(app_key == 'google_tasks'),
+            client=client,
         )
         if not integration.get('connected'):
             name = OAUTH_CONFIGS.get(app_key, {'name': app_key}).get('name', app_key)
@@ -520,7 +532,7 @@ async def _create_task_internal(
         return {"success": False, "error": f"No access token for {app_key}", "error_code": "no_access_token"}
 
     try:
-        client = get_http_client()
+        client = client or get_http_client()
 
         if app_key == 'todoist':
             body = {'content': title, 'priority': 2}
