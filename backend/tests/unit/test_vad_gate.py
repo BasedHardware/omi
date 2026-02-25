@@ -15,7 +15,6 @@ from utils.stt.vad_gate import (
     GatedDeepgramSocket,
     VADStreamingGate,
     is_gate_enabled,
-    should_gate_session,
 )
 
 # Global speech flag for mock VAD
@@ -493,40 +492,6 @@ class TestGateConfig:
     def test_gate_enabled_active(self):
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
             assert is_gate_enabled()
-
-    def test_rollout_percentage(self):
-        """Rollout should be deterministic based on uid hash."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 50):
-            # Same uid should always get same result
-            result1 = should_gate_session('user-abc')
-            result2 = should_gate_session('user-abc')
-            assert result1 == result2
-
-    def test_rollout_100_percent(self):
-        """100% rollout should gate all sessions."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
-            assert should_gate_session('any-user')
-
-    def test_rollout_0_percent(self):
-        """0% rollout should never gate any session."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 0):
-            assert not should_gate_session('any-user')
-            assert not should_gate_session('another-user')
-
-    def test_mode_off_overrides_rollout(self):
-        """Mode=off should prevent gating even with 100% rollout."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100):
-            assert not should_gate_session('any-user')
-
-    def test_rollout_negative_never_gates(self):
-        """Negative rollout percentage should never gate any session."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', -1):
-            assert not should_gate_session('any-user')
-
-    def test_rollout_over_100_always_gates(self):
-        """Rollout > 100 should gate all sessions (same as 100)."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'), patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 200):
-            assert should_gate_session('any-user')
 
 
 class TestGatedDeepgramSocket:
@@ -1351,14 +1316,11 @@ class TestGateCreationIntegration:
 
     def test_transcribe_gate_creation_with_preseconds(self):
         """Mirror transcribe.py:742 — active mode + preseconds > 0 → shadow gate."""
-        with (
-            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
-            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
-        ):
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
             # Mirror transcribe.py:742-752
             uid = 'test-uid'
             speech_profile_preseconds = 8.0  # Has speech profile
-            assert is_gate_enabled() and should_gate_session(uid)
+            assert is_gate_enabled()
 
             from utils.stt.vad_gate import VAD_GATE_MODE as _mode
 
@@ -1377,13 +1339,10 @@ class TestGateCreationIntegration:
 
     def test_transcribe_gate_creation_without_preseconds(self):
         """Mirror transcribe.py:742 — active mode + no preseconds → active gate."""
-        with (
-            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
-            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
-        ):
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
             uid = 'test-uid'
             speech_profile_preseconds = 0.0  # No speech profile
-            assert is_gate_enabled() and should_gate_session(uid)
+            assert is_gate_enabled()
 
             from utils.stt.vad_gate import VAD_GATE_MODE as _mode
 
@@ -1457,10 +1416,7 @@ class TestGateCreationIntegration:
 
     def test_gate_init_failure_results_in_none(self):
         """Mirror transcribe.py:752 — if VADStreamingGate() raises, vad_gate stays None."""
-        with (
-            patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'),
-            patch('utils.stt.vad_gate.VAD_GATE_ROLLOUT_PCT', 100),
-        ):
+        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
             # Simulate construction failure (e.g. model load error)
             vad_gate = None
             try:
