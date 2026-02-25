@@ -50,7 +50,10 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/services/desktop_update_service.dart';
 
 enum SettingsSection {
   account,
@@ -2290,6 +2293,38 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Software Update section
+        _buildSettingsGroup(
+          title: 'SOFTWARE UPDATE',
+          children: [
+            FutureBuilder<PackageInfo>(
+              future: PackageInfo.fromPlatform(),
+              builder: (context, snapshot) {
+                final version = snapshot.hasData
+                    ? 'v${snapshot.data!.version} (${snapshot.data!.buildNumber})'
+                    : '...';
+                return _buildSettingsRow(
+                  title: 'Current Version',
+                  subtitle: version,
+                  showChevron: false,
+                  onTap: () {},
+                );
+              },
+            ),
+            _buildSettingsRow(
+              title: 'Check for Updates...',
+              subtitle: DesktopUpdateService().isAvailable
+                  ? 'Checks every 3 hours automatically'
+                  : 'Update service not initialized',
+              onTap: () {
+                DesktopUpdateService().checkForUpdates();
+              },
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+
         _buildSettingsGroup(
           title: context.l10n.links,
           children: [

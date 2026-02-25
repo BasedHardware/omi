@@ -9,6 +9,9 @@ import app_links
 class AppDelegate: FlutterAppDelegate {
     // Method channel for direct URL delivery to Flutter
     private var urlChannel: FlutterMethodChannel?
+    
+    // Method channel for update checking
+    private var updateChannel: FlutterMethodChannel?
 
     // Required for app_links plugin to register Apple Event handler for URL schemes
     override func applicationWillFinishLaunching(_ notification: Notification) {
@@ -66,6 +69,16 @@ class AppDelegate: FlutterAppDelegate {
 
         super.applicationDidFinishLaunching(aNotification)
 
+        // Initialize method channels now that Flutter engine is ready
+        if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
+           let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
+            updateChannel = FlutterMethodChannel(
+                name: "com.omi/updates",
+                binaryMessenger: flutterViewController.engine.binaryMessenger
+            )
+            NSLog("DEBUG: Initialized updates method channel")
+        }
+
         // Delay to check if app was launched hidden (e.g., as a login item)
         DispatchQueue.main.async {
             if !NSApp.isHidden {
@@ -104,6 +117,29 @@ class AppDelegate: FlutterAppDelegate {
         for url in urls {
             print("DEBUG: Received URL scheme callback: \(url.absoluteString)")
             AppLinks.shared.handleLink(link: url.absoluteString)
+        }
+    }
+    
+    // MARK: - Check for Updates
+
+    @IBAction func checkForUpdates(_ sender: Any) {
+        // Lazily initialize channel if needed (in case it wasn't ready at app launch)
+        if updateChannel == nil {
+            if let mainWindow = NSApp.windows.first(where: { $0 is MainFlutterWindow }) as? MainFlutterWindow,
+               let flutterViewController = mainWindow.contentViewController as? FlutterViewController {
+                updateChannel = FlutterMethodChannel(
+                    name: "com.omi/updates",
+                    binaryMessenger: flutterViewController.engine.binaryMessenger
+                )
+                NSLog("DEBUG: Lazily initialized updates method channel")
+            }
+        }
+
+        if let channel = updateChannel {
+            channel.invokeMethod("checkForUpdates", arguments: nil)
+            NSLog("DEBUG: Triggered check for updates via menu")
+        } else {
+            NSLog("ERROR: Could not initialize updates method channel - Flutter not ready")
         }
     }
 }
