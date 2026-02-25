@@ -743,6 +743,15 @@ class GatedDeepgramSocket:
     def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
         self._conn = dg_connection
         self._gate = gate
+        # Audio capture for transcript quality validation (off by default)
+        self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
+        self._raw_file = None
+        self._gated_file = None
+        if self._capture_dir and gate:
+            os.makedirs(self._capture_dir, exist_ok=True)
+            session_id = gate.session_id or 'unknown'
+            self._raw_file = open(os.path.join(self._capture_dir, f'{session_id}_raw.pcm'), 'wb')
+            self._gated_file = open(os.path.join(self._capture_dir, f'{session_id}_gated.pcm'), 'wb')
 
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
         """Send audio through VAD gate (if active), then to DG."""
@@ -757,6 +766,10 @@ class GatedDeepgramSocket:
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
             return self._conn.send(data)
+        if self._raw_file:
+            self._raw_file.write(data)
+        if self._gated_file and gate_out.audio_to_send:
+            self._gated_file.write(gate_out.audio_to_send)
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
         elif self._gate.needs_keepalive(now):
@@ -786,6 +799,12 @@ class GatedDeepgramSocket:
                 self._gate._finalize_errors += 1
                 logger.warning('finalize in finish() failed uid=%s session=%s', self._gate.uid, self._gate.session_id)
         self._conn.finish()
+        for f in (self._raw_file, self._gated_file):
+            if f:
+                try:
+                    f.close()
+                except Exception:
+                    pass
 
     def remap_segments(self, segments: list) -> None:
         """Remap DG timestamps from audio-time to wall-clock-relative time."""
