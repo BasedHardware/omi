@@ -659,7 +659,12 @@ else
         "$DMG_PATH"
 fi
 
-# Clean up staging directory
+# Clean up staging directory and its stale LaunchServices registration
+# (macOS auto-registers apps it discovers; the staging copy creates a stale
+# entry pointing to /tmp/... which can cause the notification icon to show
+# a generic folder instead of the app icon)
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$STAGING_DIR/$DMG_APP_NAME.app" 2>/dev/null || true
 rm -rf "$STAGING_DIR"
 
 echo "  ✓ DMG created"

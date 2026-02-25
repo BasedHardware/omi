@@ -263,11 +263,21 @@ actor ACPBridge {
     /// Tell the bridge to pre-create ACP sessions in the background.
     /// This saves ~4s on the first query by doing session/new ahead of time.
     /// Pass multiple models to pre-warm sessions for both Opus and Sonnet in parallel.
-    func warmupSession(cwd: String? = nil, models: [String]? = nil) {
+    struct WarmupSessionConfig {
+        let key: String
+        let model: String
+        let systemPrompt: String?
+    }
+
+    func warmupSession(cwd: String? = nil, sessions: [WarmupSessionConfig]) {
         guard isRunning else { return }
         var dict: [String: Any] = ["type": "warmup"]
         if let cwd = cwd { dict["cwd"] = cwd }
-        if let models = models { dict["models"] = models }
+        dict["sessions"] = sessions.map { s -> [String: Any] in
+            var entry: [String: Any] = ["key": s.key, "model": s.model]
+            if let sp = s.systemPrompt { entry["systemPrompt"] = sp }
+            return entry
+        }
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let str = String(data: data, encoding: .utf8) {
             sendLine(str)
@@ -277,13 +287,29 @@ actor ACPBridge {
     // MARK: - Query
 
     /// Send a query to the ACP agent and stream results back.
+    ///
+    /// SESSION LIFECYCLE (Desktop app — not the VM/agent-cloud flow):
+    /// Sessions are pre-warmed at startup via warmupSession(). The bridge reuses
+    /// the same session for every subsequent query, so `systemPrompt` is ignored
+    /// for the normal path. It is only applied if the session was invalidated
+    /// (e.g. cwd change) and the bridge creates a new session/new internally.
+    /// Pass cachedMainSystemPrompt here — never rebuild the full system prompt
+    /// per-query, and never inject conversation history into it (the ACP SDK
+    /// maintains conversation history natively within the session).
+    ///
+    /// TOKEN COUNTS: The cacheReadTokens/cacheWriteTokens returned by the bridge
+    /// reflect the TOTAL across all internal tool-use rounds within this single
+    /// session/prompt call. The ACP SDK handles tool use internally — there is no
+    /// separate "sub-agent" spawning visible at this level.
     func query(
         prompt: String,
         systemPrompt: String,
+        sessionKey: String? = nil,
         cwd: String? = nil,
         mode: String? = nil,
         model: String? = nil,
         resume: String? = nil,
+        imageData: Data? = nil,
         onTextDelta: @escaping TextDeltaHandler,
         onToolCall: @escaping ToolCallHandler,
         onToolActivity: @escaping ToolActivityHandler,
@@ -302,6 +328,9 @@ actor ACPBridge {
             "prompt": prompt,
             "systemPrompt": systemPrompt
         ]
+        if let sessionKey = sessionKey {
+            queryDict["sessionKey"] = sessionKey
+        }
         if let cwd = cwd {
             queryDict["cwd"] = cwd
         }
@@ -313,6 +342,9 @@ actor ACPBridge {
         }
         if let resume = resume {
             queryDict["resume"] = resume
+        }
+        if let imageData = imageData {
+            queryDict["imageBase64"] = imageData.base64EncodedString()
         }
 
         let jsonData = try JSONSerialization.data(withJSONObject: queryDict)

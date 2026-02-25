@@ -302,6 +302,12 @@ step "Clearing stale LaunchServices registration..."
 # the launch-disabled flag prevents notification center registration.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 $LSREGISTER -u "$APP_BUNDLE" 2>/dev/null || true
+# Purge stale registrations from old DMG staging dirs and unmounted volumes
+# These create ghost entries that can cause notification icons to show a
+# generic folder instead of the app icon
+for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
+    [ -d "$stale" ] || $LSREGISTER -u "$stale" 2>/dev/null || true
+done
 $LSREGISTER -f "$APP_BUNDLE" 2>/dev/null || true
 
 step "Starting app..."

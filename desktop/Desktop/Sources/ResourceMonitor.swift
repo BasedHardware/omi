@@ -317,13 +317,20 @@ class ResourceMonitor {
 
     /// Attempt to free memory by flushing heavy components.
     /// Called at most once per warningCooldown (5 min) when critical threshold is exceeded.
+    /// Closure called during memory remediation to trim transcript state.
+    /// Set by AppState on init to avoid tight coupling.
+    var onMemoryPressureTrimTranscript: (() -> Void)?
+
     private func triggerMemoryRemediation() {
-        log("ResourceMonitor: Triggering memory remediation — flushing video encoder, clearing assistant pending work, pausing AgentSync")
+        log("ResourceMonitor: Triggering memory remediation — flushing video encoder, clearing assistant pending work, trimming transcript, pausing AgentSync")
 
         let memoryBefore = getMemoryFootprintMB()
 
         // Clear queued frames in assistant coordinator
         AssistantCoordinator.shared.clearAllPendingWork()
+
+        // Trim in-memory transcript segments (already persisted in SQLite)
+        onMemoryPressureTrimTranscript?()
 
         Task {
             // Flush VideoChunkEncoder and await completion
