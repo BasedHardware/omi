@@ -177,72 +177,79 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 Widget _buildFab() {
   return Consumer<ActionItemsProvider>(
     builder: (context, provider, _) {
+      // 1. EDIT MODE WITH SELECTION: Vertical Actions
       if (provider.isEditMode && provider.hasSelection) {
         return Positioned(
           right: 20,
           bottom: 100,
-          child: FloatingActionButton.extended(
-            heroTag: 'action_items_fab',
-            onPressed: () async {
-              HapticFeedback.mediumImpact();
-
-              // --- START CONFIRMATION BOX ---
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  backgroundColor: const Color(0xFF1F1F25),
-                  title: Text(
-                    'Delete ${provider.selectedCount} items', 
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  content: Text(
-                    'Are you sure you want to permanently delete these ${provider.selectedCount} tasks?',
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // --- BULK COMPLETE (Top - Green Mini FAB) ---
+              FloatingActionButton(
+                heroTag: 'bulk_complete_fab',
+                mini: true, 
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  final selectedIds = List<String>.from(provider.selectedItems);
+                  
+                  // Trigger updates in parallel for instant feel
+                  for (var id in selectedIds) {
+                    final item = provider.actionItems.firstWhere((i) => i.id == id);
+                    provider.updateActionItemState(item, true); 
+                    _onActionItemCompleted();
+                  }
+                  
+                  provider.toggleEditMode(); // Exit edit mode immediately
+                },
+                backgroundColor: Colors.green[600],
+                child: const Icon(Icons.check, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              // --- BULK DELETE (Bottom - Red Normal FAB) ---
+              FloatingActionButton(
+                heroTag: 'bulk_delete_fab',
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1F1F25),
+                      title: Text('Delete ${provider.selectedCount} items', style: const TextStyle(color: Colors.white)),
+                      content: const Text('Are you sure you want to permanently delete these tasks?', style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Delete'),
+                        ),
+                      ],
                     ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text('Delete'),
-                    ),
-                  ],
-                ),
-              );
-              // --- END CONFIRMATION BOX ---
-
-              if (confirm == true) {
-                await provider.deleteSelectedItems();
-              }
-            },
-            backgroundColor: Colors.red[600],
-            icon: const Icon(Icons.delete, color: Colors.white),
-            label: Text(
-              'Delete (${provider.selectedCount})',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
+                  );
+                  if (confirm == true) {
+                    await provider.deleteSelectedItems();
+                  }
+                },
+                backgroundColor: Colors.red[600],
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+            ],
           ),
         );
       }
-      
-      // ... rest of your _buildFab logic (completed view, etc.)
-      if (provider.isEditMode) {
-        return const SizedBox.shrink();
-      }
-if (provider.showCompletedView) {
-        // Optional UX Polish: Hide the trash can if there are no completed items!
-        if (provider.completedItems.isEmpty) {
-          return const SizedBox.shrink();
-        }
 
+      // 2. COMPLETED VIEW (Sweep Delete FAB)
+      if (provider.showCompletedView) {
+        if (provider.completedItems.isEmpty) return const SizedBox.shrink();
         return Positioned(
           right: 20,
           bottom: 100,
           child: FloatingActionButton(
-            heroTag: 'action_items_fab',
+            heroTag: 'sweep_delete_fab',
             onPressed: () async {
               HapticFeedback.mediumImpact();
               final confirm = await showDialog<bool>(
@@ -252,10 +259,7 @@ if (provider.showCompletedView) {
                   title: const Text('Delete all completed', style: TextStyle(color: Colors.white)),
                   content: const Text('This will permanently delete all completed tasks.', style: TextStyle(color: Colors.white70)),
                   actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
                     TextButton(
                       onPressed: () => Navigator.pop(context, true),
                       style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -264,28 +268,24 @@ if (provider.showCompletedView) {
                   ],
                 ),
               );
-              
-              if (confirm == true) {
-                // Call the new, highly optimized provider method instead of a slow loop!
-                await provider.deleteCompletedItems();
-              }
+              if (confirm == true) await provider.deleteCompletedItems();
             },
             backgroundColor: Colors.red[600],
-            child: const Icon(Icons.delete_sweep, color: Colors.white), // delete_sweep looks great here!
+            child: const Icon(Icons.delete_sweep, color: Colors.white),
           ),
         );
       }
+
+      // 3. NORMAL VIEW (Add Task FAB)
+      // Hide standard FAB if in edit mode but nothing is selected
+      if (provider.isEditMode) return const SizedBox.shrink();
+      
       return Positioned(
         right: 20,
         bottom: 100,
         child: FloatingActionButton(
-          heroTag: 'action_items_fab',
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            _showCreateActionItemSheet(
-              defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-            );
-          },
+          heroTag: 'add_task_fab',
+          onPressed: () => _showCreateActionItemSheet(),
           backgroundColor: Colors.deepPurple,
           child: const Icon(Icons.add, color: Colors.white),
         ),
