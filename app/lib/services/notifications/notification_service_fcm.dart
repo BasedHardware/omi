@@ -275,23 +275,19 @@ class _FCMNotificationService implements NotificationInterface {
       }
     });
 
-    // Background state: app in background, user taps a push notification
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    void handleNotificationTap(RemoteMessage? message) {
+      if (message == null) return;
       final navigateTo = message.data['navigate_to'];
-      if (navigateTo != null && navigateTo.toString().isNotEmpty) {
-        NotificationUtil.handleNavigateTo(navigateTo.toString());
+      if (navigateTo is String && navigateTo.isNotEmpty) {
+        NotificationUtil.handleNavigateTo(navigateTo);
       }
-    });
+    }
+
+    // Background state: app in background, user taps a push notification
+    FirebaseMessaging.onMessageOpenedApp.listen(handleNotificationTap);
 
     // Terminated state: app was killed and opened via notification tap
-    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        final navigateTo = message.data['navigate_to'];
-        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
-          NotificationUtil.handleNavigateTo(navigateTo.toString());
-        }
-      }
-    });
+    FirebaseMessaging.instance.getInitialMessage().then(handleNotificationTap);
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();
