@@ -240,17 +240,23 @@ def get_messages(
     return messages
 
 
-@prepare_for_read(decrypt_func=_prepare_message_for_read)
-def get_all_messages(uid: str, limit: int = 10000):
-    """Get all chat messages for a user regardless of app/plugin. Used for data export."""
+def iter_all_messages(uid: str, batch_size: int = 1000):
+    """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
     user_ref = db.collection('users').document(uid)
-    msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-    messages = []
-    for doc in msgs_ref.stream():
-        msg = doc.to_dict()
-        msg['id'] = doc.id
-        messages.append(msg)
-    return messages
+    msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
+    offset = 0
+    while True:
+        batch_ref = msgs_ref.limit(batch_size).offset(offset)
+        batch = []
+        for doc in batch_ref.stream():
+            msg = doc.to_dict()
+            msg['id'] = doc.id
+            msg = _prepare_message_for_read(msg, uid) or msg
+            batch.append(msg)
+        yield from batch
+        if len(batch) < batch_size:
+            break
+        offset += batch_size
 
 
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
