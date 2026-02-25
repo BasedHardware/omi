@@ -13,6 +13,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/services/notifications.dart' show NotificationUtil;
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
@@ -271,6 +272,24 @@ class _FCMNotificationService implements NotificationInterface {
       if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
         _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
         return;
+      }
+    });
+
+    // Background state: app in background, user taps a push notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      final navigateTo = message.data['navigate_to'];
+      if (navigateTo != null && navigateTo.toString().isNotEmpty) {
+        NotificationUtil.handleNavigateTo(navigateTo.toString());
+      }
+    });
+
+    // Terminated state: app was killed and opened via notification tap
+    FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        final navigateTo = message.data['navigate_to'];
+        if (navigateTo != null && navigateTo.toString().isNotEmpty) {
+          NotificationUtil.handleNavigateTo(navigateTo.toString());
+        }
       }
     });
   }
