@@ -412,7 +412,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     if (_localSync == null) {
       Logger.debug("SDCard: ERROR - LocalWalSync not available, aborting to preserve data safety");
-      DebugLogManager.logError('LocalWalSync not available', null, 'SD card sync aborted');
+      DebugLogManager.logError('SD card sync aborted: LocalWalSync not available', null, null);
       throw Exception('Local sync service not available. Cannot safely download SD card data.');
     }
 
@@ -454,7 +454,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     } catch (e) {
       await _storageStream?.cancel();
       Logger.debug('SDCard download failed: $e');
-      DebugLogManager.logError(e, null, 'SD card BLE download failed', {
+      DebugLogManager.logError(e, null, 'SD card BLE download failed: ${e.toString()}', {
         'chunksDownloaded': chunksDownloaded,
         'walId': wal.id,
       });
@@ -565,7 +565,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         wal.status = WalStatus.synced;
       } catch (e) {
         Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
-        DebugLogManager.logError(e, null, 'SD card syncAll WAL failed', {'walId': wal.id});
+        DebugLogManager.logError(e, null, 'SD card syncAll WAL failed: ${e.toString()}', {'walId': wal.id});
         wal.isSyncing = false;
         wal.syncStartedAt = null;
         wal.syncEtaSeconds = null;
@@ -633,7 +633,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       wal.status = WalStatus.synced;
     } catch (e) {
       Logger.debug("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
-      DebugLogManager.logError(e, null, 'SD card single WAL sync failed', {'walId': wal.id});
+      DebugLogManager.logError(e, null, 'SD card single WAL sync failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
@@ -838,7 +838,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         _resetSyncState();
         final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';
         final errorCode = setupResult.errorCode;
-        DebugLogManager.logError(errorMessage, null, 'SD card WiFi setup failed', {
+        DebugLogManager.logError('SD card WiFi setup failed: $errorMessage', null, null, {
           'errorCode': errorCode?.code.toRadixString(16) ?? 'none',
         });
         if (errorCode != null) {
@@ -874,7 +874,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!wifiResult.success) {
         await _cleanupWifiSync(null, wifiNetwork, ssid, connection, deviceId: deviceId);
         final errorMsg = wifiResult.errorMessage ?? wifiResult.error?.userMessage ?? 'Failed to connect to device WiFi';
-        DebugLogManager.logError(errorMsg, null, 'SD card WiFi AP connection failed');
+        DebugLogManager.logError('SD card WiFi AP connection failed: $errorMsg', null, null);
         connectionListener?.onConnectionFailed(errorMsg);
         throw WifiSyncException('WiFi connection failed: $errorMsg');
       }
@@ -891,7 +891,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         connectionListener?.onConnected();
       } catch (e) {
         debugPrint("SDCardWalSync WiFi: TCP server error: $e");
-        DebugLogManager.logError(e, null, 'SD card WiFi TCP connection failed');
+        DebugLogManager.logError(e, null, 'SD card WiFi TCP connection failed: ${e.toString()}');
         await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection, deviceId: deviceId);
         connectionListener?.onConnectionFailed('Device did not connect');
         throw WifiSyncException('Device did not connect to TCP server: $e');
@@ -1278,7 +1278,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       return resp;
     } catch (e) {
       Logger.debug("SDCardWalSync WiFi: Error during sync: $e");
-      DebugLogManager.logError(e, null, 'SD card WiFi sync error');
+      DebugLogManager.logError(e, null, 'SD card WiFi sync error: ${e.toString()}');
 
       _activeTcpTransport = null;
       _activeTransferCompleter = null;
