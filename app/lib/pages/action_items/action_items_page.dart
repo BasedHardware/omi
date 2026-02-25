@@ -178,7 +178,7 @@ Widget _buildFab() {
   return Consumer<ActionItemsProvider>(
     builder: (context, provider, _) {
       // 1. EDIT MODE WITH SELECTION: Vertical Actions
-      if (provider.isEditMode && provider.hasSelection) {
+      if (provider.isEditMode) {
         return Positioned(
           right: 20,
           bottom: 100,
