@@ -285,7 +285,7 @@ startupProbe:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 1
+  maxReplicas: 3
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -293,6 +293,10 @@ autoscaling:
       - type: Percent
         value: 25
         periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Max
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
