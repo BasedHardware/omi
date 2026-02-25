@@ -117,12 +117,14 @@ class AgentChatService {
         }
       },
       onError: (error) {
+        print('[AgentChat] Stream error: $error');
         Logger.error('AgentChatService: stream error: $error');
         _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Connection error: $error'));
         _eventController?.close();
         _connected = false;
       },
       onDone: () {
+        print('[AgentChat] Stream done (connection closed)');
         _connected = false;
         if (!(_eventController?.isClosed ?? true)) {
           _eventController?.close();
