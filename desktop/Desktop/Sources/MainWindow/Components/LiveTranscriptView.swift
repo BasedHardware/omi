@@ -39,6 +39,49 @@ struct LiveTranscriptPanel: View {
     }
 }
 
+/// Self-contained audio level waveforms that observe AudioLevelMonitor internally,
+/// so the parent view does NOT need to observe audio level changes.
+struct RecordingBarAudioLevels: View {
+    @ObservedObject private var monitor = AudioLevelMonitor.shared
+
+    var body: some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 6) {
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                AudioLevelWaveformView(
+                    level: monitor.microphoneLevel,
+                    barCount: 8,
+                    isActive: true
+                )
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                AudioLevelWaveformView(
+                    level: monitor.systemLevel,
+                    barCount: 8,
+                    isActive: true
+                )
+            }
+        }
+    }
+}
+
+/// Self-contained recording duration text that observes RecordingTimer internally.
+struct RecordingBarDuration: View {
+    @ObservedObject private var timer = RecordingTimer.shared
+
+    var body: some View {
+        Text(timer.formattedDuration)
+            .scaledFont(size: 14, weight: .medium, design: .monospaced)
+            .foregroundColor(OmiColors.textSecondary)
+    }
+}
+
 /// Small view for the recording bar that observes LiveTranscriptMonitor
 /// without forcing the parent to re-render.
 struct RecordingBarTranscriptText: View {

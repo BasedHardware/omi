@@ -176,6 +176,11 @@ class SharedPreferencesUtil {
 
   bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
 
+  // Claude Agent — route chat through desktop agent VM (experimental)
+  set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
+
+  bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
+
   // Daily reflection notification at 9 PM - default is true (enabled)
   set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
 

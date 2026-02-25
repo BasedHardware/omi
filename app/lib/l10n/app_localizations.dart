@@ -15350,6 +15350,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'App Icon'**
   String get appIconLabel;
+
+  /// Title for onboarding step that previews the memory graph
+  ///
+  /// In en, this message translates to:
+  /// **'Here is what I know about you'**
+  String get onboardingWhatIKnowAboutYouTitle;
+
+  /// Description for onboarding memory graph preview step
+  ///
+  /// In en, this message translates to:
+  /// **'This map updates as Omi learns from your conversations.'**
+  String get onboardingWhatIKnowAboutYouDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -14,23 +14,48 @@ struct SelectableMarkdown: View {
     let sender: ChatSender
     @Environment(\.fontScale) private var fontScale
 
-    var body: some View {
-        let segments = Self.splitSegments(text)
+    // Cached parsed segments — pre-computed on init, recomputed only when text changes.
+    // Avoids running splitSegments() on every SwiftUI layout pass.
+    @State private var cachedSegments: [Segment]
 
-        if segments.count == 1, case .text = segments[0].kind {
-            // Single text segment — no VStack overhead
-            textView(segments[0].content)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(segments) { segment in
-                    switch segment.kind {
-                    case .text:
-                        textView(segment.content)
-                    case .codeBlock:
-                        codeBlockView(segment.content)
+    // Cached AttributedStrings keyed by segment content.
+    // Populated on first appear; reused on subsequent renders.
+    @State private var attrCache: [String: AttributedString?] = [:]
+    // Font scale at time of caching — used to invalidate when scale changes.
+    @State private var cachedFontScale: CGFloat = 0
+
+    init(text: String, sender: ChatSender) {
+        self.text = text
+        self.sender = sender
+        self._cachedSegments = State(initialValue: Self.splitSegments(text))
+    }
+
+    var body: some View {
+        Group {
+            if cachedSegments.count == 1, case .text = cachedSegments[0].kind {
+                // Single text segment — no VStack overhead
+                textView(cachedSegments[0].content)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(cachedSegments) { segment in
+                        switch segment.kind {
+                        case .text:
+                            textView(segment.content)
+                        case .codeBlock:
+                            codeBlockView(segment.content)
+                        }
                     }
                 }
             }
+        }
+        .onChange(of: text) { newText in
+            cachedSegments = Self.splitSegments(newText)
+            attrCache.removeAll()
+        }
+        .onChange(of: fontScale) { _ in
+            // Font scale changed — cached attributed strings are stale
+            attrCache.removeAll()
+            cachedFontScale = 0
         }
     }
 
@@ -39,18 +64,37 @@ struct SelectableMarkdown: View {
     @ViewBuilder
     private func textView(_ content: String) -> some View {
         let fontSize = round(14 * fontScale)
-        let processed = Self.preprocessText(content)
+        // Use cached AttributedString if available for the current font scale
+        let styled: AttributedString? = {
+            if cachedFontScale == fontScale, let cached = attrCache[content] {
+                return cached
+            }
+            let processed = Self.preprocessText(content)
+            return Self.styledAttributedString(
+                from: processed, sender: sender, fontSize: fontSize, fontScale: fontScale
+            )
+        }()
 
-        if let styled = Self.styledAttributedString(
-            from: processed, sender: sender, fontSize: fontSize, fontScale: fontScale
-        ) {
-            Text(styled)
-                .if_available_writingToolsNone()
-        } else {
-            Text(content)
-                .font(.system(size: fontSize))
-                .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
-                .if_available_writingToolsNone()
+        Group {
+            if let s = styled {
+                Text(s)
+                    .if_available_writingToolsNone()
+            } else {
+                Text(content)
+                    .font(.system(size: fontSize))
+                    .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+                    .if_available_writingToolsNone()
+            }
+        }
+        .onAppear {
+            // Populate cache on first appearance so future renders skip computation
+            if cachedFontScale != fontScale {
+                attrCache.removeAll()
+                cachedFontScale = fontScale
+            }
+            if attrCache[content] == nil {
+                attrCache[content] = styled
+            }
         }
     }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -34,6 +36,11 @@ class DeveloperModeProvider extends BaseProvider {
   bool autoCreateSpeakersEnabled = false;
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
+
+  // Claude Agent (experimental)
+  bool claudeAgentEnabled = false;
+  bool claudeAgentLoading = false;
+  final AgentChatService agentChatService = AgentChatService();
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -106,6 +113,7 @@ class DeveloperModeProvider extends BaseProvider {
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -258,6 +266,39 @@ class DeveloperModeProvider extends BaseProvider {
       DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
     } else {
       DailyReflectionNotification.cancelNotification();
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> onClaudeAgentChanged(bool value) async {
+    if (value) {
+      // Enabling — check if VM exists first
+      claudeAgentLoading = true;
+      notifyListeners();
+
+      try {
+        final vmInfo = await getAgentVmStatus();
+        if (vmInfo == null || !vmInfo.hasVm) {
+          AppSnackbar.showSnackbarError('Requires OMI Desktop with agent enabled');
+          claudeAgentLoading = false;
+          notifyListeners();
+          return;
+        }
+
+        claudeAgentEnabled = true;
+        SharedPreferencesUtil().claudeAgentEnabled = true;
+      } catch (e) {
+        Logger.error('Failed to check agent VM status: $e');
+        AppSnackbar.showSnackbarError('Failed to check agent VM status');
+      }
+
+      claudeAgentLoading = false;
+    } else {
+      // Disabling — disconnect and revert
+      claudeAgentEnabled = false;
+      SharedPreferencesUtil().claudeAgentEnabled = false;
+      await agentChatService.disconnect();
     }
 
     notifyListeners();

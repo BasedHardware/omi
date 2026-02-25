@@ -164,9 +164,14 @@ def _get_structured(
                 )
             return structured, False
 
+        # Compute conversation duration for discard heuristics
+        duration_seconds = None
+        if conversation.started_at and conversation.finished_at:
+            duration_seconds = max(0, (conversation.finished_at - conversation.started_at).total_seconds())
+
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         with track_usage(uid, Features.CONVERSATION_DISCARD):
-            discarded = should_discard_conversation(transcript_text, conversation.photos)
+            discarded = should_discard_conversation(transcript_text, conversation.photos, duration_seconds)
         if discarded:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 

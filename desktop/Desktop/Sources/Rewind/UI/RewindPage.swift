@@ -8,8 +8,6 @@ struct RewindPage: View {
     var appState: AppState? = nil
 
     @StateObject private var viewModel = RewindViewModel()
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
-    @ObservedObject private var recordingTimer = RecordingTimer.shared
 
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
@@ -671,6 +669,9 @@ struct RewindPage: View {
                 selection: Binding(
                     get: { viewModel.selectedDate },
                     set: { newDate in
+                        // Only reload if the selected day actually changed
+                        let calendar = Calendar.current
+                        guard !calendar.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
                         Task { await viewModel.filterByDate(newDate) }
                     }
                 ),
@@ -967,40 +968,119 @@ struct RewindPage: View {
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        let isScreenCaptureKitBroken = appState?.isScreenCaptureKitBroken == true
+        let hasNoPermission = appState?.hasScreenRecordingPermission == false
+
+        return VStack(spacing: 16) {
             Spacer()
 
-            ZStack {
-                Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.1))
-                    .frame(width: 80, height: 80)
+            if isScreenCaptureKitBroken {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.1))
+                        .frame(width: 80, height: 80)
 
-                Image(systemName: "clock.arrow.circlepath")
-                    .scaledFont(size: 36)
-                    .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+                    Image(systemName: "rectangle.on.rectangle.slash")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.red.opacity(0.7))
+                }
+
+                Text("Screen Recording Needs Reset")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("macOS granted permission but ScreenCaptureKit is stuck.\nResetting fixes this — the app will restart automatically.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    AnalyticsManager.shared.screenCaptureResetClicked(source: "rewind_empty_state")
+                    // Re-enable screen analysis so it auto-starts after the restart
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+                } label: {
+                    Text("Reset & Restart")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else if hasNoPermission {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "lock.rectangle")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.orange.opacity(0.7))
+                }
+
+                Text("Screen Recording Permission Required")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Rewind needs Screen Recording permission to capture your screen.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    ScreenCaptureService.requestAllScreenCapturePermissions()
+                    ScreenCaptureService.openScreenRecordingPreferences()
+                } label: {
+                    Text("Grant Permission")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "clock.arrow.circlepath")
+                        .scaledFont(size: 36)
+                        .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+                }
+
+                Text("No Screenshots Yet")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundColor(.yellow)
+                    Text("Tip: Use search to find anything you've seen on screen")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.top, 8)
             }
-
-            Text("No Screenshots Yet")
-                .scaledFont(size: 20, weight: .semibold)
-                .foregroundColor(.white)
-
-            Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
-                .scaledFont(size: 14)
-                .foregroundColor(.white.opacity(0.6))
-                .multilineTextAlignment(.center)
-
-            HStack(spacing: 8) {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                Text("Tip: Use search to find anything you've seen on screen")
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.top, 8)
 
             Spacer()
         }
@@ -1262,35 +1342,11 @@ struct RewindPage: View {
                 }
                 .buttonStyle(.plain)
 
-                // Audio level waveforms
-                HStack(spacing: 16) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mic.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.microphoneLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
-                    }
+                // Audio level waveforms (self-observing, won't re-render parent)
+                RecordingBarAudioLevels()
 
-                    HStack(spacing: 6) {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.systemLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
-                    }
-                }
-
-                // Duration
-                Text(recordingTimer.formattedDuration)
-                    .scaledFont(size: 14, weight: .medium, design: .monospaced)
-                    .foregroundColor(OmiColors.textSecondary)
+                // Duration (self-observing, won't re-render parent)
+                RecordingBarDuration()
             } else if appState.isSavingConversation {
                 // Saving indicator
                 ZStack {

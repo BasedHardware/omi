@@ -6,12 +6,13 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
+const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
 const BACKEND_URL = process.env.BACKEND_URL || "https://api.omi.me";
@@ -584,6 +585,36 @@ async function checkIdleAndStop() {
   }
 }
 
+// --- Hot-reload: check GCS for new version every 10 minutes ---
+
+let currentVersion = null;
+
+async function checkAndApplyUpdate(log) {
+  try {
+    const resp = await fetch(`${GCS_BASE}/version.txt`);
+    if (!resp.ok) return;
+    const version = (await resp.text()).trim();
+    if (currentVersion === null) {
+      currentVersion = version;
+      log(`Running version: ${version}`);
+      return;
+    }
+    if (version === currentVersion) return;
+    log(`Update available: ${version} (current: ${currentVersion}), downloading...`);
+    const agentResp = await fetch(`${GCS_BASE}/agent.mjs`);
+    if (!agentResp.ok) {
+      log(`Update download failed: HTTP ${agentResp.status}`);
+      return;
+    }
+    const newCode = await agentResp.text();
+    writeFileSync(join(__dirname, "agent.mjs"), newCode);
+    log(`Update applied (${version}), restarting in 3s...`);
+    setTimeout(() => process.exit(0), 3000);
+  } catch (e) {
+    log(`Update check failed: ${e.message}`);
+  }
+}
+
 function startServer() {
   const log = (msg) => console.log(`[server] ${msg}`);
 
@@ -603,6 +634,17 @@ function startServer() {
   const dataDir = dirname(DB_PATH);
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true });
+  }
+
+  // Clean up any stale upload temp file left by a previous crashed upload
+  const uploadTmpPath = DB_PATH + ".uploading";
+  if (existsSync(uploadTmpPath)) {
+    try {
+      unlinkSync(uploadTmpPath);
+      log("Cleaned up stale upload temp file");
+    } catch (e) {
+      log(`Warning: could not remove stale upload temp file: ${e.message}`);
+    }
   }
 
   const httpServer = createServer((req, res) => {
@@ -784,6 +826,20 @@ function startServer() {
           res.end(JSON.stringify({ error: err.message }));
         }
       });
+      return;
+    }
+
+    // Keepalive ping — resets idle timer so VM doesn't auto-stop
+    if (req.url?.startsWith("/ping") && req.method === "POST") {
+      if (!verifyAuth(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized" }));
+        return;
+      }
+      lastActivityAt = Date.now();
+      log("Keepalive ping received");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
       return;
     }
 
@@ -985,6 +1041,11 @@ function startServer() {
 
   // Start idle auto-stop checker
   setInterval(checkIdleAndStop, IDLE_CHECK_INTERVAL_MS);
+
+  // Start hot-reload version checker
+  const UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+  checkAndApplyUpdate(log);
+  setInterval(() => checkAndApplyUpdate(log), UPDATE_INTERVAL_MS);
 }
 
 // --- Main ---

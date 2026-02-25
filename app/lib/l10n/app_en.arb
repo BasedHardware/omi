@@ -10051,7 +10051,6 @@
   "@revokeShareConfirmation": {
     "description": "Confirmation message for revoking speech profile sharing"
   },
-  "appIconLabel": "App Icon",
   "sharedProfiles": "Shared Profiles",
   "@sharedProfiles": {
     "description": "Short menu title for speech profile sharing status page"
@@ -10083,5 +10082,13 @@
   "alreadySharedWithUser": "You have already shared your voice profile with this user",
   "@alreadySharedWithUser": {
     "description": "Error when trying to share with someone you already shared with"
+  "appIconLabel": "App Icon",
+  "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
+  "@onboardingWhatIKnowAboutYouTitle": {
+    "description": "Title for onboarding step that previews the memory graph"
+  },
+  "onboardingWhatIKnowAboutYouDescription": "This map updates as Omi learns from your conversations.",
+  "@onboardingWhatIKnowAboutYouDescription": {
+    "description": "Description for onboarding memory graph preview step"
   }
 }

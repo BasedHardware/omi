@@ -91,6 +91,11 @@ class SettingsSyncManager {
             if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
+
+        // Update channel (server-authoritative override)
+        if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
+            UpdaterViewModel.shared.updateChannel = parsed
+        }
     }
 
     // MARK: - Build Local → Response

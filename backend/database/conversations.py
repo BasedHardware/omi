@@ -1059,7 +1059,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
 
     logger.info('get_closest_conversation_to_timestamps found:')
     for conversation in conversations:
-        logger.info(f'- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}')
+        logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
     # get the conversation that has the closest start timestamp or end timestamp
     closest_conversation = None
@@ -1073,7 +1073,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
             min_diff = min(diff1, diff2)
             closest_conversation = conversation
 
-    logger.info(f'get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}')
+    logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation
 
 
