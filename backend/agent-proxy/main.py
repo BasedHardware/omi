@@ -383,7 +383,7 @@ async def agent_ws(websocket: WebSocket):
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
 
     try:
-        async with websockets.connect(vm_uri) as vm_ws:
+        async with websockets.connect(vm_uri, ping_interval=600, ping_timeout=600) as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
 
             async def phone_to_vm():
