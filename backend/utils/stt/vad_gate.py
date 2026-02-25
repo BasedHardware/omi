@@ -39,10 +39,9 @@ VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '4000'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
 VAD_GATE_FINALIZE_SILENCE_MS = int(os.getenv('VAD_GATE_FINALIZE_SILENCE_MS', '300'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
-try:
-    VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
-except ValueError:
-    VAD_GATE_MODEL_POOL_SIZE = max(1, os.cpu_count() or 1)
+# Fixed pool size — inference is <0.5ms so contention is negligible even at high concurrency.
+# 16 covers up to 16 concurrent sessions without any lock wait.
+VAD_GATE_MODEL_POOL_SIZE = 16
 
 
 def is_gate_enabled() -> bool:
