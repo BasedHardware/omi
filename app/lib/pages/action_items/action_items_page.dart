@@ -192,6 +192,11 @@ Widget _buildFab() {
                   HapticFeedback.mediumImpact();
                   final selectedIds = List<String>.from(provider.selectedItems);
                   
+                  if (selectedIds.isEmpty) {
+                      provider.toggleEditMode();
+                    return;
+                  }
+
                   // Trigger updates in parallel for instant feel
                   for (var id in selectedIds) {
                     final item = provider.actionItems.firstWhere((i) => i.id == id);
@@ -210,6 +215,12 @@ Widget _buildFab() {
                 heroTag: 'bulk_delete_fab',
                 onPressed: () async {
                   HapticFeedback.mediumImpact();
+
+                  if (provider.selectedItems.isEmpty) {
+                    provider.toggleEditMode();
+                    return;
+                  }
+                  
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
@@ -243,7 +254,6 @@ Widget _buildFab() {
 
       // 2. COMPLETED VIEW (Sweep Delete FAB)
       if (provider.showCompletedView) {
-        if (provider.completedItems.isEmpty) return const SizedBox.shrink();
         return Positioned(
           right: 20,
           bottom: 100,
@@ -251,6 +261,10 @@ Widget _buildFab() {
             heroTag: 'sweep_delete_fab',
             onPressed: () async {
               HapticFeedback.mediumImpact();
+              if (provider.completedItems.isEmpty) {
+                provider.toggleShowCompletedView();
+                return;
+              }
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (context) => AlertDialog(
