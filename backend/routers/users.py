@@ -1,3 +1,4 @@
+import json
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -6,6 +7,7 @@ import os
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database import (
@@ -1137,38 +1139,68 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
 @router.get('/v1/users/export', tags=['v1'])
-def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
-    """Export all user data for GDPR/CCPA compliance."""
-    profile = get_user_profile(uid)
+async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+    """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
 
-    conversations = conversations_db.get_conversations(uid, limit=10000, offset=0, include_discarded=True)
+    def generate():
+        profile = get_user_profile(uid)
+        memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+        people = get_people(uid)
+        action_items = get_standalone_action_items(uid, limit=10000, offset=0)
 
-    memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+        chat_messages = []
+        try:
+            user_ref = chat_db.db.collection('users').document(uid)
+            msgs_ref = (
+                user_ref.collection('messages')
+                .order_by('created_at', direction=cloud_firestore.Query.DESCENDING)
+                .limit(10000)
+            )
+            for doc in msgs_ref.stream():
+                msg = doc.to_dict()
+                msg['id'] = doc.id
+                chat_messages.append(msg)
+        except Exception as e:
+            logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
 
-    people = get_people(uid)
+        # Start JSON object with non-conversation fields and open conversations array
+        yield '{"profile": ' + json.dumps(profile if profile else {}, default=_json_default)
+        yield ', "conversations": ['
 
-    action_items = get_standalone_action_items(uid, limit=10000, offset=0)
+        # Stream conversations in batches to avoid timeout
+        batch_size = 200
+        offset = 0
+        first = True
+        while True:
+            batch = conversations_db.get_conversations_without_photos(
+                uid, limit=batch_size, offset=offset, include_discarded=True
+            )
+            for conv in batch:
+                if not first:
+                    yield ','
+                first = False
+                yield json.dumps(conv, default=_json_default)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+            del batch
 
-    # Get chat messages (all, no app_id filter)
-    chat_messages = []
-    try:
-        user_ref = chat_db.db.collection('users').document(uid)
-        msgs_ref = user_ref.collection('messages').order_by(
-            'created_at', direction=cloud_firestore.Query.DESCENDING
-        ).limit(10000)
-        for doc in msgs_ref.stream():
-            msg = doc.to_dict()
-            msg['id'] = doc.id
-            chat_messages.append(msg)
-    except Exception as e:
-        logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
+        # Close conversations array and add remaining fields
+        yield '], "memories": ' + json.dumps(memories_list, default=_json_default)
+        yield ', "people": ' + json.dumps(people, default=_json_default)
+        yield ', "action_items": ' + json.dumps(action_items, default=_json_default)
+        yield ', "chat_messages": ' + json.dumps(chat_messages, default=_json_default)
+        yield '}'
 
-    return {
-        'profile': profile if profile else {},
-        'conversations': conversations,
-        'memories': memories_list,
-        'people': people,
-        'action_items': action_items,
-        'chat_messages': chat_messages,
-    }
+    return StreamingResponse(
+        generate(),
+        media_type='application/json',
+        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+    )
