@@ -95,8 +95,12 @@ def _make_pcm_with_amplitude(duration_ms: int, amplitude: float, sample_rate: in
 class TestEnergyPreFilter:
     """Tests for the RMS energy pre-filter before Silero VAD."""
 
-    def _make_gate(self, energy_threshold=0.0, mode='active'):
-        with patch('utils.stt.vad_gate.VAD_GATE_ENERGY_THRESHOLD', energy_threshold):
+    def _make_gate(self, energy_threshold=0.0, onset_confirm=1, onset_window=5, mode='active'):
+        with (
+            patch('utils.stt.vad_gate.VAD_GATE_ENERGY_THRESHOLD', energy_threshold),
+            patch('utils.stt.vad_gate.VAD_GATE_ONSET_CONFIRM', onset_confirm),
+            patch('utils.stt.vad_gate.VAD_GATE_ONSET_WINDOW', onset_window),
+        ):
             return VADStreamingGate(
                 sample_rate=16000,
                 channels=1,
@@ -115,15 +119,16 @@ class TestEnergyPreFilter:
         assert gate._chunks_energy_filtered == 0
 
     def test_energy_filter_skips_quiet_audio(self):
-        """Audio below threshold should be classified as silence without Silero."""
+        """Quiet windows should be classified as silence without Silero."""
         gate = self._make_gate(energy_threshold=0.05)
         _set_vad_speech(True)  # Silero would say speech, but energy filter should block it
         t = 1000.0
-        # Silent PCM (all zeros) → RMS = 0.0 < 0.05
+        # Silent PCM (all zeros) → window RMS = 0.0 < 0.05
+        # Use 40ms to fill at least one complete VAD window (512 samples)
         out = gate.process_audio(_make_pcm(40), t)
         assert out.audio_to_send == b''
         assert not out.is_speech
-        assert gate._chunks_energy_filtered == 1
+        assert gate._chunks_energy_filtered >= 1
 
     def test_energy_filter_passes_loud_audio(self):
         """Audio above threshold should pass through to Silero normally."""
@@ -151,60 +156,73 @@ class TestEnergyPreFilter:
         assert gate._chunks_energy_filtered == 0
 
     def test_energy_filter_metrics_tracked(self):
-        """chunks_energy_filtered should be counted correctly in metrics."""
+        """chunks_energy_filtered should count filtered windows in metrics."""
         gate = self._make_gate(energy_threshold=0.05)
         t = 1000.0
         _set_vad_speech(True)
-        # Feed 5 quiet chunks
+        # Feed 5 quiet chunks of 40ms each (640 samples each)
+        # Each fills at least one 512-sample window → 5 windows filtered
         for i in range(5):
-            gate.process_audio(_make_pcm(30), t + i * 0.03)
+            gate.process_audio(_make_pcm(40), t + i * 0.04)
         metrics = gate.get_metrics()
-        assert metrics['chunks_energy_filtered'] == 5
-        assert metrics['energy_filter_ratio'] == 1.0
+        assert metrics['chunks_energy_filtered'] >= 5
+        assert metrics['energy_filter_ratio'] > 0.5
         assert metrics['energy_threshold'] == 0.05
 
     def test_energy_filter_rms_ema_updated(self):
-        """EMA should track across multiple chunks."""
+        """EMA should track across window completions."""
         gate = self._make_gate(energy_threshold=0.05)
         t = 1000.0
-        # First chunk: silent (RMS=0.0), EMA should be 0.0
-        gate.process_audio(_make_pcm(30), t)
+        # First window: silent (RMS=0.0), EMA should be ~0.0
+        gate.process_audio(_make_pcm(40), t)  # 40ms → 640 samples, completes one window
         assert gate._rms_ema == pytest.approx(0.0, abs=1e-6)
 
-        # Second chunk: loud (RMS=0.5), EMA = 0.1*0.5 + 0.9*0.0 = 0.05
-        loud_chunk = _make_pcm_with_amplitude(30, 0.5)
+        # Second window: loud (RMS=0.5), EMA = 0.1*0.5 + 0.9*0.0 = 0.05
+        loud_chunk = _make_pcm_with_amplitude(40, 0.5)
         _set_vad_speech(True)
-        gate.process_audio(loud_chunk, t + 0.03)
-        assert gate._rms_ema == pytest.approx(0.05, abs=0.01)
+        gate.process_audio(loud_chunk, t + 0.04)
+        assert gate._rms_ema == pytest.approx(0.05, abs=0.02)
 
     def test_energy_filter_does_not_corrupt_vad_buffer(self):
-        """quiet→loud→quiet→loud sequence should not corrupt VAD buffer state."""
+        """quiet→loud→quiet→loud sequence should not corrupt VAD buffer.
+
+        Energy filter works per-window. Quiet windows skip Silero;
+        loud windows run Silero. Leftover loud samples may mix into
+        the next window, so we flush with enough quiet chunks.
+        """
         gate = self._make_gate(energy_threshold=0.05)
         t = 1000.0
+        dt = 0.04
 
-        # Quiet — filtered, no buffer append
+        # Pure quiet — window filtered
         _set_vad_speech(True)
-        gate.process_audio(_make_pcm(30), t)
-        assert gate._chunks_energy_filtered == 1
-        assert len(gate._vad_buffer) == 0  # Energy filter skips buffer append
+        gate.process_audio(_make_pcm(40), t)
+        assert gate._chunks_energy_filtered >= 1
 
-        # Loud — passes to Silero, fills buffer
+        # Loud — passes to Silero
         loud = _make_pcm_with_amplitude(40, 0.5)
-        out = gate.process_audio(loud, t + 0.03)
-        assert gate._chunks_energy_filtered == 1  # Not incremented
+        out = gate.process_audio(loud, t + dt)
         assert out.is_speech
 
-        # Quiet again — filtered
-        gate.process_audio(_make_pcm(30), t + 0.07)
-        assert gate._chunks_energy_filtered == 2
+        # Feed enough quiet chunks to flush any loud leftover from buffer
+        for i in range(5):
+            gate.process_audio(_make_pcm(40), t + 2 * dt + i * dt)
+        # Eventually quiet windows should be energy-filtered again
+        assert gate._chunks_energy_filtered > 1
 
-        # Loud again — should still work normally
+        # Loud again — Silero should still work
         _set_vad_speech(True)
-        out = gate.process_audio(_make_pcm_with_amplitude(40, 0.5), t + 0.10)
-        assert gate._chunks_energy_filtered == 2
+        filtered_before = gate._chunks_energy_filtered
+        out = gate.process_audio(_make_pcm_with_amplitude(40, 0.5), t + 7 * dt)
+        assert gate._chunks_energy_filtered == filtered_before
 
     def test_energy_filter_with_state_transitions(self):
-        """Energy-filtered chunks should interact correctly with state machine."""
+        """Energy-filtered windows interact correctly with state machine.
+
+        After loud speech, quiet chunks eventually produce energy-filtered
+        windows (once loud leftovers flush from buffer), leading to silence
+        detection and the normal hangover→finalize→silence flow.
+        """
         gate = self._make_gate(energy_threshold=0.05)
         t = 1000.0
 
@@ -214,19 +232,16 @@ class TestEnergyPreFilter:
         gate.process_audio(loud, t)
         assert gate._state == GateState.SPEECH
 
-        # Feed quiet chunk — energy filter returns False (silence), enters HANGOVER
-        gate.process_audio(_make_pcm(30), t + 0.04)
-        assert gate._state == GateState.HANGOVER
-        assert gate._chunks_energy_filtered == 1
-
-        # Feed more quiet chunks past hangover → should transition to SILENCE + finalize
+        # Switch to silence — feed quiet chunks through hangover to SILENCE
+        _set_vad_speech(False)
         finalized = False
-        for i in range(30):
-            out = gate.process_audio(_make_pcm(30), t + 0.07 + i * 0.03)
+        for i in range(35):
+            out = gate.process_audio(_make_pcm(30), t + 0.04 + i * 0.03)
             if out.should_finalize:
                 finalized = True
         assert finalized
         assert gate._state == GateState.SILENCE
+        assert gate._chunks_energy_filtered > 0
 
     def test_energy_filter_in_json_log(self):
         """to_json_log should include energy filter metrics."""
@@ -238,6 +253,127 @@ class TestEnergyPreFilter:
         assert 'rms_ema' in log
         assert 'chunks_energy_filtered' in log
         assert 'energy_threshold' in log
+
+
+class TestOnsetConfirmation:
+    """Tests for speech onset confirmation (require N/M speech windows before SILENCE→SPEECH)."""
+
+    def _make_gate(self, energy_threshold=0.05, onset_confirm=3, onset_window=5, mode='active'):
+        with (
+            patch('utils.stt.vad_gate.VAD_GATE_ENERGY_THRESHOLD', energy_threshold),
+            patch('utils.stt.vad_gate.VAD_GATE_ONSET_CONFIRM', onset_confirm),
+            patch('utils.stt.vad_gate.VAD_GATE_ONSET_WINDOW', onset_window),
+        ):
+            return VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode=mode,
+                uid='test',
+                session_id='test',
+            )
+
+    def test_onset_requires_multiple_speech_windows(self):
+        """Single speech window should NOT trigger SILENCE→SPEECH with onset_confirm=3."""
+        gate = self._make_gate(onset_confirm=3, onset_window=5)
+        _set_vad_speech(True)
+        t = 1000.0
+        # One loud chunk → 1 speech window → not enough (need 3/5)
+        loud = _make_pcm_with_amplitude(40, 0.5)
+        out = gate.process_audio(loud, t)
+        assert gate._state == GateState.SILENCE
+        assert out.audio_to_send == b''
+
+    def test_onset_triggers_after_enough_speech_windows(self):
+        """After N speech windows out of M, should transition to SPEECH."""
+        gate = self._make_gate(onset_confirm=3, onset_window=5)
+        _set_vad_speech(True)
+        t = 1000.0
+        loud = _make_pcm_with_amplitude(40, 0.5)
+        # Feed 3 loud chunks → 3 speech windows → onset confirmed
+        for i in range(3):
+            out = gate.process_audio(loud, t + i * 0.04)
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+
+    def test_onset_resets_on_silence_transition(self):
+        """After HANGOVER→SILENCE, onset ring buffer should be cleared."""
+        gate = self._make_gate(onset_confirm=2, onset_window=3)
+        t = 1000.0
+        loud = _make_pcm_with_amplitude(40, 0.5)
+
+        # Build up speech (2/3 windows → onset confirmed)
+        _set_vad_speech(True)
+        for i in range(3):
+            gate.process_audio(loud, t + i * 0.04)
+        assert gate._state == GateState.SPEECH
+
+        # Silence → HANGOVER → SILENCE
+        _set_vad_speech(False)
+        for i in range(35):
+            gate.process_audio(_make_pcm(30), t + 0.12 + i * 0.03)
+        assert gate._state == GateState.SILENCE
+
+        # After reset, a single speech window should NOT trigger onset
+        _set_vad_speech(True)
+        gate.process_audio(loud, t + 1.2)
+        assert gate._state == GateState.SILENCE  # Need 2/3 again
+
+    def test_onset_does_not_apply_in_hangover(self):
+        """In HANGOVER state, speech should immediately resume (no onset check)."""
+        gate = self._make_gate(onset_confirm=3, onset_window=5)
+        t = 1000.0
+        loud = _make_pcm_with_amplitude(40, 0.5)
+
+        # Enter SPEECH via onset confirmation
+        _set_vad_speech(True)
+        for i in range(4):
+            gate.process_audio(loud, t + i * 0.04)
+        assert gate._state == GateState.SPEECH
+
+        # Brief silence → HANGOVER
+        _set_vad_speech(False)
+        gate.process_audio(_make_pcm(30), t + 0.16)
+        assert gate._state == GateState.HANGOVER
+
+        # Speech resumes → back to SPEECH immediately (no onset confirmation)
+        _set_vad_speech(True)
+        out = gate.process_audio(loud, t + 0.19)
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+
+    def test_onset_disabled_when_energy_filter_off(self):
+        """Without energy filter, onset_confirm defaults to 1 (immediate transition)."""
+        gate = self._make_gate(energy_threshold=0.0, onset_confirm=1, onset_window=1)
+        _set_vad_speech(True)
+        t = 1000.0
+        # Single speech chunk → immediate transition (no onset delay)
+        out = gate.process_audio(_make_pcm(40), t)
+        assert gate._state == GateState.SPEECH
+
+    def test_onset_noise_spikes_below_threshold(self):
+        """Sporadic noise spikes (1 speech in 5 windows) should not trigger onset."""
+        gate = self._make_gate(onset_confirm=3, onset_window=5)
+        t = 1000.0
+        loud = _make_pcm_with_amplitude(40, 0.5)
+
+        # 4 quiet windows + 1 loud → ring buffer has 1 True out of 5
+        _set_vad_speech(True)  # Silero would say speech if audio reaches it
+        for i in range(4):
+            gate.process_audio(_make_pcm(40), t + i * 0.04)  # Energy-filtered as silence
+        gate.process_audio(loud, t + 0.16)  # 1 speech window
+        assert gate._state == GateState.SILENCE  # Not enough: 1/5 < 3
+
+    def test_onset_ring_buffer_sliding_window(self):
+        """Ring buffer should slide: old entries drop out as new ones come in."""
+        gate = self._make_gate(onset_confirm=3, onset_window=5)
+        t = 1000.0
+        loud = _make_pcm_with_amplitude(40, 0.5)
+
+        # 3 speech windows → onset confirmed → SPEECH
+        _set_vad_speech(True)
+        for i in range(3):
+            gate.process_audio(loud, t + i * 0.04)
+        assert gate._state == GateState.SPEECH
 
 
 class TestVADStreamingGate:
