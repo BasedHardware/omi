@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -20,7 +18,11 @@ class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
   final VoidCallback onSkip;
 
-  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
+  const SpeechProfileWidget({
+    super.key,
+    required this.goNext,
+    required this.onSkip,
+  });
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
@@ -184,6 +186,22 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     () {},
                     context.l10n.invalidRecordingMultipleSpeakers,
                     context.l10n.tooShortDesc,
+                    okButtonText: context.l10n.ok,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'UPLOAD_FAILED') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.connectionError,
+                    context.l10n.connectionErrorDesc,
                     okButtonText: context.l10n.ok,
                     singleButton: true,
                   ),
@@ -354,9 +372,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                           // Skip for now
                           TextButton(
-                            onPressed: () {
-                              widget.onSkip();
-                            },
+                            onPressed: () => widget.onSkip(),
                             child: Text(
                               context.l10n.skipForNow,
                               style: const TextStyle(
@@ -372,9 +388,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                widget.goNext();
-                              },
+                              onPressed: () => widget.goNext(),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black,
