@@ -40,6 +40,7 @@ VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
 VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
 VAD_GATE_KEEPALIVE_SEC = int(os.getenv('VAD_GATE_KEEPALIVE_SEC', '20'))
+VAD_GATE_ENERGY_THRESHOLD = float(os.getenv('VAD_GATE_ENERGY_THRESHOLD', '0.0'))
 try:
     VAD_GATE_MODEL_POOL_SIZE = max(1, int(os.getenv('VAD_GATE_MODEL_POOL_SIZE', str(os.cpu_count() or 1))))
 except ValueError:
@@ -335,6 +336,11 @@ class VADStreamingGate:
         # Timestamp mapper
         self.dg_wall_mapper = DgWallMapper()
 
+        # Energy pre-filter
+        self._energy_threshold = VAD_GATE_ENERGY_THRESHOLD
+        self._rms_ema: Optional[float] = None
+        self._chunks_energy_filtered = 0
+
         # Metrics
         self._chunks_total = 0
         self._chunks_speech = 0
@@ -397,6 +403,11 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
+    @staticmethod
+    def _compute_rms(float_data: np.ndarray) -> float:
+        """Compute RMS energy of float32 audio data."""
+        return float(np.sqrt(np.mean(float_data * float_data)))
+
     def _run_vad(self, pcm_data: bytes) -> bool:
         """Run Silero VAD on audio chunk. Returns True if speech detected.
 
@@ -413,6 +424,15 @@ class VADStreamingGate:
         """
         with self._vad_inference_lock:
             float_data = self._convert_for_vad(pcm_data)
+
+            # Energy pre-filter: skip Silero if audio is below threshold
+            if self._energy_threshold > 0.0:
+                rms = self._compute_rms(float_data)
+                self._rms_ema = rms if self._rms_ema is None else 0.1 * rms + 0.9 * self._rms_ema
+                if rms < self._energy_threshold:
+                    self._chunks_energy_filtered += 1
+                    del float_data
+                    return False
 
             # Append to buffer
             self._vad_buffer = np.concatenate([self._vad_buffer, float_data])
@@ -628,6 +648,10 @@ class VADStreamingGate:
             'chunks_speech': self._chunks_speech,
             'chunks_silence': self._chunks_silence,
             'silence_ratio': self._chunks_silence / total,
+            'chunks_energy_filtered': self._chunks_energy_filtered,
+            'energy_filter_ratio': self._chunks_energy_filtered / total,
+            'energy_threshold': self._energy_threshold,
+            'rms_ema': self._rms_ema,
             'finalize_count': self._finalize_count,
             'finalize_errors': self._finalize_errors,
             'bytes_received': self._bytes_received,
@@ -650,6 +674,8 @@ class VADStreamingGate:
             'session_duration_sec': self._audio_cursor_ms / 1000.0,
             'speech_ratio': metrics['chunks_speech'] / total,
             'estimated_savings_pct': metrics['bytes_saved_ratio'] * 100.0,
+            'energy_filter_ratio': metrics['energy_filter_ratio'],
+            'rms_ema': metrics['rms_ema'],
             **metrics,
         }
 
