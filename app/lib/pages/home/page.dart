@@ -276,8 +276,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     // Pre-warm agent VM so it's ready by the time the user opens chat
     if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive');
       ensureAgentVm();
       Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
+    } else {
+      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
