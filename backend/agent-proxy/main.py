@@ -319,19 +319,22 @@ async def agent_ws(websocket: WebSocket):
     # Validate Firebase token from Authorization header
     auth_header = websocket.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
+        logger.warning("[agent-proxy] WS rejected: missing Authorization header")
         await websocket.close(code=4001, reason="Missing Authorization header")
         return
 
     token = auth_header[7:].strip()
     try:
         uid = auth.verify_id_token(token)["uid"]
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[agent-proxy] WS rejected: invalid token: {e}")
         await websocket.close(code=4001, reason="Invalid token")
         return
 
     # Look up the user's agent VM and data protection level
     vm, data_protection_level = _get_user_context(uid)
     if not vm:
+        logger.warning(f"[agent-proxy] WS rejected: uid={uid} no VM")
         await websocket.close(code=4002, reason="No agent VM available")
         return
 
@@ -383,7 +386,7 @@ async def agent_ws(websocket: WebSocket):
     logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
 
     try:
-        async with websockets.connect(vm_uri) as vm_ws:
+        async with websockets.connect(vm_uri, ping_interval=600, ping_timeout=600) as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
 
             async def phone_to_vm():

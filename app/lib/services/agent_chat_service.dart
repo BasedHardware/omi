@@ -48,6 +48,7 @@ class AgentChatService {
       _channel = IOWebSocketChannel.connect(
         uri,
         headers: {'Authorization': 'Bearer $token'},
+        pingInterval: const Duration(seconds: 30),
       );
       await _channel!.ready;
       _connected = true;
