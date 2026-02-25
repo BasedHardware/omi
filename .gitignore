@@ -8,6 +8,7 @@ myenv/
 venv/
 .DS_Store
 dump/
+/scripts/
 *.zip
 *.wav
 node_modules
