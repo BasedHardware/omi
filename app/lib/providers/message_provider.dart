@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -43,6 +44,8 @@ class MessageProvider extends ChangeNotifier {
   bool _isNextMessageFromVoice = false;
 
   final AgentChatService _agentChatService = AgentChatService();
+  Timer? _vmKeepaliveTimer;
+  static const _keepaliveInterval = Duration(minutes: 5);
 
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
@@ -65,6 +68,19 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void startVmKeepalive() {
+    if (!SharedPreferencesUtil().claudeAgentEnabled) return;
+    stopVmKeepalive();
+    _vmKeepaliveTimer = Timer.periodic(_keepaliveInterval, (_) {
+      sendAgentKeepalive();
+    });
+  }
+
+  void stopVmKeepalive() {
+    _vmKeepaliveTimer?.cancel();
+    _vmKeepaliveTimer = null;
   }
 
   void setChatApps(List<App> apps) {
@@ -755,6 +771,16 @@ class MessageProvider extends ChangeNotifier {
             flushBuffer();
             if (event.text.isNotEmpty && message.text.isEmpty) {
               message.text = event.text;
+            }
+            notifyListeners();
+            break;
+          case AgentChatEventType.status:
+            // Show VM startup status as thinking indicator
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            flushBuffer();
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
             }
             notifyListeners();
             break;
