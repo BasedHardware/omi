@@ -96,7 +96,8 @@
           "doc/developer/apps/Import",
           "doc/developer/apps/Oauth",
           "doc/developer/apps/Notifications",
-          "doc/developer/apps/Submitting"
+          "doc/developer/apps/Submitting",
+                    "doc/developer/apps/OpenSource"
         ]
       },
       {
