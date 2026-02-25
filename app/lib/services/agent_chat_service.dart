@@ -37,21 +37,25 @@ class AgentChatService {
     final user = FirebaseAuth.instance.currentUser;
     final token = await user?.getIdToken();
     if (token == null) {
+      print('[AgentChat] ERROR: no Firebase user/token');
       Logger.error('AgentChatService: no Firebase user');
       return false;
     }
 
     try {
       final uri = Uri.parse(Env.agentProxyWsUrl);
+      print('[AgentChat] Connecting to $uri');
       _channel = IOWebSocketChannel.connect(
         uri,
         headers: {'Authorization': 'Bearer $token'},
       );
       await _channel!.ready;
       _connected = true;
+      print('[AgentChat] Connected successfully');
       Logger.debug('AgentChatService: connected to agent proxy');
       return true;
     } catch (e) {
+      print('[AgentChat] Connection failed: $e');
       Logger.error('AgentChatService: connection failed: $e');
       _connected = false;
       return false;
@@ -68,6 +72,7 @@ class AgentChatService {
       return _eventController!.stream;
     }
 
+    print('[AgentChat] Sending query (${prompt.length} chars)');
     _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
 
     _channel!.stream.listen(
@@ -76,6 +81,7 @@ class AgentChatService {
           final msg = jsonDecode(data as String) as Map<String, dynamic>;
           final type = msg['type'] as String?;
           final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
+          print('[AgentChat] Event: type=$type text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
 
           switch (type) {
             case 'text_delta':
