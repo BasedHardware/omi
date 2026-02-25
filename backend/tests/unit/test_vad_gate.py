@@ -80,6 +80,166 @@ def _set_vad_prob(prob: float):
     _mock_vad_prob = prob
 
 
+def _make_pcm_with_amplitude(duration_ms: int, amplitude: float, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    """Generate PCM16 audio with a known amplitude (RMS ≈ amplitude/√2 for sine, amplitude for DC).
+
+    Uses a DC offset for simplicity: all samples = amplitude * 32768.
+    After float conversion, RMS = amplitude exactly.
+    """
+    n_samples = int(sample_rate * channels * duration_ms / 1000)
+    value = int(amplitude * 32768)
+    value = max(-32768, min(32767, value))
+    return struct.pack(f'<{n_samples}h', *([value] * n_samples))
+
+
+class TestEnergyPreFilter:
+    """Tests for the RMS energy pre-filter before Silero VAD."""
+
+    def _make_gate(self, energy_threshold=0.0, mode='active'):
+        with patch('utils.stt.vad_gate.VAD_GATE_ENERGY_THRESHOLD', energy_threshold):
+            return VADStreamingGate(
+                sample_rate=16000,
+                channels=1,
+                mode=mode,
+                uid='test',
+                session_id='test',
+            )
+
+    def test_energy_filter_disabled_by_default(self):
+        """threshold=0.0 should not filter any audio (Silero always runs)."""
+        gate = self._make_gate(energy_threshold=0.0)
+        _set_vad_speech(True)
+        t = 1000.0
+        out = gate.process_audio(_make_pcm(40), t)
+        # With threshold=0.0, energy filter is bypassed; Silero runs and detects speech
+        assert gate._chunks_energy_filtered == 0
+
+    def test_energy_filter_skips_quiet_audio(self):
+        """Audio below threshold should be classified as silence without Silero."""
+        gate = self._make_gate(energy_threshold=0.05)
+        _set_vad_speech(True)  # Silero would say speech, but energy filter should block it
+        t = 1000.0
+        # Silent PCM (all zeros) → RMS = 0.0 < 0.05
+        out = gate.process_audio(_make_pcm(40), t)
+        assert out.audio_to_send == b''
+        assert not out.is_speech
+        assert gate._chunks_energy_filtered == 1
+
+    def test_energy_filter_passes_loud_audio(self):
+        """Audio above threshold should pass through to Silero normally."""
+        gate = self._make_gate(energy_threshold=0.05)
+        _set_vad_speech(True)
+        t = 1000.0
+        # Loud PCM: amplitude=0.5 → RMS = 0.5 >> 0.05
+        loud_chunk = _make_pcm_with_amplitude(40, 0.5)
+        out = gate.process_audio(loud_chunk, t)
+        assert gate._chunks_energy_filtered == 0
+        assert out.is_speech
+        assert len(out.audio_to_send) > 0
+
+    def test_energy_filter_threshold_boundary(self):
+        """Audio with RMS at threshold should NOT be filtered (strict <)."""
+        # Use int16 value that round-trips exactly: 3277/32768 ≈ 0.10003
+        int16_val = 3277
+        threshold = int16_val / 32768.0  # Exact RMS after float conversion
+        gate = self._make_gate(energy_threshold=threshold)
+        _set_vad_speech(True)
+        t = 1000.0
+        chunk = _make_pcm_with_amplitude(40, threshold)
+        out = gate.process_audio(chunk, t)
+        # RMS == threshold, strict < means NOT filtered
+        assert gate._chunks_energy_filtered == 0
+
+    def test_energy_filter_metrics_tracked(self):
+        """chunks_energy_filtered should be counted correctly in metrics."""
+        gate = self._make_gate(energy_threshold=0.05)
+        t = 1000.0
+        _set_vad_speech(True)
+        # Feed 5 quiet chunks
+        for i in range(5):
+            gate.process_audio(_make_pcm(30), t + i * 0.03)
+        metrics = gate.get_metrics()
+        assert metrics['chunks_energy_filtered'] == 5
+        assert metrics['energy_filter_ratio'] == 1.0
+        assert metrics['energy_threshold'] == 0.05
+
+    def test_energy_filter_rms_ema_updated(self):
+        """EMA should track across multiple chunks."""
+        gate = self._make_gate(energy_threshold=0.05)
+        t = 1000.0
+        # First chunk: silent (RMS=0.0), EMA should be 0.0
+        gate.process_audio(_make_pcm(30), t)
+        assert gate._rms_ema == pytest.approx(0.0, abs=1e-6)
+
+        # Second chunk: loud (RMS=0.5), EMA = 0.1*0.5 + 0.9*0.0 = 0.05
+        loud_chunk = _make_pcm_with_amplitude(30, 0.5)
+        _set_vad_speech(True)
+        gate.process_audio(loud_chunk, t + 0.03)
+        assert gate._rms_ema == pytest.approx(0.05, abs=0.01)
+
+    def test_energy_filter_does_not_corrupt_vad_buffer(self):
+        """quiet→loud→quiet→loud sequence should not corrupt VAD buffer state."""
+        gate = self._make_gate(energy_threshold=0.05)
+        t = 1000.0
+
+        # Quiet — filtered, no buffer append
+        _set_vad_speech(True)
+        gate.process_audio(_make_pcm(30), t)
+        assert gate._chunks_energy_filtered == 1
+        assert len(gate._vad_buffer) == 0  # Energy filter skips buffer append
+
+        # Loud — passes to Silero, fills buffer
+        loud = _make_pcm_with_amplitude(40, 0.5)
+        out = gate.process_audio(loud, t + 0.03)
+        assert gate._chunks_energy_filtered == 1  # Not incremented
+        assert out.is_speech
+
+        # Quiet again — filtered
+        gate.process_audio(_make_pcm(30), t + 0.07)
+        assert gate._chunks_energy_filtered == 2
+
+        # Loud again — should still work normally
+        _set_vad_speech(True)
+        out = gate.process_audio(_make_pcm_with_amplitude(40, 0.5), t + 0.10)
+        assert gate._chunks_energy_filtered == 2
+
+    def test_energy_filter_with_state_transitions(self):
+        """Energy-filtered chunks should interact correctly with state machine."""
+        gate = self._make_gate(energy_threshold=0.05)
+        t = 1000.0
+
+        # Start with loud speech to enter SPEECH state
+        _set_vad_speech(True)
+        loud = _make_pcm_with_amplitude(40, 0.5)
+        gate.process_audio(loud, t)
+        assert gate._state == GateState.SPEECH
+
+        # Feed quiet chunk — energy filter returns False (silence), enters HANGOVER
+        gate.process_audio(_make_pcm(30), t + 0.04)
+        assert gate._state == GateState.HANGOVER
+        assert gate._chunks_energy_filtered == 1
+
+        # Feed more quiet chunks past hangover → should transition to SILENCE + finalize
+        finalized = False
+        for i in range(30):
+            out = gate.process_audio(_make_pcm(30), t + 0.07 + i * 0.03)
+            if out.should_finalize:
+                finalized = True
+        assert finalized
+        assert gate._state == GateState.SILENCE
+
+    def test_energy_filter_in_json_log(self):
+        """to_json_log should include energy filter metrics."""
+        gate = self._make_gate(energy_threshold=0.05)
+        t = 1000.0
+        gate.process_audio(_make_pcm(30), t)
+        log = gate.to_json_log()
+        assert 'energy_filter_ratio' in log
+        assert 'rms_ema' in log
+        assert 'chunks_energy_filtered' in log
+        assert 'energy_threshold' in log
+
+
 class TestVADStreamingGate:
     def _make_gate(self, mode='active', sample_rate=16000):
         return VADStreamingGate(
