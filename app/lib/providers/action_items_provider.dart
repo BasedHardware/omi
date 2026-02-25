@@ -307,7 +307,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _findAndUpdateItemState(item.id, !newState);
+      //_findAndUpdateItemState(item.id, !newState); comment out only for demo
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
     }
