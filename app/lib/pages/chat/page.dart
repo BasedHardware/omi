@@ -278,6 +278,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     final child = AIMessage(
                                                       showTypingIndicator: provider.showTypingIndicator &&
                                                           chatIndex == provider.messages.length - 1,
+                                                      showThinkingAfterText: provider.agentThinkingAfterText,
                                                       message: message,
                                                       sendMessage: _sendMessageUtil,
                                                       onAskOmi: (text) {

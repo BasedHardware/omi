@@ -50,6 +50,7 @@ class MessageProvider extends ChangeNotifier {
   bool showTypingIndicator = false;
   bool sendingMessage = false;
   double aiStreamProgress = 1.0;
+  bool agentThinkingAfterText = false;
 
   String firstTimeLoadingText = '';
 
@@ -678,9 +679,20 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
-      await for (var event in _agentChatService.sendQuery(text)) {
+      // Build prompt with recent conversation history so the agent has context
+      final history = messages.where((m) => m.text.isNotEmpty).toList().reversed.take(10).toList().reversed.toList();
+      final historyLines =
+          history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
+      final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
+
+      await for (var event in _agentChatService.sendQuery(prompt)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            if (agentThinkingAfterText) {
+              textBuffer += '\n\n';
+              agentThinkingAfterText = false;
+              notifyListeners();
+            }
             textBuffer += event.text;
             timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
               flushBuffer();
@@ -689,6 +701,9 @@ class MessageProvider extends ChangeNotifier {
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
             flushBuffer();
+            if (message.text.isNotEmpty) {
+              agentThinkingAfterText = true;
+            }
             message.thinkings.add(event.text);
             notifyListeners();
             break;
@@ -717,6 +732,7 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      agentThinkingAfterText = false;
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);

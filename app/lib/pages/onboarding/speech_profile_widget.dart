@@ -284,7 +284,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                         // Title
                         Text(
-                          context.l10n.speechProfile,
+                          provider.startedRecording && !provider.profileCompleted
+                              ? 'Answer with your voice:'
+                              : 'Please find a quiet place',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -301,7 +303,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         if (!provider.startedRecording) ...[
                           // Intro text
                           Text(
-                            context.l10n.speechProfileIntro,
+                            'Omi needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
@@ -481,10 +483,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               provider.currentQuestion,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 18,
+                                fontSize: 24,
                                 height: 1.3,
                                 fontFamily: 'Manrope',
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                               ),
                               textAlign: TextAlign.center,
                             ),
