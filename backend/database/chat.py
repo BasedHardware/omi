@@ -240,6 +240,19 @@ def get_messages(
     return messages
 
 
+@prepare_for_read(decrypt_func=_prepare_message_for_read)
+def get_all_messages(uid: str, limit: int = 10000):
+    """Get all chat messages for a user regardless of app/plugin. Used for data export."""
+    user_ref = db.collection('users').document(uid)
+    msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
+    messages = []
+    for doc in msgs_ref.stream():
+        msg = doc.to_dict()
+        msg['id'] = doc.id
+        messages.append(msg)
+    return messages
+
+
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
