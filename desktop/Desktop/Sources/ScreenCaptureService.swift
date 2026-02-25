@@ -11,7 +11,7 @@ final class ScreenCaptureService: Sendable {
     /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
     /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
     /// thread pool (captureActiveWindowCGImage runs non-isolated), so a lock is required.
-    nonisolated(unsafe) private static let axStateLock = NSLock()
+    private static let axStateLock = NSLock()
     /// Tracks consecutive AX cannotComplete failures per bundle ID.
     /// Apps that consistently fail (Qt, OpenGL, etc.) are skipped for AX after the threshold.
     /// Must be accessed only while holding axStateLock.
@@ -199,12 +199,39 @@ final class ScreenCaptureService: Sendable {
         return !sckGranted // Broken if TCC yes but SCK no
     }
 
-    /// Reset screen capture permission using tccutil
-    /// This resets BOTH the traditional TCC and ScreenCaptureKit consent
-    /// Returns true if reset succeeded
+    /// Attempt soft recovery of screen capture permission without resetting TCC.
+    /// Re-registers with Launch Services and re-requests ScreenCaptureKit consent.
+    /// Returns true if capture works after recovery.
+    static func attemptSoftRecovery() async -> Bool {
+        log("Screen capture: Attempting soft recovery (lsregister + SCK re-request)...")
+
+        // 1. Re-register with Launch Services synchronously so the OS maps our bundle ID
+        //    to the current app binary (fixes stale registrations from old builds/updates)
+        ensureLaunchServicesRegistrationSync()
+
+        // 2. Re-request ScreenCaptureKit consent (macOS 14+)
+        //    This can fix the "TCC says yes but SCK says no" broken state
+        if #available(macOS 14.0, *) {
+            let sckGranted = await requestScreenCaptureKitPermission()
+            if sckGranted {
+                log("Screen capture: Soft recovery succeeded (SCK re-consent granted)")
+                return true
+            }
+            log("Screen capture: SCK re-request did not succeed, testing actual capture...")
+        }
+
+        // 3. Test if capture actually works now (covers cases where CGPreflight was stale)
+        let works = testCapturePermission()
+        log("Screen capture: Soft recovery capture test = \(works ? "SUCCESS" : "FAILED")")
+        return works
+    }
+
+    /// Reset screen capture permission using tccutil (nuclear option).
+    /// This removes the TCC entry entirely — user must re-grant in System Settings.
+    /// Only use as a last resort when soft recovery has already failed.
     static func resetScreenCapturePermission() -> Bool {
         let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
-        log("Resetting screen capture permission for \(bundleId) via tccutil...")
+        log("Resetting screen capture permission for \(bundleId) via tccutil (hard reset)...")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
@@ -222,7 +249,50 @@ final class ScreenCaptureService: Sendable {
         }
     }
 
-    /// Reset screen capture permission and restart the app
+    /// Try soft recovery first, then restart the app.
+    /// Does NOT reset TCC — preserves the user's existing permission grant.
+    /// The restart refreshes the app's permission state with the OS.
+    @MainActor
+    static func softRecoveryAndRestart() {
+        if UpdaterViewModel.isUpdateInProgress {
+            log("Sparkle update in progress, skipping screen capture soft recovery restart")
+            return
+        }
+
+        let bundleURL = Bundle.main.bundleURL
+
+        Task.detached {
+            // Re-register with Launch Services so the OS recognizes this binary
+            ensureLaunchServicesRegistrationSync()
+
+            // Re-request ScreenCaptureKit consent
+            if #available(macOS 14.0, *) {
+                _ = await requestScreenCaptureKitPermission()
+            }
+
+            await MainActor.run {
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: true)
+                log("Screen capture: Soft recovery done, restarting app to refresh permission state...")
+
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+
+                do {
+                    try task.run()
+                    log("Restart scheduled, terminating current instance...")
+                    DispatchQueue.main.async {
+                        NSApplication.shared.terminate(nil)
+                    }
+                } catch {
+                    logError("Failed to schedule restart", error: error)
+                }
+            }
+        }
+    }
+
+    /// Hard reset: wipe TCC entry and restart. User must re-grant permission.
+    /// Only use when soft recovery has already been tried and failed.
     @MainActor
     static func resetScreenCapturePermissionAndRestart() {
         if UpdaterViewModel.isUpdateInProgress {
@@ -236,7 +306,7 @@ final class ScreenCaptureService: Sendable {
         Task.detached {
             // First ensure this app is the authoritative version in Launch Services
             // This fixes issues where tccutil resets permission for a stale app registration
-            ensureLaunchServicesRegistration()
+            ensureLaunchServicesRegistrationSync()
 
             let success = resetScreenCapturePermission()
 

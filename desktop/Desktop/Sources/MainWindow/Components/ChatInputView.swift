@@ -106,6 +106,7 @@ struct ChatInputView: View {
                 .disabled(!hasText)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear {
             // When ask mode is disabled, ensure we're always in act mode
             if !askModeEnabled {

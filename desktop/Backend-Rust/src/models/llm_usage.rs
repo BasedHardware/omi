@@ -14,3 +14,8 @@ pub struct RecordLlmUsageRequest {
 pub struct RecordLlmUsageResponse {
     pub status: String,
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GetTotalLlmCostResponse {
+    pub total_cost_usd: f64,
+}

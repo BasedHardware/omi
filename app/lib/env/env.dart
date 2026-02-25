@@ -3,6 +3,7 @@ import 'package:omi/env/dev_env.dart';
 abstract class Env {
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
+  static String? _agentProxyWsUrlOverride;
 
   static void init([EnvFields? instance]) {
     _instance = instance ?? DevEnv() as EnvFields;
@@ -12,12 +13,29 @@ abstract class Env {
     _apiBaseUrlOverride = url;
   }
 
+  static void overrideAgentProxyWsUrl(String url) {
+    _agentProxyWsUrlOverride = url;
+  }
+
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
+
+  /// WebSocket URL for the agent proxy service (agent.omi.me / agent.omiapi.com).
+  /// Derived from apiBaseUrl: https://api.* → wss://agent.*
+  /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
+  static String get agentProxyWsUrl {
+    if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
+    final base = apiBaseUrl ?? 'https://api.omi.me/';
+    return base
+            .replaceFirst('https://api.', 'wss://agent.')
+            .replaceFirst('http://api.', 'ws://agent.')
+            .replaceAll(RegExp(r'/$'), '') +
+        '/v1/agent/ws';
+  }
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 

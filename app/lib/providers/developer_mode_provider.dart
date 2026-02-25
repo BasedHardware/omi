@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/agent.dart';
 import 'package:omi/main.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
@@ -41,7 +40,6 @@ class DeveloperModeProvider extends BaseProvider {
   // Claude Agent (experimental)
   bool claudeAgentEnabled = false;
   bool claudeAgentLoading = false;
-  AgentVmInfo? cachedVmInfo;
   final AgentChatService agentChatService = AgentChatService();
 
   void onConversationEventsToggled(bool value) {
@@ -288,9 +286,6 @@ class DeveloperModeProvider extends BaseProvider {
           return;
         }
 
-        cachedVmInfo = vmInfo;
-        SharedPreferencesUtil().cachedAgentVmIp = vmInfo.ip ?? '';
-        SharedPreferencesUtil().cachedAgentVmAuthToken = vmInfo.authToken ?? '';
         claudeAgentEnabled = true;
         SharedPreferencesUtil().claudeAgentEnabled = true;
       } catch (e) {
@@ -304,7 +299,6 @@ class DeveloperModeProvider extends BaseProvider {
       claudeAgentEnabled = false;
       SharedPreferencesUtil().claudeAgentEnabled = false;
       await agentChatService.disconnect();
-      cachedVmInfo = null;
     }
 
     notifyListeners();

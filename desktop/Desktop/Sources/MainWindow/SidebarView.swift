@@ -830,7 +830,7 @@ struct SidebarView: View {
     private var screenRecordingPermissionRow: some View {
         let isDenied = appState.isScreenRecordingPermissionDenied()
         let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
-        let needsReset = isBroken  // Show reset when broken
+        let needsFix = isBroken  // Show fix when broken
         let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
@@ -841,7 +841,7 @@ struct SidebarView: View {
                 .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
+                Text(isBroken ? "Screen Recording (Fix Required)" : "Screen Recording")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -849,11 +849,12 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    if needsReset {
-                        // Track reset button click
+                    if needsFix {
+                        // Track fix button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
-                        // Reset and restart to fix broken ScreenCaptureKit state
-                        ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+                        // Soft recovery + restart: re-register with Launch Services and restart
+                        // to refresh permission state without wiping TCC
+                        ScreenCaptureService.softRecoveryAndRestart()
                     } else {
                         // Request both traditional TCC and ScreenCaptureKit permissions
                         ScreenCaptureService.requestAllScreenCapturePermissions()
@@ -861,7 +862,7 @@ struct SidebarView: View {
                         ScreenCaptureService.openScreenRecordingPreferences()
                     }
                 }) {
-                    Text(needsReset ? "Reset" : "Grant")
+                    Text(needsFix ? "Fix" : "Grant")
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)

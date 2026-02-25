@@ -45,8 +45,8 @@ Future<bool> uploadProfile(File file) async {
       Logger.debug('uploadProfile Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      Logger.debug('Failed to upload sample. Status code: ${response.statusCode}');
-      throw Exception('Failed to upload sample. Status code: ${response.statusCode}');
+      Logger.debug('Failed to upload sample. Status code: ${response.statusCode} body: ${response.body}');
+      throw Exception('Failed to upload sample (${response.statusCode}): ${response.body}');
     }
   } catch (e) {
     Logger.debug('An error occurred uploadSample: $e');

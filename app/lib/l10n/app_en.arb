@@ -10024,5 +10024,13 @@
   "networkNameSsid": "Network Name (SSID)",
   "enterWifiNetworkName": "Enter WiFi network name",
   "enterWifiPassword": "Enter WiFi password",
-  "appIconLabel": "App Icon"
+  "appIconLabel": "App Icon",
+  "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
+  "@onboardingWhatIKnowAboutYouTitle": {
+    "description": "Title for onboarding step that previews the memory graph"
+  },
+  "onboardingWhatIKnowAboutYouDescription": "This map updates as Omi learns from your conversations.",
+  "@onboardingWhatIKnowAboutYouDescription": {
+    "description": "Description for onboarding memory graph preview step"
+  }
 }

@@ -161,8 +161,8 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
         substep "Installing npm dependencies"
         npm install --no-fund --no-audit 2>&1 | tail -1
     fi
-    substep "Compiling TypeScript"
-    npx tsc
+    substep "Compiling TypeScript and copying assets"
+    npm run build --silent
     cd - > /dev/null
 else
     echo "Warning: acp-bridge directory not found at $ACP_BRIDGE_DIR"

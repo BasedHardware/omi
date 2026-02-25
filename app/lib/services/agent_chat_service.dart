@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 enum AgentChatEventType { textDelta, toolActivity, result, error }
@@ -18,21 +20,36 @@ class AgentChatEvent {
 class AgentChatService {
   WebSocketChannel? _channel;
   StreamController<AgentChatEvent>? _eventController;
-  String? _ip;
-  String? _authToken;
   bool _connected = false;
 
   bool get isConnected => _connected;
 
-  Future<bool> connect(String ip, String authToken) async {
-    _ip = ip;
-    _authToken = authToken;
+  Future<bool> connect() async {
+    // Close any existing channel before opening a new one
+    if (_channel != null) {
+      try {
+        await _channel!.sink.close();
+      } catch (_) {}
+      _channel = null;
+    }
+    _connected = false;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final token = await user?.getIdToken();
+    if (token == null) {
+      Logger.error('AgentChatService: no Firebase user');
+      return false;
+    }
+
     try {
-      final uri = Uri.parse('ws://$ip:8080/ws?token=$authToken');
-      _channel = IOWebSocketChannel.connect(uri);
+      final uri = Uri.parse(Env.agentProxyWsUrl);
+      _channel = IOWebSocketChannel.connect(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      );
       await _channel!.ready;
       _connected = true;
-      Logger.debug('AgentChatService: connected to $ip');
+      Logger.debug('AgentChatService: connected to agent proxy');
       return true;
     } catch (e) {
       Logger.error('AgentChatService: connection failed: $e');
@@ -46,7 +63,7 @@ class AgentChatService {
     _eventController = StreamController<AgentChatEvent>();
 
     if (_channel == null || !_connected) {
-      _eventController!.addError('Not connected to agent VM');
+      _eventController!.addError('Not connected to agent proxy');
       _eventController!.close();
       return _eventController!.stream;
     }
@@ -76,7 +93,6 @@ class AgentChatService {
               _eventController?.close();
               break;
             default:
-              // Treat unknown types as text deltas if they have content
               if (text.isNotEmpty) {
                 _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
               }
@@ -114,10 +130,7 @@ class AgentChatService {
   }
 
   Future<bool> reconnect() async {
-    if (_ip != null && _authToken != null) {
-      await disconnect();
-      return connect(_ip!, _authToken!);
-    }
-    return false;
+    await disconnect();
+    return connect();
   }
 }
