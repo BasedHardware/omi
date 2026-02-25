@@ -13,7 +13,6 @@ Modes (VAD_GATE_MODE env var):
 
 import audioop
 import copy
-import hashlib
 import logging
 import os
 import queue
@@ -35,7 +34,6 @@ logger = logging.getLogger('vad_gate')
 # Configuration from environment
 # ---------------------------------------------------------------------------
 VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
-VAD_GATE_ROLLOUT_PCT = int(os.getenv('VAD_GATE_ROLLOUT_PCT', '100'))
 VAD_GATE_PRE_ROLL_MS = int(os.getenv('VAD_GATE_PRE_ROLL_MS', '300'))
 VAD_GATE_HANGOVER_MS = int(os.getenv('VAD_GATE_HANGOVER_MS', '700'))
 VAD_GATE_SPEECH_THRESHOLD = float(os.getenv('VAD_GATE_SPEECH_THRESHOLD', '0.65'))
@@ -48,19 +46,6 @@ except ValueError:
 
 def is_gate_enabled() -> bool:
     return VAD_GATE_MODE in ('shadow', 'active')
-
-
-def should_gate_session(uid: str) -> bool:
-    """Determine if this session should be gated based on rollout percentage.
-
-    Uses MD5 for stable hashing across processes (Python hash() is randomized).
-    """
-    if not is_gate_enabled():
-        return False
-    if VAD_GATE_ROLLOUT_PCT >= 100:
-        return True
-    digest = hashlib.md5(uid.encode()).hexdigest()
-    return (int(digest[:8], 16) % 100) < VAD_GATE_ROLLOUT_PCT
 
 
 # ---------------------------------------------------------------------------
