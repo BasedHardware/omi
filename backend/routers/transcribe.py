@@ -84,7 +84,7 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
-from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, should_gate_session, is_gate_enabled
+from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
@@ -734,7 +734,7 @@ async def _stream_handler(
             # so preseconds filtering uses uncompressed DG timestamps. After profile
             # completes, switch to active mode to start saving cost.
             nonlocal vad_gate
-            if is_gate_enabled() and should_gate_session(uid) and stt_service == STTService.deepgram:
+            if is_gate_enabled() and stt_service == STTService.deepgram:
                 gate_mode = VAD_GATE_MODE
                 if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
                     gate_mode = 'shadow'  # Shadow during profile, activate later
