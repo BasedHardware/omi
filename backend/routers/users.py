@@ -1170,34 +1170,29 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         except Exception as e:
             logger.warning(f'export_all_user_data: failed to fetch chat messages: {e}')
 
-        # Start JSON object with non-conversation fields and open conversations array
-        yield '{"profile": ' + json.dumps(profile if profile else {}, default=_json_default)
-        yield ', "conversations": ['
+        # Fetch all conversations in one query (no offset pagination which can miss docs)
+        conversations = conversations_db.get_conversations_without_photos(
+            uid, limit=10000, offset=0, include_discarded=True
+        )
 
-        # Stream conversations in batches to avoid timeout
-        batch_size = 200
-        offset = 0
-        first = True
-        while True:
-            batch = conversations_db.get_conversations_without_photos(
-                uid, limit=batch_size, offset=offset, include_discarded=True
-            )
-            for conv in batch:
-                if not first:
-                    yield ','
-                first = False
-                yield json.dumps(conv, default=_json_default)
-            if len(batch) < batch_size:
-                break
-            offset += batch_size
-            del batch
+        # Stream pretty-printed JSON object one conversation at a time
+        yield '{\n'
+        yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
+        yield '  "conversations": [\n'
 
-        # Close conversations array and add remaining fields
-        yield '], "memories": ' + json.dumps(memories_list, default=_json_default)
-        yield ', "people": ' + json.dumps(people, default=_json_default)
-        yield ', "action_items": ' + json.dumps(action_items, default=_json_default)
-        yield ', "chat_messages": ' + json.dumps(chat_messages, default=_json_default)
-        yield '}'
+        for i, conv in enumerate(conversations):
+            if i > 0:
+                yield ',\n'
+            yield '    ' + json.dumps(conv, default=_json_default, indent=4)
+
+        yield '\n  ],\n'
+        yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
+        yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
+        yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
+        yield '  "chat_messages": ' + json.dumps(chat_messages, default=_json_default, indent=2) + '\n'
+        yield '}\n'
+
+        del conversations
 
     return StreamingResponse(
         generate(),
