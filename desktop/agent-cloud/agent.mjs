@@ -19,6 +19,12 @@ process.on('unhandledRejection', (err) => {
     console.log(`[server] Suppressed abort error: ${msg}`);
     return;
   }
+  // ProcessTransport errors mean the Claude SDK subprocess died — invalidate cached session
+  if (msg.includes('ProcessTransport')) {
+    console.log(`[server] ProcessTransport error, clearing warm session: ${msg}`);
+    warmSessionId = null;
+    return;
+  }
   console.error(`[server] Unhandled rejection:`, err);
 });
 
