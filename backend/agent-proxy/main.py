@@ -473,14 +473,33 @@ async def agent_ws(websocket: WebSocket):
                             evt_text = event.get('text', '') or event.get('content', '') or ''
                             if evt_type == 'text_delta':
                                 response_text += evt_text
-                            elif evt_type == 'result' and evt_text and not response_text:
-                                response_text = evt_text
+                            elif evt_type == 'result':
+                                # Use result text as fallback if no deltas were collected
+                                if evt_text and not response_text:
+                                    response_text = evt_text
+                                # Save per-query so each message gets its own history entry
+                                if response_text.strip():
+                                    try:
+                                        await asyncio.to_thread(
+                                            _save_message,
+                                            uid,
+                                            response_text.strip(),
+                                            'ai',
+                                            chat_session_id,
+                                            data_protection_level,
+                                        )
+                                        logger.info(
+                                            f"[agent-proxy] uid={uid} saved AI response ({len(response_text)} chars)"
+                                        )
+                                    except Exception as e:
+                                        logger.warning(f"[agent-proxy] failed to save AI response: {e}")
+                                response_text = ''
                         except json.JSONDecodeError:
                             pass
                 except Exception:
                     pass
                 finally:
-                    # Save AI response
+                    # Save any unsaved partial response (connection dropped mid-query)
                     if response_text.strip():
                         try:
                             await asyncio.to_thread(
@@ -491,9 +510,11 @@ async def agent_ws(websocket: WebSocket):
                                 chat_session_id,
                                 data_protection_level,
                             )
-                            logger.info(f"[agent-proxy] uid={uid} saved AI response ({len(response_text)} chars)")
+                            logger.info(
+                                f"[agent-proxy] uid={uid} saved partial AI response ({len(response_text)} chars)"
+                            )
                         except Exception as e:
-                            logger.warning(f"[agent-proxy] failed to save AI response: {e}")
+                            logger.warning(f"[agent-proxy] failed to save partial AI response: {e}")
 
             async def keepalive_pinger():
                 """Periodically ping the VM to prevent idle auto-stop during active WS."""
