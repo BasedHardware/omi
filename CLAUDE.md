@@ -126,6 +126,7 @@ cd app && flutter gen-l10n
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
 cd app && flutter run -d <device-id> --flavor prod
+cd app && flutter run -d <device-id> --flavor dev
 ```
 
 ### Firebase Prod Config
