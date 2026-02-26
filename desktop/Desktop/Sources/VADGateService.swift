@@ -218,6 +218,17 @@ final class VADGateService {
     // Thread safety
     private let lock = NSLock()
 
+    // Metrics
+    private var bytesReceived: Int = 0
+    private var bytesSent: Int = 0
+    private var chunksTotal: Int = 0
+    private var chunksSpeech: Int = 0
+    private var chunksSilence: Int = 0
+    private var finalizeCount: Int = 0
+    private var keepaliveCount: Int = 0
+    private var lastMetricsLogTime: Double = 0
+    private let metricsLogInterval: Double = 30  // Log metrics every 30 seconds
+
     // Fail-open flag
     private let modelAvailable: Bool
 
@@ -248,6 +259,7 @@ final class VADGateService {
         let wallTime = CACurrentMediaTime()
         if firstAudioWallTime == nil {
             firstAudioWallTime = wallTime
+            lastMetricsLogTime = wallTime
         }
         let wallRel = wallTime - (firstAudioWallTime ?? wallTime)
 
@@ -258,6 +270,10 @@ final class VADGateService {
         let chunkMs = Double(numFrames) * 1000.0 / Double(sampleRate)
         let chunkDurationSec = Double(numFrames) / Double(sampleRate)
         audioCursorMs += chunkMs
+
+        // Track metrics
+        chunksTotal += 1
+        bytesReceived += stereoData.count
 
         // Deinterleave stereo into mic (even) and system (odd) channels
         let (micSamples, sysSamples) = deinterleave(stereoData)
@@ -306,8 +322,26 @@ final class VADGateService {
             lastSpeechMs = audioCursorMs
         }
 
+        if isSpeech {
+            chunksSpeech += 1
+        } else {
+            chunksSilence += 1
+        }
+
         // State machine
-        return updateState(stereoData, isSpeech: isSpeech, wallRel: wallRel, chunkDurationSec: chunkDurationSec, chunkMs: chunkMs, wallTime: wallTime)
+        let output = updateState(stereoData, isSpeech: isSpeech, wallRel: wallRel, chunkDurationSec: chunkDurationSec, chunkMs: chunkMs, wallTime: wallTime)
+
+        // Track bytes sent
+        bytesSent += output.audioToSend.count
+        if output.shouldFinalize { finalizeCount += 1 }
+
+        // Periodic metrics log
+        if wallTime - lastMetricsLogTime >= metricsLogInterval {
+            lastMetricsLogTime = wallTime
+            logMetrics()
+        }
+
+        return output
     }
 
     /// Check if a keepalive should be sent to prevent Deepgram timeout.
@@ -317,7 +351,12 @@ final class VADGateService {
 
         guard let firstTime = firstAudioWallTime else { return false }
         let refTime = lastSendWallTime ?? firstTime
-        return (CACurrentMediaTime() - refTime) >= keepaliveSec
+        let needed = (CACurrentMediaTime() - refTime) >= keepaliveSec
+        if needed {
+            keepaliveCount += 1
+            lastSendWallTime = CACurrentMediaTime()
+        }
+        return needed
     }
 
     /// Remap Deepgram timestamps to wall-clock-relative timestamps.
@@ -326,6 +365,19 @@ final class VADGateService {
     }
 
     // MARK: - Private
+
+    private func logMetrics() {
+        let bytesSkipped = bytesReceived - bytesSent
+        let savingsRatio = bytesReceived > 0 ? Double(bytesSkipped) / Double(bytesReceived) * 100.0 : 0.0
+        let sessionSec = audioCursorMs / 1000.0
+        let dgCostPerSec = 0.0043 / 60.0  // Nova-3: $0.0043/min
+        let costWithout = sessionSec * dgCostPerSec
+        let costWith = (sessionSec * (1.0 - savingsRatio / 100.0)) * dgCostPerSec
+        log(String(format: "VADGate metrics: state=%@ chunks=%d (speech=%d silence=%d) received=%.1fKB sent=%.1fKB skipped=%.1fKB savings=%.1f%% finalizes=%d keepalives=%d session=%.0fs dgCost=$%.4f→$%.4f",
+            String(describing: state), chunksTotal, chunksSpeech, chunksSilence,
+            Double(bytesReceived) / 1024.0, Double(bytesSent) / 1024.0, Double(bytesSkipped) / 1024.0,
+            savingsRatio, finalizeCount, keepaliveCount, sessionSec, costWithout, costWith))
+    }
 
     private func updateState(_ pcmData: Data, isSpeech: Bool, wallRel: Double, chunkDurationSec: Double, chunkMs: Double, wallTime: Double) -> GateOutput {
         switch state {
