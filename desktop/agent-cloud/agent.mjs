@@ -87,8 +87,13 @@ function openDatabase() {
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const timeStr = now.toISOString().split('T')[1].split('.')[0];
   defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
 This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
+
+CURRENT DATE AND TIME: ${dateStr} ${timeStr} UTC
 
 DATABASE SCHEMA:
 ${schema}
