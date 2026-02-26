@@ -8164,4 +8164,84 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get pairingDescNeoOne =>
       'Naciśnij i przytrzymaj przycisk zasilania, aż dioda LED zacznie migać. Urządzenie będzie wykrywalne.';
+
+  @override
+  String get downloadingFromDevice => 'Pobieranie z urządzenia';
+
+  @override
+  String get reconnectingToInternet => 'Ponowne łączenie z internetem...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Przesyłanie $current z $total';
+  }
+
+  @override
+  String get processedStatus => 'Przetworzono';
+
+  @override
+  String get corruptedStatus => 'Uszkodzony';
+
+  @override
+  String nPending(int count) {
+    return '$count oczekujących';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count przetworzonych';
+  }
+
+  @override
+  String get synced => 'Zsynchronizowano';
+
+  @override
+  String get noPendingRecordings => 'Brak oczekujących nagrań';
+
+  @override
+  String get noProcessedRecordings => 'Brak przetworzonych nagrań';
+
+  @override
+  String get pending => 'Oczekujące';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Co nowego w $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Dodać do listy zadań?';
+
+  @override
+  String get failedToCreateShareLink => 'Nie udało się utworzyć linku do udostępniania';
+
+  @override
+  String get deleteGoal => 'Usuń cel';
+
+  @override
+  String get deviceUpToDate => 'Twoje urządzenie jest aktualne';
+
+  @override
+  String get wifiConfiguration => 'Konfiguracja WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Wprowadź dane WiFi, aby urządzenie mogło pobrać oprogramowanie.';
+
+  @override
+  String get networkNameSsid => 'Nazwa sieci (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Wprowadź nazwę sieci WiFi';
+
+  @override
+  String get enterWifiPassword => 'Wprowadź hasło WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

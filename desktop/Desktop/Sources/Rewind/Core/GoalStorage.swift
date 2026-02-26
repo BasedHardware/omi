@@ -25,7 +25,7 @@ enum GoalStorageError: LocalizedError {
 actor GoalStorage {
     static let shared = GoalStorage()
 
-    private var _dbQueue: DatabaseQueue?
+    private var _dbQueue: DatabasePool?
     private var isInitialized = false
 
     private init() {}
@@ -37,7 +37,7 @@ actor GoalStorage {
     }
 
     /// Ensure database is initialized before use
-    private func ensureInitialized() async throws -> DatabaseQueue {
+    private func ensureInitialized() async throws -> DatabasePool {
         if let db = _dbQueue {
             return db
         }
@@ -76,20 +76,50 @@ actor GoalStorage {
 
     // MARK: - Sync Operations
 
-    /// Batch upsert from API response
+    /// Batch upsert from API response and reconcile.
+    /// The API only returns active goals, so any local synced goal NOT in the
+    /// response has been deleted/completed on the server — mark it inactive.
     func syncServerGoals(_ goals: [Goal]) async throws {
         let db = try await ensureInitialized()
+        let serverIds = Set(goals.map { $0.id })
 
         try await db.write { database in
+            // 1. Upsert all goals from server (handles name, progress, etc.)
             for goal in goals {
                 if var existingRecord = try GoalRecord
                     .filter(Column("backendId") == goal.id)
                     .fetchOne(database) {
                     existingRecord.updateFrom(goal)
+                    existingRecord.deleted = false
                     try existingRecord.update(database)
                 } else {
                     _ = try GoalRecord.from(goal).inserted(database)
                 }
+            }
+
+            // 2. Reconcile: mark local goals absent from server as deleted.
+            //    Only touch synced goals (have a backendId) that are still
+            //    active locally — unsynced local goals haven't reached the
+            //    server yet and should be left alone.
+            let localActive = try GoalRecord
+                .filter(Column("backendSynced") == true)
+                .filter(Column("deleted") == false)
+                .filter(Column("isActive") == true)
+                .fetchAll(database)
+
+            var reconciled = 0
+            for var record in localActive {
+                if let bid = record.backendId, !serverIds.contains(bid) {
+                    record.isActive = false
+                    record.deleted = true
+                    record.updatedAt = Date()
+                    try record.update(database)
+                    reconciled += 1
+                }
+            }
+
+            if reconciled > 0 {
+                log("GoalStorage: Reconciled \(reconciled) stale local goals (deleted/completed on server)")
             }
         }
 

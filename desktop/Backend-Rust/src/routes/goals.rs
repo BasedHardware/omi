@@ -79,6 +79,7 @@ async fn create_goal(
             request.min_value.unwrap_or(0.0),
             request.max_value.unwrap_or(100.0),
             request.unit.as_deref(),
+            request.source.as_deref(),
         )
         .await
     {

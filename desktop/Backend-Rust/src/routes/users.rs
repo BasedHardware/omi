@@ -428,16 +428,23 @@ async fn update_ai_profile(
 ) -> Result<Json<AIUserProfile>, StatusCode> {
     tracing::info!("Updating AI user profile for user {}", user.uid);
 
-    if request.profile_text.len() > 2000 {
-        tracing::warn!("Profile text too long: {} chars (max 2000)", request.profile_text.len());
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    // Truncate to 10000 bytes if needed (don't reject), respecting char boundaries
+    let profile_text = if request.profile_text.len() > 10000 {
+        tracing::warn!("Profile text truncated: {} chars -> 10000", request.profile_text.len());
+        let mut end = 10000;
+        while !request.profile_text.is_char_boundary(end) {
+            end -= 1;
+        }
+        &request.profile_text[..end]
+    } else {
+        &request.profile_text
+    };
 
     match state
         .firestore
         .update_ai_user_profile(
             &user.uid,
-            &request.profile_text,
+            profile_text,
             &request.generated_at,
             request.data_sources_used,
         )

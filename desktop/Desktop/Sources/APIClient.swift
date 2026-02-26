@@ -21,6 +21,12 @@ actor APIClient {
     let session: URLSession
     private let decoder: JSONDecoder
 
+    // Short-lived caches to deduplicate simultaneous calls from multiple services
+    private var goalsCacheTime: Date?
+    private var goalsCache: [Goal]?
+    private var conversationsCountCacheTime: Date?
+    private var conversationsCountCache: Int?
+
     init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -72,9 +78,11 @@ actor APIClient {
 
     func get<T: Decodable>(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -113,9 +121,11 @@ actor APIClient {
 
     func delete(
         _ endpoint: String,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -365,11 +375,15 @@ extension APIClient {
         return try await post("v1/conversations/search", body: body)
     }
 
-    /// Gets the total count of conversations
+    /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
     func getConversationsCount(
         includeDiscarded: Bool = false,
         statuses: [ConversationStatus] = [.completed, .processing]
     ) async throws -> Int {
+        if let cache = conversationsCountCache, let time = conversationsCountCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
+
         var queryItems: [String] = [
             "include_discarded=\(includeDiscarded)"
         ]
@@ -386,6 +400,8 @@ extension APIClient {
         }
 
         let response: CountResponse = try await get(endpoint)
+        conversationsCountCache = response.count
+        conversationsCountCacheTime = Date()
         return response.count
     }
 
@@ -503,7 +519,21 @@ enum ConversationSource: String, Codable {
     }
 }
 
-struct ServerConversation: Codable, Identifiable {
+struct ServerConversation: Codable, Identifiable, Equatable {
+    static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.createdAt == rhs.createdAt &&
+        lhs.startedAt == rhs.startedAt &&
+        lhs.finishedAt == rhs.finishedAt &&
+        lhs.structured == rhs.structured &&
+        lhs.status == rhs.status &&
+        lhs.discarded == rhs.discarded &&
+        lhs.deleted == rhs.deleted &&
+        lhs.starred == rhs.starred &&
+        lhs.folderId == rhs.folderId &&
+        lhs.source == rhs.source
+    }
+
     let id: String
     let createdAt: Date
     let startedAt: Date?
@@ -651,7 +681,7 @@ struct ServerConversation: Codable, Identifiable {
     }
 }
 
-struct Structured: Codable {
+struct Structured: Codable, Equatable {
     var title: String
     let overview: String
     let emoji: String
@@ -694,7 +724,7 @@ struct Structured: Codable {
     }
 }
 
-struct ActionItem: Codable, Identifiable {
+struct ActionItem: Codable, Identifiable, Equatable {
     var id: String { description }
     let description: String
     let completed: Bool
@@ -714,7 +744,7 @@ struct ActionItem: Codable, Identifiable {
     }
 }
 
-struct Event: Codable, Identifiable {
+struct Event: Codable, Identifiable, Equatable {
     var id: String { title + startsAt.description }
     let title: String
     let startsAt: Date
@@ -1173,6 +1203,7 @@ extension APIClient {
         let speaker: String
         let speakerId: Int
         let isUser: Bool
+        let personId: String?
         let start: Double
         let end: Double
 
@@ -1180,6 +1211,7 @@ extension APIClient {
             case text, speaker
             case speakerId = "speaker_id"
             case isUser = "is_user"
+            case personId = "person_id"
             case start, end
         }
     }
@@ -1373,9 +1405,11 @@ extension APIClient {
     func patch<T: Decodable, B: Encodable>(
         _ endpoint: String,
         body: B,
-        requireAuth: Bool = true
+        requireAuth: Bool = true,
+        customBaseURL: String? = nil
     ) async throws -> T {
-        let url = URL(string: baseURL + endpoint)!
+        let base = customBaseURL ?? baseURL
+        let url = URL(string: base + endpoint)!
         var request = URLRequest(url: url)
         request.httpMethod = "PATCH"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
@@ -1502,7 +1536,8 @@ extension APIClient {
         priority: String? = nil,
         metadata: [String: Any]? = nil,
         goalId: String? = nil,
-        relevanceScore: Int? = nil
+        relevanceScore: Int? = nil,
+        recurrenceRule: String? = nil
     ) async throws -> TaskActionItem {
         struct UpdateRequest: Encodable {
             let completed: Bool?
@@ -1512,12 +1547,14 @@ extension APIClient {
             let metadata: String?
             let goalId: String?
             let relevanceScore: Int?
+            let recurrenceRule: String?
 
             enum CodingKeys: String, CodingKey {
                 case completed, description, priority, metadata
                 case dueAt = "due_at"
                 case goalId = "goal_id"
                 case relevanceScore = "relevance_score"
+                case recurrenceRule = "recurrence_rule"
             }
         }
 
@@ -1539,7 +1576,8 @@ extension APIClient {
             priority: priority,
             metadata: metadataString,
             goalId: goalId,
-            relevanceScore: relevanceScore
+            relevanceScore: relevanceScore,
+            recurrenceRule: recurrenceRule
         )
 
         return try await patch("v1/action-items/\(id)", body: request)
@@ -1576,7 +1614,9 @@ extension APIClient {
         priority: String? = nil,
         category: String? = nil,
         metadata: [String: Any]? = nil,
-        relevanceScore: Int? = nil
+        relevanceScore: Int? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil
     ) async throws -> TaskActionItem {
         struct CreateRequest: Encodable {
             let description: String
@@ -1586,12 +1626,16 @@ extension APIClient {
             let category: String?
             let metadata: String?
             let relevanceScore: Int?
+            let recurrenceRule: String?
+            let recurrenceParentId: String?
 
             enum CodingKeys: String, CodingKey {
                 case description
                 case dueAt = "due_at"
                 case source, priority, category, metadata
                 case relevanceScore = "relevance_score"
+                case recurrenceRule = "recurrence_rule"
+                case recurrenceParentId = "recurrence_parent_id"
             }
         }
 
@@ -1613,7 +1657,9 @@ extension APIClient {
             priority: priority,
             category: category,
             metadata: metadataString,
-            relevanceScore: relevanceScore
+            relevanceScore: relevanceScore,
+            recurrenceRule: recurrenceRule,
+            recurrenceParentId: recurrenceParentId
         )
 
         return try await post("v1/action-items", body: request)
@@ -1643,6 +1689,23 @@ extension APIClient {
         }
         let request = BatchRequest(scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
         let _: StatusResponse = try await patch("v1/action-items/batch-scores", body: request)
+    }
+
+    /// Batch update sort orders and indent levels for multiple action items
+    func batchUpdateSortOrders(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)]) async throws {
+        struct SortUpdate: Encodable {
+            let id: String
+            let sort_order: Int
+            let indent_level: Int
+        }
+        struct BatchRequest: Encodable {
+            let items: [SortUpdate]
+        }
+        struct StatusResponse: Decodable {
+            let status: String
+        }
+        let request = BatchRequest(items: updates.map { SortUpdate(id: $0.id, sort_order: $0.sortOrder, indent_level: $0.indentLevel) })
+        let _: StatusResponse = try await patch("v1/action-items/batch", body: request)
     }
 
     // MARK: - Task Sharing
@@ -1836,6 +1899,12 @@ extension APIClient {
         struct StatusResponse: Decodable { let status: String }
         let _: StatusResponse = try await post("v1/staged-tasks/migrate")
     }
+
+    /// Migrate conversation-extracted action items (no source field) to staged_tasks
+    func migrateConversationItemsToStaged() async throws {
+        struct MigrateResponse: Decodable { let status: String; let migrated: Int; let deleted: Int }
+        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
+    }
 }
 
 /// Response for staged task promotion
@@ -1854,9 +1923,14 @@ struct PromoteResponse: Codable {
 
 extension APIClient {
 
-    /// Fetches all active goals (up to 3)
+    /// Fetches all active goals (up to 3). Uses 5-second cache to deduplicate parallel calls.
     func getGoals() async throws -> [Goal] {
+        if let cache = goalsCache, let time = goalsCacheTime, Date().timeIntervalSince(time) < 5 {
+            return cache
+        }
         let response: GoalsListResponse = try await get("v1/goals/all")
+        goalsCache = response.goals
+        goalsCacheTime = Date()
         return response.goals
     }
 
@@ -1869,7 +1943,8 @@ extension APIClient {
         currentValue: Double = 0.0,
         minValue: Double = 0.0,
         maxValue: Double = 100.0,
-        unit: String? = nil
+        unit: String? = nil,
+        source: String? = nil
     ) async throws -> Goal {
         struct CreateGoalRequest: Encodable {
             let title: String
@@ -1880,9 +1955,10 @@ extension APIClient {
             let minValue: Double
             let maxValue: Double
             let unit: String?
+            let source: String?
 
             enum CodingKeys: String, CodingKey {
-                case title, description, unit
+                case title, description, unit, source
                 case goalType = "goal_type"
                 case targetValue = "target_value"
                 case currentValue = "current_value"
@@ -1899,10 +1975,13 @@ extension APIClient {
             currentValue: currentValue,
             minValue: minValue,
             maxValue: maxValue,
-            unit: unit
+            unit: unit,
+            source: source
         )
 
-        return try await post("v1/goals", body: request)
+        let goal: Goal = try await post("v1/goals", body: request)
+        goalsCache = nil
+        return goal
     }
 
     /// Updates a goal's progress
@@ -1953,12 +2032,15 @@ extension APIClient {
             throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
         }
 
-        return try decoder.decode(Goal.self, from: data)
+        let goal = try decoder.decode(Goal.self, from: data)
+        goalsCache = nil
+        return goal
     }
 
     /// Deletes a goal
     func deleteGoal(id: String) async throws {
         try await delete("v1/goals/\(id)")
+        goalsCache = nil
     }
 
     /// Gets progress history for a goal
@@ -2023,9 +2105,24 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
     let keptTaskId: String?
     /// ID of the goal this task is linked to
     let goalId: String?
+    /// Whether this task was promoted from staged_tasks
+    let fromStaged: Bool?
+    /// Recurrence rule: "daily", "weekdays", "weekly", "biweekly", "monthly"
+    let recurrenceRule: String?
+    /// ID of original parent task in recurrence chain
+    let recurrenceParentId: String?
+
+    // Ordering (synced to backend)
+    var sortOrder: Int?            // Sort position within category
+    var indentLevel: Int?          // 0-3 indent depth
 
     // Prioritization (stored locally, not synced to backend)
     var relevanceScore: Int?       // 0-100 relevance score from TaskPrioritizationService
+
+    // Desktop extraction context (stored locally, not synced to backend)
+    var contextSummary: String?    // Summary of screen context at extraction time
+    var currentActivity: String?   // What user was doing when task was detected
+    var agentEditedFiles: [String]? // Files the agent previously edited
 
     // Agent execution tracking (stored locally, not synced to backend)
     var agentStatus: String?       // nil, "pending", "processing", "completed", "failed"
@@ -2037,6 +2134,12 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
 
     // Chat session for task-scoped AI chat (stored locally, not synced to backend)
     var chatSessionId: String?
+
+    /// Whether this task has an active recurrence rule
+    var isRecurring: Bool {
+        guard let rule = recurrenceRule, !rule.isEmpty else { return false }
+        return true
+    }
 
     /// Custom Equatable: compares only display-relevant fields.
     /// Skips `metadata` (JSON key ordering is non-deterministic after SQLite round-trip),
@@ -2052,7 +2155,8 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         lhs.category == rhs.category &&
         lhs.deleted == rhs.deleted &&
         lhs.deletedBy == rhs.deletedBy &&
-        lhs.goalId == rhs.goalId
+        lhs.goalId == rhs.goalId &&
+        lhs.recurrenceRule == rhs.recurrenceRule
     }
 
     enum CodingKeys: String, CodingKey {
@@ -2067,6 +2171,11 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         case deletedReason = "deleted_reason"
         case keptTaskId = "kept_task_id"
         case goalId = "goal_id"
+        case fromStaged = "from_staged"
+        case recurrenceRule = "recurrence_rule"
+        case recurrenceParentId = "recurrence_parent_id"
+        case sortOrder = "sort_order"
+        case indentLevel = "indent_level"
         case relevanceScore = "relevance_score"
     }
 
@@ -2090,7 +2199,15 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason: String? = nil,
         keptTaskId: String? = nil,
         goalId: String? = nil,
+        fromStaged: Bool? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil,
+        sortOrder: Int? = nil,
+        indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
+        contextSummary: String? = nil,
+        currentActivity: String? = nil,
+        agentEditedFiles: [String]? = nil,
         agentStatus: String? = nil,
         agentPrompt: String? = nil,
         agentPlan: String? = nil,
@@ -2117,7 +2234,15 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         self.deletedReason = deletedReason
         self.keptTaskId = keptTaskId
         self.goalId = goalId
+        self.fromStaged = fromStaged
+        self.recurrenceRule = recurrenceRule
+        self.recurrenceParentId = recurrenceParentId
+        self.sortOrder = sortOrder
+        self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
+        self.contextSummary = contextSummary
+        self.currentActivity = currentActivity
+        self.agentEditedFiles = agentEditedFiles
         self.agentStatus = agentStatus
         self.agentPrompt = agentPrompt
         self.agentPlan = agentPlan
@@ -2147,9 +2272,17 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         deletedReason = try container.decodeIfPresent(String.self, forKey: .deletedReason)
         keptTaskId = try container.decodeIfPresent(String.self, forKey: .keptTaskId)
         goalId = try container.decodeIfPresent(String.self, forKey: .goalId)
+        fromStaged = try container.decodeIfPresent(Bool.self, forKey: .fromStaged)
+        recurrenceRule = try container.decodeIfPresent(String.self, forKey: .recurrenceRule)
+        recurrenceParentId = try container.decodeIfPresent(String.self, forKey: .recurrenceParentId)
+        sortOrder = try container.decodeIfPresent(Int.self, forKey: .sortOrder)
+        indentLevel = try container.decodeIfPresent(Int.self, forKey: .indentLevel)
         relevanceScore = try container.decodeIfPresent(Int.self, forKey: .relevanceScore)
 
-        // Agent fields are local-only, not decoded from API
+        // Local-only fields, not decoded from API
+        contextSummary = nil
+        currentActivity = nil
+        agentEditedFiles = nil
         agentStatus = nil
         agentPrompt = nil
         agentPlan = nil
@@ -2313,6 +2446,67 @@ struct TaskActionItem: Codable, Identifiable, Equatable {
         default: return "gray"
         }
     }
+
+    /// All meaningful task data formatted for chat context.
+    /// Add new fields here when they're added to the struct so chat always gets everything.
+    var chatContext: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+
+        var lines: [String] = []
+
+        // Core
+        lines.append("Task: \(description)")
+        if let category = category { lines.append("Category: \(category)") }
+        if !tags.isEmpty { lines.append("Tags: \(tags.joined(separator: ", "))") }
+        if let priority = priority { lines.append("Priority: \(priority)") }
+        lines.append("Status: \(completed ? "completed" : "active")")
+        lines.append("Created: \(formatter.string(from: createdAt))")
+        if let dueAt = dueAt { lines.append("Due: \(formatter.string(from: dueAt))") }
+        if let completedAt = completedAt { lines.append("Completed: \(formatter.string(from: completedAt))") }
+
+        // Source & origin
+        if let source = source { lines.append("Source: \(sourceLabel) (\(source))") }
+        if let app = sourceApp { lines.append("Source app: \(app)") }
+        if let title = windowTitle { lines.append("Window title: \(title)") }
+        if let conf = confidence { lines.append("Extraction confidence: \(String(format: "%.0f%%", conf * 100))") }
+
+        // Screen context at extraction time
+        if let ctx = contextSummary, !ctx.isEmpty { lines.append("Context when detected: \(ctx)") }
+        if let act = currentActivity, !act.isEmpty { lines.append("User activity: \(act)") }
+
+        // Relationships
+        if let convId = conversationId { lines.append("Conversation ID: \(convId)") }
+        if let goalId = goalId { lines.append("Linked goal: \(goalId)") }
+
+        // Agent work
+        if let status = agentStatus { lines.append("Agent status: \(status)") }
+        if let prompt = agentPrompt, !prompt.isEmpty {
+            lines.append("Agent prompt: \(String(prompt.prefix(1000)))")
+        }
+        if let plan = agentPlan, !plan.isEmpty {
+            lines.append("Agent plan:\n\(String(plan.prefix(2000)))")
+        }
+        if let files = agentEditedFiles, !files.isEmpty {
+            lines.append("Files edited by agent: \(files.joined(separator: ", "))")
+        }
+
+        // Raw metadata (catches anything not explicitly listed above)
+        if let meta = parsedMetadata {
+            let coveredKeys: Set<String> = [
+                "tags", "source_app", "window_title", "confidence",
+                "source_category", "source_subcategory"
+            ]
+            let extra = meta.filter { !coveredKeys.contains($0.key) }
+            if !extra.isEmpty {
+                let pairs = extra.map { "\($0.key): \($0.value)" }.sorted()
+                lines.append("Additional metadata: \(pairs.joined(separator: ", "))")
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
 }
 
 // MARK: - Goal Models
@@ -2347,9 +2541,10 @@ struct Goal: Codable, Identifiable {
     let createdAt: Date
     let updatedAt: Date
     let completedAt: Date?
+    let source: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, unit
+        case id, title, description, unit, source
         case goalType = "goal_type"
         case targetValue = "target_value"
         case currentValue = "current_value"
@@ -2376,6 +2571,7 @@ struct Goal: Codable, Identifiable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
         completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        source = try container.decodeIfPresent(String.self, forKey: .source)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -2393,12 +2589,13 @@ struct Goal: Codable, Identifiable {
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
+        try container.encodeIfPresent(source, forKey: .source)
     }
 
-    /// Progress as a percentage (0-100)
+    /// Progress as a percentage (0-100), based on targetValue
     var progress: Double {
-        guard maxValue != minValue else { return 0 }
-        return ((currentValue - minValue) / (maxValue - minValue)) * 100.0
+        guard targetValue != minValue else { return 0 }
+        return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
     }
 
     /// Whether the goal is completed
@@ -2506,7 +2703,7 @@ struct ScoreResponse: Codable {
 // MARK: - App Models
 
 /// App summary for list views (lightweight)
-struct OmiApp: Codable, Identifiable {
+struct OmiApp: Codable, Identifiable, Sendable {
     let id: String
     let name: String
     let description: String
@@ -2668,13 +2865,13 @@ struct OmiAppDetails: Codable, Identifiable {
 }
 
 /// App category
-struct OmiAppCategory: Codable, Identifiable {
+struct OmiAppCategory: Codable, Identifiable, Sendable {
     let id: String
     let title: String
 }
 
 /// App capability definition
-struct OmiAppCapability: Codable, Identifiable {
+struct OmiAppCapability: Codable, Identifiable, Sendable {
     let id: String
     let title: String
     let description: String
@@ -2710,13 +2907,13 @@ struct OmiAppReview: Codable, Identifiable {
 // MARK: - V2 Apps Response Types
 
 /// Capability info in v2/apps response
-struct OmiCapabilityInfo: Codable {
+struct OmiCapabilityInfo: Codable, Sendable {
     let id: String
     let title: String
 }
 
 /// Pagination metadata in v2/apps response
-struct OmiPaginationMeta: Codable {
+struct OmiPaginationMeta: Codable, Sendable {
     let total: Int
     let count: Int
     let offset: Int
@@ -2724,14 +2921,14 @@ struct OmiPaginationMeta: Codable {
 }
 
 /// A single group in the v2/apps response
-struct OmiAppGroup: Codable {
+struct OmiAppGroup: Codable, Sendable {
     let capability: OmiCapabilityInfo
     let data: [OmiApp]
     let pagination: OmiPaginationMeta
 }
 
 /// Metadata in v2/apps response
-struct OmiAppsV2Meta: Codable {
+struct OmiAppsV2Meta: Codable, Sendable {
     let capabilities: [OmiCapabilityInfo]
     let groupCount: Int
     let limit: Int
@@ -2739,7 +2936,7 @@ struct OmiAppsV2Meta: Codable {
 }
 
 /// Full v2/apps grouped response
-struct OmiAppsV2Response: Codable {
+struct OmiAppsV2Response: Codable, Sendable {
     let groups: [OmiAppGroup]
     let meta: OmiAppsV2Meta
 }
@@ -3202,19 +3399,22 @@ extension APIClient {
 
     // MARK: - Knowledge Graph API
 
+    // Knowledge graph uses the main omi API (not the desktop backend)
+    private var knowledgeGraphBaseURL: String { "https://api.omi.me/" }
+
     /// Get the full knowledge graph (nodes and edges)
     func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-        return try await get("v1/knowledge-graph")
+        return try await get("v1/knowledge-graph", customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Rebuild the knowledge graph from memories
     func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
+        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody(), customBaseURL: knowledgeGraphBaseURL)
     }
 
     /// Delete the knowledge graph
     func deleteKnowledgeGraph() async throws {
-        let url = URL(string: baseURL + "v1/knowledge-graph")!
+        let url = URL(string: knowledgeGraphBaseURL + "v1/knowledge-graph")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -3260,7 +3460,11 @@ struct KnowledgeGraphNode: Codable, Identifiable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         label = try container.decode(String.self, forKey: .label)
-        nodeType = try container.decodeIfPresent(KnowledgeGraphNodeType.self, forKey: .nodeType) ?? .concept
+        if let rawType = try container.decodeIfPresent(String.self, forKey: .nodeType) {
+            nodeType = KnowledgeGraphNodeType(rawValue: rawType) ?? .concept
+        } else {
+            nodeType = .concept
+        }
         aliases = try container.decodeIfPresent([String].self, forKey: .aliases) ?? []
         memoryIds = try container.decodeIfPresent([String].self, forKey: .memoryIds) ?? []
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
@@ -3305,7 +3509,14 @@ struct KnowledgeGraphResponse: Codable {
 /// Response for rebuild operation
 struct RebuildGraphResponse: Codable {
     let status: String
-    let message: String
+    let nodesCount: Int?
+    let edgesCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case nodesCount = "nodes_count"
+        case edgesCount = "edges_count"
+    }
 }
 
 // MARK: - User Settings Models
@@ -3494,6 +3705,12 @@ struct AssistantSettingsResponse: Codable {
     var task: TaskSettingsResponse?
     var advice: AdviceSettingsResponse?
     var memory: MemorySettingsResponse?
+    var updateChannel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case shared, focus, task, advice, memory
+        case updateChannel = "update_channel"
+    }
 }
 
 // MARK: - Focus Sessions API
@@ -3689,23 +3906,18 @@ extension APIClient {
         text: String,
         sender: String,
         appId: String? = nil,
-        sessionId: String? = nil
+        sessionId: String? = nil,
+        metadata: String? = nil
     ) async throws -> SaveMessageResponse {
         struct SaveRequest: Encodable {
             let text: String
             let sender: String
+            let app_id: String?
+            let session_id: String?
+            let metadata: String?
         }
-        let body = SaveRequest(text: text, sender: sender)
-        // app_id must be a query parameter (backend reads it from URL, not body)
-        var endpoint = "v2/messages"
-        var queryItems: [String] = []
-        if let appId = appId {
-            queryItems.append("app_id=\(appId)")
-        }
-        if !queryItems.isEmpty {
-            endpoint += "?\(queryItems.joined(separator: "&"))"
-        }
-        return try await post(endpoint, body: body)
+        let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
+        return try await post("v2/messages", body: body)
     }
 
     /// Fetch chat message history
@@ -3972,152 +4184,6 @@ struct MessageDeleteResponse: Codable {
     }
 }
 
-// MARK: - Chat Context API (RAG)
-
-extension APIClient {
-
-    /// Fetch context for building chat prompts (conversations + memories)
-    /// Uses LLM to determine if context is needed and extract date ranges
-    func getChatContext(
-        question: String,
-        timezone: String = TimeZone.current.identifier,
-        appId: String? = nil,
-        previousMessages: [(text: String, sender: String)] = []
-    ) async throws -> ChatContextResponse {
-        struct ContextRequest: Encodable {
-            let question: String
-            let timezone: String
-            let app_id: String?
-            let messages: [MessageInput]
-
-            struct MessageInput: Encodable {
-                let text: String
-                let sender: String
-            }
-        }
-
-        let body = ContextRequest(
-            question: question,
-            timezone: timezone,
-            app_id: appId,
-            messages: previousMessages.map { ContextRequest.MessageInput(text: $0.text, sender: $0.sender) }
-        )
-
-        return try await post("v2/chat-context", body: body)
-    }
-}
-
-// MARK: - Chat Context Models
-
-/// Response from chat context endpoint
-struct ChatContextResponse: Codable {
-    /// Whether the question requires context to answer
-    let requiresContext: Bool
-    /// Extracted date range from the question (if any)
-    let dateRange: ChatDateRange?
-    /// Relevant conversation summaries
-    let conversations: [ChatConversationSummary]
-    /// User memories/facts
-    let memories: [ChatMemorySummary]
-    /// Pre-formatted context string ready for prompt injection
-    let contextString: String
-    /// Citation sources for tracking which conversations/memories are cited
-    let citationSources: [CitationSource]
-
-    enum CodingKeys: String, CodingKey {
-        case requiresContext = "requires_context"
-        case dateRange = "date_range"
-        case conversations
-        case memories
-        case contextString = "context_string"
-        case citationSources = "citation_sources"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        requiresContext = try container.decodeIfPresent(Bool.self, forKey: .requiresContext) ?? false
-        dateRange = try container.decodeIfPresent(ChatDateRange.self, forKey: .dateRange)
-        conversations = try container.decodeIfPresent([ChatConversationSummary].self, forKey: .conversations) ?? []
-        memories = try container.decodeIfPresent([ChatMemorySummary].self, forKey: .memories) ?? []
-        contextString = try container.decodeIfPresent(String.self, forKey: .contextString) ?? ""
-        citationSources = try container.decodeIfPresent([CitationSource].self, forKey: .citationSources) ?? []
-    }
-}
-
-/// Date range extracted from question
-struct ChatDateRange: Codable {
-    let start: Date
-    let end: Date
-}
-
-/// Conversation summary for context
-struct ChatConversationSummary: Codable, Identifiable {
-    let id: String
-    let title: String
-    let overview: String
-    let emoji: String
-    let category: String
-    let createdAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, title, overview, emoji, category
-        case createdAt = "created_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        overview = try container.decodeIfPresent(String.self, forKey: .overview) ?? ""
-        emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? ""
-        category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    }
-}
-
-/// Memory summary for context
-struct ChatMemorySummary: Codable, Identifiable {
-    let id: String
-    let content: String
-    let category: String
-}
-
-/// Citation source for tracking which conversations/memories are cited
-struct CitationSource: Codable, Identifiable {
-    /// 1-based index matching [1], [2] in context string
-    let index: Int
-    /// Type of source: "conversation" or "memory"
-    let sourceType: String
-    /// ID of the source document
-    let id: String
-    /// Title or summary of the source
-    let title: String
-    /// Preview text of the source
-    let preview: String
-    /// Emoji (for conversations)
-    let emoji: String?
-    /// When the source was created
-    let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case index
-        case sourceType = "source_type"
-        case id, title, preview, emoji
-        case createdAt = "created_at"
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        index = try container.decode(Int.self, forKey: .index)
-        sourceType = try container.decode(String.self, forKey: .sourceType)
-        id = try container.decode(String.self, forKey: .id)
-        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-        preview = try container.decodeIfPresent(String.self, forKey: .preview) ?? ""
-        emoji = try container.decodeIfPresent(String.self, forKey: .emoji)
-        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
-    }
-}
-
 // MARK: - AI User Profile API
 
 struct AIUserProfileResponse: Codable {
@@ -4157,5 +4223,172 @@ extension APIClient {
         )
 
         let _: AIUserProfileResponse = try await patch("v1/users/ai-profile", body: body)
+    }
+
+    // MARK: - Agent VM
+
+    struct AgentProvisionResponse: Decodable {
+        let status: String
+        let vmName: String
+        let ip: String?
+        let authToken: String
+        let agentStatus: String
+    }
+
+    /// Provision a cloud agent VM for the current user (fire-and-forget)
+    func provisionAgentVM() async throws -> AgentProvisionResponse {
+        return try await post("v2/agent/provision")
+    }
+
+    struct AgentStatusResponse: Decodable {
+        let vmName: String
+        let zone: String
+        let ip: String?
+        let status: String
+        let authToken: String
+        let createdAt: String
+        let lastQueryAt: String?
+    }
+
+    /// Get current agent VM status
+    func getAgentStatus() async throws -> AgentStatusResponse? {
+        return try await get("v2/agent/status")
+    }
+}
+
+// MARK: - People Models
+
+struct Person: Codable, Identifiable {
+    let id: String
+    let name: String
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - People API
+
+extension APIClient {
+
+    /// Fetches all people for the current user
+    func getPeople() async throws -> [Person] {
+        return try await get("v1/users/people")
+    }
+
+    /// Creates a new person
+    func createPerson(name: String) async throws -> Person {
+        struct CreatePersonRequest: Encodable {
+            let name: String
+        }
+        return try await post("v1/users/people", body: CreatePersonRequest(name: name))
+    }
+
+    /// Updates a person's name
+    func updatePersonName(personId: String, newName: String) async throws {
+        let encodedName = newName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? newName
+        let url = URL(string: baseURL + "v1/users/people/\(personId)/name?value=\(encodedName)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    /// Deletes a person
+    func deletePerson(personId: String) async throws {
+        try await delete("v1/users/people/\(personId)")
+    }
+
+    /// Bulk assigns segments to a person or user
+    func assignSegmentsBulk(
+        conversationId: String,
+        segmentIds: [String],
+        isUser: Bool,
+        personId: String?
+    ) async throws {
+        struct AssignBulkRequest: Encodable {
+            let assignType: String
+            let value: String?
+            let segmentIds: [String]
+
+            enum CodingKeys: String, CodingKey {
+                case assignType = "assign_type"
+                case value
+                case segmentIds = "segment_ids"
+            }
+        }
+
+        let body = AssignBulkRequest(
+            assignType: isUser ? "is_user" : "person_id",
+            value: isUser ? "true" : personId,
+            segmentIds: segmentIds
+        )
+
+        let url = URL(string: baseURL + "v1/conversations/\(conversationId)/segments/assign-bulk")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+        request.httpBody = try JSONEncoder().encode(body)
+
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    // MARK: - LLM Usage
+
+    func recordLlmUsage(
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheReadTokens: Int,
+        cacheWriteTokens: Int,
+        totalTokens: Int,
+        costUsd: Double
+    ) async {
+        struct Req: Encodable {
+            let input_tokens: Int
+            let output_tokens: Int
+            let cache_read_tokens: Int
+            let cache_write_tokens: Int
+            let total_tokens: Int
+            let cost_usd: Double
+        }
+        struct Res: Decodable { let status: String }
+        do {
+            let _: Res = try await post("v1/users/me/llm-usage", body: Req(
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                cache_read_tokens: cacheReadTokens,
+                cache_write_tokens: cacheWriteTokens,
+                total_tokens: totalTokens,
+                cost_usd: costUsd
+            ))
+        } catch {
+            log("APIClient: LLM usage record failed: \(error.localizedDescription)")
+        }
+    }
+
+    func fetchTotalOmiAICost() async -> Double? {
+        struct Res: Decodable { let total_cost_usd: Double }
+        do {
+            log("APIClient: Fetching total Omi AI cost from backend")
+            let res: Res = try await get("v1/users/me/llm-usage/total")
+            log("APIClient: Total Omi AI cost from backend: $\(String(format: "%.4f", res.total_cost_usd))")
+            return res.total_cost_usd
+        } catch {
+            log("APIClient: LLM total cost fetch failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 }

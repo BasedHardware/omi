@@ -8,6 +8,9 @@ extension UserDefaults {
     @objc dynamic var multiChatEnabled: Bool {
         return bool(forKey: "multiChatEnabled")
     }
+    @objc dynamic var playwrightUseExtension: Bool {
+        return bool(forKey: "playwrightUseExtension")
+    }
 }
 
 // MARK: - Chat Session Model
@@ -59,15 +62,28 @@ struct ChatSession: Identifiable, Codable, Equatable {
 
 // MARK: - Content Block Model
 
+/// Structured tool input for inline display
+struct ToolCallInput {
+    /// Short summary for inline display (e.g., file path, command)
+    let summary: String
+    /// Full JSON details for expanded view
+    let details: String?
+}
+
 /// A block of content within an AI message (text or tool call indicator)
 enum ChatContentBlock: Identifiable {
     case text(id: String, text: String)
-    case toolCall(id: String, name: String, status: ToolCallStatus)
+    case toolCall(id: String, name: String, status: ToolCallStatus,
+                  toolUseId: String? = nil,
+                  input: ToolCallInput? = nil,
+                  output: String? = nil)
+    case thinking(id: String, text: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
-        case .toolCall(let id, _, _): return id
+        case .toolCall(let id, _, _, _, _, _): return id
+        case .thinking(let id, _): return id
         }
     }
 
@@ -94,6 +110,64 @@ enum ChatContentBlock: Identifiable {
         case "WebFetch": return "Fetching page"
         default: return "Using \(cleanName)"
         }
+    }
+
+    /// Extracts a short summary from tool input for inline display
+    static func toolInputSummary(for toolName: String, input: [String: Any]) -> ToolCallInput? {
+        let cleanName: String
+        if toolName.hasPrefix("mcp__") {
+            cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleanName = toolName
+        }
+
+        let summary: String?
+        switch cleanName {
+        case "Read":
+            summary = input["file_path"] as? String
+        case "Write", "Edit":
+            summary = input["file_path"] as? String
+        case "Bash":
+            if let cmd = input["command"] as? String {
+                summary = cmd.count > 80 ? String(cmd.prefix(80)) + "…" : cmd
+            } else {
+                summary = nil
+            }
+        case "Grep":
+            let pattern = input["pattern"] as? String ?? ""
+            let path = input["path"] as? String
+            summary = path != nil ? "\(pattern) in \(path!)" : pattern
+        case "Glob":
+            summary = input["pattern"] as? String
+        case "WebSearch":
+            summary = input["query"] as? String
+        case "WebFetch":
+            summary = input["url"] as? String
+        case "execute_sql":
+            if let query = input["query"] as? String {
+                summary = query.count > 100 ? String(query.prefix(100)) + "…" : query
+            } else {
+                summary = nil
+            }
+        case "semantic_search":
+            summary = input["query"] as? String
+        default:
+            // Try common key names
+            summary = (input["file_path"] ?? input["path"] ?? input["query"] ?? input["command"]) as? String
+        }
+
+        guard let summary = summary, !summary.isEmpty else { return nil }
+
+        // Build full details JSON
+        let details: String?
+        if let data = try? JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted, .sortedKeys]),
+           let str = String(data: data, encoding: .utf8) {
+            details = str
+        } else {
+            details = nil
+        }
+
+        return ToolCallInput(summary: summary, details: details)
     }
 }
 
@@ -168,34 +242,59 @@ struct Citation: Identifiable {
         case conversation
         case memory
     }
+}
 
-    init(from source: CitationSource) {
-        self.id = source.id
-        self.sourceType = source.sourceType == "conversation" ? .conversation : .memory
-        self.title = source.title
-        self.preview = source.preview
-        self.emoji = source.emoji
-        self.createdAt = source.createdAt
-    }
+// MARK: - Chat Mode
+
+/// Controls whether the AI agent can perform write actions (Act) or is restricted to read-only (Ask)
+enum ChatMode: String, CaseIterable {
+    case ask
+    case act
 }
 
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
 class ChatProvider: ObservableObject {
+
+    // MARK: - Floating Bar System Prompt Prefix
+    /// Static prefix injected at the top of the system prompt for floating bar sessions.
+    /// Defined here so it can be referenced both at warmup time and at query time.
+    static let floatingBarSystemPromptPrefix = """
+================================================================================
+🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
+================================================================================
+If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+Respond in exactly 1 sentence. No lists. No headers. No follow-up questions.
+A screenshot may be attached — use it silently only if relevant. Never mention or acknowledge it.
+================================================================================
+"""
+
     // MARK: - Published State
+    @Published var chatMode: ChatMode = .act
+    @Published var draftText = ""
     @Published var messages: [ChatMessage] = []
     @Published var sessions: [ChatSession] = []
     @Published var currentSession: ChatSession?
     @Published var isLoading = false
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
+    @Published var isStopping = false
+    @Published var isClearing = false
     @Published var errorMessage: String?
+    @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
     @Published var hasMoreMessages = false
     @Published var isLoadingMoreMessages = false
     @Published var showStarredOnly = false
     @Published var searchQuery = ""
+    /// Pre-computed grouped sessions for sidebar display.
+    /// Updated reactively via Combine instead of recomputed on every SwiftUI render pass.
+    @Published private(set) var groupedSessions: [(String, [ChatSession])] = []
+
+    /// Triggered when a browser tool is called but the extension token isn't configured.
+    /// The UI should observe this and present BrowserExtensionSetup.
+    @Published var needsBrowserExtensionSetup = false
 
     /// Whether the user is currently viewing the default chat (syncs with Flutter app)
     @Published var isInDefaultChat = true
@@ -209,14 +308,66 @@ class ChatProvider: ObservableObject {
     /// to the correct session instead of the default chat.
     var overrideAppId: String?
 
+    /// Override the Claude model for this provider's queries.
+    /// When set, the bridge uses this model instead of the default (Opus).
+    /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
+    var modelOverride: String?
+
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
 
-    private let claudeBridge = ClaudeAgentBridge()
-    private var bridgeStarted = false
+    // MARK: - Bridge (ACP-only, passApiKey controls OMI vs user's account)
+    // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
+    // not always defaulting to Omi mode on cold start.
+    private lazy var acpBridge: ACPBridge = {
+        let isOmi = (UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.omiAI.rawValue) != BridgeMode.userClaude.rawValue
+        return ACPBridge(passApiKey: isOmi)
+    }()
+    private var acpBridgeStarted = false
+
+    enum BridgeMode: String {
+        case omiAI = "agentSDK"
+        case userClaude = "claudeCode"
+    }
+    @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.omiAI.rawValue
+
+    /// Whether the ACP bridge requires authentication (shown as sheet in UI)
+    @Published var isClaudeAuthRequired = false
+    /// Auth methods returned by ACP bridge
+    @Published var claudeAuthMethods: [[String: Any]] = []
+    /// OAuth URL to open in browser (sent by bridge when auth is needed)
+    @Published var claudeAuthUrl: String?
+    /// Whether the user has a cached Claude OAuth token
+    @Published var isClaudeConnected = false
+    /// Cumulative tokens used in the current session via Omi account
+    @Published var sessionTokensUsed: Int = 0
+    /// Cumulative USD cost spent using the Omi account, persisted across sessions.
+    /// Used to enforce the $50 threshold for auto-switching to the user's Claude account.
+    @AppStorage("omiAICumulativeCostUsd") var omiAICumulativeCostUsd: Double = 0.0
+    /// Set to true when the $50 Omi account usage threshold is reached, triggering an alert.
+    @Published var showOmiThresholdAlert = false
+
     private let messagesPageSize = 50
+    private let maxMessagesInMemory = 200
     private var multiChatObserver: AnyCancellable?
+    private var playwrightExtensionObserver: AnyCancellable?
+    private var sessionGroupingObserver: AnyCancellable?
+
+    // MARK: - Cross-Platform Message Polling
+    /// Polls for new messages from other platforms (mobile) every 15 seconds.
+    /// Similar to TasksStore's 30-second polling pattern.
+    private var messagePollTimer: AnyCancellable?
+    private static let messagePollInterval: TimeInterval = 15.0
+
+    // MARK: - Streaming Buffer
+    /// Accumulates text deltas during streaming and flushes them to the published
+    /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
+    private var streamingTextBuffer: String = ""
+    private var streamingThinkingBuffer: String = ""
+    private var streamingBufferMessageId: String?
+    private var streamingFlushWorkItem: DispatchWorkItem?
+    private let streamingFlushInterval: TimeInterval = 0.1
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
@@ -240,15 +391,42 @@ class ChatProvider: ObservableObject {
     }
 
     // MARK: - Cached Context for Prompts
-    private var cachedContext: ChatContextResponse?
     private var cachedMemories: [ServerMemory] = []
     private var memoriesLoaded = false
     private var cachedGoals: [Goal] = []
     private var goalsLoaded = false
+    private var cachedTasks: [TaskActionItem] = []
+    private var tasksLoaded = false
     private var cachedAIProfile: String = ""
     private var aiProfileLoaded = false
     private var cachedDatabaseSchema: String = ""
     private var schemaLoaded = false
+    /// System prompt built once at warmup and reused for every query.
+    /// The ACP session is pre-warmed with this prompt via session/new.
+    /// On subsequent queries the bridge reuses the same session, so the
+    /// system prompt is ignored — it is only re-applied if the session is
+    /// invalidated (e.g. cwd change) and a new session/new is triggered.
+    /// Conversation history from before app launch IS included (via buildConversationHistory());
+    /// after session/new the ACP SDK tracks ongoing history natively.
+    private var cachedMainSystemPrompt: String = ""
+
+    // MARK: - CLAUDE.md & Skills (Global)
+    @Published var claudeMdContent: String?
+    @Published var claudeMdPath: String?
+    @Published var discoveredSkills: [(name: String, description: String, path: String)] = []
+    @AppStorage("claudeMdEnabled") var claudeMdEnabled = true
+    @AppStorage("disabledSkillsJSON") private var disabledSkillsJSON: String = ""
+
+    // MARK: - Project-level CLAUDE.md & Skills
+    @AppStorage("aiChatWorkingDirectory") var aiChatWorkingDirectory: String = ""
+    @Published var projectClaudeMdContent: String?
+    @Published var projectClaudeMdPath: String?
+    @Published var projectDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @AppStorage("projectClaudeMdEnabled") var projectClaudeMdEnabled = true
+
+    // MARK: - Dev Mode
+    @AppStorage("devModeEnabled") var devModeEnabled = false
+    private var devModeContext: String?
 
     // MARK: - Current Session ID
     var currentSessionId: String? {
@@ -275,53 +453,274 @@ class ChatProvider: ObservableObject {
                     await self?.reinitialize()
                 }
             }
+
+        // Poll for new messages from other platforms (mobile) every 15 seconds
+        messagePollTimer = Timer.publish(every: Self.messagePollInterval, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    await self?.pollForNewMessages()
+                }
+            }
+
+        // Observe changes to Playwright extension mode setting — restart bridge to pick up new env vars
+        playwrightExtensionObserver = UserDefaults.standard.publisher(for: \.playwrightUseExtension)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    guard !self.isSending else {
+                        log("ChatProvider: Skipping bridge restart — query in progress")
+                        return
+                    }
+                    guard self.acpBridgeStarted else { return }
+                    log("ChatProvider: Playwright extension setting changed, restarting ACP bridge")
+                    self.acpBridgeStarted = false
+                    do {
+                        try await self.acpBridge.restart()
+                        self.acpBridgeStarted = true
+                        log("ChatProvider: ACP bridge restarted with new Playwright settings")
+                    } catch {
+                        logError("Failed to restart ACP bridge after Playwright setting change", error: error)
+                    }
+                }
+            }
+
+        // Keep groupedSessions in sync — runs off the hot path so SwiftUI body never recomputes it
+        sessionGroupingObserver = Publishers.CombineLatest3($sessions, $searchQuery, $currentSession)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _, _, _ in
+                guard let self else { return }
+                self.groupedSessions = self.computeGroupedSessions()
+            }
     }
 
-    /// Ensure the Claude Agent bridge is started (restarts if the process died)
+    /// Pre-start the active bridge so the first query doesn't wait for process launch
+    func warmupBridge() async {
+        _ = await ensureBridgeStarted()
+    }
+
+    /// Test that the Playwright Chrome extension is connected and working.
+    /// Ensures the bridge is started (restarting if needed to pick up new token),
+    /// then sends a lightweight test query that triggers a browser_snapshot tool call.
+    func testPlaywrightConnection() async throws -> Bool {
+        // Restart bridge to pick up new extension token
+        acpBridgeStarted = false
+        do {
+            try await acpBridge.restart()
+            acpBridgeStarted = true
+        } catch {
+            try await acpBridge.start()
+            acpBridgeStarted = true
+        }
+        return try await acpBridge.testPlaywrightConnection()
+    }
+
+    /// Whether we're currently in user's Claude account mode
+    private var isUserClaudeMode: Bool {
+        bridgeMode == BridgeMode.userClaude.rawValue
+    }
+
+    /// Ensure the ACP bridge is started (restarts if the process died)
     private func ensureBridgeStarted() async -> Bool {
-        // If we thought the bridge was started but the process died, reset so we restart
-        if bridgeStarted {
-            let alive = await claudeBridge.isAlive
+        if acpBridgeStarted {
+            let alive = await acpBridge.isAlive
             if !alive {
-                log("ChatProvider: Bridge process died, will restart")
-                bridgeStarted = false
+                log("ChatProvider: ACP bridge process died, will restart")
+                acpBridgeStarted = false
             }
         }
-        guard !bridgeStarted else { return true }
+        guard !acpBridgeStarted else { return true }
         do {
-            try await claudeBridge.start()
-            bridgeStarted = true
-            log("ChatProvider: Claude bridge started successfully")
+            try await acpBridge.start()
+            acpBridgeStarted = true
+            log("ChatProvider: ACP bridge started successfully")
+            // Set up global auth handlers so auth_required during warmup is handled
+            await acpBridge.setGlobalAuthHandlers(
+                onAuthRequired: { [weak self] methods, authUrl in
+                    Task { @MainActor [weak self] in
+                        self?.claudeAuthMethods = methods
+                        self?.claudeAuthUrl = authUrl
+                        self?.isClaudeAuthRequired = true
+                    }
+                },
+                onAuthSuccess: { [weak self] in
+                    Task { @MainActor [weak self] in
+                        self?.isClaudeAuthRequired = false
+                        self?.checkClaudeConnectionStatus()
+                    }
+                }
+            )
+            // Pre-warm ACP sessions with their respective system prompts.
+            // This is the only place the system prompt is built and applied.
+            let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            cachedMainSystemPrompt = mainSystemPrompt
+            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            await acpBridge.warmupSession(cwd: workingDirectory, sessions: [
+                .init(key: "main", model: "claude-opus-4-6", systemPrompt: mainSystemPrompt),
+                .init(key: "floating", model: "claude-sonnet-4-6", systemPrompt: floatingSystemPrompt)
+            ])
             return true
         } catch {
-            logError("Failed to start Claude bridge", error: error)
+            logError("Failed to start ACP bridge", error: error)
             errorMessage = "AI not available: \(error.localizedDescription)"
             return false
         }
     }
 
+    /// Switch between bridge modes (Omi AI vs user's Claude account)
+    func switchBridgeMode(to mode: BridgeMode) async {
+        // Compare against the actual running bridge state, not bridgeMode (@AppStorage updates
+        // immediately when the Picker changes, so bridgeMode already equals `mode` by the time
+        // this function is called — the old string comparison always exits early).
+        guard (mode == .omiAI) != acpBridge.passApiKey else { return }
+        let oldMode = bridgeMode
+        log("ChatProvider: Switching bridge mode from \(bridgeMode) to \(mode.rawValue)")
+
+        // Stop the current bridge
+        await acpBridge.stop()
+        acpBridgeStarted = false
+
+        // Switch mode and recreate bridge with appropriate passApiKey
+        bridgeMode = mode.rawValue
+        acpBridge = ACPBridge(passApiKey: mode == .omiAI)
+        AnalyticsManager.shared.chatBridgeModeChanged(from: oldMode, to: mode.rawValue)
+
+        // Check Claude connection status when switching to user's Claude account
+        if mode == .userClaude {
+            checkClaudeConnectionStatus()
+        }
+
+        // Warm up the new bridge
+        _ = await ensureBridgeStarted()
+    }
+
+    /// Start Claude OAuth authentication (Mode B)
+    /// Opens the OAuth URL (provided by the bridge) in the default browser.
+    /// The bridge handles the full OAuth flow: local callback server, token exchange,
+    /// credential storage, and ACP subprocess restart.
+    func startClaudeAuth() {
+        guard isUserClaudeMode else { return }
+
+        if let urlString = claudeAuthUrl, let url = URL(string: urlString) {
+            log("ChatProvider: Opening Claude OAuth URL in browser")
+            NSWorkspace.shared.open(url)
+        } else {
+            logError("ChatProvider: No auth URL available from bridge")
+            isClaudeAuthRequired = false
+        }
+    }
+
+    /// Check whether a cached Claude OAuth token exists (config file or Keychain)
+    func checkClaudeConnectionStatus() {
+        // Check config file
+        let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+        if FileManager.default.fileExists(atPath: configPath),
+           let data = FileManager.default.contents(atPath: configPath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let tokenCache = json["oauth:tokenCache"] as? String, !tokenCache.isEmpty {
+            isClaudeConnected = true
+            return
+        }
+
+        // Check Keychain via security CLI (Keychain item owned by Claude Desktop)
+        let secProcess = Process()
+        secProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        secProcess.arguments = ["find-generic-password", "-s", "Claude Code-credentials"]
+        secProcess.standardOutput = FileHandle.nullDevice
+        secProcess.standardError = FileHandle.nullDevice
+        do {
+            try secProcess.run()
+            secProcess.waitUntilExit()
+            isClaudeConnected = (secProcess.terminationStatus == 0)
+        } catch {
+            isClaudeConnected = false
+        }
+    }
+
+    /// Disconnect from Claude: stop bridge, clear OAuth token, switch back to free mode
+    func disconnectClaude() async {
+        log("ChatProvider: Disconnecting Claude account")
+
+        // 1. Stop the ACP bridge
+        await acpBridge.stop()
+        acpBridgeStarted = false
+
+        // 2. Clear the OAuth token from config file
+        let configPath = NSString(string: "~/Library/Application Support/Claude/config.json").expandingTildeInPath
+        if let data = FileManager.default.contents(atPath: configPath),
+           var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            json.removeValue(forKey: "oauth:tokenCache")
+            if let updatedData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+                try? updatedData.write(to: URL(fileURLWithPath: configPath))
+            }
+        }
+
+        // 3. Clear OAuth credentials from macOS Keychain
+        //    The Keychain item is owned by Claude Desktop/CLI, so SecItemDelete fails
+        //    with errSecInvalidOwnerEdit. Use the `security` CLI which runs as the user.
+        let secProcess = Process()
+        secProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        secProcess.arguments = ["delete-generic-password", "-s", "Claude Code-credentials"]
+        secProcess.standardOutput = FileHandle.nullDevice
+        secProcess.standardError = FileHandle.nullDevice
+        do {
+            try secProcess.run()
+            secProcess.waitUntilExit()
+            if secProcess.terminationStatus == 0 {
+                log("ChatProvider: Cleared Claude Code credentials from Keychain")
+            } else {
+                log("ChatProvider: No Claude Code credentials found in Keychain (status=\(secProcess.terminationStatus))")
+            }
+        } catch {
+            log("ChatProvider: Failed to run security command: \(error.localizedDescription)")
+        }
+
+        // 4. Update state
+        isClaudeConnected = false
+
+        // 5. Switch back to Omi AI mode and recreate bridge with API key
+        bridgeMode = BridgeMode.omiAI.rawValue
+        acpBridge = ACPBridge(passApiKey: true)
+    }
+
     // MARK: - Session Management
 
-    /// Fetch all chat sessions for the current app
+    /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
     func fetchSessions() async {
         isLoadingSessions = true
         defer { isLoadingSessions = false }
 
-        do {
-            sessions = try await APIClient.shared.getChatSessions(
-                appId: selectedAppId,
-                starred: showStarredOnly ? true : nil
-            )
-            log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
 
-            // If we have sessions and no current session, select the most recent
-            if currentSession == nil, let mostRecent = sessions.first {
-                await selectSession(mostRecent)
+        for attempt in 1...maxAttempts {
+            do {
+                sessions = try await APIClient.shared.getChatSessions(
+                    appId: selectedAppId,
+                    starred: showStarredOnly ? true : nil
+                )
+                log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
+                sessionsLoadError = nil
+
+                // If we have sessions and no current session, select the most recent
+                if currentSession == nil, let mostRecent = sessions.first {
+                    await selectSession(mostRecent)
+                }
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load chat sessions (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
             }
-        } catch {
-            logError("Failed to load chat sessions", error: error)
-            sessions = []
         }
+
+        sessions = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
     }
 
     /// Toggle the starred filter and reload sessions
@@ -397,8 +796,8 @@ class ChatProvider: ObservableObject {
     }
 
     /// Select a session and load its messages
-    func selectSession(_ session: ChatSession) async {
-        guard currentSession?.id != session.id || isInDefaultChat else { return }
+    func selectSession(_ session: ChatSession, force: Bool = false) async {
+        guard force || currentSession?.id != session.id || isInDefaultChat else { return }
 
         currentSession = session
         isInDefaultChat = false
@@ -426,25 +825,38 @@ class ChatProvider: ObservableObject {
 
     /// Load more (older) messages for the current session
     func loadMoreMessages() async {
-        guard let sessionId = currentSessionId,
-              hasMoreMessages,
+        guard hasMoreMessages,
               !isLoadingMoreMessages else { return }
 
         isLoadingMoreMessages = true
 
         do {
             let offset = messages.count
-            let olderMessages = try await APIClient.shared.getMessages(
-                sessionId: sessionId,
-                limit: messagesPageSize,
-                offset: offset
-            )
+            let olderMessages: [ChatMessageDB]
+            if let sessionId = currentSessionId {
+                olderMessages = try await APIClient.shared.getMessages(
+                    sessionId: sessionId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            } else {
+                olderMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize,
+                    offset: offset
+                )
+            }
 
             let newMessages = olderMessages.map(ChatMessage.init(from:))
 
             // Append older messages and re-sort to ensure correct chronological order
             messages.append(contentsOf: newMessages)
             messages.sort(by: { $0.createdAt < $1.createdAt })
+
+            // Cap memory usage: keep only the most recent messages
+            if messages.count > maxMessagesInMemory {
+                messages.removeFirst(messages.count - maxMessagesInMemory)
+            }
 
             // Check if there are more
             hasMoreMessages = olderMessages.count == messagesPageSize
@@ -456,10 +868,15 @@ class ChatProvider: ObservableObject {
         isLoadingMoreMessages = false
     }
 
+    /// Track which sessions are currently being deleted
+    @Published var deletingSessionIds: Set<String> = []
+
     /// Delete a chat session
     func deleteSession(_ session: ChatSession) async {
+        deletingSessionIds.insert(session.id)
         do {
             try await APIClient.shared.deleteChatSession(sessionId: session.id)
+            deletingSessionIds.remove(session.id)
             sessions.removeAll { $0.id == session.id }
 
             // If deleted the current session, select another or clear
@@ -475,6 +892,7 @@ class ChatProvider: ObservableObject {
             log("Deleted chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionDeleted()
         } catch {
+            deletingSessionIds.remove(session.id)
             logError("Failed to delete chat session", error: error)
             errorMessage = "Failed to delete chat"
         }
@@ -531,16 +949,16 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Context (Memories)
 
-    /// Fetches user memories from the backend for use in prompts
+    /// Loads user memories from local SQLite for use in prompts
     private func loadMemoriesIfNeeded() async {
         guard !memoriesLoaded else { return }
 
         do {
-            cachedMemories = try await APIClient.shared.getMemories(limit: 50)
+            cachedMemories = try await MemoryStorage.shared.getLocalMemories(limit: 50)
             memoriesLoaded = true
-            log("ChatProvider loaded \(cachedMemories.count) memories for context")
+            log("ChatProvider loaded \(cachedMemories.count) memories from local DB")
         } catch {
-            logError("Failed to load memories for chat context", error: error)
+            logError("Failed to load memories from local DB", error: error)
             // Continue without memories - non-critical
         }
     }
@@ -562,14 +980,14 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Load Goals
 
-    /// Fetches user goals from the backend for use in prompts
+    /// Loads user goals from local SQLite for use in prompts
     private func loadGoalsIfNeeded() async {
         guard !goalsLoaded else { return }
 
         do {
-            cachedGoals = try await APIClient.shared.getGoals()
+            cachedGoals = try await GoalStorage.shared.getLocalGoals(activeOnly: false)
             goalsLoaded = true
-            log("ChatProvider loaded \(cachedGoals.count) goals for context")
+            log("ChatProvider loaded \(cachedGoals.count) goals from local DB")
         } catch {
             logError("Failed to load goals for chat context", error: error)
         }
@@ -594,6 +1012,50 @@ class ChatProvider: ObservableObject {
             lines.append(line)
         }
         lines.append("</user_goals>")
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Load Tasks
+
+    /// Fetches the latest 20 active tasks from local database for context
+    private func loadTasksIfNeeded() async {
+        guard !tasksLoaded else { return }
+
+        do {
+            cachedTasks = try await ActionItemStorage.shared.getLocalActionItems(
+                limit: 20,
+                completed: false
+            )
+            tasksLoaded = true
+            log("ChatProvider loaded \(cachedTasks.count) tasks for context")
+        } catch {
+            logError("Failed to load tasks for chat context", error: error)
+            tasksLoaded = true
+        }
+    }
+
+    /// Formats cached tasks into a prompt section
+    private func formatTasksSection() -> String {
+        guard !cachedTasks.isEmpty else { return "" }
+
+        var lines: [String] = ["\n<user_tasks>", "Current tasks:"]
+        for task in cachedTasks {
+            var line = "- \(task.description)"
+            if let priority = task.priority {
+                line += " [priority: \(priority)]"
+            }
+            if let dueAt = task.dueAt {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                line += " [due: \(formatter.string(from: dueAt))]"
+            }
+            if let category = task.category {
+                line += " [category: \(category)]"
+            }
+            lines.append(line)
+        }
+        lines.append("</user_tasks>")
         return lines.joined(separator: "\n")
     }
 
@@ -659,18 +1121,23 @@ class ChatProvider: ObservableObject {
             // Skip internal/FTS tables
             if ChatPrompts.excludedTables.contains(name) { continue }
             if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
+            if name.contains("_fts") { continue } // catches all FTS virtual + internal tables
 
-            // Extract columns from CREATE TABLE statement
-            let columns = extractColumns(from: sql)
-            guard !columns.isEmpty else { continue }
+            // Extract column names only, stripping types, constraints, and infrastructure columns
+            let columnNames = extractColumns(from: sql).compactMap { col -> String? in
+                let name = col.components(separatedBy: .whitespaces).first?
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`")) ?? ""
+                return ChatPrompts.excludedColumns.contains(name) ? nil : name
+            }.filter { !$0.isEmpty }
+            guard !columnNames.isEmpty else { continue }
 
             // Table header with annotation
             let annotation = ChatPrompts.tableAnnotations[name] ?? ""
             let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
             lines.append(header)
 
-            // Columns as compact one-liner
-            lines.append("  \(columns.joined(separator: ", "))")
+            // Column names as compact one-liner
+            lines.append("  \(columnNames.joined(separator: ", "))")
             lines.append("")
         }
 
@@ -722,43 +1189,12 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    // MARK: - Fetch Context from Backend
-
-    /// Fetches rich context (conversations + memories) from backend using LLM-based retrieval
-    private func fetchContext(for question: String) async -> String {
-        // Build previous messages for context
-        let previousMessages: [(text: String, sender: String)] = messages.suffix(10).map { msg in
-            (text: msg.text, sender: msg.sender == .user ? "human" : "ai")
-        }
-
-        do {
-            let context = try await APIClient.shared.getChatContext(
-                question: question,
-                timezone: TimeZone.current.identifier,
-                appId: selectedAppId,
-                previousMessages: previousMessages
-            )
-
-            cachedContext = context
-
-            if context.requiresContext {
-                log("ChatProvider fetched context: \(context.conversations.count) conversations, \(context.memories.count) memories")
-                return context.contextString
-            } else {
-                log("ChatProvider: question doesn't require context")
-                // Return just memories for personalization
-                return context.contextString
-            }
-        } catch {
-            logError("Failed to fetch chat context", error: error)
-            // Fall back to cached memories
-            return formatMemoriesSection()
-        }
-    }
-
     // MARK: - Build System Prompt with Variables
 
-    /// Builds the system prompt with dynamic template variables
+    /// Builds the system prompt for ACP session initialization.
+    /// Called once at warmup (via ensureBridgeStarted) and cached in cachedMainSystemPrompt.
+    /// Conversation history is injected here so the brand-new ACP session starts with context
+    /// from before the app launch. After session/new the ACP SDK owns history natively.
     private func buildSystemPrompt(contextString: String) -> String {
         // Get user name from AuthService
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
@@ -769,29 +1205,119 @@ class ChatProvider: ObservableObject {
 
         // Build individual sections
         let goalSection = formatGoalSection()
+        let tasksSection = formatTasksSection()
         let aiProfileSection = formatAIProfileSection()
-        let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
-        let historyCount = min(historyMessages.count, 20)
 
         // Build base prompt with goals, AI profile, and dynamic schema
         var prompt = ChatPromptBuilder.buildDesktopChat(
             userName: userName,
             memoriesSection: contextSection,
             goalSection: goalSection,
+            tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
             databaseSchema: cachedDatabaseSchema
         )
 
-        // Append conversation history from Firestore (source of truth for cross-platform sync)
+        // Inject conversation history so the new ACP session has context from before app launch.
+        // The ACP SDK maintains history natively after this via session/prompt — this only matters
+        // at session creation time.
         let history = buildConversationHistory()
         if !history.isEmpty {
-            prompt += "\n\n<conversation_history>\n\(history)\n</conversation_history>"
+            prompt += "\n\n<conversation_history>\nBelow is the recent conversation history between you and the user. Use this to maintain continuity — the user can see these messages in the chat UI and expects you to be aware of them.\n\(history)\n</conversation_history>"
+        }
+
+        // Append global CLAUDE.md instructions if enabled
+        if claudeMdEnabled, let claudeMd = claudeMdContent {
+            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
+        }
+
+        // Append project CLAUDE.md instructions if enabled
+        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
+            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
+        }
+
+        // Append enabled skills as available context (global + project)
+        // dev-mode is included in the list when devModeEnabled; full content loaded on demand via load_skill
+        let enabledSkillNames = getEnabledSkillNames()
+        if !enabledSkillNames.isEmpty {
+            let allSkills = discoveredSkills + projectDiscoveredSkills
+            let skillNames = allSkills
+                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
+                .map { $0.name }
+                .joined(separator: ", ")
+            if !skillNames.isEmpty {
+                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
+            }
         }
 
         // Log prompt context summary
         let activeGoalCount = cachedGoals.filter { $0.isActive }.count
-        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyCount) msgs, prompt_length: \(prompt.count) chars")
+        let historyInjected = !history.isEmpty
+        let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
+        let historyCount = min(historyMessages.count, 20)
+        log("ChatProvider: prompt built — schema: \(!cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(enabledSkillNames.count), dev_mode_in_skills: \(devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
 
+        // Log per-section character breakdown
+        let baseTemplate = ChatPromptBuilder.buildDesktopChat(
+            userName: userName, memoriesSection: "", goalSection: "", tasksSection: "", aiProfileSection: "", databaseSchema: "")
+        let allSkillsForSize = (discoveredSkills + projectDiscoveredSkills)
+            .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
+            .map { $0.name }.joined(separator: ", ")
+        let skillsSectionSize = allSkillsForSize.isEmpty ? 0 : allSkillsForSize.count + 80 // names + wrapper
+        log("ChatProvider: prompt breakdown — " +
+            "base_template:\(baseTemplate.count)c, " +
+            "context:\(contextSection.count)c, " +
+            "goals:\(goalSection.count)c, " +
+            "tasks:\(tasksSection.count)c, " +
+            "ai_profile:\(aiProfileSection.count)c, " +
+            "schema:\(cachedDatabaseSchema.count)c, " +
+            "history:\(history.count)c, " +
+            "claude_md:\(claudeMdContent?.count ?? 0)c, " +
+            "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
+            "skills:\(skillsSectionSize)c")
+
+        return prompt
+    }
+
+    /// Build system prompt for task chat sessions.
+    func buildTaskChatSystemPrompt() -> String {
+        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let contextSection = formatMemoriesSection()
+        let goalSection = formatGoalSection()
+        let tasksSection = formatTasksSection()
+        let aiProfileSection = formatAIProfileSection()
+
+        var prompt = ChatPromptBuilder.buildDesktopChat(
+            userName: userName,
+            memoriesSection: contextSection,
+            goalSection: goalSection,
+            tasksSection: tasksSection,
+            aiProfileSection: aiProfileSection,
+            databaseSchema: cachedDatabaseSchema
+        )
+
+        // NO conversation_history — SDK handles this via resume
+
+        if claudeMdEnabled, let claudeMd = claudeMdContent {
+            prompt += "\n\n<claude_md>\n\(claudeMd)\n</claude_md>"
+        }
+        if projectClaudeMdEnabled, let projectClaudeMd = projectClaudeMdContent {
+            prompt += "\n\n<project_claude_md>\n\(projectClaudeMd)\n</project_claude_md>"
+        }
+
+        let enabledSkillNames = getEnabledSkillNames()
+        if !enabledSkillNames.isEmpty {
+            let allSkills = discoveredSkills + projectDiscoveredSkills
+            let skillNames = allSkills
+                .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
+                .map { $0.name }
+                .joined(separator: ", ")
+            if !skillNames.isEmpty {
+                prompt += "\n\n<available_skills>\nAvailable skills: \(skillNames)\nUse the load_skill tool to get full instructions for any skill before using it.\n</available_skills>"
+            }
+        }
+
+        log("ChatProvider: task chat prompt built — prompt_length: \(prompt.count) chars")
         return prompt
     }
 
@@ -806,67 +1332,36 @@ class ChatProvider: ObservableObject {
         )
     }
 
-    /// Build conversation history from messages (loaded from Firestore)
-    /// This ensures cross-platform sync: messages from mobile appear in context
+
+    /// Formats the last 10 non-empty messages in the current session as a conversation history string.
+    /// Used to seed new ACP sessions with context from the existing chat UI history.
     private func buildConversationHistory() -> String {
-        // Take recent messages, excluding the current user message (last one) and any empty streaming placeholders
-        let historyMessages = messages.filter { msg in
-            !msg.text.isEmpty && !msg.isStreaming
-        }
-
-        // Skip if no history
-        guard !historyMessages.isEmpty else { return "" }
-
-        // Limit to last 20 messages to avoid excessive prompt size
-        let recent = historyMessages.suffix(20)
-
+        let recent = messages.filter { !$0.text.isEmpty }.suffix(10)
         return recent.map { msg in
-            let role = msg.sender == .user ? "human" : "assistant"
+            let role = msg.sender == .user ? "User" : "Assistant"
             return "\(role): \(msg.text)"
         }.joined(separator: "\n")
     }
 
-    // MARK: - Citation Extraction
-
-    /// Extracts citations from an AI response based on [N] patterns
-    /// - Parameters:
-    ///   - response: The AI response text containing citation markers
-    ///   - sources: Available citation sources from the context
-    /// - Returns: Array of citations that were actually referenced in the response
-    private func extractCitations(from response: String, sources: [CitationSource]) -> [Citation] {
-        guard !sources.isEmpty else { return [] }
-
-        // Find all [N] patterns in response
-        let pattern = "\\[(\\d+)\\]"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        let range = NSRange(response.startIndex..., in: response)
-        let matches = regex.matches(in: response, range: range)
-
-        // Extract unique indices
-        var citedIndices = Set<Int>()
-        for match in matches {
-            if let indexRange = Range(match.range(at: 1), in: response),
-               let index = Int(response[indexRange]) {
-                citedIndices.insert(index)
+    /// Initialize chat: fetch sessions and load messages
+    func initialize() async {
+        // Seed cumulative Omi AI cost from backend now that auth is ready (background, no latency)
+        Task.detached(priority: .background) { [weak self] in
+            guard let serverCost = await APIClient.shared.fetchTotalOmiAICost() else { return }
+            guard let self else { return }
+            await MainActor.run {
+                // Always trust the server value — it's the authoritative total
+                self.omiAICumulativeCostUsd = serverCost
+                log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
+                // Auto-switch if already over threshold on startup
+                if self.bridgeMode == BridgeMode.omiAI.rawValue && serverCost >= 50.0 {
+                    log("ChatProvider: Omi AI cost already at $\(String(format: "%.2f", serverCost)) on startup — switching to user Claude account")
+                    self.showOmiThresholdAlert = true
+                    Task { await self.switchBridgeMode(to: .userClaude) }
+                }
             }
         }
 
-        // Map to Citation objects (only cited sources)
-        return sources
-            .filter { citedIndices.contains($0.index) }
-            .map { Citation(from: $0) }
-    }
-
-    /// Strips citation markers [N] from display text
-    /// - Parameter text: Text containing citation markers
-    /// - Returns: Cleaned text without citation markers
-    private func stripCitationMarkers(from text: String) -> String {
-        text.replacingOccurrences(of: "\\[\\d+\\]", with: "", options: .regularExpression)
-    }
-
-    /// Initialize chat: fetch sessions and load messages
-    func initialize() async {
         if multiChatEnabled {
             // Multi-chat mode: load sessions, default to default chat
             await fetchSessions()
@@ -879,8 +1374,15 @@ class ChatProvider: ObservableObject {
         }
         await loadMemoriesIfNeeded()
         await loadGoalsIfNeeded()
+        await loadTasksIfNeeded()
         await loadAIProfileIfNeeded()
         await loadSchemaIfNeeded()
+        await discoverClaudeConfig()
+
+        // Set working directory for Claude Agent SDK if workspace is configured
+        if workingDirectory == nil, !aiChatWorkingDirectory.isEmpty {
+            workingDirectory = aiChatWorkingDirectory
+        }
     }
 
     /// Reinitialize after settings change
@@ -892,6 +1394,187 @@ class ChatProvider: ObservableObject {
         await initialize()
     }
 
+    /// Retry loading after a failure — clears error state and re-runs initialize
+    func retryLoad() async {
+        sessionsLoadError = nil
+        await initialize()
+    }
+
+    // MARK: - CLAUDE.md & Skills Discovery
+
+    /// Results from background Claude config discovery
+    private struct ClaudeConfigResult: Sendable {
+        let claudeMdContent: String?
+        let claudeMdPath: String?
+        let skills: [(name: String, description: String, path: String)]
+        let projectClaudeMdContent: String?
+        let projectClaudeMdPath: String?
+        let projectSkills: [(name: String, description: String, path: String)]
+        let devModeContext: String?
+    }
+
+    /// Perform all file I/O for Claude config discovery off the main thread
+    private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeDir = "\(home)/.claude"
+        let fm = FileManager.default
+
+        // Discover global CLAUDE.md
+        let mdPath = "\(claudeDir)/CLAUDE.md"
+        var globalMdContent: String?
+        var globalMdPath: String?
+        if fm.fileExists(atPath: mdPath),
+           let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
+            globalMdContent = content
+            globalMdPath = mdPath
+        }
+
+        // Discover global skills
+        var skills: [(name: String, description: String, path: String)] = []
+        let skillsDir = "\(claudeDir)/skills"
+        if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
+            for dir in skillDirs.sorted() {
+                let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+                if fm.fileExists(atPath: skillPath),
+                   let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                    let desc = extractSkillDescription(from: content)
+                    skills.append((name: dir, description: desc, path: skillPath))
+                }
+            }
+        }
+
+        // Discover project-level config from workspace directory
+        var projMdContent: String?
+        var projMdPath: String?
+        var projectSkills: [(name: String, description: String, path: String)] = []
+
+        if !workspace.isEmpty, fm.fileExists(atPath: workspace) {
+            let projectMdPath = "\(workspace)/CLAUDE.md"
+            if fm.fileExists(atPath: projectMdPath),
+               let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
+                projMdContent = content
+                projMdPath = projectMdPath
+            }
+
+            let projectSkillsDir = "\(workspace)/.claude/skills"
+            if let skillDirs = try? fm.contentsOfDirectory(atPath: projectSkillsDir) {
+                for dir in skillDirs.sorted() {
+                    let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
+                    if fm.fileExists(atPath: skillPath),
+                       let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                        let desc = extractSkillDescription(from: content)
+                        projectSkills.append((name: dir, description: desc, path: skillPath))
+                    }
+                }
+            }
+        }
+
+        // Load dev-mode skill content (full SKILL.md, not just description)
+        var devMode: String?
+        let devModeSkillPath = "\(skillsDir)/dev-mode/SKILL.md"
+        if fm.fileExists(atPath: devModeSkillPath),
+           let content = try? String(contentsOfFile: devModeSkillPath, encoding: .utf8) {
+            var body = content
+            if body.hasPrefix("---") {
+                let lines = body.components(separatedBy: "\n")
+                if let endIdx = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("---") }) {
+                    body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            devMode = body
+        } else {
+            let projectDevModePath = "\(workspace)/.claude/skills/dev-mode/SKILL.md"
+            if !workspace.isEmpty, fm.fileExists(atPath: projectDevModePath),
+               let content = try? String(contentsOfFile: projectDevModePath, encoding: .utf8) {
+                var body = content
+                if body.hasPrefix("---") {
+                    let lines = body.components(separatedBy: "\n")
+                    if let endIdx = lines.dropFirst().firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("---") }) {
+                        body = lines[(endIdx + 1)...].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+                devMode = body
+            }
+        }
+
+        return ClaudeConfigResult(
+            claudeMdContent: globalMdContent,
+            claudeMdPath: globalMdPath,
+            skills: skills,
+            projectClaudeMdContent: projMdContent,
+            projectClaudeMdPath: projMdPath,
+            projectSkills: projectSkills,
+            devModeContext: devMode
+        )
+    }
+
+    /// Discover ~/.claude/CLAUDE.md, skills from ~/.claude/skills/, and project-level equivalents
+    func discoverClaudeConfig() async {
+        let workspace = aiChatWorkingDirectory
+        let result = await Task.detached(priority: .utility) {
+            Self.loadClaudeConfigFromDisk(workspace: workspace)
+        }.value
+
+        // Assign results back on main actor
+        claudeMdContent = result.claudeMdContent
+        claudeMdPath = result.claudeMdPath
+        discoveredSkills = result.skills
+        projectClaudeMdContent = result.projectClaudeMdContent
+        projectClaudeMdPath = result.projectClaudeMdPath
+        projectDiscoveredSkills = result.projectSkills
+        devModeContext = result.devModeContext
+
+        log("ChatProvider: discovered global CLAUDE.md=\(claudeMdContent != nil), global skills=\(discoveredSkills.count), project CLAUDE.md=\(projectClaudeMdContent != nil), project skills=\(projectDiscoveredSkills.count), dev_mode_skill=\(devModeContext != nil)")
+    }
+
+    /// Extract description from YAML frontmatter in SKILL.md
+    nonisolated static func extractSkillDescription(from content: String) -> String {
+        guard content.hasPrefix("---") else {
+            // No frontmatter — use first non-empty line as description
+            let lines = content.components(separatedBy: "\n")
+            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
+        }
+        let lines = content.components(separatedBy: "\n")
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
+                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
+                value = value.trimmingCharacters(in: .whitespaces)
+                // Remove surrounding quotes if present
+                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
+                   (value.hasPrefix("'") && value.hasSuffix("'")) {
+                    value = String(value.dropFirst().dropLast())
+                }
+                return value
+            }
+        }
+        return ""
+    }
+
+    /// Get the set of enabled skill names (all skills minus explicitly disabled ones)
+    func getEnabledSkillNames() -> Set<String> {
+        let allSkillNames = Set(discoveredSkills.map { $0.name } + projectDiscoveredSkills.map { $0.name })
+        let disabled = getDisabledSkillNames()
+        return allSkillNames.subtracting(disabled)
+    }
+
+    /// Get the set of explicitly disabled skill names from UserDefaults
+    func getDisabledSkillNames() -> Set<String> {
+        guard let data = disabledSkillsJSON.data(using: .utf8),
+              let names = try? JSONDecoder().decode([String].self, from: data) else {
+            return [] // Default: nothing disabled = all enabled
+        }
+        return Set(names)
+    }
+
+    /// Save the set of disabled skill names to UserDefaults
+    func setDisabledSkillNames(_ names: Set<String>) {
+        if let data = try? JSONEncoder().encode(Array(names)),
+           let json = String(data: data, encoding: .utf8) {
+            disabledSkillsJSON = json
+        }
+    }
+
     /// Switch to the default chat (messages without session_id, syncs with Flutter app)
     func switchToDefaultChat() async {
         currentSession = nil
@@ -901,39 +1584,214 @@ class ChatProvider: ObservableObject {
     }
 
     /// Load messages for the default chat (no session filter - compatible with Flutter)
+    /// Retries up to 3 times on failure.
     private func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
 
-        do {
-            let persistedMessages = try await APIClient.shared.getMessages(
-                appId: selectedAppId,
-                limit: messagesPageSize
-            )
-            messages = persistedMessages.map(ChatMessage.init(from:))
-                .sorted(by: { $0.createdAt < $1.createdAt })
-            hasMoreMessages = persistedMessages.count == messagesPageSize
-            log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
-        } catch {
-            logError("Failed to load default chat messages", error: error)
-            messages = []
+        let maxAttempts = 3
+        let delays: [UInt64] = [1_000_000_000, 2_000_000_000] // 1s, 2s
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                let persistedMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize
+                )
+                messages = persistedMessages.map(ChatMessage.init(from:))
+                    .sorted(by: { $0.createdAt < $1.createdAt })
+                hasMoreMessages = persistedMessages.count == messagesPageSize
+                sessionsLoadError = nil
+                log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
+                isLoading = false
+                return
+            } catch {
+                lastError = error
+                logError("Failed to load default chat messages (attempt \(attempt)/\(maxAttempts))", error: error)
+                if attempt < maxAttempts {
+                    try? await Task.sleep(nanoseconds: delays[attempt - 1])
+                }
+            }
         }
 
+        messages = []
+        sessionsLoadError = lastError?.localizedDescription ?? "Unknown error"
         isLoading = false
+    }
+
+    // MARK: - Cross-Platform Message Polling
+
+    /// Poll for new messages from other platforms (e.g. mobile).
+    /// Merges new messages into the existing array without disrupting the UI.
+    private func pollForNewMessages() async {
+        // Skip if user is signed out (tokens are cleared)
+        guard AuthState.shared.isSignedIn else { return }
+        // Skip if we're actively sending. Note: isSending is released *before* the AI
+        // message is saved to the backend (to unblock the next query). This means the
+        // poll can run while saveMessage() is still in-flight — see the race note below.
+        guard !isSending, !isLoading, !isLoadingSessions else { return }
+        // Skip if messages haven't been loaded yet (initial load not done)
+        guard !messages.isEmpty || sessionsLoadError != nil else { return }
+        // Skip if there's an active streaming message
+        guard !messages.contains(where: { $0.isStreaming }) else { return }
+
+        do {
+            let persistedMessages: [ChatMessageDB]
+
+            if let session = currentSession {
+                // Multi-chat: fetch for current session
+                persistedMessages = try await APIClient.shared.getMessages(
+                    sessionId: session.id,
+                    limit: messagesPageSize
+                )
+            } else {
+                // Default chat
+                persistedMessages = try await APIClient.shared.getMessages(
+                    appId: selectedAppId,
+                    limit: messagesPageSize
+                )
+            }
+
+            // Build a lookup of existing IDs for fast O(1) checks.
+            let existingIds = Set(messages.map(\.id))
+
+            var genuinelyNewMessages: [ChatMessage] = []
+
+            for dbMsg in persistedMessages {
+                // Fast path: already in memory by server ID — skip.
+                if existingIds.contains(dbMsg.id) { continue }
+
+                // Race-condition guard: isSending is released before the backend save
+                // completes (intentionally, to unblock the next query). If this poll
+                // fires between "isSending = false" and "messages[i].id = response.id",
+                // the backend message lands here with a server ID that doesn't match
+                // the local UUID still sitting in messages[]. Without this check we'd
+                // append a duplicate.
+                //
+                // Detection: find an in-memory message that (a) hasn't been synced yet
+                // (isSynced=false → still has a local UUID) and (b) has the same text.
+                // If found, this is the same message — just update its ID in-place
+                // instead of appending a copy.
+                let dbSender: ChatSender = dbMsg.sender == "human" ? .user : .ai
+                let dbPrefix = String(dbMsg.text.prefix(200))
+                if let localIndex = messages.firstIndex(where: {
+                    !$0.isSynced && $0.sender == dbSender && String($0.text.prefix(200)) == dbPrefix
+                }) {
+                    // Merge: adopt the server ID so future polls find it by ID.
+                    messages[localIndex].id = dbMsg.id
+                    messages[localIndex].isSynced = true
+                    log("ChatProvider poll: merged backend ID \(dbMsg.id) into local message (was unsynced)")
+                    continue
+                }
+
+                // Genuinely new message from another platform (phone, web, etc.)
+                genuinelyNewMessages.append(ChatMessage(from: dbMsg))
+            }
+
+            if !genuinelyNewMessages.isEmpty {
+                log("ChatProvider poll: found \(genuinelyNewMessages.count) new message(s) from other platforms")
+                messages.append(contentsOf: genuinelyNewMessages)
+                messages.sort(by: { $0.createdAt < $1.createdAt })
+            }
+        } catch {
+            // Silent failure — polling errors shouldn't disrupt the user
+            logError("ChatProvider poll failed", error: error)
+        }
+    }
+
+    // MARK: - Stop / Follow-Up
+
+    /// Text of a follow-up queued while the current query is being interrupted.
+    /// Checked at the end of `sendMessage` — if set, a new query is chained automatically.
+    private var pendingFollowUpText: String?
+
+    /// Stop the running agent, keeping partial response
+    func stopAgent() {
+        guard isSending else { return }
+        isStopping = true
+        Task {
+            await acpBridge.interrupt()
+        }
+        // Result flows back normally through the bridge with partial text
+    }
+
+    /// Send a follow-up message while the agent is still running.
+    /// Interrupts the current query and chains a new one with full context.
+    func sendFollowUp(_ text: String) async {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty, isSending else { return }
+
+        // Add as user message in UI
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+
+        // Persist to backend and sync server ID back to prevent poll duplicates
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        let localId = userMessage.id
+        Task { [weak self] in
+            do {
+                let response = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "human",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId
+                )
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                }
+                log("Saved follow-up message to backend: \(response.id)")
+            } catch {
+                logError("Failed to persist follow-up message", error: error)
+            }
+        }
+
+        // Queue the follow-up and interrupt the current query.
+        // When sendMessage finishes (due to the interrupt), it checks
+        // pendingFollowUpText and chains a new full query automatically.
+        pendingFollowUpText = trimmedText
+        await acpBridge.interrupt()
+        log("ChatProvider: follow-up queued, interrupt sent")
     }
 
     // MARK: - Send Message
 
     /// Send a message and get AI response via Claude Agent SDK bridge
     /// Persists both user and AI messages to backend
-    func sendMessage(_ text: String) async {
+    /// - Parameters:
+    ///   - text: The message text
+    ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
+    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, sessionKey: String? = nil, imageData: Data? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
+
+        // Guard against concurrent sendMessage calls.
+        // The bridge uses a single message continuation, so concurrent queries
+        // would cause responses to be consumed by the wrong caller.
+        guard !isSending else {
+            log("ChatProvider: sendMessage called while already sending, ignoring")
+            return
+        }
 
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {
             errorMessage = "AI not available"
+            return
+        }
+
+        // Guard: Block query if Omi account $50 usage threshold already reached
+        if bridgeMode == BridgeMode.omiAI.rawValue && omiAICumulativeCostUsd >= 50.0 {
+            showOmiThresholdAlert = true
+            Task { await self.switchBridgeMode(to: .userClaude) }
             return
         }
 
@@ -956,42 +1814,55 @@ class ChatProvider: ObservableObject {
         isSending = true
         errorMessage = nil
 
-        // Save user message to backend (fire and forget - don't block UI)
+        // Save user message to backend and add to UI.
+        // (skip for follow-ups — sendFollowUp already did both)
+        //
+        // The save is fire-and-forget (unstructured Task) so it doesn't block
+        // the ACP query from starting. This is safe because isSending=true for
+        // the entire duration of the ACP query, so the poll timer is suppressed
+        // the whole time — by the time isSending is released the user message
+        // save has almost always already completed and its ID has been synced.
         let userMessageId = UUID().uuidString
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
-        Task { [weak self] in
-            do {
-                let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
-                    sender: "human",
-                    appId: capturedAppId,
-                    sessionId: capturedSessionId
-                )
-                // Sync local message ID with server ID
-                await MainActor.run {
-                    if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
-                        self?.messages[index].id = response.id
-                        self?.messages[index].isSynced = true
+        if !isFollowUp {
+            Task { [weak self] in
+                do {
+                    let response = try await APIClient.shared.saveMessage(
+                        text: trimmedText,
+                        sender: "human",
+                        appId: capturedAppId,
+                        sessionId: capturedSessionId
+                    )
+                    // Adopt the server ID (local UUID → server ID) and mark synced.
+                    // isSynced=true enables rating buttons on the message bubble.
+                    await MainActor.run {
+                        if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
+                            self?.messages[index].id = response.id
+                            self?.messages[index].isSynced = true
+                        }
                     }
+                    log("Saved user message to backend: \(response.id)")
+                } catch {
+                    logError("Failed to persist user message", error: error)
+                    // Non-critical - continue with chat
                 }
-                log("Saved user message to backend: \(response.id)")
-            } catch {
-                logError("Failed to persist user message", error: error)
-                // Non-critical - continue with chat
             }
+
+            let userMessage = ChatMessage(
+                id: userMessageId,
+                text: trimmedText,
+                sender: .user
+            )
+            messages.append(userMessage)
         }
 
-        // Add user message to UI
-        let userMessage = ChatMessage(
-            id: userMessageId,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-
-        // Create placeholder AI message
+        // Create a placeholder AI message shown immediately in the UI while
+        // streaming. It starts with a local UUID (isSynced=false, no rating buttons).
+        // Lifecycle: local UUID → streaming text appended token by token →
+        // isStreaming=false → isSending=false → backend save → ID replaced with
+        // server ID, isSynced=true (rating buttons appear).
         let aiMessageId = UUID().uuidString
         let aiMessage = ChatMessage(
             id: aiMessageId,
@@ -1007,89 +1878,154 @@ class ChatProvider: ObservableObject {
         var toolStartTimes: [String: Date] = [:]
 
         do {
-            // Fetch context from backend (LLM determines if context is needed)
-            let contextString = await fetchContext(for: trimmedText)
+            // Use the system prompt built at warmup. The ACP bridge applies it only
+            // at session/new; for the normal reused-session path it is ignored.
+            // Passing it here ensures it is applied if the session was invalidated
+            // (e.g. cwd change) and a new session/new is triggered mid-conversation.
+            var systemPrompt = cachedMainSystemPrompt
+            if let prefix = systemPromptPrefix, !prefix.isEmpty {
+                systemPrompt = prefix + "\n\n" + systemPrompt
+            }
+            if let suffix = systemPromptSuffix, !suffix.isEmpty {
+                systemPrompt += "\n\n" + suffix
+            }
 
-            // Build system prompt with fetched context
-            let systemPrompt = buildSystemPrompt(contextString: contextString)
+            // Query the active bridge with streaming
+            // Callbacks for ACP bridge
+            let textDeltaHandler: ACPBridge.TextDeltaHandler = { [weak self] delta in
+                Task { @MainActor [weak self] in
+                    self?.appendToMessage(id: aiMessageId, text: delta)
+                }
+            }
+            let toolCallHandler: ACPBridge.ToolCallHandler = { callId, name, input in
+                let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                let result = await ChatToolExecutor.execute(toolCall)
+                log("OMI tool \(name) executed for callId=\(callId)")
+                return result
+            }
+            let toolActivityHandler: ACPBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                Task { @MainActor [weak self] in
+                    self?.addToolActivity(
+                        messageId: aiMessageId,
+                        toolName: name,
+                        status: status == "started" ? .running : .completed,
+                        toolUseId: toolUseId,
+                        input: input
+                    )
+                    if status == "started" {
+                        toolNames.append(name)
+                        toolStartTimes[name] = Date()
+                        if (name.contains("browser") || name.contains("playwright")) {
+                            let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                            if token.isEmpty {
+                                log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
+                                self?.needsBrowserExtensionSetup = true
+                                self?.stopAgent()
+                            }
+                        }
+                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
+                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                    }
+                }
+            }
+            let thinkingDeltaHandler: ACPBridge.ThinkingDeltaHandler = { [weak self] text in
+                Task { @MainActor [weak self] in
+                    self?.appendThinking(messageId: aiMessageId, text: text)
+                }
+            }
+            let toolResultDisplayHandler: ACPBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
+                Task { @MainActor [weak self] in
+                    self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                }
+            }
 
-            // Query the Claude Agent SDK bridge with streaming
-            // Each query is standalone — conversation history is in the system prompt
-            // This ensures cross-platform sync (mobile messages appear in context)
-            let queryResult = try await claudeBridge.query(
+            let queryResult = try await acpBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
+                sessionKey: sessionKey ?? "main",
                 cwd: workingDirectory,
-                onTextDelta: { [weak self] delta in
+                mode: chatMode.rawValue,
+                model: model ?? modelOverride,
+                imageData: imageData,
+                onTextDelta: textDeltaHandler,
+                onToolCall: toolCallHandler,
+                onToolActivity: toolActivityHandler,
+                onThinkingDelta: thinkingDeltaHandler,
+                onToolResultDisplay: toolResultDisplayHandler,
+                onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
-                        self?.appendToMessage(id: aiMessageId, text: delta)
+                        self?.claudeAuthMethods = methods
+                        self?.claudeAuthUrl = authUrl
+                        self?.isClaudeAuthRequired = true
                     }
                 },
-                onToolCall: { callId, name, input in
-                    // Route OMI tool calls (execute_sql, semantic_search) through ChatToolExecutor
-                    let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
-                    log("OMI tool \(name) executed for callId=\(callId)")
-                    return result
-                },
-                onToolActivity: { [weak self] name, status in
+                onAuthSuccess: { [weak self] in
                     Task { @MainActor [weak self] in
-                        self?.addToolActivity(
-                            messageId: aiMessageId,
-                            toolName: name,
-                            status: status == "started" ? .running : .completed
-                        )
-                        // Track tool timing
-                        if status == "started" {
-                            toolNames.append(name)
-                            toolStartTimes[name] = Date()
-                        } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                            let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                            AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
-                        }
+                        self?.isClaudeAuthRequired = false
+                        self?.checkClaudeConnectionStatus()
                     }
                 }
             )
 
-            // Extract citations from the response and strip markers for display
-            let citationSources = cachedContext?.citationSources ?? []
-            let citations = extractCitations(from: queryResult.text, sources: citationSources)
-            let displayText = stripCitationMarkers(from: queryResult.text)
+            // Flush any remaining buffered streaming text before finalizing
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
 
             // Determine the final text to display and save
             let messageText: String
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
-                messageText = messages[index].text.isEmpty ? displayText : stripCitationMarkers(from: messages[index].text)
+                messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                 messages[index].text = messageText
-                messages[index].citations = citations
                 messages[index].isStreaming = false
-
-                if !citations.isEmpty {
-                    log("Extracted \(citations.count) citation(s) from response")
-                }
+                completeRemainingToolCalls(messageId: aiMessageId)
             } else {
                 // Message no longer in memory (user switched away from this session).
-                // Still need to persist the response to the backend.
-                messageText = displayText
-                log("Chat response arrived after session switch, persisting to backend only")
+                messageText = queryResult.text
+                log("Chat response arrived after session switch")
             }
 
-            // Always save AI response to backend (even if the user navigated away)
+            // Release the sending lock as soon as the AI response is visible in the
+            // UI. Backend persistence is slow (can timeout at 30s+) and should not
+            // block the user from making new queries to Claude.
+            //
+            // IMPORTANT: releasing isSending here opens a race window with the poll
+            // timer. The poll can now fetch backend messages while saveMessage() is
+            // still in-flight. The AI message still has a local UUID at this point
+            // (isSynced=false). pollForNewMessages() handles this by merging the
+            // backend copy into the local message rather than appending a duplicate.
+            isSending = false
+            isStopping = false
+
+            // Save AI response to backend. aiMessageId is captured above so we can
+            // locate the right message even if the user has started a new query by
+            // the time this completes.
+            //
+            // After save: update the in-memory message's ID from local UUID to the
+            // server-assigned ID, and mark isSynced=true. This is the normal path
+            // (no race). The poll's merge logic handles the case where the poll fires
+            // before this update runs.
             let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
             if !textToSave.isEmpty {
                 do {
+                    let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
                     let response = try await APIClient.shared.saveMessage(
                         text: textToSave,
                         sender: "ai",
                         appId: capturedAppId,
-                        sessionId: capturedSessionId
+                        sessionId: capturedSessionId,
+                        metadata: toolMetadata
                     )
+                    // Adopt the server ID so future polls find this message by ID
+                    // (existingIds check in pollForNewMessages). isSynced=true enables
+                    // thumbs-up/down rating UI.
                     if let syncIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
                         messages[syncIndex].id = response.id
                         messages[syncIndex].isSynced = true
                     }
-                    log("Saved and synced AI response: \(response.id)")
+                    log("Saved and synced AI response: \(response.id) (session=\(capturedSessionId ?? "nil"), tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
                 } catch {
                     logError("Failed to persist AI response", error: error)
                 }
@@ -1113,21 +2049,99 @@ class ChatProvider: ObservableObject {
                 messageLength: responseLength
             )
 
+            if bridgeMode == BridgeMode.omiAI.rawValue {
+                sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
+                omiAICumulativeCostUsd += queryResult.costUsd
+                let r = queryResult
+                Task.detached(priority: .background) {
+                    await APIClient.shared.recordLlmUsage(
+                        inputTokens: r.inputTokens,
+                        outputTokens: r.outputTokens,
+                        cacheReadTokens: r.cacheReadTokens,
+                        cacheWriteTokens: r.cacheWriteTokens,
+                        totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
+                        costUsd: r.costUsd
+                    )
+                }
+                // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
+                if omiAICumulativeCostUsd >= 50.0 {
+                    showOmiThresholdAlert = true
+                    Task { await self.switchBridgeMode(to: .userClaude) }
+                }
+            }
+
             // Fire-and-forget: check if user's message mentions goal progress
             let chatText = trimmedText
             Task.detached(priority: .background) {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
-            // Remove AI message placeholder on error
-            messages.removeAll { $0.id == aiMessageId }
+            // On timeout, cancel the stuck ACP session so it's not left dangling
+            if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
+                log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
+                await acpBridge.interrupt()
+            }
+
+            // Flush any remaining buffered streaming text before handling the error
+            streamingFlushWorkItem?.cancel()
+            streamingFlushWorkItem = nil
+            flushStreamingBuffer()
+
+            // Only remove the AI message if it's still empty (no streamed text yet).
+            // If text was already streamed and visible, keep it and just stop streaming.
+            if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                    messages.remove(at: index)
+                } else {
+                    messages[index].isStreaming = false
+                    completeRemainingToolCalls(messageId: aiMessageId)
+                    log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
+                    // Still try to persist the partial response
+                    let partialText = messages[index].text
+                    let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
+                    Task { [weak self] in
+                        do {
+                            let response = try await APIClient.shared.saveMessage(
+                                text: partialText,
+                                sender: "ai",
+                                appId: capturedAppId,
+                                sessionId: capturedSessionId,
+                                metadata: partialToolMetadata
+                            )
+                            await MainActor.run {
+                                if let syncIndex = self?.messages.firstIndex(where: { $0.id == aiMessageId }) {
+                                    self?.messages[syncIndex].id = response.id
+                                    self?.messages[syncIndex].isSynced = true
+                                }
+                            }
+                            log("Saved partial AI response to backend: \(response.id)")
+                        } catch {
+                            logError("Failed to persist partial AI response", error: error)
+                        }
+                    }
+                }
+            }
 
             logError("Failed to get AI response", error: error)
-            errorMessage = "Failed to get response: \(error.localizedDescription)"
             AnalyticsManager.shared.chatAgentError(error: error.localizedDescription)
+
+            // Show error to user (unless they intentionally stopped)
+            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                // User stopped — no error to show
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
 
         isSending = false
+        isStopping = false
+
+        // If a follow-up was queued while we were running, chain it as a new full query
+        if let followUp = pendingFollowUpText {
+            pendingFollowUpText = nil
+            log("ChatProvider: chaining follow-up query")
+            await sendMessage(followUp, isFollowUp: true)
+        }
     }
 
     /// Generate a title for the session using LLM
@@ -1174,38 +2188,179 @@ class ChatProvider: ObservableObject {
         }
     }
 
-    /// Append text to a streaming message, updating content blocks for visual separation
+    /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
+    /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
     private func appendToMessage(id: String, text: String) {
-        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
-        messages[index].text += text
+        streamingBufferMessageId = id
+        streamingTextBuffer += text
 
-        // Update content blocks: append to last text block, or create new one after tool calls
-        if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-           case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-            messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + text)
-        } else {
-            messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: text))
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        }
+    }
+
+    /// Flush accumulated text and thinking deltas to the published messages array.
+    private func flushStreamingBuffer() {
+        streamingFlushWorkItem = nil
+
+        guard let id = streamingBufferMessageId,
+              let index = messages.firstIndex(where: { $0.id == id }) else {
+            streamingTextBuffer = ""
+            streamingThinkingBuffer = ""
+            return
+        }
+
+        // Flush text buffer
+        if !streamingTextBuffer.isEmpty {
+            let buffered = streamingTextBuffer
+            streamingTextBuffer = ""
+
+            messages[index].text += buffered
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+            }
+        }
+
+        // Flush thinking buffer
+        if !streamingThinkingBuffer.isEmpty {
+            let buffered = streamingThinkingBuffer
+            streamingThinkingBuffer = ""
+
+            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
+               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
+                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
+            } else {
+                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
+            }
         }
     }
 
     /// Add a tool call indicator to a streaming message
-    private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus) {
+    private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
+        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
+
         if status == .running {
+            // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
+            if let toolUseId = toolUseId, toolInput != nil {
+                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
+                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: st,
+                            toolUseId: toolUseId, input: toolInput, output: output
+                        )
+                        return
+                    }
+                }
+            }
+            // No existing block to update — create a new one
             messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running)
+                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
+                          toolUseId: toolUseId, input: toolInput)
             )
         } else {
-            // Find and update the most recent tool call with this name
+            // Mark as completed — find by toolUseId first, fall back to name
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running) = messages[index].contentBlocks[i],
-                   name == toolName {
-                    messages[index].contentBlocks[i] = .toolCall(id: id, name: name, status: .completed)
-                    break
+                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
+                    if matches {
+                        messages[index].contentBlocks[i] = .toolCall(
+                            id: id, name: name, status: .completed,
+                            toolUseId: toolUseId ?? existingTuid,
+                            input: toolInput ?? existingInput,
+                            output: output
+                        )
+                        break
+                    }
                 }
             }
         }
+    }
+
+    /// Add tool result output to an existing tool call block
+    private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let blockName, let status, let tuid, let input, _) = messages[index].contentBlocks[i],
+               (tuid == toolUseId || (tuid == nil && blockName == name)) {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: blockName, status: status,
+                    toolUseId: toolUseId, input: input, output: output
+                )
+                return
+            }
+        }
+    }
+
+    /// Append thinking text to the streaming message via the shared buffer.
+    private func appendThinking(messageId: String, text: String) {
+        streamingBufferMessageId = messageId
+        streamingThinkingBuffer += text
+
+        // Schedule a flush if one isn't already pending
+        if streamingFlushWorkItem == nil {
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.flushStreamingBuffer()
+            }
+            streamingFlushWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        }
+    }
+
+    /// Mark any remaining `.running` tool call blocks as `.completed` in a message.
+    /// Called when a query finishes (success or interrupt) so spinners don't spin forever.
+    private func completeRemainingToolCalls(messageId: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+        for i in messages[index].contentBlocks.indices {
+            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+                messages[index].contentBlocks[i] = .toolCall(
+                    id: id, name: name, status: .completed,
+                    toolUseId: toolUseId, input: input, output: output
+                )
+            }
+        }
+    }
+
+    /// Serialize tool calls from a message's contentBlocks into a JSON metadata string.
+    /// Returns nil if there are no tool calls.
+    private func serializeToolCallMetadata(messageId: String) -> String? {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
+
+        var toolCalls: [[String: Any]] = []
+        for block in messages[index].contentBlocks {
+            if case .toolCall(_, let name, _, let toolUseId, let input, let output) = block {
+                var call: [String: Any] = ["name": name]
+                if let toolUseId = toolUseId { call["tool_use_id"] = toolUseId }
+                if let input = input {
+                    call["input_summary"] = input.summary
+                    if let details = input.details { call["input"] = details }
+                }
+                if let output = output {
+                    // Truncate large outputs to keep metadata reasonable
+                    call["output"] = output.count > 500 ? String(output.prefix(500)) + "… (truncated)" : output
+                }
+                toolCalls.append(call)
+            }
+        }
+
+        guard !toolCalls.isEmpty else { return nil }
+
+        let metadata: [String: Any] = ["tool_calls": toolCalls]
+        guard let data = try? JSONSerialization.data(withJSONObject: metadata),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        return json
     }
 
     // MARK: - Message Rating
@@ -1242,21 +2397,44 @@ class ChatProvider: ObservableObject {
 
     /// Clear current session messages (delete and create new)
     func clearChat() async {
+        isClearing = true
+        defer { isClearing = false }
+
         if isInDefaultChat {
-            // Default chat mode: delete messages without session (compatible with Flutter)
-            do {
-                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
-                messages = []
-                log("Cleared default chat messages")
-            } catch {
-                logError("Failed to clear default chat messages", error: error)
+            // Default chat mode: clear UI immediately, delete in background
+            messages = []
+            log("Cleared default chat messages")
+            Task {
+                do {
+                    _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
+                } catch {
+                    logError("Failed to clear default chat messages", error: error)
+                }
             }
         } else {
-            // Session mode: delete session and create new
-            if let session = currentSession {
-                await deleteSession(session)
+            // Session mode: clear UI immediately, delete old session in background, create new
+            let sessionToDelete = currentSession
+
+            // Immediately clear UI state
+            if let session = sessionToDelete {
+                sessions.removeAll { $0.id == session.id }
             }
-            // Create a fresh session
+            currentSession = nil
+            messages = []
+
+            // Delete old session in background (don't await — backend is slow)
+            if let session = sessionToDelete {
+                Task {
+                    do {
+                        try await APIClient.shared.deleteChatSession(sessionId: session.id)
+                        log("Background deleted chat session: \(session.id)")
+                    } catch {
+                        logError("Failed to background delete chat session", error: error)
+                    }
+                }
+            }
+
+            // Create a fresh session immediately
             _ = await createNewSession()
         }
 
@@ -1288,8 +2466,8 @@ class ChatProvider: ObservableObject {
 
     // MARK: - Session Grouping Helpers
 
-    /// Group sessions by date for sidebar display (uses filteredSessions for search)
-    var groupedSessions: [(String, [ChatSession])] {
+    /// Group sessions by date — called by the Combine observer, not on every SwiftUI render pass.
+    private func computeGroupedSessions() -> [(String, [ChatSession])] {
         let calendar = Calendar.current
         let now = Date()
 

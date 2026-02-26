@@ -48,6 +48,12 @@ pub struct Config {
     pub sentry_auth_token: Option<String>,
     /// Firestore UID where Sentry feedback action items are created
     pub sentry_admin_uid: Option<String>,
+    /// Crisp plugin identifier (for REST API authentication)
+    pub crisp_plugin_identifier: Option<String>,
+    /// Crisp plugin key (for REST API authentication)
+    pub crisp_plugin_key: Option<String>,
+    /// Crisp website ID
+    pub crisp_website_id: Option<String>,
 }
 
 impl Config {
@@ -85,6 +91,9 @@ impl Config {
             sentry_webhook_secret: env::var("SENTRY_WEBHOOK_SECRET").ok(),
             sentry_auth_token: env::var("SENTRY_AUTH_TOKEN").ok(),
             sentry_admin_uid: env::var("SENTRY_ADMIN_UID").ok(),
+            crisp_plugin_identifier: env::var("CRISP_PLUGIN_IDENTIFIER").ok(),
+            crisp_plugin_key: env::var("CRISP_PLUGIN_KEY").ok(),
+            crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
         }
     }
 

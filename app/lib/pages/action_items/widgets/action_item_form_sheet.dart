@@ -72,8 +72,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
       // Compare due dates - handle null cases explicitly
-      bool dueDateChanged =
-          (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
+      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
           (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
           (_selectedDueDate != null &&
               widget.actionItem!.dueAt != null &&
@@ -210,7 +209,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Failed to create share link'), backgroundColor: Colors.red));
+      ).showSnackBar(SnackBar(content: Text(context.l10n.failedToCreateShareLink), backgroundColor: Colors.red));
     }
   }
 
@@ -472,8 +471,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
-            : Colors.transparent,
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(

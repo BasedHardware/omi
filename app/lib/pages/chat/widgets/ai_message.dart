@@ -182,6 +182,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
+  final bool showThinkingAfterText;
   final ServerMessage message;
   final Function(String) sendMessage;
   final Function(String)? onAskOmi;
@@ -200,6 +201,7 @@ class AIMessage extends StatefulWidget {
     required this.setMessageNps,
     this.appSender,
     this.showTypingIndicator = false,
+    this.showThinkingAfterText = false,
   });
 
   @override
@@ -233,6 +235,7 @@ class _AIMessageState extends State<AIMessage> {
             widget.updateConversation,
             widget.setMessageNps,
             onAskOmi: widget.onAskOmi,
+            showThinkingAfterText: widget.showThinkingAfterText,
           ),
         ),
       ],
@@ -249,6 +252,7 @@ Widget buildMessageWidget(
   Function(ServerConversation) updateConversation,
   Function(int, {String? reason}) sendMessageNps, {
   Function(String)? onAskOmi,
+  bool showThinkingAfterText = false,
 }) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
@@ -273,6 +277,7 @@ Widget buildMessageWidget(
   } else {
     return NormalMessageWidget(
       showTypingIndicator: showTypingIndicator,
+      showThinkingAfterText: showThinkingAfterText,
       thinkings: message.thinkings,
       messageText: message.text.decodeString,
       message: message,
@@ -423,6 +428,7 @@ class DaySummaryWidget extends StatelessWidget {
 
 class NormalMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
+  final bool showThinkingAfterText;
   final String messageText;
   final List<String> thinkings;
   final ServerMessage message;
@@ -437,6 +443,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.message,
     required this.setMessageNps,
     required this.createdAt,
+    this.showThinkingAfterText = false,
     this.thinkings = const [],
     this.onAskOmi,
   });
@@ -591,6 +598,35 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                   },
                 ),
               ),
+        if (widget.showTypingIndicator && widget.messageText.isNotEmpty && widget.showThinkingAfterText)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (currentAppId != null) ...[
+                  _buildAppIcon(context, currentAppId, size: 15),
+                  const SizedBox(width: 6),
+                ] else ...[
+                  _buildThinkingIconWidget(displayThinkingText, size: 15),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(
+                  child: ShimmerWithTimeout(
+                    baseColor: Colors.white,
+                    highlightColor: Colors.grey,
+                    child: Text(
+                      overflow: TextOverflow.fade,
+                      maxLines: 1,
+                      softWrap: false,
+                      displayThinkingText,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (widget.message.chartData != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),

@@ -8,6 +8,21 @@ final class ScreenCaptureService: Sendable {
     private let maxSize: CGFloat = 3000
     private let jpegQuality: CGFloat = 1.0
 
+    /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
+    /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
+    /// thread pool (captureActiveWindowCGImage runs non-isolated), so a lock is required.
+    private static let axStateLock = NSLock()
+    /// Tracks consecutive AX cannotComplete failures per bundle ID.
+    /// Apps that consistently fail (Qt, OpenGL, etc.) are skipped for AX after the threshold.
+    /// Must be accessed only while holding axStateLock.
+    nonisolated(unsafe) private static var axFailureCountByBundleID: [String: Int] = [:]
+    private static let axSkipThreshold = 3
+
+    /// When the AX API is disabled system-wide (apiDisabled error), skip all AX attempts
+    /// to avoid spamming a failing call on every capture cycle (every ~1 second).
+    /// Must be accessed only while holding axStateLock.
+    nonisolated(unsafe) private static var axSystemwideDisabled = false
+
     init() {}
 
     /// Check if we have screen recording permission by actually testing capture
@@ -84,6 +99,7 @@ final class ScreenCaptureService: Sendable {
     /// Force re-register this app with Launch Services to ensure it's the authoritative version
     /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
     /// about which app to grant permissions to.
+    /// Runs the process on a background thread to avoid blocking the main thread.
     static func ensureLaunchServicesRegistration() {
         guard let bundlePath = Bundle.main.bundlePath as String? else {
             log("Launch Services: Failed to get bundle path")
@@ -94,8 +110,28 @@ final class ScreenCaptureService: Sendable {
 
         let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
+        DispatchQueue.global(qos: .utility).async {
+            runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+        }
+    }
+
+    /// Synchronous version — call from a background thread when CGRequestScreenCaptureAccess()
+    /// must run after registration completes (e.g. permission trigger flow).
+    static func ensureLaunchServicesRegistrationSync() {
+        guard let bundlePath = Bundle.main.bundlePath as String? else {
+            log("Launch Services: Failed to get bundle path")
+            return
+        }
+
+        log("Launch Services: Re-registering (sync) \(bundlePath)...")
+
+        let lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+        runLsregister(path: lsregisterPath, bundlePath: bundlePath)
+    }
+
+    private static func runLsregister(path: String, bundlePath: String) {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: lsregisterPath)
+        process.executableURL = URL(fileURLWithPath: path)
         // -f = force registration even if already registered
         // This makes this specific app bundle authoritative
         process.arguments = ["-f", bundlePath]
@@ -163,12 +199,39 @@ final class ScreenCaptureService: Sendable {
         return !sckGranted // Broken if TCC yes but SCK no
     }
 
-    /// Reset screen capture permission using tccutil
-    /// This resets BOTH the traditional TCC and ScreenCaptureKit consent
-    /// Returns true if reset succeeded
+    /// Attempt soft recovery of screen capture permission without resetting TCC.
+    /// Re-registers with Launch Services and re-requests ScreenCaptureKit consent.
+    /// Returns true if capture works after recovery.
+    static func attemptSoftRecovery() async -> Bool {
+        log("Screen capture: Attempting soft recovery (lsregister + SCK re-request)...")
+
+        // 1. Re-register with Launch Services synchronously so the OS maps our bundle ID
+        //    to the current app binary (fixes stale registrations from old builds/updates)
+        ensureLaunchServicesRegistrationSync()
+
+        // 2. Re-request ScreenCaptureKit consent (macOS 14+)
+        //    This can fix the "TCC says yes but SCK says no" broken state
+        if #available(macOS 14.0, *) {
+            let sckGranted = await requestScreenCaptureKitPermission()
+            if sckGranted {
+                log("Screen capture: Soft recovery succeeded (SCK re-consent granted)")
+                return true
+            }
+            log("Screen capture: SCK re-request did not succeed, testing actual capture...")
+        }
+
+        // 3. Test if capture actually works now (covers cases where CGPreflight was stale)
+        let works = testCapturePermission()
+        log("Screen capture: Soft recovery capture test = \(works ? "SUCCESS" : "FAILED")")
+        return works
+    }
+
+    /// Reset screen capture permission using tccutil (nuclear option).
+    /// This removes the TCC entry entirely — user must re-grant in System Settings.
+    /// Only use as a last resort when soft recovery has already failed.
     static func resetScreenCapturePermission() -> Bool {
         let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
-        log("Resetting screen capture permission for \(bundleId) via tccutil...")
+        log("Resetting screen capture permission for \(bundleId) via tccutil (hard reset)...")
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
@@ -186,7 +249,50 @@ final class ScreenCaptureService: Sendable {
         }
     }
 
-    /// Reset screen capture permission and restart the app
+    /// Try soft recovery first, then restart the app.
+    /// Does NOT reset TCC — preserves the user's existing permission grant.
+    /// The restart refreshes the app's permission state with the OS.
+    @MainActor
+    static func softRecoveryAndRestart() {
+        if UpdaterViewModel.isUpdateInProgress {
+            log("Sparkle update in progress, skipping screen capture soft recovery restart")
+            return
+        }
+
+        let bundleURL = Bundle.main.bundleURL
+
+        Task.detached {
+            // Re-register with Launch Services so the OS recognizes this binary
+            ensureLaunchServicesRegistrationSync()
+
+            // Re-request ScreenCaptureKit consent
+            if #available(macOS 14.0, *) {
+                _ = await requestScreenCaptureKitPermission()
+            }
+
+            await MainActor.run {
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: true)
+                log("Screen capture: Soft recovery done, restarting app to refresh permission state...")
+
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+
+                do {
+                    try task.run()
+                    log("Restart scheduled, terminating current instance...")
+                    DispatchQueue.main.async {
+                        NSApplication.shared.terminate(nil)
+                    }
+                } catch {
+                    logError("Failed to schedule restart", error: error)
+                }
+            }
+        }
+    }
+
+    /// Hard reset: wipe TCC entry and restart. User must re-grant permission.
+    /// Only use when soft recovery has already been tried and failed.
     @MainActor
     static func resetScreenCapturePermissionAndRestart() {
         if UpdaterViewModel.isUpdateInProgress {
@@ -194,39 +300,41 @@ final class ScreenCaptureService: Sendable {
             return
         }
 
-        // First ensure this app is the authoritative version in Launch Services
-        // This fixes issues where tccutil resets permission for a stale app registration
-        ensureLaunchServicesRegistration()
+        let bundleURL = Bundle.main.bundleURL
 
-        let success = resetScreenCapturePermission()
+        // Run blocking Process calls on a background thread
+        Task.detached {
+            // First ensure this app is the authoritative version in Launch Services
+            // This fixes issues where tccutil resets permission for a stale app registration
+            ensureLaunchServicesRegistrationSync()
 
-        // Track reset completion
-        AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
+            let success = resetScreenCapturePermission()
 
-        if success {
-            log("Screen capture permission reset, restarting app...")
+            await MainActor.run {
+                // Track reset completion
+                AnalyticsManager.shared.screenCaptureResetCompleted(success: success)
 
-            guard let bundleURL = Bundle.main.bundleURL as URL? else {
-                log("Failed to get bundle URL for restart")
-                return
-            }
+                if success {
+                    log("Screen capture permission reset, restarting app...")
 
-            // Use a shell script to wait briefly, then relaunch the app
-            let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/sh")
-            task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+                    // Use a shell script to wait briefly, then relaunch the app
+                    let task = Process()
+                    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+                    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
 
-            do {
-                try task.run()
-                log("Restart scheduled, terminating current instance...")
-                DispatchQueue.main.async {
-                    NSApplication.shared.terminate(nil)
+                    do {
+                        try task.run()
+                        log("Restart scheduled, terminating current instance...")
+                        DispatchQueue.main.async {
+                            NSApplication.shared.terminate(nil)
+                        }
+                    } catch {
+                        logError("Failed to schedule restart", error: error)
+                    }
+                } else {
+                    log("Screen capture permission reset failed")
                 }
-            } catch {
-                logError("Failed to schedule restart", error: error)
             }
-        } else {
-            log("Screen capture permission reset failed")
         }
     }
 
@@ -244,14 +352,19 @@ final class ScreenCaptureService: Sendable {
 
         let appName = frontApp.localizedName
         let activePID = frontApp.processIdentifier
+        let bundleID = frontApp.bundleIdentifier ?? ""
 
         // Get all on-screen windows
         guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return (appName, nil, nil)
         }
 
-        // Try Accessibility API first (most accurate - gets actual focused window)
-        if let axResult = getWindowInfoViaAccessibility(pid: activePID, windowList: windowList) {
+        // Try Accessibility API first (most accurate - gets actual focused window).
+        // Skip if AX is disabled system-wide (apiDisabled) or this app exceeded the cannotComplete threshold.
+        let skipAX = axStateLock.withLock {
+            axSystemwideDisabled || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
+        }
+        if !skipAX, let axResult = getWindowInfoViaAccessibility(pid: activePID, bundleID: bundleID, windowList: windowList) {
             return (appName, axResult.title, axResult.windowID)
         }
 
@@ -282,7 +395,7 @@ final class ScreenCaptureService: Sendable {
     }
 
     /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
-    private static func getWindowInfoViaAccessibility(pid: pid_t, windowList: [[String: Any]]) -> (title: String?, windowID: CGWindowID)? {
+    private static func getWindowInfoViaAccessibility(pid: pid_t, bundleID: String, windowList: [[String: Any]]) -> (title: String?, windowID: CGWindowID)? {
         let appElement = AXUIElementCreateApplication(pid)
 
         // Get the focused window
@@ -290,7 +403,37 @@ final class ScreenCaptureService: Sendable {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
+            if focusResult == .apiDisabled {
+                // System-wide AX permission issue. Set a flag so we stop attempting
+                // AX on every capture cycle — avoids spinning on a known-broken call.
+                let wasAlreadyDisabled = axStateLock.withLock {
+                    let prev = axSystemwideDisabled
+                    axSystemwideDisabled = true
+                    return prev
+                }
+                if !wasAlreadyDisabled {
+                    log("ACCESSIBILITY_AX: apiDisabled (\(focusResult.rawValue)) — disabling AX attempts until next launch")
+                }
+            } else if focusResult == .cannotComplete {
+                // App-specific failure (Qt, OpenGL, Python-based apps often don't implement AX).
+                // Track per bundle ID and suppress logs after the threshold to avoid spam.
+                let count = axStateLock.withLock {
+                    let c = (axFailureCountByBundleID[bundleID] ?? 0) + 1
+                    axFailureCountByBundleID[bundleID] = c
+                    return c
+                }
+                if count == 1 {
+                    log("ACCESSIBILITY_AX: cannotComplete for \(bundleID) (1st failure, will suppress after \(axSkipThreshold))")
+                } else if count == axSkipThreshold {
+                    log("ACCESSIBILITY_AX: cannotComplete for \(bundleID) — \(axSkipThreshold) failures reached, skipping AX for this app going forward")
+                }
+            }
             return nil
+        }
+
+        // On success, reset failure count in case the app's AX state recovered
+        if !bundleID.isEmpty {
+            axStateLock.withLock { axFailureCountByBundleID[bundleID] = 0 }
         }
 
         // Get window title from AX
@@ -414,7 +557,7 @@ final class ScreenCaptureService: Sendable {
 
             return jpegData(from: image)
         } catch {
-            logError("ScreenCaptureKit error", error: error)
+            log("ScreenCaptureKit error: \(error.localizedDescription)")
             return nil
         }
     }
@@ -446,40 +589,55 @@ final class ScreenCaptureService: Sendable {
                 onScreenWindowsOnly: true
             )
 
-            guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+            // Wrap synchronous ScreenCaptureKit object processing in autoreleasepool.
+            // SCShareableContent enumerates all windows, creating Obj-C objects that
+            // accumulate in Swift concurrency's cooperative thread pool (which doesn't
+            // drain autorelease pools between tasks).
+            let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
+                guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+                    return nil
+                }
+
+                let filter = SCContentFilter(desktopIndependentWindow: window)
+                let config = SCStreamConfiguration()
+                config.scalesToFit = true
+                config.showsCursor = false
+                let windowWidth = window.frame.width
+                let windowHeight = window.frame.height
+                let aspectRatio = windowWidth / windowHeight
+                var configWidth = min(windowWidth, maxSize)
+                var configHeight = configWidth / aspectRatio
+                if configHeight > maxSize {
+                    configHeight = maxSize
+                    configWidth = configHeight * aspectRatio
+                }
+                config.width = Int(configWidth)
+                config.height = Int(configHeight)
+                return (filter, config)
+            }
+
+            guard let (filter, config) = filterAndConfig else {
                 log("Window not found in SCShareableContent")
                 return nil
             }
-
-            let filter = SCContentFilter(desktopIndependentWindow: window)
-            let config = SCStreamConfiguration()
-            config.scalesToFit = true
-            config.showsCursor = false
-            let windowWidth = window.frame.width
-            let windowHeight = window.frame.height
-            let aspectRatio = windowWidth / windowHeight
-            var configWidth = min(windowWidth, maxSize)
-            var configHeight = configWidth / aspectRatio
-            if configHeight > maxSize {
-                configHeight = maxSize
-                configWidth = configHeight * aspectRatio
-            }
-            config.width = Int(configWidth)
-            config.height = Int(configHeight)
 
             return try await SCScreenshotManager.captureImage(
                 contentFilter: filter,
                 configuration: config
             )
         } catch {
-            logError("ScreenCaptureKit CGImage error", error: error)
+            log("ScreenCaptureKit CGImage error: \(error.localizedDescription)")
             return nil
         }
     }
 
     /// Encode a CGImage to JPEG data. Public wrapper for use by callers that need JPEG once.
+    /// Wrapped in autoreleasepool because callers often run this in detached Tasks
+    /// on the cooperative thread pool, which doesn't drain autorelease pools.
     func encodeJPEG(from cgImage: CGImage) -> Data? {
-        return jpegData(from: cgImage)
+        return autoreleasepool {
+            jpegData(from: cgImage)
+        }
     }
 
     // MARK: - Synchronous Capture (Legacy)

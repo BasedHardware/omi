@@ -11,6 +11,7 @@ DerivedData/
 # Environment (both contain secrets)
 .env
 .env.app
+.env.app.dev
 
 # Credentials
 **/google-credentials.json
@@ -26,10 +27,6 @@ DerivedData/
 # Swift Package Manager
 .swiftpm/
 Package.resolved
-
-# Agent bridge build artifacts
-agent-bridge/node_modules/
-agent-bridge/dist/
 
 # Xcode
 *.pbxuser
@@ -78,11 +75,18 @@ linkedin-*.md
 # Session logs / transcripts
 /*.txt
 
+# Runtime log files
+*.log
+
 # Skills (user-local)
 skills/
 
 # Agent configs (user-local)
 .agents/
+
+# Demo project (Remotion)
+demo/node_modules/
+demo/out/
 
 # Claude project instructions (user-local, contains absolute paths)
 CLAUDE.md

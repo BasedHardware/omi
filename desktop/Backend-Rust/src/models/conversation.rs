@@ -17,6 +17,8 @@ pub struct TranscriptSegment {
     #[serde(default)]
     pub is_user: bool,
     #[serde(default)]
+    pub person_id: Option<String>,
+    #[serde(default)]
     pub start: f64,
     #[serde(default)]
     pub end: f64,
@@ -55,6 +57,12 @@ pub struct ActionItem {
     pub completed: bool,
     /// When the action item is due (ISO 8601 UTC)
     pub due_at: Option<DateTime<Utc>>,
+    /// LLM confidence score (0.0-1.0). Items below 0.75 are filtered out.
+    #[serde(default)]
+    pub confidence: Option<f64>,
+    /// Priority classification: "high", "medium", "low"
+    #[serde(default)]
+    pub priority: Option<String>,
 }
 
 /// An event extracted from conversation

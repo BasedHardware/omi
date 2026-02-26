@@ -8,6 +8,9 @@ and for submitting feedback to LangSmith.
 
 import os
 from typing import Optional, List, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def is_langsmith_enabled() -> bool:
@@ -80,17 +83,17 @@ def log_langsmith_status() -> None:
     endpoint = get_langsmith_endpoint()
 
     if global_enabled and has_key:
-        print(f"🔍 LangSmith: GLOBAL tracing ENABLED")
-        print(f"   Project: {project}")
-        print(f"   Endpoint: {endpoint}")
+        logger.info(f"🔍 LangSmith: GLOBAL tracing ENABLED")
+        logger.info(f"   Project: {project}")
+        logger.info(f"   Endpoint: {endpoint}")
     elif has_key:
         # Global tracing off but API key present - per-request tracing for chat
-        print(f"🔍 LangSmith: Per-request tracing (chat only)")
-        print(f"   Project: {project}")
-        print(f"   Prompt Hub: enabled")
+        logger.info(f"🔍 LangSmith: Per-request tracing (chat only)")
+        logger.info(f"   Project: {project}")
+        logger.info(f"   Prompt Hub: enabled")
     else:
-        print(f"📊 LangSmith: DISABLED (no API key)")
-        print(f"   Set LANGSMITH_API_KEY to enable tracing and prompt fetching")
+        logger.info(f"📊 LangSmith: DISABLED (no API key)")
+        logger.info(f"   Set LANGSMITH_API_KEY to enable tracing and prompt fetching")
 
 
 def get_chat_tracer_callbacks(
@@ -130,7 +133,7 @@ def get_chat_tracer_callbacks(
         return [tracer]
 
     except Exception as e:
-        print(f"⚠️  Failed to create LangSmith tracer: {e}")
+        logger.error(f"⚠️  Failed to create LangSmith tracer: {e}")
         return []
 
 
@@ -156,7 +159,7 @@ def submit_langsmith_feedback(
     The run_id must be from a traced run (e.g., chat requests with per-request tracing).
     """
     if not has_langsmith_api_key():
-        print(f"⚠️  LangSmith feedback skipped: API key not configured")
+        logger.warning(f"⚠️  LangSmith feedback skipped: API key not configured")
         return False
 
     try:
@@ -173,9 +176,9 @@ def submit_langsmith_feedback(
             comment=comment,
         )
 
-        print(f"✅ LangSmith feedback submitted: run_id={run_id}, score={score}, key={key}")
+        logger.info(f"✅ LangSmith feedback submitted: run_id={run_id}, score={score}, key={key}")
         return True
 
     except Exception as e:
-        print(f"❌ LangSmith feedback error: {e}")
+        logger.error(f"❌ LangSmith feedback error: {e}")
         return False

@@ -1,8 +1,113 @@
 import SwiftUI
 
+/// Self-contained panel that observes LiveTranscriptMonitor internally,
+/// so the parent view does NOT need to observe transcript changes.
+struct LiveTranscriptPanel: View {
+    @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+    var speakerNames: [Int: String] = [:]
+    var onSpeakerTapped: ((SpeakerSegment) -> Void)? = nil
+
+    private var displaySegments: [SpeakerSegment] {
+        if !monitor.segments.isEmpty { return monitor.segments }
+        return monitor.savedSegments
+    }
+
+    var body: some View {
+        if displaySegments.isEmpty {
+            VStack(spacing: 16) {
+                Image(systemName: "waveform")
+                    .scaledFont(size: 48)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .opacity(0.5)
+                Text("Live Transcript")
+                    .scaledFont(size: 16, weight: .medium)
+                    .foregroundColor(OmiColors.textSecondary)
+                Text("Start speaking and your transcript will appear here")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(32)
+        } else {
+            LiveTranscriptView(
+                segments: displaySegments,
+                speakerNames: speakerNames,
+                onSpeakerTapped: onSpeakerTapped
+            )
+        }
+    }
+}
+
+/// Self-contained audio level waveforms that observe AudioLevelMonitor internally,
+/// so the parent view does NOT need to observe audio level changes.
+struct RecordingBarAudioLevels: View {
+    @ObservedObject private var monitor = AudioLevelMonitor.shared
+
+    var body: some View {
+        HStack(spacing: 16) {
+            HStack(spacing: 6) {
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                AudioLevelWaveformView(
+                    level: monitor.microphoneLevel,
+                    barCount: 8,
+                    isActive: true
+                )
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                AudioLevelWaveformView(
+                    level: monitor.systemLevel,
+                    barCount: 8,
+                    isActive: true
+                )
+            }
+        }
+    }
+}
+
+/// Self-contained recording duration text that observes RecordingTimer internally.
+struct RecordingBarDuration: View {
+    @ObservedObject private var timer = RecordingTimer.shared
+
+    var body: some View {
+        Text(timer.formattedDuration)
+            .scaledFont(size: 14, weight: .medium, design: .monospaced)
+            .foregroundColor(OmiColors.textSecondary)
+    }
+}
+
+/// Small view for the recording bar that observes LiveTranscriptMonitor
+/// without forcing the parent to re-render.
+struct RecordingBarTranscriptText: View {
+    @ObservedObject private var monitor = LiveTranscriptMonitor.shared
+
+    var body: some View {
+        if let latestText = monitor.latestText, !monitor.isEmpty {
+            Text(latestText)
+                .scaledFont(size: 14)
+                .foregroundColor(OmiColors.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .frame(maxWidth: 260, alignment: .leading)
+        } else {
+            Text("Listening")
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+        }
+    }
+}
+
 /// Live transcript view showing speaker segments during recording
 struct LiveTranscriptView: View {
     let segments: [SpeakerSegment]
+    var speakerNames: [Int: String] = [:]
+    var onSpeakerTapped: ((SpeakerSegment) -> Void)? = nil
 
     /// Format timestamp as MM:SS
     private func formatTime(_ seconds: Double) -> String {
@@ -12,27 +117,35 @@ struct LiveTranscriptView: View {
         return String(format: "%d:%02d", minutes, secs)
     }
 
+    /// A lightweight fingerprint of the segments to detect any content change
+    private var scrollTrigger: String {
+        guard let last = segments.last else { return "" }
+        return "\(segments.count)-\(last.id)-\(last.text.count)"
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(segments) { segment in
                         LiveSegmentView(
                             segment: segment,
-                            formatTime: formatTime
+                            formatTime: formatTime,
+                            personName: speakerNames[segment.speaker],
+                            onSpeakerTapped: segment.speaker != 0 ? { onSpeakerTapped?(segment) } : nil
                         )
-                        .id(index)
                     }
+
+                    // Stable bottom anchor that never changes ID
+                    Color.clear
+                        .frame(height: 1)
+                        .id("transcript-bottom")
                 }
                 .padding(16)
             }
-            .onChange(of: segments.count) { _, _ in
-                // Auto-scroll to bottom when new segments arrive
-                if let lastIndex = segments.indices.last {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(lastIndex, anchor: .bottom)
-                    }
-                }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: scrollTrigger) { _, _ in
+                proxy.scrollTo("transcript-bottom", anchor: .bottom)
             }
         }
     }
@@ -42,13 +155,19 @@ struct LiveTranscriptView: View {
 private struct LiveSegmentView: View {
     let segment: SpeakerSegment
     let formatTime: (Double) -> String
+    var personName: String? = nil
+    var onSpeakerTapped: (() -> Void)? = nil
+
+    @State private var isHovered = false
 
     private var isUser: Bool {
         segment.speaker == 0
     }
 
     private var speakerLabel: String {
-        isUser ? "You" : "Speaker \(segment.speaker)"
+        if isUser { return "You" }
+        if let name = personName { return name }
+        return "Speaker \(segment.speaker)"
     }
 
     private var bubbleColor: Color {
@@ -77,12 +196,38 @@ private struct LiveSegmentView: View {
                     speakerAvatar
                 }
 
-                Text(speakerLabel)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(OmiColors.textTertiary)
+                if !isUser, let onTap = onSpeakerTapped {
+                    Button(action: onTap) {
+                        HStack(spacing: 4) {
+                            Text(speakerLabel)
+                                .scaledFont(size: 12, weight: personName != nil ? .semibold : .medium)
+                                .foregroundColor(personName != nil ? OmiColors.purplePrimary : OmiColors.textTertiary)
+
+                            if personName == nil {
+                                Image(systemName: "pencil")
+                                    .scaledFont(size: 9)
+                                    .foregroundColor(OmiColors.textQuaternary)
+                                    .opacity(isHovered ? 1 : 0)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        isHovered = hovering
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                } else {
+                    Text(speakerLabel)
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
 
                 Text(formatTime(segment.start))
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textQuaternary)
 
                 if isUser {
@@ -92,8 +237,9 @@ private struct LiveSegmentView: View {
 
             // Message bubble
             Text(segment.text)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
+                .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -105,11 +251,11 @@ private struct LiveSegmentView: View {
 
     private var speakerAvatar: some View {
         Circle()
-            .fill(isUser ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary)
+            .fill(isUser ? OmiColors.purplePrimary : (personName != nil ? OmiColors.purplePrimary.opacity(0.6) : OmiColors.backgroundQuaternary))
             .frame(width: 24, height: 24)
             .overlay(
-                Text(isUser ? "Y" : String(segment.speaker))
-                    .font(.system(size: 11, weight: .medium))
+                Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
             )
     }

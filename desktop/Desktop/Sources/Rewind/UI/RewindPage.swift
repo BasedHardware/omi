@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import AVKit
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -7,9 +8,6 @@ struct RewindPage: View {
     var appState: AppState? = nil
 
     @StateObject private var viewModel = RewindViewModel()
-    @ObservedObject private var audioLevels = AudioLevelMonitor.shared
-    @ObservedObject private var recordingTimer = RecordingTimer.shared
-    @ObservedObject private var liveTranscript = LiveTranscriptMonitor.shared
 
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
@@ -19,6 +17,7 @@ struct RewindPage: View {
     @State private var searchViewMode: SearchViewMode? = nil
     @State private var selectedGroupIndex: Int = 0
     @FocusState private var isSearchFocused: Bool
+    @FocusState private var isPageFocused: Bool
 
     // Monitoring toggle state
     @State private var isMonitoring = false
@@ -29,6 +28,22 @@ struct RewindPage: View {
     @State private var isRecordingPulsing = false
     @State private var isSavingPulsing = false
 
+    // Expanded transcript state
+    @State private var isTranscriptExpanded = false
+
+    // Finish conversation button state
+    @State private var isFinishing = false
+    @State private var showSavedSuccess = false
+    @State private var showDiscarded = false
+    @State private var showError = false
+
+    // Speaker naming state
+    @State private var showNameSpeakerSheet = false
+    @State private var selectedSpeakerSegment: SpeakerSegment? = nil
+
+    // Rewind intro video (first-time experience)
+    @AppStorage("hasSeenRewindIntro") private var hasSeenRewindIntro = false
+
     enum SearchViewMode {
         case results  // Full-screen search results
         case timeline // Timeline with search highlights
@@ -37,6 +52,40 @@ struct RewindPage: View {
     /// Whether we're in search mode (has query or active search)
     private var isInSearchMode: Bool {
         viewModel.activeSearchQuery != nil || !viewModel.searchQuery.isEmpty
+    }
+
+    private var finishButtonText: String {
+        if isFinishing { return "Saving..." }
+        if showSavedSuccess { return "Saved!" }
+        if showDiscarded { return "Too Short" }
+        if showError { return "Failed" }
+        return "Finish Conversation"
+    }
+
+    private var finishButtonForeground: Color {
+        if showSavedSuccess { return .white }
+        if showDiscarded { return .white }
+        if showError { return .white }
+        return .black
+    }
+
+    private var finishButtonBackground: Color {
+        if showSavedSuccess { return OmiColors.success }
+        if showDiscarded { return OmiColors.warning }
+        if showError { return OmiColors.error }
+        return .white
+    }
+
+    /// Compute speaker names from the live speaker-person map
+    private var speakerNames: [Int: String] {
+        guard let appState = appState else { return [:] }
+        var names: [Int: String] = [:]
+        for (speakerId, personId) in appState.liveSpeakerPersonMap {
+            if let person = appState.peopleById[personId] {
+                names[speakerId] = person.name
+            }
+        }
+        return names
     }
 
     var body: some View {
@@ -51,45 +100,73 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
-                    // Recording bar (when recording or saving)
-                    if let appState = appState, (appState.isTranscribing || appState.isSavingConversation) {
+                    // Recording bar (always visible when appState exists)
+                    if let appState = appState {
                         rewindRecordingBar(appState: appState)
                     }
 
-                    // Recovery banner (if database was recovered from corruption)
-                    if viewModel.showRecoveryBanner {
-                        recoveryBanner
-                    }
-
-                    // Unified top bar - search field is always here
-                    unifiedTopBar
-
-                    // Content area changes based on mode
-                    if isInSearchMode {
-                        if viewModel.screenshots.isEmpty {
-                            noSearchResultsView
-                        } else if searchViewMode == .timeline {
-                            timelineWithSearch
-                        } else {
-                            fullScreenResultsView
-                        }
-                    } else if viewModel.screenshots.isEmpty {
-                        emptyState
+                    if isTranscriptExpanded {
+                        // Expanded transcript + notes view replaces timeline
+                        expandedTranscriptView
                     } else {
-                        // Normal timeline view (without top bar, since we have unified one)
-                        timelineContentBody
+                        // Recovery banner (if database was recovered from corruption)
+                        if viewModel.showRecoveryBanner {
+                            recoveryBanner
+                        }
+
+                        // Unified top bar - search field is always here
+                        unifiedTopBar
+
+                        // Content area changes based on mode
+                        if isInSearchMode {
+                            if viewModel.screenshots.isEmpty {
+                                noSearchResultsView
+                            } else if searchViewMode == .timeline {
+                                timelineWithSearch
+                            } else {
+                                fullScreenResultsView
+                            }
+                        } else if viewModel.screenshots.isEmpty {
+                            emptyState
+                        } else {
+                            // Normal timeline view (without top bar, since we have unified one)
+                            timelineContentBody
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
+
+            // Rewind intro video overlay (first-time experience)
+            if !hasSeenRewindIntro {
+                rewindIntroOverlay
             }
         }
+        .focusable()
+        .focused($isPageFocused)
         .task {
             await viewModel.loadInitialData()
         }
         .onAppear {
             isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            isPageFocused = true
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
-            isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+            let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+            isMonitoring = pluginState
+            // Keep persistent setting in sync when monitoring stops due to errors
+            if !pluginState && screenAnalysisEnabled {
+                screenAnalysisEnabled = false
+                AssistantSettings.shared.screenAnalysisEnabled = false
+            }
+        }
+        .onChange(of: isSearchFocused) { _, focused in
+            if !focused {
+                isPageFocused = true
+            }
+        }
+        .onChange(of: isTranscriptExpanded) { _, expanded in
+            viewModel.isTranscriptExpanded = expanded
         }
         .onChange(of: viewModel.screenshots) { oldScreenshots, newScreenshots in
             // Try to preserve position on the same screenshot the user was viewing
@@ -123,6 +200,12 @@ struct RewindPage: View {
         }
         // Global keyboard handlers
         .onKeyPress(.escape) {
+            // Expanded transcript → collapse
+            if isTranscriptExpanded {
+                isTranscriptExpanded = false
+                LiveTranscriptMonitor.shared.clearSaved()
+                return .handled
+            }
             // Timeline mode → go back to results list
             if searchViewMode == .timeline {
                 searchViewMode = .results
@@ -143,14 +226,14 @@ struct RewindPage: View {
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored
@@ -213,20 +296,20 @@ struct RewindPage: View {
             Spacer()
 
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(.white.opacity(0.3))
 
             if viewModel.isSearching {
                 Text("Searching...")
-                    .font(.system(size: 16, weight: .medium))
+                    .scaledFont(size: 16, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
             } else {
                 Text("No results found")
-                    .font(.system(size: 16, weight: .medium))
+                    .scaledFont(size: 16, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
 
                 Text("Try a different search term")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.4))
             }
 
@@ -265,6 +348,11 @@ struct RewindPage: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
             ScreenCaptureService.requestAllScreenCapturePermissions()
@@ -280,12 +368,24 @@ struct RewindPage: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription
+        if let appState = appState {
+            if enabled && !appState.isTranscribing {
+                appState.startTranscription()
+            } else if !enabled && appState.isTranscribing {
+                appState.stopTranscription()
+            }
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
                         isMonitoring = false
+                        // Revert persistent setting so UI and auto-start stay in sync
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -307,7 +407,7 @@ struct RewindPage: View {
                     searchViewMode = .results
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(.white.opacity(0.7))
                         .frame(width: 28, height: 28)
                         .background(Color.white.opacity(0.1))
@@ -316,13 +416,10 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Rewind title/logo with toggle
+                // Rewind title
                 HStack(spacing: 8) {
-                    // Toggle for monitoring on/off
-                    rewindToggle
-
                     Text("Rewind")
-                        .font(.system(size: 16, weight: .semibold))
+                        .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.white)
 
                     // Global hotkey hint
@@ -331,7 +428,7 @@ struct RewindPage: View {
                         Text("⌥")
                         Text("R")
                     }
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .scaledFont(size: 10, weight: .medium, design: .rounded)
                     .foregroundColor(.white.opacity(0.4))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
@@ -357,7 +454,7 @@ struct RewindPage: View {
                         }
                     } label: {
                         Image(systemName: "list.bullet")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(searchViewMode == .results ? .black : .white.opacity(0.5))
                             .frame(width: 28, height: 24)
                             .background(searchViewMode == .results ? Color.white : Color.clear)
@@ -374,7 +471,7 @@ struct RewindPage: View {
                         searchViewMode = .timeline
                     } label: {
                         Image(systemName: "timeline.selection")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(searchViewMode == .timeline ? .black : .white.opacity(0.5))
                             .frame(width: 28, height: 24)
                             .background(searchViewMode == .timeline ? Color.white : Color.clear)
@@ -386,17 +483,11 @@ struct RewindPage: View {
                 .padding(2)
                 .background(Color.white.opacity(0.1))
                 .cornerRadius(6)
-            } else {
-                // Timeline mode controls
-                // Stats
-                if let stats = viewModel.stats {
-                    Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
-                }
             }
 
-            // Settings - always visible
+            Spacer()
+
+            // Settings
             Button {
                 NotificationCenter.default.post(
                     name: .navigateToRewindSettings,
@@ -404,25 +495,28 @@ struct RewindPage: View {
                 )
             } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
             .help("Rewind Settings")
+
+            // Rewind on/off toggle (controls both screen + audio)
+            rewindToggle
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.black.opacity(0.8))
+        .background(OmiColors.backgroundTertiary.opacity(0.8))
     }
 
     // MARK: - Timeline Content Body (without top bar)
 
     private var timelineContentBody: some View {
         VStack(spacing: 0) {
-            // Main frame display
-            Spacer()
+            // Main frame display - fills available space without Spacers to avoid SwiftUI layout loops
+            // (GeometryReader + Spacer inside VStack causes recursive StackLayout sizing)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls at bottom
             bottomControls
@@ -485,10 +579,9 @@ struct RewindPage: View {
 
     private var timelineWithSearch: some View {
         VStack(spacing: 0) {
-            // Frame display
-            Spacer()
+            // Frame display - fills available space (no Spacers to avoid layout loop)
             frameDisplay
-            Spacer()
+                .frame(maxHeight: .infinity)
 
             // Timeline and controls
             bottomControls
@@ -500,12 +593,12 @@ struct RewindPage: View {
     private func searchField(showResultsCount: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : .white.opacity(0.5))
 
             TextField("Search your screen history...", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(.white)
                 .focused($isSearchFocused)
 
@@ -519,11 +612,11 @@ struct RewindPage: View {
                 let total = viewModel.totalScreenshotCount
                 if groups.count == total {
                     Text("\(total) results")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.5))
                 } else {
                     Text("\(groups.count) groups (\(total) total)")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }
@@ -534,7 +627,7 @@ struct RewindPage: View {
                     searchViewMode = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.white.opacity(0.5))
                 }
                 .buttonStyle(.plain)
@@ -561,10 +654,10 @@ struct RewindPage: View {
         } label: {
             HStack(spacing: 6) {
                 Text(viewModel.selectedDate.formatted(.dateTime.month().day().year()))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .scaledFont(size: 8, weight: .semibold)
                     .foregroundColor(.white.opacity(0.5))
             }
             .padding(.horizontal, 10)
@@ -579,6 +672,9 @@ struct RewindPage: View {
                 selection: Binding(
                     get: { viewModel.selectedDate },
                     set: { newDate in
+                        // Only reload if the selected day actually changed
+                        let calendar = Calendar.current
+                        guard !calendar.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
                         Task { await viewModel.filterByDate(newDate) }
                     }
                 ),
@@ -650,10 +746,10 @@ struct RewindPage: View {
                 }()
                 VStack(spacing: 6) {
                     Image(systemName: "photo")
-                        .font(.system(size: 24))
+                        .scaledFont(size: 24)
                         .foregroundColor(.white.opacity(0.3))
                     Text("No frame")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.4))
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
@@ -688,7 +784,7 @@ struct RewindPage: View {
                             .fill(Color.white)
                             .frame(width: 8, height: 8)
                         Text("current")
-                            .font(.system(size: 9))
+                            .scaledFont(size: 9)
                             .foregroundColor(.white.opacity(0.4))
                     }
 
@@ -699,7 +795,7 @@ struct RewindPage: View {
                                 .fill(Color.yellow.opacity(0.8))
                                 .frame(width: 8, height: 8)
                             Text("match")
-                                .font(.system(size: 9))
+                                .scaledFont(size: 9)
                                 .foregroundColor(.white.opacity(0.4))
                         }
                     }
@@ -712,17 +808,17 @@ struct RewindPage: View {
                     let screenshot = screenshots[currentIndex]
                     HStack(spacing: 8) {
                         Text("\(currentIndex + 1)/\(screenshots.count)")
-                            .font(.system(size: 10, design: .monospaced))
+                            .scaledFont(size: 10, design: .monospaced)
                             .foregroundColor(.white.opacity(0.5))
                         Text(screenshot.formattedDateCompact)
-                            .font(.system(size: 10, design: .monospaced))
+                            .scaledFont(size: 10, design: .monospaced)
                             .foregroundColor(.white.opacity(0.7))
                     }
                 }
 
                 // Scroll hint
                 Text("scroll to navigate")
-                    .font(.system(size: 9))
+                    .scaledFont(size: 9)
                     .foregroundColor(.white.opacity(0.3))
             }
             .padding(.horizontal, 16)
@@ -829,54 +925,167 @@ struct RewindPage: View {
     }
 
 
+    // MARK: - Rewind Intro Video
+
+    private var rewindIntroOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.85)
+                .ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                RewindIntroVideoView()
+                    .frame(maxWidth: 700, maxHeight: 394) // 16:9 aspect
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: OmiColors.purplePrimary.opacity(0.3), radius: 20)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Get Started")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 10)
+                        .background(OmiColors.purplePrimary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        hasSeenRewindIntro = true
+                    }
+                }) {
+                    Text("Skip")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .transition(.opacity)
+    }
+
     // MARK: - Empty States
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(OmiColors.purplePrimary.opacity(0.1))
-                    .frame(width: 80, height: 80)
+        let isScreenCaptureKitBroken = appState?.isScreenCaptureKitBroken == true
+        let hasNoPermission = appState?.hasScreenRecordingPermission == false
 
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 36))
-                    .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+        return VStack(spacing: 16) {
+            Spacer()
+
+            if isScreenCaptureKitBroken {
+                ZStack {
+                    Circle()
+                        .fill(Color.red.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "rectangle.on.rectangle.slash")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.red.opacity(0.7))
+                }
+
+                Text("Screen Recording Needs Reset")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("macOS granted permission but ScreenCaptureKit is stuck.\nResetting fixes this — the app will restart automatically.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    AnalyticsManager.shared.screenCaptureResetClicked(source: "rewind_empty_state")
+                    // Re-enable screen analysis so it auto-starts after the restart
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+                } label: {
+                    Text("Reset & Restart")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else if hasNoPermission {
+                ZStack {
+                    Circle()
+                        .fill(Color.orange.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "lock.rectangle")
+                        .scaledFont(size: 36)
+                        .foregroundColor(.orange.opacity(0.7))
+                }
+
+                Text("Screen Recording Permission Required")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Rewind needs Screen Recording permission to capture your screen.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
+                    screenAnalysisEnabled = true
+                    AssistantSettings.shared.screenAnalysisEnabled = true
+                    ScreenCaptureService.requestAllScreenCapturePermissions()
+                    ScreenCaptureService.openScreenRecordingPreferences()
+                } label: {
+                    Text("Grant Permission")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.1))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "clock.arrow.circlepath")
+                        .scaledFont(size: 36)
+                        .foregroundColor(OmiColors.purplePrimary.opacity(0.6))
+                }
+
+                Text("No Screenshots Yet")
+                    .scaledFont(size: 20, weight: .semibold)
+                    .foregroundColor(.white)
+
+                Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
+                    .scaledFont(size: 14)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "lightbulb.fill")
+                        .foregroundColor(.yellow)
+                    Text("Tip: Use search to find anything you've seen on screen")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.top, 8)
             }
 
-            Text("No Screenshots Yet")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-
-            Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen locally to build your personal memory.")
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.6))
-                .multilineTextAlignment(.center)
-
-            // Privacy clarification
-            HStack(spacing: 8) {
-                Image(systemName: "lock.shield.fill")
-                    .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
-                Text("All screen captures are stored locally on your Mac — nothing leaves your device unless you choose to sync.")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(OmiColors.purplePrimary.opacity(0.08))
-            .cornerRadius(8)
-
-            HStack(spacing: 8) {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                Text("Tip: Use search to find anything you've seen on screen")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color.white.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.top, 4)
+            Spacer()
         }
     }
 
@@ -884,20 +1093,20 @@ struct RewindPage: View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundColor(.orange)
-                .font(.system(size: 16))
+                .scaledFont(size: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Database Recovered")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(.white)
 
                 if viewModel.recoveredRecordCount > 0 {
                     Text("\(viewModel.recoveredRecordCount) screenshots recovered from corrupted database")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.7))
                 } else {
                     Text("Database was corrupted and has been reset. Your video files are intact.")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
@@ -909,7 +1118,7 @@ struct RewindPage: View {
                     Task { await rebuildDatabase() }
                 } label: {
                     Text("Rebuild Index")
-                        .font(.system(size: 11, weight: .medium))
+                        .scaledFont(size: 11, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -926,7 +1135,7 @@ struct RewindPage: View {
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(.white.opacity(0.6))
             }
             .buttonStyle(.plain)
@@ -969,7 +1178,7 @@ struct RewindPage: View {
                 .tint(.white)
 
             Text("Loading screenshots...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
         }
     }
@@ -982,16 +1191,16 @@ struct RewindPage: View {
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 36))
+                    .scaledFont(size: 36)
                     .foregroundColor(OmiColors.error)
             }
 
             Text("Failed to Load Screenshots")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(.white)
 
             Text(message)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.6))
 
             Button {
@@ -1001,7 +1210,7 @@ struct RewindPage: View {
                     Image(systemName: "arrow.clockwise")
                     Text("Retry")
                 }
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
@@ -1012,93 +1221,135 @@ struct RewindPage: View {
         }
     }
 
+    // MARK: - Expanded Transcript View
+
+    @AppStorage("recordingNotesPanelRatio") private var panelRatio: Double = 0.65
+    private let minPanelWidth: CGFloat = 200
+
+    private var expandedTranscriptView: some View {
+        VStack(spacing: 0) {
+            // Show a back bar only when the recording bar is not visible
+            if appState?.isTranscribing != true && appState?.isSavingConversation != true {
+                HStack(spacing: 8) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isTranscriptExpanded = false
+                            LiveTranscriptMonitor.shared.clearSaved()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.up")
+                                .scaledFont(size: 11, weight: .semibold)
+                            Text("Back to Rewind")
+                                .scaledFont(size: 13, weight: .medium)
+                        }
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+            }
+
+            // Split panel: transcript (left) + notes (right)
+            GeometryReader { geometry in
+                let totalWidth = geometry.size.width
+                let transcriptWidth = max(minPanelWidth, totalWidth * panelRatio)
+                let notesWidth = max(minPanelWidth, totalWidth - transcriptWidth - 1)
+
+                HStack(spacing: 0) {
+                    // Left: Live transcript
+                    VStack(spacing: 0) {
+                        LiveTranscriptPanel(
+                            speakerNames: speakerNames,
+                            onSpeakerTapped: { segment in
+                                selectedSpeakerSegment = segment
+                                showNameSpeakerSheet = true
+                            }
+                        )
+                    }
+                    .frame(width: transcriptWidth)
+                    .background(OmiColors.backgroundPrimary)
+
+                    // Divider
+                    Rectangle()
+                        .fill(OmiColors.border)
+                        .frame(width: 1)
+
+                    // Right: Notes
+                    LiveNotesView()
+                        .frame(width: notesWidth)
+                }
+            }
+        }
+        .background(OmiColors.backgroundPrimary)
+        .task {
+            await appState?.fetchPeople()
+        }
+        .dismissableSheet(isPresented: $showNameSpeakerSheet) {
+            if let segment = selectedSpeakerSegment, let appState = appState {
+                LiveNameSpeakerSheet(
+                    speakerId: segment.speaker,
+                    sampleText: segment.text,
+                    people: appState.people,
+                    currentPersonId: appState.liveSpeakerPersonMap[segment.speaker],
+                    onSave: { personId in
+                        appState.liveSpeakerPersonMap[segment.speaker] = personId
+                        showNameSpeakerSheet = false
+                    },
+                    onCreatePerson: { name in
+                        return await appState.createPerson(name: name)
+                    },
+                    onDismiss: {
+                        showNameSpeakerSheet = false
+                    }
+                )
+            }
+        }
+    }
+
     // MARK: - Recording Bar
 
     private func rewindRecordingBar(appState: AppState) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
+            // Content depends on state
             if appState.isTranscribing {
-                // Pulsing dot
-                ZStack {
-                    Circle()
-                        .fill(OmiColors.purplePrimary.opacity(0.3))
-                        .frame(width: 20, height: 20)
-                        .scaleEffect(isRecordingPulsing ? 1.6 : 1.0)
-                        .opacity(isRecordingPulsing ? 0.0 : 0.6)
-
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 10, height: 10)
-                }
-                .animation(
-                    .easeInOut(duration: 1.0)
-                        .repeatForever(autoreverses: true),
-                    value: isRecordingPulsing
-                )
-                .onAppear { isRecordingPulsing = true }
-
-                // Latest transcript text
-                if let latestText = liveTranscript.latestText, !liveTranscript.isEmpty {
-                    Text(latestText)
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: 280, alignment: .leading)
-                } else {
-                    Text("Listening")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(OmiColors.textPrimary)
-                }
-
-                // Audio level waveforms
-                HStack(spacing: 16) {
+                // Transcript text + chevron (clickable to expand/collapse)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isTranscriptExpanded.toggle()
+                        if !isTranscriptExpanded {
+                            LiveTranscriptMonitor.shared.clearSaved()
+                        }
+                    }
+                } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 12))
+                        RecordingBarTranscriptText()
+                        Image(systemName: isTranscriptExpanded ? "chevron.up" : "chevron.down")
+                            .scaledFont(size: 10, weight: .semibold)
                             .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.microphoneLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
                     }
-
-                    HStack(spacing: 6) {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(OmiColors.textTertiary)
-                        AudioLevelWaveformView(
-                            level: audioLevels.systemLevel,
-                            barCount: 8,
-                            isActive: true
-                        )
-                    }
-                }
-
-                Spacer()
-
-                // Duration
-                Text(recordingTimer.formattedDuration)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundColor(OmiColors.textSecondary)
-
-                // Stop button
-                Button(action: {
-                    appState.stopTranscription()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.system(size: 12))
-                        Text("Stop Recording")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(Color.white))
-                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    )
                 }
                 .buttonStyle(.plain)
+
+                // Audio level waveforms (self-observing, won't re-render parent)
+                RecordingBarAudioLevels()
+
+                // Duration (self-observing, won't re-render parent)
+                RecordingBarDuration()
             } else if appState.isSavingConversation {
                 // Saving indicator
                 ZStack {
@@ -1109,7 +1360,7 @@ struct RewindPage: View {
                         .opacity(isSavingPulsing ? 0.0 : 0.6)
 
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.purplePrimary)
                         .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
                 }
@@ -1122,18 +1373,115 @@ struct RewindPage: View {
                 .onDisappear { isSavingPulsing = false }
 
                 Text("Saving conversation...")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 ProgressView()
                     .scaleEffect(0.7)
-
-                Spacer()
             }
+
+            Spacer()
+
+            // Right: Finish Conversation button (when recording)
+            if appState.isTranscribing {
+                Button(action: {
+                    handleFinish(appState: appState)
+                }) {
+                    HStack(spacing: 6) {
+                        if isFinishing {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else if showSavedSuccess {
+                            Image(systemName: "checkmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showDiscarded {
+                            Image(systemName: "xmark")
+                                .scaledFont(size: 12, weight: .bold)
+                        } else if showError {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .scaledFont(size: 12)
+                        }
+                        Text(finishButtonText)
+                            .scaledFont(size: 13, weight: .medium)
+                    }
+                    .foregroundColor(finishButtonForeground)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(finishButtonBackground))
+                    .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
+                .help("Saves current conversation and starts a new one")
+            }
+
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(OmiColors.backgroundTertiary.opacity(0.8))
+    }
+
+    // MARK: - Audio Toggle
+
+    private func audioToggle(appState: AppState) -> some View {
+        ZStack {
+            Capsule()
+                .fill(appState.isTranscribing ? OmiColors.purplePrimary : Color.red)
+                .frame(width: 36, height: 20)
+
+            Circle()
+                .fill(Color.white)
+                .frame(width: 16, height: 16)
+                .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+                .offset(x: appState.isTranscribing ? 8 : -8)
+                .animation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
+        }
+        .onTapGesture {
+            if appState.isTranscribing {
+                appState.stopTranscription()
+            } else {
+                appState.startTranscription()
+            }
+        }
+        .help(appState.isTranscribing ? "Audio is on - click to stop" : "Audio is off - click to start")
+    }
+
+    // MARK: - Finish Conversation
+
+    private func handleFinish(appState: AppState) {
+        guard !isFinishing else { return }
+        isFinishing = true
+        Task {
+            let result = await appState.finishConversation()
+            isFinishing = false
+            switch result {
+            case .saved:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSavedSuccess = false
+                }
+            case .discarded:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showDiscarded = false
+                }
+            case .error:
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = true
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showError = false
+                }
+            }
+        }
     }
 }
 
@@ -1159,13 +1507,13 @@ struct SearchResultListItem: View {
                     HStack(spacing: 6) {
                         AppIconView(appName: screenshot.appName, size: 16)
                         Text(screenshot.appName)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.purplePrimary)
                         if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
                             Text("›")
                                 .foregroundColor(.white.opacity(0.3))
                             Text(windowTitle)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.white.opacity(0.5))
                                 .lineLimit(1)
                         }
@@ -1173,7 +1521,7 @@ struct SearchResultListItem: View {
 
                     // Timestamp (like page title in Google)
                     Text(screenshot.formattedDate)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
 
                     // Context snippet with highlighted search term
@@ -1183,7 +1531,7 @@ struct SearchResultListItem: View {
 
                     // Result number
                     Text("Result \(index + 1) of \(totalCount)")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.white.opacity(0.3))
                         .padding(.top, 2)
                 }
@@ -1253,17 +1601,17 @@ struct SearchResultListItem: View {
                 (Text(before).foregroundColor(.white.opacity(0.6)) +
                  Text(match).foregroundColor(.white).bold() +
                  Text(after).foregroundColor(.white.opacity(0.6)))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .lineLimit(3)
             } else {
                 Text(snippet)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
                     .lineLimit(3)
             }
         } else {
             Text(snippet)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.6))
                 .lineLimit(3)
         }
@@ -1304,13 +1652,13 @@ struct SearchResultGroupItem: View {
                     HStack(spacing: 6) {
                         AppIconView(appName: group.appName, size: 16)
                         Text(group.appName)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.purplePrimary)
                         if let windowTitle = group.windowTitle, !windowTitle.isEmpty {
                             Text("›")
                                 .foregroundColor(.white.opacity(0.3))
                             Text(windowTitle)
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(.white.opacity(0.5))
                                 .lineLimit(1)
                         }
@@ -1318,7 +1666,7 @@ struct SearchResultGroupItem: View {
 
                     // Time range
                     Text(group.formattedTimeRange)
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(.white)
 
                     // Context snippet from representative screenshot
@@ -1331,10 +1679,10 @@ struct SearchResultGroupItem: View {
                         if group.count > 1 {
                             HStack(spacing: 4) {
                                 Image(systemName: "square.stack")
-                                    .font(.system(size: 9))
+                                    .scaledFont(size: 9)
                                 Text("\(group.count) screenshots")
                             }
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -1343,7 +1691,7 @@ struct SearchResultGroupItem: View {
                         }
 
                         Text("Group \(index + 1) of \(totalGroups)")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(.white.opacity(0.3))
                     }
                     .padding(.top, 2)
@@ -1414,17 +1762,17 @@ struct SearchResultGroupItem: View {
                 (Text(before).foregroundColor(.white.opacity(0.6)) +
                  Text(match).foregroundColor(.white).bold() +
                  Text(after).foregroundColor(.white.opacity(0.6)))
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .lineLimit(3)
             } else {
                 Text(snippet)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.6))
                     .lineLimit(3)
             }
         } else {
             Text(snippet)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.6))
                 .lineLimit(3)
         }
@@ -1462,12 +1810,12 @@ struct SearchResultRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(screenshot.appName)
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.white)
 
                         if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
                             Text("— \(windowTitle)")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(.white.opacity(0.6))
                                 .lineLimit(1)
                         }
@@ -1477,7 +1825,7 @@ struct SearchResultRow: View {
                     if let query = searchQuery,
                        let snippet = screenshot.contextSnippet(for: query) {
                         Text(snippet)
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(.white.opacity(0.7))
                             .lineLimit(2)
                     }
@@ -1487,13 +1835,13 @@ struct SearchResultRow: View {
 
                 // Timestamp
                 Text(screenshot.formattedDate)
-                    .font(.system(size: 11, design: .monospaced))
+                    .scaledFont(size: 11, design: .monospaced)
                     .foregroundColor(.white.opacity(0.5))
 
                 // Selection indicator
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
             }
@@ -1547,6 +1895,45 @@ struct ScrollWheelMonitor: ViewModifier {
 extension View {
     func onScrollWheel(_ handler: @escaping (CGFloat) -> Void) -> some View {
         modifier(ScrollWheelMonitor(onScroll: handler))
+    }
+}
+
+// MARK: - Rewind Intro Video Player
+
+struct RewindIntroVideoView: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> AVPlayerView {
+        let playerView = AVPlayerView()
+        if let url = Bundle.resourceBundle.url(forResource: "rewind-demo", withExtension: "mp4") {
+            let player = AVPlayer(url: url)
+            playerView.player = player
+            playerView.controlsStyle = .inline
+            playerView.showsFullScreenToggleButton = false
+            player.play()
+
+            NotificationCenter.default.addObserver(
+                context.coordinator,
+                selector: #selector(Coordinator.playerDidFinishPlaying(_:)),
+                name: .AVPlayerItemDidPlayToEndTime,
+                object: player.currentItem
+            )
+            context.coordinator.player = player
+        }
+        return playerView
+    }
+
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {}
+
+    class Coordinator: NSObject {
+        var player: AVPlayer?
+
+        @objc func playerDidFinishPlaying(_ notification: Notification) {
+            player?.seek(to: .zero)
+            player?.play()
+        }
     }
 }
 

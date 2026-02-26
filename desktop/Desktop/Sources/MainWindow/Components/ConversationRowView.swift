@@ -38,23 +38,40 @@ struct ConversationRowView: View {
         Date().timeIntervalSince(conversation.createdAt) < 60
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+    private static let yesterdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "'Yesterday,' h:mm a"
+        return f
+    }()
+    private static let sameYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, h:mm a"
+        return f
+    }()
+    private static let otherYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy, h:mm a"
+        return f
+    }()
+
     /// Format timestamp (e.g., "10:43 AM" for today, "Jan 29, 10:43 AM" for other days)
     private var formattedTimestamp: String {
-        let formatter = DateFormatter()
         let calendar = Calendar.current
+        let formatter: DateFormatter
 
         if calendar.isDateInToday(displayDate) {
-            // Today: just show time
-            formatter.dateFormat = "h:mm a"
+            formatter = Self.timeFormatter
         } else if calendar.isDateInYesterday(displayDate) {
-            // Yesterday: show "Yesterday, time"
-            formatter.dateFormat = "'Yesterday,' h:mm a"
+            formatter = Self.yesterdayFormatter
         } else if calendar.isDate(displayDate, equalTo: Date(), toGranularity: .year) {
-            // This year: show "Mon, Jan 29, 10:43 AM"
-            formatter.dateFormat = "MMM d, h:mm a"
+            formatter = Self.sameYearFormatter
         } else {
-            // Different year: include year
-            formatter.dateFormat = "MMM d, yyyy, h:mm a"
+            formatter = Self.otherYearFormatter
         }
 
         return formatter.string(from: displayDate)
@@ -197,7 +214,7 @@ struct ConversationRowView: View {
                 showEditDialog = true
             }) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -208,7 +225,7 @@ struct ConversationRowView: View {
             // Copy link
             Button(action: { Task { await copyLink() } }) {
                 Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -239,7 +256,7 @@ struct ConversationRowView: View {
                     }
                 } label: {
                     Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(conversation.folderId != nil ? .white : OmiColors.textTertiary)
                         .frame(width: 22, height: 22)
                         .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -252,7 +269,7 @@ struct ConversationRowView: View {
             // Delete
             Button(action: { showDeleteConfirmation = true }) {
                 Image(systemName: "trash")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.error.opacity(0.8))
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(OmiColors.backgroundSecondary))
@@ -269,34 +286,51 @@ struct ConversationRowView: View {
             // Checkbox for multi-select mode
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 18))
+                    .scaledFont(size: 18)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
 
             // Emoji
             Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-                .font(.system(size: 16))
-                .frame(width: 28, height: 28)
+                .scaledFont(size: 16)
+                .frame(width: 32, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
                         .fill(OmiColors.backgroundTertiary)
                 )
 
-            // Title
-            Text(conversation.title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(OmiColors.textPrimary)
-                .lineLimit(1)
+            // Title + metadata below
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(conversation.title)
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .lineLimit(1)
 
-            // New badge
-            if isNewlyCreated {
-                NewBadge()
-            }
+                    if isNewlyCreated {
+                        NewBadge()
+                    }
 
-            // Inline action buttons (show on hover)
-            if isHovering && !isMultiSelectMode {
-                inlineActionButtons
-                    .transition(.opacity)
+                    // Inline action buttons (show on hover)
+                    if isHovering && !isMultiSelectMode {
+                        inlineActionButtons
+                            .transition(.opacity)
+                    }
+                }
+
+                HStack(spacing: 6) {
+                    Text(formattedTimestamp)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Text("·")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textQuaternary)
+
+                    Text(conversation.formattedDuration)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
             }
 
             Spacer()
@@ -306,41 +340,14 @@ struct ConversationRowView: View {
                 Task { await toggleStar() }
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
-
-            // Source label (hide on hover to make room)
-            if !isHovering {
-                Text(sourceLabel)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(OmiColors.textQuaternary)
-            }
-
-            // Folder label
-            if !isHovering, let folderName = folderName {
-                Text(folderName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(OmiColors.textQuaternary)
-                    .lineLimit(1)
-            }
-
-            // Time
-            Text(formattedTimestamp)
-                .font(.system(size: 12))
-                .foregroundColor(OmiColors.textTertiary)
-
-            // Duration (hide on hover to make room)
-            if !isHovering {
-                Text(conversation.formattedDuration)
-                    .font(.system(size: 11))
-                    .foregroundColor(OmiColors.textQuaternary)
-            }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? OmiColors.purplePrimary.opacity(0.2) : (isHovering ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)))
@@ -352,26 +359,34 @@ struct ConversationRowView: View {
         .contentShape(Rectangle())
     }
 
-    // MARK: - Expanded Row (title + overview)
+    // MARK: - Expanded Row (title + time/duration)
 
     private var expandedRowContent: some View {
         HStack(spacing: 12) {
             // Checkbox for multi-select mode
             if isMultiSelectMode {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
+                    .scaledFont(size: 20)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
 
-            // Emoji, Title, and overview
-            VStack(alignment: .leading, spacing: 4) {
+            // Emoji
+            Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
+                .scaledFont(size: 18)
+                .frame(width: 36, height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(OmiColors.backgroundTertiary)
+                )
+
+            // Title + time/duration below
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(conversation.title)
-                        .font(.system(size: 15, weight: .medium))
+                        .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
-                    // New badge
                     if isNewlyCreated {
                         NewBadge()
                     }
@@ -381,19 +396,20 @@ struct ConversationRowView: View {
                         inlineActionButtons
                             .transition(.opacity)
                     }
-
-                    if conversation.structured.title.isEmpty && !isHovering {
-                        Text("(\(conversation.id.prefix(8))...)")
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(OmiColors.textQuaternary)
-                    }
                 }
 
-                if !conversation.overview.isEmpty {
-                    Text(conversation.overview)
-                        .font(.system(size: 13))
+                HStack(spacing: 6) {
+                    Text(formattedTimestamp)
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
-                        .lineLimit(2)
+
+                    Text("·")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textQuaternary)
+
+                    Text(conversation.formattedDuration)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
                 }
             }
 
@@ -404,41 +420,11 @@ struct ConversationRowView: View {
                 Task { await toggleStar() }
             }) {
                 Image(systemName: conversation.starred ? "star.fill" : "star")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
                     .opacity(isStarring ? 0.5 : 1.0)
             }
             .buttonStyle(.plain)
-
-            // Time, duration, and source
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 6) {
-                    if !isHovering {
-                        Text(sourceLabel)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-
-                    Text(formattedTimestamp)
-                        .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                if !isHovering {
-                    HStack(spacing: 6) {
-                        if let folderName = folderName {
-                            Text(folderName)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(OmiColors.textQuaternary)
-                                .lineLimit(1)
-                        }
-
-                        Text(conversation.formattedDuration)
-                            .font(.system(size: 12))
-                            .foregroundColor(OmiColors.textQuaternary)
-                    }
-                }
-            }
         }
         .padding(12)
         .background(

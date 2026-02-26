@@ -95,7 +95,7 @@ struct RewindOnlyView: View {
             }
         } label: {
             Image(systemName: "gearshape.fill")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(.white.opacity(0.7))
                 .padding(10)
                 .background(Color.black.opacity(0.5))
@@ -153,6 +153,7 @@ class RewindSettingsWindow {
 
         // Create settings content - using SettingsContentView with Rewind section
         let settingsView = RewindSettingsView()
+            .withFontScaling()
             .frame(minWidth: 500, minHeight: 400)
             .background(OmiColors.backgroundPrimary)
             .preferredColorScheme(.dark)
@@ -192,11 +193,11 @@ struct RewindSettingsView: View {
                 // Header
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Rewind Settings")
-                        .font(.system(size: 24, weight: .bold))
+                        .scaledFont(size: 24, weight: .bold)
                         .foregroundColor(.white)
 
                     Text("Configure screen capture and storage")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(.white.opacity(0.6))
                 }
 
@@ -266,11 +267,11 @@ struct RewindSettingsView: View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(.white)
 
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(.white.opacity(0.5))
             }
 
@@ -284,17 +285,17 @@ struct RewindSettingsView: View {
     private var storageInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Storage")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(.white.opacity(0.8))
 
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Screenshots stored locally")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(.white.opacity(0.7))
 
                     Text("~/Library/Application Support/Omi/users/\(UserDefaults.standard.string(forKey: "auth_userId") ?? "")/")
-                        .font(.system(size: 11, design: .monospaced))
+                        .scaledFont(size: 11, design: .monospaced)
                         .foregroundColor(.white.opacity(0.4))
                 }
 
@@ -309,7 +310,7 @@ struct RewindSettingsView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(OmiColors.purplePrimary)
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
             }
         }
         .padding(16)
@@ -320,7 +321,7 @@ struct RewindSettingsView: View {
     private var permissionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Permissions")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(.white.opacity(0.8))
 
             Button {
@@ -328,23 +329,23 @@ struct RewindSettingsView: View {
             } label: {
                 HStack {
                     Image(systemName: "rectangle.on.rectangle")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.purplePrimary)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Screen Recording")
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.white)
 
                         Text("Required for Rewind to capture your screen")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(.white.opacity(0.5))
                     }
 
                     Spacer()
 
                     Text("Open Settings")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
                 .padding(12)

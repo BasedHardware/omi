@@ -33,7 +33,7 @@ struct ConversationsPage: View {
     var embedded: Bool = false
 
     // Compact view mode - persisted preference
-    @AppStorage("conversationsCompactView") private var isCompactView = false
+    @AppStorage("conversationsCompactView") private var isCompactView = true
 
     // Search state
     @State private var searchQuery: String = ""
@@ -86,6 +86,21 @@ struct ConversationsPage: View {
                                 await appState.refreshConversations()
                             }
                         }
+                    },
+                    people: appState.people,
+                    onFetchPeople: {
+                        await appState.fetchPeople()
+                    },
+                    onCreatePerson: { name in
+                        await appState.createPerson(name: name)
+                    },
+                    onAssignSpeaker: { conversationId, segmentIds, personId, isUser in
+                        await appState.assignSpeakerToSegments(
+                            conversationId: conversationId,
+                            segmentIds: segmentIds,
+                            personId: personId,
+                            isUser: isUser
+                        )
                     }
                 )
             } else {
@@ -136,7 +151,7 @@ struct ConversationsPage: View {
             // Conversations header
             HStack {
                 Text("Conversations")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -162,12 +177,12 @@ struct ConversationsPage: View {
                 // Search bar
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     TextField("Search conversations...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textPrimary)
                         .onChange(of: searchQuery) { _, newValue in
                             // Feed input to debouncer
@@ -186,7 +201,7 @@ struct ConversationsPage: View {
                             searchError = nil
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -271,17 +286,17 @@ struct ConversationsPage: View {
                 VStack(spacing: 12) {
                     ProgressView()
                     Text("Searching...")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = searchError {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 32))
+                        .scaledFont(size: 32)
                         .foregroundColor(OmiColors.textTertiary)
                     Text(error)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -290,13 +305,13 @@ struct ConversationsPage: View {
             } else if searchResults.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 32))
+                        .scaledFont(size: 32)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
                     Text("No conversations found")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                     Text("Try a different search term")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textQuaternary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -407,10 +422,10 @@ struct ConversationsPage: View {
                             .frame(width: 12, height: 12)
                     } else {
                         Image(systemName: appState.showStarredOnly ? "star.fill" : "star")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     Text("Starred")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                 }
                 .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
                 .padding(.horizontal, 12)
@@ -438,11 +453,11 @@ struct ConversationsPage: View {
                             .frame(width: 12, height: 12)
                     } else {
                         Image(systemName: "calendar")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     if let date = appState.selectedDateFilter {
                         Text(formatFilterDate(date))
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                         // Clear button
                         Button(action: {
                             Task {
@@ -452,12 +467,12 @@ struct ConversationsPage: View {
                             }
                         }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                         }
                         .buttonStyle(.plain)
                     } else {
                         Text("Date")
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                     }
                 }
                 .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
@@ -486,7 +501,7 @@ struct ConversationsPage: View {
                     }
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -532,7 +547,7 @@ struct ConversationsPage: View {
         HStack(spacing: 16) {
             // Selection count
             Text("\(selectedConversationIds.count) selected")
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
@@ -546,7 +561,7 @@ struct ConversationsPage: View {
                 }
             }) {
                 Text(selectedConversationIds.count == appState.conversations.count ? "Deselect All" : "Select All")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
             }
             .buttonStyle(.plain)
@@ -562,10 +577,10 @@ struct ConversationsPage: View {
                             .frame(width: 14, height: 14)
                     } else {
                         Image(systemName: "arrow.triangle.merge")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                     }
                     Text("Merge")
-                        .font(.system(size: 13, weight: .semibold))
+                        .scaledFont(size: 13, weight: .semibold)
                 }
                 .foregroundColor(selectedConversationIds.count >= 2 ? OmiColors.textPrimary : OmiColors.textTertiary)
                 .padding(.horizontal, 16)
@@ -652,9 +667,9 @@ struct ConversationsPage: View {
         }) {
             HStack(spacing: 6) {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                 Text("Start Recording")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
             }
             .foregroundColor(.black)
             .padding(.horizontal, 14)

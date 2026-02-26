@@ -19,6 +19,9 @@ from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syn
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words, get_deepgram_model_for_language
 from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
@@ -75,18 +78,18 @@ def transcribe_voice_message_segment(
         words = deepgram_prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
         detected_language = stt_language
     if not words:
-        print('no words')
+        logger.info('no words')
         return None, detected_language
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        print('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return None, detected_language
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        print('voice message text is empty')
+        logger.info('voice message text is empty')
         return None, detected_language
 
     return text, detected_language
@@ -115,13 +118,13 @@ def process_voice_message_segment(
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        print('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return []
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        print('voice message text is empty')
+        logger.info('voice message text is empty')
         return []
 
     # create message
@@ -194,13 +197,13 @@ async def process_voice_message_segment_stream(
     transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     del words
     if not transcript_segments:
-        print('failed to get deepgram segments')
+        logger.error('failed to get deepgram segments')
         return
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
     transcript_segments.clear()
     if len(text) == 0:
-        print('voice message text is empty')
+        logger.info('voice message text is empty')
         return
 
     # create message

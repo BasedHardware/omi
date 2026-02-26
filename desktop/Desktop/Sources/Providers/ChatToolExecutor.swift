@@ -91,12 +91,12 @@ class ChatToolExecutor {
             }
         } catch {
             logError("Tool execute_sql failed", error: error)
-            return "SQL Error: \(error.localizedDescription)"
+            return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
         }
     }
 
     /// Execute a SELECT query and format results as text
-    private static func executeSelectQuery(_ query: String, upper: String, dbQueue: DatabaseQueue) async throws -> String {
+    private static func executeSelectQuery(_ query: String, upper: String, dbQueue: DatabasePool) async throws -> String {
         // Auto-append LIMIT 200 if no LIMIT clause
         var finalQuery = query
         if !upper.contains("LIMIT") {
@@ -155,13 +155,23 @@ class ChatToolExecutor {
     }
 
     /// Execute a write (INSERT/UPDATE/DELETE) query
-    private static func executeWriteQuery(_ query: String, dbQueue: DatabaseQueue) async throws -> String {
+    private static func executeWriteQuery(_ query: String, dbQueue: DatabasePool) async throws -> String {
         let changes = try await dbQueue.write { db -> Int in
             try db.execute(sql: query)
             return db.changesCount
         }
 
         log("Tool execute_sql write: \(changes) row(s) affected")
+
+        // If the query modified the action_items table, refresh TasksStore from local cache
+        if changes > 0 {
+            let upper = query.uppercased()
+            if upper.contains("ACTION_ITEMS") {
+                log("Tool execute_sql: action_items modified, refreshing TasksStore")
+                await TasksStore.shared.reloadFromLocalCache()
+            }
+        }
+
         return "OK: \(changes) row(s) affected"
     }
 

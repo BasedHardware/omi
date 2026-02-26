@@ -28,6 +28,39 @@ struct ChatSessionsSidebar: View {
             // Sessions list
             if chatProvider.isLoadingSessions {
                 loadingView
+            } else if let error = chatProvider.sessionsLoadError {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .scaledFont(size: 24)
+                        .foregroundColor(OmiColors.warning)
+
+                    Text("Failed to load chats")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text(error)
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+
+                    Button(action: {
+                        Task { await chatProvider.retryLoad() }
+                    }) {
+                        Text("Try Again")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.purplePrimary)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(16)
             } else if chatProvider.filteredSessions.isEmpty {
                 emptyStateView
             } else {
@@ -48,10 +81,10 @@ struct ChatSessionsSidebar: View {
         }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
 
                 Text("New Chat")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
 
                 Spacer()
             }
@@ -81,10 +114,10 @@ struct ChatSessionsSidebar: View {
                         .frame(width: 12, height: 12)
                 } else {
                     Image(systemName: chatProvider.showStarredOnly ? "star.fill" : "star")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                 }
                 Text("Starred")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                 Spacer()
             }
             .foregroundColor(chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
@@ -108,12 +141,12 @@ struct ChatSessionsSidebar: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
 
             TextField("Search chats...", text: $chatProvider.searchQuery)
                 .textFieldStyle(.plain)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textPrimary)
 
             if !chatProvider.searchQuery.isEmpty {
@@ -121,7 +154,7 @@ struct ChatSessionsSidebar: View {
                     chatProvider.searchQuery = ""
                 }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -141,7 +174,7 @@ struct ChatSessionsSidebar: View {
                 ForEach(chatProvider.groupedSessions, id: \.0) { group, sessions in
                     // Group header
                     Text(group)
-                        .font(.system(size: 11, weight: .semibold))
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
@@ -152,6 +185,7 @@ struct ChatSessionsSidebar: View {
                         SessionRow(
                             session: session,
                             isSelected: chatProvider.currentSession?.id == session.id,
+                            isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                             onSelect: {
                                 Task {
                                     await chatProvider.selectSession(session)
@@ -188,7 +222,7 @@ struct ChatSessionsSidebar: View {
             ProgressView()
                 .scaleEffect(0.8)
             Text("Loading chats...")
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.top, 8)
             Spacer()
@@ -199,15 +233,15 @@ struct ChatSessionsSidebar: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: emptyStateIcon)
-                .font(.system(size: 32))
+                .scaledFont(size: 32)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text(emptyStateTitle)
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text(emptyStateSubtitle)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
             Spacer()
         }
@@ -250,6 +284,7 @@ struct ChatSessionsSidebar: View {
 struct SessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -271,7 +306,7 @@ struct SessionRow: View {
                 // Star indicator
                 if session.starred {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.yellow)
                 }
 
@@ -279,7 +314,7 @@ struct SessionRow: View {
                     if isEditing {
                         TextField("Chat title", text: $editedTitle)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
                             .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
                             .focused($isTitleFocused)
                             .onSubmit {
@@ -290,14 +325,14 @@ struct SessionRow: View {
                             }
                     } else {
                         Text(session.title)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
                             .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
                             .lineLimit(1)
                     }
 
                     if let preview = session.preview, !preview.isEmpty, !isEditing {
                         Text(preview)
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
                     }
@@ -305,13 +340,19 @@ struct SessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Hover actions
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 4) {
                         // Rename button
                         Button(action: startEditing) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -319,7 +360,7 @@ struct SessionRow: View {
                         // Star/unstar button
                         Button(action: onToggleStar) {
                             Image(systemName: session.starred ? "star.fill" : "star")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -327,7 +368,7 @@ struct SessionRow: View {
                         // Delete button
                         Button(action: { showDeleteConfirm = true }) {
                             Image(systemName: "trash")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)

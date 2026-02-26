@@ -31,6 +31,16 @@ actor RewindIndexer {
 
     private init() {}
 
+    /// Reset the indexer state so it re-initializes on the next frame.
+    /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
+    func reset() {
+        isInitialized = false
+        isInitializing = false
+        initFailureCount = 0
+        nextRetryTime = .distantPast
+        log("RewindIndexer: Reset (will re-initialize on next frame)")
+    }
+
     /// Initialize all Rewind services
     func initialize() async throws {
         guard !isInitialized, !isInitializing else { return }
@@ -81,9 +91,12 @@ actor RewindIndexer {
             let backoffSeconds = min(pow(2.0, Double(initFailureCount)), Self.maxBackoffSeconds)
             nextRetryTime = Date().addingTimeInterval(backoffSeconds)
 
-            // Only log every few failures to avoid spamming Sentry
-            if initFailureCount <= 3 || initFailureCount % 10 == 0 {
+            // First 3 failures: send to Sentry for diagnostics (logError).
+            // After that: log locally only (log) to avoid flooding Sentry with a known-dead DB.
+            if initFailureCount <= 3 {
                 logError("RewindIndexer: Failed to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s): \(error)")
+            } else if initFailureCount % 10 == 0 {
+                log("RewindIndexer: Still failing to initialize (attempt \(initFailureCount), next retry in \(Int(backoffSeconds))s)")
             }
             return false
         }
@@ -131,10 +144,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }
@@ -144,6 +162,10 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: frame.captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            // since there's no video chunk to load later
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -185,8 +207,8 @@ actor RewindIndexer {
                 appName: frame.appName,
                 windowTitle: frame.windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
@@ -209,6 +231,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process frame: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
@@ -222,6 +245,9 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -262,8 +288,8 @@ actor RewindIndexer {
                 appName: appName,
                 windowTitle: windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
@@ -285,6 +311,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process CGImage frame: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
@@ -293,10 +320,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }
@@ -306,6 +338,9 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: frame.captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -355,8 +390,8 @@ actor RewindIndexer {
                 appName: frame.appName,
                 windowTitle: frame.windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
@@ -382,6 +417,7 @@ actor RewindIndexer {
 
         } catch {
             logError("RewindIndexer: Failed to process frame with metadata: \(error)")
+            await RewindDatabase.shared.reportQueryError(error)
         }
     }
 
@@ -484,8 +520,16 @@ actor RewindIndexer {
 
                         try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
                         totalProcessed += 1
+                    } catch RewindError.screenshotNotFound {
+                        // Screenshot/video file is permanently missing — clear skippedForBattery so we don't retry forever
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
+                    } catch let RewindError.corruptedVideoChunk(path) {
+                        log("RewindIndexer: Skipping corrupted chunk \(path) for screenshot \(id)")
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
                     } catch {
                         logError("RewindIndexer: Backfill OCR failed for screenshot \(id): \(error)")
+                        // Clear flag to prevent infinite retry loop for permanently broken screenshots
+                        try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
                     }
 
                     // Small delay to avoid hogging CPU

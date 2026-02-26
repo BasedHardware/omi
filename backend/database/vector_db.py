@@ -8,6 +8,9 @@ from pinecone import Pinecone
 
 from models.conversation import Conversation
 from utils.llm.clients import embeddings
+import logging
+
+logger = logging.getLogger(__name__)
 
 if os.getenv('PINECONE_API_KEY') is not None:
     pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
@@ -30,14 +33,14 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]):
 
 def upsert_vector(uid: str, conversation: Conversation, vector: List[float]):
     res = index.upsert(vectors=[_get_data(uid, conversation.id, vector)], namespace="ns1")
-    print('upsert_vector', res)
+    logger.info(f'upsert_vector {res}')
 
 
 def upsert_vector2(uid: str, conversation: Conversation, vector: List[float], metadata: dict):
     data = _get_data(uid, conversation.id, vector)
     data['metadata'].update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
-    print('upsert_vector', res)
+    logger.info(f'upsert_vector {res}')
 
 
 def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
@@ -49,7 +52,7 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
 def upsert_vectors(uid: str, vectors: List[List[float]], conversations: List[Conversation]):
     data = [_get_data(uid, conversation.id, vector) for conversation, vector in zip(conversations, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
-    print('upsert_vectors', res)
+    logger.info(f'upsert_vectors {res}')
 
 
 def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
@@ -89,7 +92,7 @@ def query_vectors_by_metadata(
             }
         )
     if dates_filter and len(dates_filter) == 2 and dates_filter[0] and dates_filter[1]:
-        print('dates_filter', dates_filter)
+        logger.info(f'dates_filter {dates_filter}')
         filter_data['$and'].append(
             {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
@@ -100,7 +103,7 @@ def query_vectors_by_metadata(
     if not xc['matches']:
         if len(filter_data['$and']) == 3:
             filter_data['$and'].pop(1)
-            print('query_vectors_by_metadata retrying without structured filters:', json.dumps(filter_data))
+            logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(
                 vector=vector,
                 filter=filter_data,
@@ -139,7 +142,7 @@ def delete_vector(uid: str, conversation_id: str):
     """
     vector_id = f'{uid}-{conversation_id}'
     result = index.delete(ids=[vector_id], namespace="ns1")
-    print('delete_vector', vector_id, result)
+    logger.info(f'delete_vector {vector_id} {result}')
 
 
 # ==========================================
@@ -155,7 +158,7 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
     Upsert a memory embedding to Pinecone.
     """
     if index is None:
-        print('Pinecone index not initialized, skipping memory vector upsert')
+        logger.warning('Pinecone index not initialized, skipping memory vector upsert')
         return None
 
     vector = embeddings.embed_query(content)
@@ -170,7 +173,7 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
         },
     }
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
-    print('upsert_memory_vector', memory_id, res)
+    logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
 
 
@@ -181,7 +184,7 @@ def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit
     Used for duplicate detection and semantic search.
     """
     if index is None:
-        print('Pinecone index not initialized, skipping similarity search')
+        logger.warning('Pinecone index not initialized, skipping similarity search')
         return []
 
     vector = embeddings.embed_query(content)
@@ -212,7 +215,7 @@ def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> d
     """
     similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
     if similar:
-        print(f'Found duplicate memory: {similar[0]}')
+        logger.warning(f'Found duplicate memory: {similar[0]}')
         return similar[0]
     return None
 
@@ -223,7 +226,7 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     Returns list of memory_ids ordered by relevance.
     """
     if index is None:
-        print('Pinecone index not initialized, skipping memory search')
+        logger.warning('Pinecone index not initialized, skipping memory search')
         return []
 
     vector = embeddings.embed_query(query)
@@ -241,9 +244,9 @@ def delete_memory_vector(uid: str, memory_id: str):
     Delete a memory vector from Pinecone.
     """
     if index is None:
-        print('Pinecone index not initialized, skipping memory vector delete')
+        logger.warning('Pinecone index not initialized, skipping memory vector delete')
         return
 
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
-    print('delete_memory_vector', vector_id, result)
+    logger.info(f'delete_memory_vector {vector_id} {result}')

@@ -10,7 +10,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::auth::AuthUser;
-use crate::models::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, CreateActionItemRequest, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};
+use crate::models::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, BatchUpdateSortOrdersRequest, CreateActionItemRequest, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -77,6 +77,9 @@ async fn create_action_item(
             request.metadata.as_deref(),
             request.category.as_deref(),
             request.relevance_score,
+            None, // from_staged
+            request.recurrence_rule.as_deref(),
+            request.recurrence_parent_id.as_deref(),
         )
         .await
     {
@@ -181,6 +184,9 @@ async fn update_action_item(
             request.category.as_deref(),
             request.goal_id.as_deref(),
             request.relevance_score,
+            request.sort_order,
+            request.indent_level,
+            request.recurrence_rule.as_deref(),
         )
         .await
     {
@@ -218,6 +224,9 @@ async fn batch_create_action_items(
                 item_request.metadata.as_deref(),
                 item_request.category.as_deref(),
                 item_request.relevance_score,
+                None, // from_staged
+                item_request.recurrence_rule.as_deref(),
+                item_request.recurrence_parent_id.as_deref(),
             )
             .await
         {
@@ -230,6 +239,35 @@ async fn batch_create_action_items(
     }
 
     Ok(Json(created_items))
+}
+
+/// PATCH /v1/action-items/batch - Batch update sort orders and indent levels
+async fn batch_update_sort_orders(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(request): Json<BatchUpdateSortOrdersRequest>,
+) -> Result<Json<ActionItemStatusResponse>, StatusCode> {
+    tracing::info!(
+        "Batch updating {} sort orders for user {}",
+        request.items.len(),
+        user.uid
+    );
+
+    let items: Vec<(String, i32, i32)> = request
+        .items
+        .into_iter()
+        .map(|s| (s.id, s.sort_order, s.indent_level))
+        .collect();
+
+    match state.firestore.batch_update_sort_orders(&user.uid, &items).await {
+        Ok(()) => Ok(Json(ActionItemStatusResponse {
+            status: "ok".to_string(),
+        })),
+        Err(e) => {
+            tracing::error!("Failed to batch update sort orders: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 /// DELETE /v1/action-items/{id} - Delete an action item
@@ -460,6 +498,9 @@ async fn accept_tasks(
                         Some(&metadata),
                         item.category.as_deref(),
                         item.relevance_score,
+                        None, // from_staged
+                        None, // recurrence_rule
+                        None, // recurrence_parent_id
                     )
                     .await
                 {
@@ -490,7 +531,7 @@ async fn accept_tasks(
 pub fn action_items_routes() -> Router<AppState> {
     Router::new()
         .route("/v1/action-items", get(get_action_items).post(create_action_item))
-        .route("/v1/action-items/batch", axum::routing::post(batch_create_action_items))
+        .route("/v1/action-items/batch", axum::routing::post(batch_create_action_items).patch(batch_update_sort_orders))
         .route("/v1/action-items/batch-scores", axum::routing::patch(batch_update_scores))
         .route("/v1/action-items/share", axum::routing::post(share_tasks))
         .route("/v1/action-items/shared/:token", get(get_shared_tasks))

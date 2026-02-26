@@ -18,18 +18,18 @@ struct StorageSyncView: View {
             // Header
             HStack {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .foregroundColor(OmiColors.purplePrimary)
 
                 Text("Storage Sync")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
 
                 Spacer()
 
                 // Pending count badge
                 if walService.pendingWals.count > 0 {
                     Text("\(walService.pendingWals.count) pending")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textSecondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
@@ -78,7 +78,7 @@ struct StorageSyncView: View {
         HStack(spacing: 12) {
             // Device icon
             Image(systemName: device.type.iconName)
-                .font(.system(size: 24))
+                .scaledFont(size: 24)
                 .foregroundColor(OmiColors.purplePrimary)
                 .frame(width: 40, height: 40)
                 .background(
@@ -88,7 +88,7 @@ struct StorageSyncView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.displayName)
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
 
                 HStack(spacing: 8) {
                     // Connection status
@@ -97,7 +97,7 @@ struct StorageSyncView: View {
                             .fill(Color.green)
                             .frame(width: 6, height: 6)
                         Text("Connected")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textSecondary)
                     }
 
@@ -105,9 +105,9 @@ struct StorageSyncView: View {
                     if deviceProvider.batteryLevel >= 0 {
                         HStack(spacing: 2) {
                             Image(systemName: batteryIcon)
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text("\(deviceProvider.batteryLevel)%")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                         }
                         .foregroundColor(batteryColor)
                     }
@@ -121,11 +121,11 @@ struct StorageSyncView: View {
     private var noDeviceView: some View {
         HStack(spacing: 12) {
             Image(systemName: "waveform.slash")
-                .font(.system(size: 20))
+                .scaledFont(size: 20)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No device connected")
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
@@ -154,10 +154,10 @@ struct StorageSyncView: View {
             // Progress details
             HStack {
                 Text(formatBytes(progress.downloadedBytes))
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
 
                 Text("of \(formatBytes(progress.totalBytes))")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -165,14 +165,14 @@ struct StorageSyncView: View {
                 // Speed
                 if progress.bytesPerSecond > 0 {
                     Text("\(formatBytes(Int(progress.bytesPerSecond)))/s")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textSecondary)
                 }
 
                 // ETA
                 if let eta = progress.estimatedSecondsRemaining {
                     Text("~\(formatDuration(eta))")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textSecondary)
                 }
             }
@@ -181,9 +181,9 @@ struct StorageSyncView: View {
             if wifiSyncService.isSyncing {
                 HStack(spacing: 6) {
                     Image(systemName: "wifi")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                     Text(wifiSyncService.status.displayName)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                 }
                 .foregroundColor(OmiColors.textSecondary)
             }
@@ -201,7 +201,7 @@ struct StorageSyncView: View {
                 .foregroundColor(.orange)
 
             Text(message)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
@@ -210,7 +210,7 @@ struct StorageSyncView: View {
                 storageSyncService.errorMessage = nil
                 wifiSyncService.errorMessage = nil
             }
-            .font(.system(size: 11, weight: .medium))
+            .scaledFont(size: 11, weight: .medium)
             .foregroundColor(OmiColors.purplePrimary)
         }
         .padding(10)
@@ -232,7 +232,7 @@ struct StorageSyncView: View {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                     Text("BLE Sync")
                 }
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -252,7 +252,7 @@ struct StorageSyncView: View {
                     Image(systemName: "wifi")
                     Text("WiFi Sync")
                 }
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
@@ -272,7 +272,7 @@ struct StorageSyncView: View {
                     stopSync()
                 }) {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(.red)
                         .padding(8)
                         .background(
@@ -290,7 +290,7 @@ struct StorageSyncView: View {
             // Header
             HStack {
                 Text("WiFi Sync Setup")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
                 DismissButton(action: { showWifiSetup = false })
@@ -298,7 +298,7 @@ struct StorageSyncView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Network Name (SSID)")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 TextField("Enter WiFi network name", text: $wifiSsid)
@@ -307,7 +307,7 @@ struct StorageSyncView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.system(size: 12, weight: .medium))
+                    .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 SecureField("Enter WiFi password", text: $wifiPassword)
@@ -446,7 +446,7 @@ struct StorageSyncIndicator: View {
                     storageSyncService.progress : wifiSyncService.progress
 
                 Text("\(Int(progress.percentComplete))%")
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
             }
             .padding(.horizontal, 8)
@@ -459,10 +459,10 @@ struct StorageSyncIndicator: View {
             // Pending indicator
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
 
                 Text("\(walService.pendingWals.count)")
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
             }
             .foregroundColor(OmiColors.textSecondary)
             .padding(.horizontal, 8)

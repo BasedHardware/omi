@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,10 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
@@ -991,14 +989,21 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: const Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
-                            String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/conversations.json');
-                            await file.writeAsString(json);
+                            final filePath = '${directory.path}/omi-export.json';
+                            final exportedPath = await exportUserDataToFile(filePath);
+                            if (exportedPath == null) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Export failed. Please try again.')),
+                                );
+                              }
+                              setState(() => provider.loadingExportMemories = false);
+                              return;
+                            }
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
+                                await Share.shareXFiles([XFile(exportedPath)], text: 'Exported Data from Omi');
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
@@ -1666,6 +1671,83 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           icon: FontAwesomeIcons.bullseye,
                           value: provider.showGoalTrackerEnabled,
                           onChanged: provider.onShowGoalTrackerChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Claude Agent
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.robot, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Claude Agent',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Text(
+                                          'BETA',
+                                          style: TextStyle(
+                                            color: Colors.purple,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Route chat through desktop agent VM',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (provider.claudeAgentLoading)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            else
+                              Switch(
+                                value: provider.claudeAgentEnabled,
+                                onChanged: (v) => provider.onClaudeAgentChanged(v),
+                                activeColor: const Color(0xFF22C55E),
+                              ),
+                          ],
                         ),
                       ],
                     ),

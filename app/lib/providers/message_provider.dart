@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -20,6 +21,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/main.dart';
+import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -41,12 +43,17 @@ class MessageProvider extends ChangeNotifier {
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
 
+  final AgentChatService _agentChatService = AgentChatService();
+  Timer? _vmKeepaliveTimer;
+  static const _keepaliveInterval = Duration(minutes: 5);
+
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
   bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
   double aiStreamProgress = 1.0;
+  bool agentThinkingAfterText = false;
 
   String firstTimeLoadingText = '';
 
@@ -61,6 +68,19 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void startVmKeepalive() {
+    if (!SharedPreferencesUtil().claudeAgentEnabled) return;
+    stopVmKeepalive();
+    _vmKeepaliveTimer = Timer.periodic(_keepaliveInterval, (_) {
+      sendAgentKeepalive();
+    });
+  }
+
+  void stopVmKeepalive() {
+    _vmKeepaliveTimer?.cancel();
+    _vmKeepaliveTimer = null;
   }
 
   void setChatApps(List<App> apps) {
@@ -567,6 +587,13 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
+    // Route through agent VM if Claude Agent is enabled
+    if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
+      await _sendMessageViaAgent(text, currentAppId);
+      return;
+    }
+
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
     final aiIndex = messages.length - 1;
@@ -627,6 +654,155 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      aiStreamProgress = 1.0;
+      setShowTypingIndicator(false);
+      setSendingMessage(false);
+    }
+  }
+
+  Future _sendMessageViaAgent(String text, String? appId) async {
+    var message = ServerMessage.empty(appId: appId);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
+    notifyListeners();
+    clearSelectedFiles();
+    clearUploadedFiles();
+    String textBuffer = '';
+    Timer? timer;
+
+    void flushBuffer() {
+      if (textBuffer.isNotEmpty) {
+        message.text += textBuffer;
+        textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
+        HapticFeedback.lightImpact();
+        notifyListeners();
+      }
+    }
+
+    Timer? silenceTimer;
+    Timer? rotateTimer;
+    int rotateIndex = 0;
+
+    try {
+      // Connect to agent proxy (authenticates via Firebase token)
+      final connected = await _agentChatService.connect();
+      if (!connected) {
+        // Retry once before giving up
+        await Future.delayed(const Duration(seconds: 1));
+        final retried = await _agentChatService.connect();
+        if (!retried) {
+          message.text = 'Failed to connect to agent. Check that your desktop is running.';
+          notifyListeners();
+          setShowTypingIndicator(false);
+          setSendingMessage(false);
+          return;
+        }
+      }
+
+      // History is injected server-side by the agent-proxy from Firestore
+      final prompt = text;
+
+      const rotateMessages = [
+        'Querying your data',
+        'Analyzing activity',
+        'Processing results',
+        'Pulling context',
+        'Searching records',
+      ];
+
+      void startSilenceTimer() {
+        silenceTimer?.cancel();
+        rotateTimer?.cancel();
+        if (message.text.isNotEmpty || textBuffer.isNotEmpty) {
+          silenceTimer = Timer(const Duration(seconds: 2), () {
+            flushBuffer();
+            agentThinkingAfterText = true;
+            rotateIndex = 0;
+            message.thinkings.add(rotateMessages[rotateIndex]);
+            notifyListeners();
+            rotateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+              rotateIndex = (rotateIndex + 1) % rotateMessages.length;
+              if (message.thinkings.isNotEmpty) {
+                message.thinkings[message.thinkings.length - 1] = rotateMessages[rotateIndex];
+              }
+              notifyListeners();
+            });
+          });
+        }
+      }
+
+      await for (var event in _agentChatService.sendQuery(prompt)) {
+        switch (event.type) {
+          case AgentChatEventType.textDelta:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            if (agentThinkingAfterText) {
+              textBuffer += '\n\n';
+              agentThinkingAfterText = false;
+              notifyListeners();
+            }
+            textBuffer += event.text;
+            timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+              flushBuffer();
+            });
+            startSilenceTimer();
+            break;
+          case AgentChatEventType.toolActivity:
+            // Show tool activity as thinking
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            flushBuffer();
+            if (message.text.isNotEmpty) {
+              agentThinkingAfterText = true;
+            }
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
+            }
+            notifyListeners();
+            break;
+          case AgentChatEventType.result:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            timer?.cancel();
+            timer = null;
+            flushBuffer();
+            if (event.text.isNotEmpty && message.text.isEmpty) {
+              message.text = event.text;
+            }
+            notifyListeners();
+            break;
+          case AgentChatEventType.status:
+            // Show VM startup status as thinking indicator
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            flushBuffer();
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
+            }
+            notifyListeners();
+            break;
+          case AgentChatEventType.error:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            timer?.cancel();
+            timer = null;
+            flushBuffer();
+            message.text = message.text.isEmpty ? 'Agent error: ${event.text}' : message.text;
+            notifyListeners();
+            break;
+        }
+      }
+    } catch (e) {
+      Logger.error('Agent chat error: $e');
+      message.text = message.text.isEmpty ? 'Failed to get response from agent.' : message.text;
+      notifyListeners();
+    } finally {
+      silenceTimer?.cancel();
+      rotateTimer?.cancel();
+      timer?.cancel();
+      flushBuffer();
+      agentThinkingAfterText = false;
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);

@@ -27,6 +27,11 @@ struct ScrollPositionDetector: NSViewRepresentable {
         let onScrollPositionChange: (Bool) -> Void
         private var scrollView: NSScrollView?
         private var observation: NSObjectProtocol?
+        /// Coalesces rapid bounds-change notifications so we update SwiftUI
+        /// state at most once per ~60ms, preventing a feedback loop with
+        /// programmatic scrolls during streaming.
+        private var coalesceWorkItem: DispatchWorkItem?
+        private var lastReportedValue: Bool?
 
         init(onScrollPositionChange: @escaping (Bool) -> Void) {
             self.onScrollPositionChange = onScrollPositionChange
@@ -69,17 +74,26 @@ struct ScrollPositionDetector: NSViewRepresentable {
             let clipBounds = scrollView.contentView.bounds
             let documentHeight = documentView.frame.height
             let visibleMaxY = clipBounds.origin.y + clipBounds.height
-            let threshold: CGFloat = 50
+            let threshold: CGFloat = 100
 
             // At bottom if we can see within threshold of the document bottom
             let isAtBottom = visibleMaxY >= documentHeight - threshold
 
-            DispatchQueue.main.async {
-                self.onScrollPositionChange(isAtBottom)
+            // Skip if the value hasn't changed — avoids redundant state updates
+            guard isAtBottom != lastReportedValue else { return }
+
+            // Coalesce rapid notifications into a single state update
+            coalesceWorkItem?.cancel()
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.lastReportedValue = isAtBottom
+                self?.onScrollPositionChange(isAtBottom)
             }
+            coalesceWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
         }
 
         deinit {
+            coalesceWorkItem?.cancel()
             if let observation = observation {
                 NotificationCenter.default.removeObserver(observation)
             }
@@ -95,6 +109,7 @@ struct ChatPage: View {
     @State private var selectedCitation: Citation?
     @State private var citedConversation: ServerConversation?
     @State private var isLoadingCitation = false
+    @State private var copied = false
 
     var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -113,6 +128,30 @@ struct ChatPage: View {
             // Messages area
             messagesView
 
+            // Error banner
+            if let error = chatProvider.errorMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(OmiColors.warning)
+                        .scaledFont(size: 14)
+                    Text(error)
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textSecondary)
+                    Spacer()
+                    Button {
+                        chatProvider.errorMessage = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(OmiColors.backgroundSecondary)
+            }
+
             // Input area
             inputArea
                 .padding()
@@ -128,6 +167,45 @@ struct ChatPage: View {
             )
             .frame(minWidth: 500, minHeight: 500)
         }
+        .sheet(isPresented: $chatProvider.needsBrowserExtensionSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    chatProvider.needsBrowserExtensionSetup = false
+                },
+                onDismiss: {
+                    chatProvider.needsBrowserExtensionSetup = false
+                },
+                chatProvider: chatProvider
+            )
+            .fixedSize()
+        }
+        .sheet(isPresented: $chatProvider.isClaudeAuthRequired) {
+            ClaudeAuthSheet(
+                onConnect: {
+                    chatProvider.startClaudeAuth()
+                },
+                onCancel: {
+                    chatProvider.isClaudeAuthRequired = false
+                    // Switch back to Mode A if auth cancelled
+                    Task {
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
+                    }
+                }
+            )
+        }
+        .alert("Free Usage Limit Reached", isPresented: $chatProvider.showOmiThresholdAlert) {
+            Button("Connect Claude Account") {
+                chatProvider.showOmiThresholdAlert = false
+                if !chatProvider.isClaudeConnected {
+                    chatProvider.isClaudeAuthRequired = true
+                }
+            }
+            Button("Later", role: .cancel) {
+                chatProvider.showOmiThresholdAlert = false
+            }
+        } message: {
+            Text("Please connect your Claude account to continue chatting.")
+        }
         .overlay {
             // Loading overlay when fetching citation
             if isLoadingCitation {
@@ -136,7 +214,7 @@ struct ChatPage: View {
                     VStack(spacing: 12) {
                         ProgressView()
                         Text("Loading source...")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(.white)
                     }
                     .padding(20)
@@ -158,9 +236,9 @@ struct ChatPage: View {
                     // Show indicator that we're in default chat
                     HStack(spacing: 6) {
                         Image(systemName: "icloud")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                         Text("Synced Chat")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(OmiColors.success)
                     .padding(.horizontal, 8)
@@ -177,9 +255,9 @@ struct ChatPage: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "icloud")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                             Text("Synced")
-                                .font(.system(size: 11, weight: .medium))
+                                .scaledFont(size: 11, weight: .medium)
                         }
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.horizontal, 8)
@@ -193,7 +271,7 @@ struct ChatPage: View {
                     // Current session indicator
                     if let session = chatProvider.currentSession {
                         Text(session.title)
-                            .font(.system(size: 12, weight: .medium))
+                            .scaledFont(size: 12, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .lineLimit(1)
                     }
@@ -206,7 +284,7 @@ struct ChatPage: View {
                     }
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .medium))
+                        .scaledFont(size: 14, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -234,23 +312,23 @@ struct ChatPage: View {
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(app.name)
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text("Chat App")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     } else {
                         // Default OMI assistant
                         Text("Omi")
-                            .font(.system(size: 14, weight: .medium))
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                     }
 
                     if !appProvider.chatApps.isEmpty {
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -280,34 +358,53 @@ struct ChatPage: View {
 
             // Model indicator
             Text(chatProvider.currentModel)
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(OmiColors.backgroundSecondary)
                 .cornerRadius(8)
 
-            // Clear chat button
+            // Copy conversation button
             if !chatProvider.messages.isEmpty {
+                Button(action: {
+                    copyConversation()
+                }) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .scaledFont(size: 14)
+                        .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy conversation")
+            }
+
+            // Clear chat button
+            if !chatProvider.messages.isEmpty || chatProvider.isClearing {
                 Button(action: {
                     Task {
                         await chatProvider.clearChat()
                     }
                 }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                        .foregroundColor(OmiColors.textTertiary)
+                    if chatProvider.isClearing {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "trash")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
                 }
                 .buttonStyle(.plain)
                 .help("Clear chat history")
-                .disabled(chatProvider.isLoading)
+                .disabled(chatProvider.isLoading || chatProvider.isClearing)
             }
 
             // History button (only in multi-chat mode)
             if chatProvider.multiChatEnabled {
                 Button(action: { showHistoryPopover.toggle() }) {
                     Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -319,6 +416,17 @@ struct ChatPage: View {
                     )
                 }
             }
+
+            // AI Chat settings button
+            Button(action: {
+                NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
+            }) {
+                Image(systemName: "gear")
+                    .scaledFont(size: 14)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+            .help("AI Chat settings")
         }
     }
 
@@ -330,7 +438,7 @@ struct ChatPage: View {
             isSending: chatProvider.isSending,
             hasMoreMessages: chatProvider.hasMoreMessages,
             isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
-            isLoadingInitial: chatProvider.isLoading || chatProvider.isLoadingSessions,
+            isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions) && !chatProvider.isClearing,
             app: selectedApp,
             onLoadMore: { await chatProvider.loadMoreMessages() },
             onRate: { messageId, rating in
@@ -339,6 +447,8 @@ struct ChatPage: View {
             onCitationTap: { citation in
                 handleCitationTap(citation)
             },
+            sessionsLoadError: chatProvider.sessionsLoadError,
+            onRetry: { Task { await chatProvider.retryLoad() } },
             welcomeContent: { welcomeMessage }
         )
     }
@@ -361,11 +471,11 @@ struct ChatPage: View {
                 .clipShape(Circle())
 
                 Text("Chat with \(app.name)")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text(app.description)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
@@ -381,18 +491,19 @@ struct ChatPage: View {
                 }
 
                 Text("Chat with Omi")
-                    .font(.system(size: 18, weight: .semibold))
+                    .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text("Your personal AI assistant that knows you through your memories and conversations")
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding()
+        .padding(.vertical, 80)
     }
 
     // MARK: - Input Area
@@ -400,11 +511,36 @@ struct ChatPage: View {
     private var inputArea: some View {
         ChatInputView(
             onSend: { text in
-                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil)
+                AnalyticsManager.shared.chatMessageSent(messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
                 Task { await chatProvider.sendMessage(text) }
             },
-            isSending: chatProvider.isSending
+            onFollowUp: { text in
+                Task { await chatProvider.sendFollowUp(text) }
+            },
+            onStop: {
+                chatProvider.stopAgent()
+            },
+            isSending: chatProvider.isSending,
+            isStopping: chatProvider.isStopping,
+            mode: $chatProvider.chatMode,
+            inputText: $chatProvider.draftText
         )
+    }
+
+    /// Copy the entire conversation to clipboard
+    private func copyConversation() {
+        let text: String = chatProvider.messages.map { message in
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            return "\(sender): \(message.text)"
+        }.joined(separator: "\n\n")
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copied = false
+        }
     }
 
     /// Handle tapping on a citation card
@@ -444,8 +580,40 @@ struct ChatBubble: View {
     let app: OmiApp?
     let onRate: (Int?) -> Void
     var onCitationTap: ((Citation) -> Void)? = nil
+    var isDuplicate: Bool = false
 
     @State private var isHovering = false
+    @State private var isExpanded = false
+    @State private var showCopied = false
+    /// Cached grouped content blocks — pre-computed on init to avoid recreating
+    /// `[ContentBlockGroup]` on every SwiftUI layout pass.
+    @State private var cachedGroupedBlocks: [ContentBlockGroup]
+
+    init(message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
+         onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false) {
+        self.message = message
+        self.app = app
+        self.onRate = onRate
+        self.onCitationTap = onCitationTap
+        self.isDuplicate = isDuplicate
+        self._cachedGroupedBlocks = State(initialValue: ContentBlockGroup.group(message.contentBlocks))
+    }
+
+    /// Messages longer than this are truncated with a "Show more" button
+    private static let truncationThreshold = 500
+
+    /// Whether this message should be truncated
+    private var shouldTruncate: Bool {
+        !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    }
+
+    /// The text to display (truncated or full) — shows the END of the message
+    private var displayText: String {
+        if shouldTruncate {
+            return "…" + String(message.text.suffix(Self.truncationThreshold))
+        }
+        return message.text
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -484,42 +652,73 @@ struct ChatBubble: View {
                     // Show typing indicator for empty streaming message
                     TypingIndicator()
                 } else if message.sender == .ai && !message.contentBlocks.isEmpty {
-                    // Render structured content blocks (text interspersed with tool calls)
-                    ForEach(message.contentBlocks) { block in
-                        switch block {
+                    // Render structured content blocks, grouping consecutive tool calls
+                    ForEach(cachedGroupedBlocks) { group in
+                        switch group {
                         case .text(_, let text):
                             if !text.isEmpty {
-                                Markdown(text)
-                                    .markdownTheme(.aiMessage)
-                                    .textSelection(.enabled)
-                                    .if_available_writingToolsNone()
+                                SelectableMarkdown(text: text, sender: .ai)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 10)
                                     .background(OmiColors.backgroundSecondary)
                                     .cornerRadius(18)
                             }
-                        case .toolCall(_, let name, let status):
-                            ToolCallIndicator(name: name, status: status)
+                        case .toolCalls(_, let calls):
+                            ToolCallsGroup(calls: calls)
+                        case .thinking(_, let text):
+                            ThinkingBlock(text: text)
                         }
                     }
                     // Show typing indicator at end if still streaming
+                    // (skip only when last group is tool calls with a running tool — it already has a spinner)
                     if message.isStreaming {
-                        if case .toolCall(_, _, .running) = message.contentBlocks.last {
-                            // Tool is running — indicator already shows spinner
-                        } else if case .text(_, let lastText) = message.contentBlocks.last, lastText.isEmpty {
+                        if case .toolCalls(_, let calls) = cachedGroupedBlocks.last,
+                           calls.contains(where: { block in
+                               if case .toolCall(_, _, .running, _, _, _) = block { return true }
+                               return false
+                           }) {
+                            // Tool group has a running tool — its card already shows a spinner
+                        } else {
                             TypingIndicator()
                         }
                     }
+                } else if isDuplicate && !isExpanded {
+                    // Collapsed duplicate message
+                    Button(action: { isExpanded = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc")
+                                .scaledFont(size: 11)
+                            Text("Duplicate message")
+                                .scaledFont(size: 12)
+                            Image(systemName: "chevron.down")
+                                .scaledFont(size: 9)
+                        }
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(OmiColors.backgroundTertiary.opacity(0.5))
+                        .cornerRadius(18)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     // User messages or AI messages without content blocks (loaded from Firestore)
-                    Markdown(message.text)
-                        .markdownTheme(message.sender == .user ? .userMessage : .aiMessage)
-                        .textSelection(.enabled)
-                        .if_available_writingToolsNone()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                        .cornerRadius(18)
+                    VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+                        SelectableMarkdown(text: displayText, sender: message.sender)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
+                            .cornerRadius(18)
+
+                        // Show more / Show less toggle for long messages
+                        if message.text.count > Self.truncationThreshold {
+                            Button(action: { isExpanded.toggle() }) {
+                                Text(isExpanded ? "Show less" : "Show more")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(.white)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 // Citation cards for AI messages with citations
@@ -530,18 +729,27 @@ struct ChatBubble: View {
                     .frame(maxWidth: 280)
                 }
 
-                // Rating buttons and timestamp row for AI messages (only when synced with backend)
+                // Rating buttons, copy button, and timestamp row for AI messages
                 if message.sender == .ai && !message.isStreaming && message.isSynced {
                     HStack(spacing: 8) {
                         ratingButtons
+                        copyButton
 
                         Text(message.createdAt, style: .time)
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                } else if message.sender == .ai && !message.isStreaming && !message.text.isEmpty {
+                    HStack(spacing: 8) {
+                        copyButton
+
+                        Text(message.createdAt, style: .time)
+                            .scaledFont(size: 10)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 } else if !message.isStreaming || !message.text.isEmpty {
                     Text(message.createdAt, style: .time)
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -549,7 +757,7 @@ struct ChatBubble: View {
             if message.sender == .user {
                 // User avatar
                 Image(systemName: "person.fill")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(width: 32, height: 32)
                     .background(OmiColors.backgroundTertiary)
@@ -558,6 +766,15 @@ struct ChatBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         .onHover { isHovering = $0 }
+        .onChange(of: message.contentBlocks.count) {
+            // Refresh grouped blocks when new blocks are added (e.g. tool calls)
+            cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+        }
+        .onChange(of: message.text) {
+            // Refresh grouped blocks when text content changes within existing blocks
+            // (streaming appends to the last text block without changing count)
+            cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+        }
     }
 
     @ViewBuilder
@@ -570,7 +787,7 @@ struct ChatBubble: View {
                 onRate(newRating)
             }) {
                 Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(message.rating == 1 ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -583,40 +800,355 @@ struct ChatBubble: View {
                 onRate(newRating)
             }) {
                 Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
             .help("Not helpful")
         }
     }
+
+    @ViewBuilder
+    private var copyButton: some View {
+        Button(action: {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(message.text, forType: .string)
+            showCopied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                showCopied = false
+            }
+        }) {
+            Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                .scaledFont(size: 11)
+                .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .help("Copy message")
+    }
 }
 
-// MARK: - Tool Call Indicator
+extension ChatBubble: Equatable {
+    static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
+        // Streaming messages always re-render so SwiftUI sees live updates
+        guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }
+        // Completed messages are equal when visible content hasn't changed
+        return lhs.message.id == rhs.message.id
+            && lhs.message.text == rhs.message.text
+            && lhs.message.rating == rhs.message.rating
+            && lhs.app?.id == rhs.app?.id
+            && lhs.isDuplicate == rhs.isDuplicate
+    }
+}
 
-struct ToolCallIndicator: View {
-    let name: String
-    let status: ToolCallStatus
+// MARK: - Content Block Grouping
+
+/// Groups consecutive tool call blocks into a single collapsible group
+enum ContentBlockGroup: Identifiable {
+    case text(id: String, text: String)
+    case toolCalls(id: String, calls: [ChatContentBlock])
+    case thinking(id: String, text: String)
+
+    var id: String {
+        switch self {
+        case .text(let id, _): return id
+        case .toolCalls(let id, _): return id
+        case .thinking(let id, _): return id
+        }
+    }
+
+    /// Groups consecutive `.toolCall` blocks together; passes `.text` and `.thinking` through
+    static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
+        var groups: [ContentBlockGroup] = []
+        var pendingToolCalls: [ChatContentBlock] = []
+
+        func flushToolCalls() {
+            guard !pendingToolCalls.isEmpty else { return }
+            let groupId = "toolgroup_\(pendingToolCalls.first!.id)"
+            groups.append(.toolCalls(id: groupId, calls: pendingToolCalls))
+            pendingToolCalls = []
+        }
+
+        for block in blocks {
+            switch block {
+            case .text(let id, let text):
+                flushToolCalls()
+                groups.append(.text(id: id, text: text))
+            case .toolCall:
+                pendingToolCalls.append(block)
+            case .thinking(let id, let text):
+                flushToolCalls()
+                groups.append(.thinking(id: id, text: text))
+            }
+        }
+        flushToolCalls()
+        return groups
+    }
+}
+
+// MARK: - Tool Calls Group
+
+/// Renders a group of consecutive tool calls as a single collapsed summary line
+struct ToolCallsGroup: View {
+    let calls: [ChatContentBlock]
+
+    @State private var isExpanded = false
+
+    /// Whether any tool in the group is still running
+    private var hasRunningTool: Bool {
+        calls.contains { block in
+            if case .toolCall(_, _, .running, _, _, _) = block { return true }
+            return false
+        }
+    }
+
+    /// Display name of the currently running tool (last running one), or last tool if all done
+    private var currentToolName: String {
+        // Find the last running tool
+        if let lastRunning = calls.last(where: { block in
+            if case .toolCall(_, _, .running, _, _, _) = block { return true }
+            return false
+        }) {
+            if case .toolCall(_, let name, _, _, _, _) = lastRunning {
+                return ChatContentBlock.displayName(for: name)
+            }
+        }
+        // All done — show last tool name
+        if case .toolCall(_, let name, _, _, _, _) = calls.last {
+            return ChatContentBlock.displayName(for: name)
+        }
+        return "Working"
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            if status == .running {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 12, height: 12)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundColor(.green)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            // Summary header
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    // Status indicator
+                    if hasRunningTool {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .scaledFont(size: 12)
+                            .foregroundColor(.green)
+                    }
 
-            Text(ChatContentBlock.displayName(for: name))
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(OmiColors.textSecondary)
+                    // Current/last tool action
+                    Text(currentToolName)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textSecondary)
+
+                    // Step count (only show when > 1)
+                    if calls.count > 1 {
+                        Text("·")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                        Text("\(calls.count) steps")
+                            .scaledFont(size: 11)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    // Expand chevron
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 9)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded: show individual tool call cards
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 8)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(calls) { block in
+                        if case .toolCall(_, let name, let status, _, let input, let output) = block {
+                            ToolCallCard(name: name, status: status, input: input, output: output)
+                        }
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 6)
+            }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
         .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - Tool Call Card
+
+struct ToolCallCard: View {
+    let name: String
+    let status: ToolCallStatus
+    let input: ToolCallInput?
+    let output: String?
+
+    @State private var isExpanded = false
+
+    private var hasExpandableContent: Bool {
+        input?.details != nil || output != nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Compact header row
+            Button(action: {
+                if hasExpandableContent {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                }
+            }) {
+                HStack(spacing: 6) {
+                    // Status indicator
+                    if status == .running {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .scaledFont(size: 12)
+                            .foregroundColor(.green)
+                    }
+
+                    // Tool name
+                    Text(ChatContentBlock.displayName(for: name))
+                        .scaledFont(size: 12, design: .monospaced)
+                        .foregroundColor(OmiColors.textSecondary)
+
+                    // Inline argument summary
+                    if let summary = input?.summary {
+                        Text("·")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text(summary)
+                            .scaledFont(size: 11, design: .monospaced)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    // Expand chevron
+                    if hasExpandableContent {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .scaledFont(size: 9)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 8)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    // Input details
+                    if let details = input?.details {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Input")
+                                .scaledFont(size: 10, weight: .semibold)
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            Text(details)
+                                .scaledFont(size: 11, design: .monospaced)
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(10)
+                        }
+                    }
+
+                    // Output
+                    if let output = output, !output.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Output")
+                                .scaledFont(size: 10, weight: .semibold)
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            Text(output)
+                                .scaledFont(size: 11, design: .monospaced)
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(15)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - Thinking Block
+
+struct ThinkingBlock: View {
+    let text: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Text("Thinking")
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .italic()
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 9)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded thinking content
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 8)
+
+                Text(text)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .italic()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .lineLimit(30)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.3))
         .cornerRadius(8)
     }
 }
@@ -656,7 +1188,7 @@ struct AppPickerPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Select Assistant")
-                .font(.system(size: 12, weight: .medium))
+                .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.textTertiary)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -717,14 +1249,14 @@ struct DefaultOmiRow: View {
                 }
 
                 Text("Omi")
-                    .font(.system(size: 13, weight: .medium))
+                    .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
             }
@@ -763,11 +1295,11 @@ struct AppPickerRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(app.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
 
                     Text(app.author)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -775,7 +1307,7 @@ struct AppPickerRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
             }
@@ -801,7 +1333,7 @@ struct ChatHistoryPopover: View {
             // Header
             HStack {
                 Text("Chat History")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -820,7 +1352,7 @@ struct ChatHistoryPopover: View {
                             .frame(width: 14, height: 14)
                     } else {
                         Image(systemName: chatProvider.showStarredOnly ? "star.fill" : "star")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textTertiary)
                     }
                 }
@@ -835,7 +1367,7 @@ struct ChatHistoryPopover: View {
                     }
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
                 .buttonStyle(.plain)
@@ -847,18 +1379,18 @@ struct ChatHistoryPopover: View {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
 
                 TextField("Search chats...", text: $chatProvider.searchQuery)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if !chatProvider.searchQuery.isEmpty {
                     Button(action: { chatProvider.searchQuery = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -880,7 +1412,7 @@ struct ChatHistoryPopover: View {
                     ProgressView()
                         .scaleEffect(0.8)
                     Text("Loading...")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.top, 8)
                     Spacer()
@@ -890,13 +1422,13 @@ struct ChatHistoryPopover: View {
                 VStack(spacing: 8) {
                     Spacer()
                     Image(systemName: emptyStateIcon)
-                        .font(.system(size: 24))
+                        .scaledFont(size: 24)
                         .foregroundColor(OmiColors.textTertiary)
                     Text(emptyStateTitle)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textSecondary)
                     Text(emptyStateSubtitle)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                     Spacer()
                 }
@@ -907,7 +1439,7 @@ struct ChatHistoryPopover: View {
                         ForEach(chatProvider.groupedSessions, id: \.0) { group, sessions in
                             // Group header
                             Text(group)
-                                .font(.system(size: 11, weight: .semibold))
+                                .scaledFont(size: 11, weight: .semibold)
                                 .foregroundColor(OmiColors.textTertiary)
                                 .padding(.horizontal, 16)
                                 .padding(.top, 12)
@@ -918,6 +1450,7 @@ struct ChatHistoryPopover: View {
                                 HistorySessionRow(
                                     session: session,
                                     isSelected: chatProvider.currentSession?.id == session.id,
+                                    isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                                     onSelect: {
                                         Task {
                                             await chatProvider.selectSession(session)
@@ -988,6 +1521,7 @@ struct ChatHistoryPopover: View {
 struct HistorySessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -1009,7 +1543,7 @@ struct HistorySessionRow: View {
                 // Star indicator
                 if session.starred {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 10))
+                        .scaledFont(size: 10)
                         .foregroundColor(.yellow)
                 }
 
@@ -1017,14 +1551,14 @@ struct HistorySessionRow: View {
                     if isEditing {
                         TextField("Chat title", text: $editedTitle)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
                             .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
                             .focused($isTitleFocused)
                             .onSubmit { saveTitle() }
                             .onExitCommand { cancelEditing() }
                     } else {
                         Text(session.title)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                            .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
                             .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
                             .lineLimit(1)
                     }
@@ -1038,7 +1572,7 @@ struct HistorySessionRow: View {
                             Text("·")
                             Text(session.createdAt, style: .relative)
                         }
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                         .lineLimit(1)
                     }
@@ -1046,13 +1580,19 @@ struct HistorySessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Action buttons on hover
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 6) {
                         // Rename button
                         Button(action: startEditing) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -1060,7 +1600,7 @@ struct HistorySessionRow: View {
                         // Star button
                         Button(action: onToggleStar) {
                             Image(systemName: session.starred ? "star.fill" : "star")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -1068,7 +1608,7 @@ struct HistorySessionRow: View {
                         // Delete button
                         Button(action: { showDeleteConfirm = true }) {
                             Image(systemName: "trash")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .buttonStyle(.plain)
@@ -1122,53 +1662,72 @@ struct HistorySessionRow: View {
 // MARK: - Markdown Themes
 
 extension Theme {
-    static let userMessage = Theme()
-        .text {
-            ForegroundColor(.white)
-            FontSize(14)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(13)
-            ForegroundColor(.white.opacity(0.9))
-            BackgroundColor(.white.opacity(0.15))
-        }
-        .strong {
-            FontWeight(.semibold)
-        }
-        .link {
-            ForegroundColor(.white.opacity(0.9))
-            UnderlineStyle(.single)
-        }
-
-    static let aiMessage = Theme()
-        .text {
-            ForegroundColor(OmiColors.textPrimary)
-            FontSize(14)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(13)
-            ForegroundColor(OmiColors.textPrimary)
-            BackgroundColor(OmiColors.backgroundTertiary)
-        }
-        .codeBlock { configuration in
-            ScrollView(.horizontal, showsIndicators: false) {
-                configuration.label
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(13)
-                        ForegroundColor(OmiColors.textPrimary)
-                    }
+    static func userMessage(scale: CGFloat = 1.0) -> Theme {
+        Theme()
+            .text {
+                ForegroundColor(.white)
+                FontSize(round(14 * scale))
             }
-            .padding(12)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(8)
-        }
-        .strong {
-            FontWeight(.semibold)
-        }
-        .link {
-            ForegroundColor(OmiColors.purplePrimary)
-        }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(round(13 * scale))
+                ForegroundColor(.white.opacity(0.9))
+                BackgroundColor(.white.opacity(0.15))
+            }
+            .strong {
+                FontWeight(.semibold)
+            }
+            .link {
+                ForegroundColor(.white.opacity(0.9))
+                UnderlineStyle(.single)
+            }
+    }
+
+    static func aiMessage(scale: CGFloat = 1.0) -> Theme {
+        Theme()
+            .text {
+                ForegroundColor(OmiColors.textPrimary)
+                FontSize(round(14 * scale))
+            }
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(round(13 * scale))
+                ForegroundColor(OmiColors.textPrimary)
+                BackgroundColor(OmiColors.backgroundTertiary)
+            }
+            .codeBlock { configuration in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    configuration.label
+                        .markdownTextStyle {
+                            FontFamilyVariant(.monospaced)
+                            FontSize(round(13 * scale))
+                            ForegroundColor(OmiColors.textPrimary)
+                        }
+                }
+                .padding(12)
+                .background(OmiColors.backgroundTertiary)
+                .cornerRadius(8)
+            }
+            .strong {
+                FontWeight(.semibold)
+            }
+            .link {
+                ForegroundColor(OmiColors.purplePrimary)
+            }
+    }
+}
+
+struct ScaledMarkdownTheme: ViewModifier {
+    @Environment(\.fontScale) private var fontScale
+    let sender: ChatSender
+
+    func body(content: Content) -> some View {
+        content.markdownTheme(sender == .user ? .userMessage(scale: fontScale) : .aiMessage(scale: fontScale))
+    }
+}
+
+extension View {
+    func scaledMarkdownTheme(_ sender: ChatSender) -> some View {
+        modifier(ScaledMarkdownTheme(sender: sender))
+    }
 }

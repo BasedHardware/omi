@@ -21,13 +21,36 @@ struct ConversationListView: View {
 
     var appState: AppState
 
-    /// Group conversations by date
-    private var groupedConversations: [(String, [ServerConversation])] {
+    private static let groupDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+
+    /// Flat list item — either a section header or a conversation row.
+    /// Using a single flat ForEach avoids nested ForEach attribute graph depth which can cause
+    /// SwiftUI layout comparison hangs (AG::LayoutDescriptor::compare) on refresh.
+    private enum ListItem: Identifiable {
+        case header(key: String, isFirst: Bool)
+        case conversation(ServerConversation)
+
+        var id: String {
+            switch self {
+            case .header(let key, _): return "header_\(key)"
+            case .conversation(let c): return c.id
+            }
+        }
+    }
+
+    /// Flat ordered list of headers + conversations, grouped by date.
+    private var flatListItems: [ListItem] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let formatter = Self.groupDateFormatter
 
         var groups: [String: [ServerConversation]] = [:]
+        var groupDates: [String: Date] = ["Today": today, "Yesterday": yesterday]
 
         for conversation in conversations {
             let conversationDate = calendar.startOfDay(for: conversation.createdAt)
@@ -38,15 +61,11 @@ struct ConversationListView: View {
             } else if conversationDate == yesterday {
                 groupKey = "Yesterday"
             } else {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "MMM d, yyyy"
                 groupKey = formatter.string(from: conversation.createdAt)
+                groupDates[groupKey] = conversationDate
             }
 
-            if groups[groupKey] == nil {
-                groups[groupKey] = []
-            }
-            groups[groupKey]?.append(conversation)
+            groups[groupKey, default: []].append(conversation)
         }
 
         // Sort groups: Today first, then Yesterday, then by date descending
@@ -55,19 +74,20 @@ struct ConversationListView: View {
             if key2 == "Today" { return false }
             if key1 == "Yesterday" { return true }
             if key2 == "Yesterday" { return false }
-
-            // Parse dates for comparison
-            let formatter = DateFormatter()
-            formatter.dateFormat = "MMM d, yyyy"
-            let date1 = formatter.date(from: key1) ?? Date.distantPast
-            let date2 = formatter.date(from: key2) ?? Date.distantPast
+            let date1 = groupDates[key1] ?? .distantPast
+            let date2 = groupDates[key2] ?? .distantPast
             return date1 > date2
         }
 
-        return sortedKeys.compactMap { key in
-            guard let convos = groups[key] else { return nil }
-            return (key, convos)
+        var items: [ListItem] = []
+        for (index, key) in sortedKeys.enumerated() {
+            guard let convos = groups[key] else { continue }
+            items.append(.header(key: key, isFirst: index == 0))
+            for conv in convos {
+                items.append(.conversation(conv))
+            }
         }
+        return items
     }
 
     var body: some View {
@@ -91,7 +111,7 @@ struct ConversationListView: View {
                 .tint(OmiColors.purplePrimary)
 
             Text("Loading conversations...")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -100,21 +120,21 @@ struct ConversationListView: View {
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .scaledFont(size: 40)
                 .foregroundColor(OmiColors.warning)
 
             Text("Failed to load conversations")
-                .font(.system(size: 16, weight: .medium))
+                .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(error)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             Button(action: onRefresh) {
                 Text("Try Again")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
@@ -132,15 +152,15 @@ struct ConversationListView: View {
     private var emptyView: some View {
         VStack(spacing: 16) {
             Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Conversations")
-                .font(.system(size: 18, weight: .semibold))
+                .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Start recording to capture your first conversation")
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
@@ -149,17 +169,17 @@ struct ConversationListView: View {
     }
 
     private var conversationListContent: some View {
-        LazyVStack(alignment: .leading, spacing: 8) {
-            ForEach(groupedConversations, id: \.0) { group, convos in
-                // Date header
-                Text(group)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(OmiColors.textTertiary)
-                    .padding(.top, group == groupedConversations.first?.0 ? 0 : 16)
-                    .padding(.bottom, 8)
-
-                // Conversations in this group
-                ForEach(convos) { conversation in
+        let items = flatListItems
+        return LazyVStack(alignment: .leading, spacing: 8) {
+            ForEach(items) { item in
+                switch item {
+                case .header(let key, let isFirst):
+                    Text(key)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.top, isFirst ? 0 : 16)
+                        .padding(.bottom, 8)
+                case .conversation(let conversation):
                     ConversationRowView(
                         conversation: conversation,
                         onTap: { onSelect(conversation) },

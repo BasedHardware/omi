@@ -183,6 +183,12 @@ class AnalyticsManager {
         PostHogManager.shared.screenCaptureResetCompleted(success: success)
     }
 
+    /// Track when notification repair is triggered (auto-repair or error-triggered)
+    func notificationRepairTriggered(reason: String, previousStatus: String, currentStatus: String) {
+        MixpanelManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+        PostHogManager.shared.notificationRepairTriggered(reason: reason, previousStatus: previousStatus, currentStatus: currentStatus)
+    }
+
     /// Track notification settings status (auth, alertStyle, sound, badge)
     func notificationSettingsChecked(
         authStatus: String,
@@ -212,6 +218,18 @@ class AnalyticsManager {
     func appLaunched() {
         MixpanelManager.shared.appLaunched()
         PostHogManager.shared.appLaunched()
+    }
+
+    func trackStartupTiming(dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool, databaseInitFailed: Bool) {
+        guard !Self.isDevBuild else { return }
+        let properties: [String: Any] = [
+            "db_init_ms": round(dbInitMs),
+            "time_to_interactive_ms": round(timeToInteractiveMs),
+            "had_unclean_shutdown": hadUncleanShutdown,
+            "database_init_failed": databaseInitFailed
+        ]
+        PostHogManager.shared.track("App Startup Timing", properties: properties)
+        MixpanelManager.shared.track("App Startup Timing", properties: properties.compactMapValues { $0 as? MixpanelType })
     }
 
     /// Track first launch with comprehensive system diagnostics
@@ -338,9 +356,9 @@ class AnalyticsManager {
 
     // MARK: - Chat Events
 
-    func chatMessageSent(messageLength: Int, hasContext: Bool = false) {
-        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
-        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext)
+    func chatMessageSent(messageLength: Int, hasContext: Bool = false, source: String) {
+        MixpanelManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
+        PostHogManager.shared.chatMessageSent(messageLength: messageLength, hasContext: hasContext, source: source)
     }
 
     // MARK: - Search Events
@@ -573,6 +591,11 @@ class AnalyticsManager {
         PostHogManager.shared.taskExtracted(taskCount: taskCount)
     }
 
+    func taskPromoted(taskCount: Int) {
+        MixpanelManager.shared.taskPromoted(taskCount: taskCount)
+        PostHogManager.shared.taskPromoted(taskCount: taskCount)
+    }
+
     func memoryExtracted(memoryCount: Int) {
         MixpanelManager.shared.memoryExtracted(memoryCount: memoryCount)
         PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
@@ -622,9 +645,9 @@ class AnalyticsManager {
         PostHogManager.shared.updateNotFound()
     }
 
-    func updateCheckFailed(error: String) {
-        MixpanelManager.shared.updateCheckFailed(error: error)
-        PostHogManager.shared.updateCheckFailed(error: error)
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        MixpanelManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
+        PostHogManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
     }
 
     // MARK: - Notification Events
@@ -673,6 +696,11 @@ class AnalyticsManager {
     func tierChanged(tier: Int, reason: String) {
         MixpanelManager.shared.tierChanged(tier: tier, reason: reason)
         PostHogManager.shared.tierChanged(tier: tier, reason: reason)
+    }
+
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        MixpanelManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+        PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
     }
 
     // MARK: - Settings State
@@ -779,6 +807,9 @@ class AnalyticsManager {
         props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
         props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
 
+        // -- AI Chat Mode --
+        props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
+
         // -- UI Preferences --
         props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
         props["conversations_compact_view"] = ud.object(forKey: "conversationsCompactView") as? Bool ?? true
@@ -792,7 +823,67 @@ class AnalyticsManager {
         // -- Launch at Login --
         props["launch_at_login_enabled"] = LaunchAtLoginManager.shared.isEnabled
 
+        // -- Floating Bar (AskOmi) --
+        props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
+        props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
+
+        // -- Dev Mode --
+        props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
+
         return props
+    }
+
+    // MARK: - Floating Bar Events
+
+    /// Track when the floating bar is toggled visible/hidden
+    func floatingBarToggled(visible: Bool, source: String) {
+        let props: [String: Any] = [
+            "visible": visible,
+            "source": source
+        ]
+        MixpanelManager.shared.track("Floating Bar Toggled", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_toggled", properties: props)
+    }
+
+    /// Track when Ask OMI is opened (AI input panel shown)
+    func floatingBarAskOmiOpened(source: String) {
+        let props: [String: Any] = ["source": source]
+        MixpanelManager.shared.track("Floating Bar Ask OMI Opened", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ask_omi_opened", properties: props)
+    }
+
+    /// Track when the AI conversation is closed
+    func floatingBarAskOmiClosed() {
+        MixpanelManager.shared.track("Floating Bar Ask OMI Closed")
+        PostHogManager.shared.track("floating_bar_ask_omi_closed")
+    }
+
+    /// Track when an AI query is sent from the floating bar
+    func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool) {
+        let props: [String: Any] = [
+            "message_length": messageLength,
+            "has_screenshot": hasScreenshot
+        ]
+        MixpanelManager.shared.track("Floating Bar Query Sent", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    }
+
+    /// Track when push-to-talk starts listening
+    func floatingBarPTTStarted(mode: String) {
+        let props: [String: Any] = ["mode": mode]
+        MixpanelManager.shared.track("Floating Bar PTT Started", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ptt_started", properties: props)
+    }
+
+    /// Track when push-to-talk ends and sends (or discards) transcript
+    func floatingBarPTTEnded(mode: String, hadTranscript: Bool, transcriptLength: Int) {
+        let props: [String: Any] = [
+            "mode": mode,
+            "had_transcript": hadTranscript,
+            "transcript_length": transcriptLength
+        ]
+        MixpanelManager.shared.track("Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
     }
 
     // MARK: - Display Info

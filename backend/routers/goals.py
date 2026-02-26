@@ -252,11 +252,19 @@ async def extract_and_update_progress(
         return {'updated': False, 'reason': 'No active goal'}
 
     if result.get('status') == 'updated':
+        updates = result.get('updates', [])
         return {
             'updated': True,
-            'previous_value': result.get('old_value'),
-            'new_value': result.get('new_value'),
-            'reasoning': result.get('reasoning', ''),
+            'updates': [
+                {
+                    'goal_id': u.get('goal_id'),
+                    'goal_title': u.get('goal_title'),
+                    'previous_value': u.get('old_value'),
+                    'new_value': u.get('new_value'),
+                    'reasoning': u.get('reasoning', ''),
+                }
+                for u in updates
+            ],
         }
 
     return {'updated': False, 'reason': result.get('message', 'No progress found in text')}

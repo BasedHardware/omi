@@ -3,14 +3,15 @@ import SwiftUI
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
     weak var window: NSWindow?
     var onPlayPause: () -> Void
     var onAskAI: () -> Void
     var onHide: () -> Void
-    var onSendQuery: (String, URL?) -> Void
+    var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
-    var onAskFollowUp: () -> Void
-    var onCaptureScreenshot: () -> Void
+
+    @State private var isHovering = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,34 +29,165 @@ struct FloatingControlBarView: View {
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                        .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
                 )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .floatingBackground()
+        .overlay(alignment: .topLeading) {
+            if state.showingAIConversation {
+                Button {
+                    onCloseAI()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isHovering && !state.isVoiceListening {
+                Button {
+                    openFloatingBarSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(5)
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
+            }
+        }
+        .clipped()
+        .onHover { hovering in
+            // Resize window BEFORE updating SwiftUI state on expand so the expanded
+            // content never renders in a too-small window (which causes overflow).
+            if hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+            }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovering = hovering
+            }
+            if !hovering {
+                (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+            }
+        }
+        .background(DraggableAreaView(targetWindow: window))
+        .floatingBackground(cornerRadius: isHovering || state.showingAIConversation || state.isVoiceListening ? 20 : 5)
+    }
+
+    private func openFloatingBarSettings() {
+        // Bring main window to front and navigate to floating bar settings
+        NSApp.activate(ignoringOtherApps: true)
+        for window in NSApp.windows where window.title.hasPrefix("Omi") {
+            window.makeKeyAndOrderFront(nil)
+            break
+        }
+        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
     }
 
     private var controlBarView: some View {
-        HStack(spacing: 12) {
-            Spacer()
-
-            if state.isVoiceListening {
+        Group {
+            if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
-            } else {
-                commandButton(title: "Ask omi", keys: ["\u{2318}", "\u{21A9}\u{FE0E}"]) {
-                    onAskAI()
-                }
-            }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .frame(height: 50)
+                    .transition(.opacity)
+            } else if isHovering || state.showingAIConversation {
+                VStack(spacing: 1) {
+                    compactButton(title: "Ask omi", keys: shortcutSettings.askOmiKey.hintKeys) {
+                        onAskAI()
+                    }
 
-            Spacer()
+                    HStack(spacing: 6) {
+                        compactLabel("Push to talk", keys: [shortcutSettings.pttKey.symbol])
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .frame(height: 50)
+                .transition(.opacity)
+            } else {
+                compactCircleView
+                    .transition(.opacity)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(height: 60)
-        .background(DraggableAreaView(targetWindow: window))
+    }
+
+    /// Minimal thin bar shown when not hovering
+    private var compactCircleView: some View {
+        RoundedRectangle(cornerRadius: 2)
+            .fill(Color.white.opacity(0.5))
+            .frame(width: 28, height: 4)
+    }
+
+    private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Button(action: { isOn.wrappedValue.toggle() }) {
+            HStack(spacing: 3) {
+                Text(title)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isOn.wrappedValue ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: 26, height: 15)
+                    .overlay(alignment: isOn.wrappedValue ? .trailing : .leading) {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 11, height: 11)
+                            .padding(2)
+                    }
+                    .animation(.easeInOut(duration: 0.15), value: isOn.wrappedValue)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            compactLabel(title, keys: keys)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactLabel(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(.white)
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .scaledFont(size: 9)
+                    .foregroundColor(.white)
+                    .frame(width: 15, height: 15)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(3)
+            }
+        }
     }
 
     private var voiceListeningView: some View {
@@ -68,12 +200,12 @@ struct FloatingControlBarView: View {
                 .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: state.isVoiceListening)
 
             Image(systemName: "mic.fill")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(.white)
 
             if state.isVoiceLocked {
                 Text("LOCKED")
-                    .font(.system(size: 10, weight: .bold))
+                    .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -83,13 +215,13 @@ struct FloatingControlBarView: View {
 
             if !state.voiceTranscript.isEmpty {
                 Text(state.voiceTranscript)
-                    .font(.system(size: 13))
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.8))
                     .lineLimit(1)
-                    .truncationMode(.tail)
+                    .truncationMode(.head)
             } else {
-                Text(state.isVoiceLocked ? "Tap \u{2325} to send" : "Release \u{2325} to send")
-                    .font(.system(size: 13))
+                Text(state.isVoiceLocked ? "Tap \(shortcutSettings.pttKey.symbol) to send" : "Release \(shortcutSettings.pttKey.symbol) to send")
+                    .scaledFont(size: 13)
                     .foregroundColor(.white.opacity(0.5))
             }
         }
@@ -101,27 +233,21 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
-            screenshotURL: Binding(
-                get: { state.screenshotURL },
-                set: { state.screenshotURL = $0 }
-            ),
             onSend: { message in
                 state.displayedQuery = message
-                let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
-                onSendQuery(message, screenshot)
+                onSendQuery(message)
             },
             onCancel: onCloseAI,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-                let totalHeight = 60 + height + 24
+                let totalHeight = 50 + height + 24
                 state.inputViewHeight = totalHeight
-            },
-            onCaptureScreenshot: onCaptureScreenshot
+            }
         )
         .transition(
             .asymmetric(
@@ -136,13 +262,32 @@ struct FloatingControlBarView: View {
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            responseText: Binding(
-                get: { state.aiResponseText },
-                set: { state.aiResponseText = $0 }
-            ),
+            currentMessage: state.currentAIMessage,
             userInput: state.displayedQuery,
+            chatHistory: state.chatHistory,
+            isVoiceFollowUp: Binding(
+                get: { state.isVoiceFollowUp },
+                set: { state.isVoiceFollowUp = $0 }
+            ),
+            voiceFollowUpTranscript: Binding(
+                get: { state.voiceFollowUpTranscript },
+                set: { state.voiceFollowUpTranscript = $0 }
+            ),
             onClose: onCloseAI,
-            onAskFollowUp: onAskFollowUp
+            onSendFollowUp: { message in
+                // Archive current exchange to chat history
+                let currentQuery = state.displayedQuery
+                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
+                }
+
+                state.displayedQuery = message
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    state.isAILoading = true
+                    state.currentAIMessage = nil
+                }
+                onSendQuery(message)
+            }
         )
         .transition(
             .asymmetric(
@@ -151,23 +296,5 @@ struct FloatingControlBarView: View {
             ))
     }
 
-    private func commandButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-                ForEach(keys, id: \.self) { key in
-                    Text(key)
-                        .font(.system(size: 11))
-                        .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(4)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
 
 }

@@ -7,6 +7,15 @@ unset TOOLCHAINS
 # Track release timing
 START_TIME=$(date +%s)
 
+# =============================================================================
+# Release log — all stdout/stderr is tee'd to this file for post-mortem review
+# =============================================================================
+RELEASE_LOG="/private/tmp/omi-release.log"
+exec > >(tee -a "$RELEASE_LOG") 2>&1
+echo ""
+echo "=== Release started at $(date -u '+%Y-%m-%d %H:%M:%S UTC') ==="
+echo "Log file: $RELEASE_LOG"
+
 # Load .env if present (for RELEASE_SECRET, SPARKLE_PRIVATE_KEY, etc.)
 # Using set -a/source instead of xargs to handle multiline values (APPLE_PRIVATE_KEY)
 if [ -f ".env" ]; then
@@ -47,6 +56,10 @@ GITHUB_REPO="BasedHardware/omi"
 # Backend (for Firestore release registration)
 DESKTOP_BACKEND_URL="${DESKTOP_BACKEND_URL:-https://desktop-backend-hhibjajaja-uc.a.run.app}"
 RELEASE_SECRET="${RELEASE_SECRET:-}"
+
+# Release channel: staging (default), beta, or stable
+# New releases start on staging; use promote_release.sh to advance
+RELEASE_CHANNEL="${RELEASE_CHANNEL:-staging}"
 
 # Read changelog from CHANGELOG.json
 CHANGELOG_FILE="CHANGELOG.json"
@@ -162,6 +175,18 @@ gcloud run services update "$CLOUD_RUN_SERVICE" \
 echo "  ✓ Backend deployed"
 
 # -----------------------------------------------------------------------------
+# Step 1.1: Check settings search coverage
+# -----------------------------------------------------------------------------
+echo "[1.1/12] Checking settings search coverage..."
+if xcrun swift scripts/check_settings_search.swift; then
+    echo "  ✓ Settings search coverage verified"
+else
+    echo "  Settings search coverage check FAILED!"
+    echo "  Fix missing entries in SettingsSidebar.swift before releasing."
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Step 1.5: Prepare Universal ffmpeg (arm64 + x86_64)
 # -----------------------------------------------------------------------------
 echo "[1.5/12] Preparing universal ffmpeg binary..."
@@ -218,7 +243,7 @@ else
     # Make executable and ad-hoc sign (required for Apple Silicon)
     chmod +x "$FFMPEG_RESOURCE"
     xattr -cr "$FFMPEG_RESOURCE"
-    codesign -s - "$FFMPEG_RESOURCE"
+    codesign -f -s - "$FFMPEG_RESOURCE"
 
     # Verify it's universal
     if file "$FFMPEG_RESOURCE" | grep -q "universal binary"; then
@@ -239,22 +264,107 @@ fi
 echo "  ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
 
 # -----------------------------------------------------------------------------
+# Step 1.6: Prepare Universal Node.js binary (for AI chat / ACP Bridge)
+# -----------------------------------------------------------------------------
+echo "[1.6/12] Preparing universal Node.js binary..."
+
+NODE_RESOURCE="Desktop/Sources/Resources/node"
+NODE_TEMP_DIR="/tmp/node-universal-$$"
+NODE_VERSION="v22.14.0"
+
+# Check if current node is already universal
+if file "$NODE_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
+    echo "  Node.js is already universal, skipping download"
+else
+    echo "  Creating universal Node.js binary..."
+
+    mkdir -p "$NODE_TEMP_DIR"
+
+    # Backup current node if exists
+    if [ -f "$NODE_RESOURCE" ]; then
+        cp "$NODE_RESOURCE" "$NODE_TEMP_DIR/node.backup"
+    fi
+
+    # Download arm64 Node.js
+    echo "  Downloading arm64 Node.js $NODE_VERSION..."
+    curl -L -o "$NODE_TEMP_DIR/node-arm64.tar.gz" \
+        "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-arm64.tar.gz" || {
+        echo "Error: Failed to download arm64 Node.js"
+        exit 1
+    }
+    tar -xzf "$NODE_TEMP_DIR/node-arm64.tar.gz" -C "$NODE_TEMP_DIR" --strip-components=1 --include="*/bin/node" 2>/dev/null || \
+    tar -xzf "$NODE_TEMP_DIR/node-arm64.tar.gz" -C "$NODE_TEMP_DIR"
+    ARM64_NODE=$(find "$NODE_TEMP_DIR" -name "node" -type f | head -1)
+    # Move arm64 node aside so x86_64 extraction doesn't overwrite
+    mv "$ARM64_NODE" "$NODE_TEMP_DIR/node-arm64"
+
+    # Download x86_64 Node.js
+    echo "  Downloading x86_64 Node.js $NODE_VERSION..."
+    curl -L -o "$NODE_TEMP_DIR/node-x86_64.tar.gz" \
+        "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-x64.tar.gz" || {
+        echo "Error: Failed to download x86_64 Node.js"
+        exit 1
+    }
+    tar -xzf "$NODE_TEMP_DIR/node-x86_64.tar.gz" -C "$NODE_TEMP_DIR" --strip-components=1 --include="*/bin/node" 2>/dev/null || \
+    tar -xzf "$NODE_TEMP_DIR/node-x86_64.tar.gz" -C "$NODE_TEMP_DIR"
+    X86_64_NODE=$(find "$NODE_TEMP_DIR" -name "node" -type f ! -name "node-arm64" | head -1)
+
+    if [ -z "$NODE_TEMP_DIR/node-arm64" ] || [ ! -f "$NODE_TEMP_DIR/node-arm64" ] || [ -z "$X86_64_NODE" ]; then
+        echo "Error: Could not find Node.js binaries in downloaded archives"
+        exit 1
+    fi
+
+    # Create universal binary with lipo
+    echo "  Creating universal Node.js with lipo..."
+    lipo -create "$NODE_TEMP_DIR/node-arm64" "$X86_64_NODE" -output "$NODE_RESOURCE"
+
+    # Make executable and ad-hoc sign
+    chmod +x "$NODE_RESOURCE"
+    xattr -cr "$NODE_RESOURCE"
+    codesign -f -s - "$NODE_RESOURCE"
+
+    # Verify it's universal
+    if file "$NODE_RESOURCE" | grep -q "universal binary"; then
+        echo "  ✓ Universal Node.js created successfully"
+    else
+        echo "Error: Failed to create universal Node.js"
+        if [ -f "$NODE_TEMP_DIR/node.backup" ]; then
+            mv "$NODE_TEMP_DIR/node.backup" "$NODE_RESOURCE"
+        fi
+        exit 1
+    fi
+
+    # Cleanup temp files
+    rm -rf "$NODE_TEMP_DIR"
+fi
+
+# Show node architectures
+echo "  node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
+
+# -----------------------------------------------------------------------------
+# Step 1.7: Build ACP Bridge (TypeScript → JavaScript)
+# -----------------------------------------------------------------------------
+echo "[1.7/12] Building acp-bridge..."
+
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
+    npm install --no-fund --no-audit
+    npx tsc
+    cd - > /dev/null
+    echo "  ✓ acp-bridge built"
+else
+    echo "Error: acp-bridge directory not found at $ACP_BRIDGE_DIR"
+    exit 1
+fi
+
+# -----------------------------------------------------------------------------
 # Step 2: Build Desktop App (Universal Binary: arm64 + x86_64)
 # -----------------------------------------------------------------------------
 echo "[2/12] Building $APP_NAME (Universal Binary)..."
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
-
-# Build agent-bridge (Node.js Claude Code integration)
-AGENT_BRIDGE_DIR="$(dirname "$0")/agent-bridge"
-if [ -d "$AGENT_BRIDGE_DIR" ]; then
-    echo "  Building agent-bridge..."
-    cd "$AGENT_BRIDGE_DIR"
-    npm install --no-fund --no-audit
-    npx tsc
-    cd - > /dev/null
-fi
 
 # Build for Apple Silicon (arm64)
 echo "  Building for arm64..."
@@ -327,6 +437,18 @@ else
     echo "Warning: Resource bundle not found at $SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
 fi
 
+# Copy acp-bridge to app bundle
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "  Copied acp-bridge to bundle"
+else
+    echo "Error: acp-bridge dist not found. Run npm install && npx tsc in acp-bridge/ first."
+    exit 1
+fi
+
 # Update Info.plist with version and bundle info
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
@@ -346,16 +468,13 @@ else
     echo "  Warning: No .env.app file found"
 fi
 
-# Copy agent-bridge (Node.js Claude Code integration)
-if [ -d "$AGENT_BRIDGE_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent-bridge"
-    cp -Rf "$AGENT_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -f "$AGENT_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    cp -Rf "$AGENT_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent-bridge/"
-    echo "  Copied agent-bridge to bundle"
-fi
-
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
+
+# Embed provisioning profile (required for Sign In with Apple entitlement)
+if [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
+fi
 
 echo "  ✓ Build complete"
 
@@ -376,14 +495,59 @@ if [ -f "$FFMPEG_PATH" ]; then
         "$FFMPEG_PATH"
 fi
 
-# Sign native binaries in agent-bridge node_modules
-AGENT_BRIDGE_RESOURCES="$APP_BUNDLE/Contents/Resources/agent-bridge/node_modules"
-if [ -d "$AGENT_BRIDGE_RESOURCES" ]; then
-    echo "  Signing agent-bridge native binaries..."
-    find "$AGENT_BRIDGE_RESOURCES" \( -name "*.node" -o -name "*.dylib" -o -name "rg" \) -type f | while read -r binary; do
-        codesign --force --options runtime --timestamp \
-            --sign "$SIGN_IDENTITY" \
-            "$binary" 2>/dev/null && echo "    Signed: $(basename "$binary")" || true
+# Sign node binary in resource bundle (if present)
+# Node.js requires JIT entitlements for V8 and WebAssembly (used by fetch/undici).
+# Without these, Hardened Runtime blocks MAP_JIT causing SIGTRAP on launch.
+NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+if [ -f "$NODE_BUNDLE_PATH" ]; then
+    echo "  Signing node binary (with JIT entitlements)..."
+    codesign --force --options runtime --timestamp \
+        --sign "$SIGN_IDENTITY" \
+        --entitlements Desktop/Node.entitlements \
+        "$NODE_BUNDLE_PATH"
+fi
+
+# Sign ALL native binaries in acp-bridge node_modules
+# Apple notarization requires every binary/dylib/jnilib to be signed
+ACP_BRIDGE_BUNDLE="$APP_BUNDLE/Contents/Resources/acp-bridge"
+if [ -d "$ACP_BRIDGE_BUNDLE/node_modules" ]; then
+    echo "  Signing native binaries in acp-bridge/node_modules..."
+
+    # Remove vendor directories with JARs containing native libs we don't need
+    # (JetBrains plugin has .jnilib inside JARs which Apple scans and rejects)
+    if [ -d "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin" ]; then
+        echo "    Removing unnecessary JetBrains plugin vendor directory..."
+        rm -rf "$ACP_BRIDGE_BUNDLE/node_modules/@anthropic-ai/claude-code/vendor/claude-code-jetbrains-plugin"
+    fi
+
+    # Sign all Mach-O binaries: .node, .dylib, executables (rg, etc.)
+    # Use a single find + file check to catch everything Apple cares about
+    echo "    Scanning for Mach-O binaries to sign..."
+    SIGNED_COUNT=0
+    find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+        \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
+        2>/dev/null | while read native_bin; do
+        if file "$native_bin" 2>/dev/null | grep -q "Mach-O"; then
+            echo "    Signing: $(echo "$native_bin" | sed "s|$ACP_BRIDGE_BUNDLE/||")"
+            codesign --force --options runtime --timestamp \
+                --sign "$SIGN_IDENTITY" \
+                "$native_bin"
+        fi
+    done
+
+    # Catch-all: find any remaining unsigned Mach-O binaries
+    find "$ACP_BRIDGE_BUNDLE/node_modules" -type f \
+        ! -name "*.js" ! -name "*.json" ! -name "*.ts" ! -name "*.map" \
+        ! -name "*.md" ! -name "*.txt" ! -name "*.yml" ! -name "*.yaml" \
+        ! -name "*.css" ! -name "*.html" ! -name "*.jar" ! -name "*.d.ts" \
+        ! -name "*.node" ! -name "*.dylib" ! -name "*.jnilib" ! -name "*.so" ! -name "rg" \
+        2>/dev/null | while read candidate; do
+        if file "$candidate" 2>/dev/null | grep -q "Mach-O"; then
+            echo "    Signing (catch-all): $(echo "$candidate" | sed "s|$ACP_BRIDGE_BUNDLE/||")"
+            codesign --force --options runtime --timestamp \
+                --sign "$SIGN_IDENTITY" \
+                "$candidate"
+        fi
     done
 fi
 
@@ -495,7 +659,12 @@ else
         "$DMG_PATH"
 fi
 
-# Clean up staging directory
+# Clean up staging directory and its stale LaunchServices registration
+# (macOS auto-registers apps it discovers; the staging copy creates a stale
+# entry pointing to /tmp/... which can cause the notification icon to show
+# a generic folder instead of the app icon)
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$STAGING_DIR/$DMG_APP_NAME.app" 2>/dev/null || true
 rm -rf "$STAGING_DIR"
 
 echo "  ✓ DMG created"
@@ -598,6 +767,12 @@ EOF
 
 # Check if gh CLI is available
 if command -v gh &> /dev/null; then
+    # Delete existing release if it exists (ensures re-runs are safe)
+    if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPO" &>/dev/null; then
+        echo "  Deleting existing GitHub release $RELEASE_TAG..."
+        gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPO" --yes 2>/dev/null
+    fi
+
     # Create GitHub release with both Omi.zip and DMG
     gh release create "$RELEASE_TAG" \
         --repo "$GITHUB_REPO" \
@@ -619,6 +794,25 @@ else
     echo "  Install with: brew install gh"
 fi
 
+# Upload DMG to GCS for direct downloads (avoids GitHub redirect chain that triggers Chrome warnings)
+GCS_BUCKET="gs://omi_macos_updates"
+echo "  Uploading DMG to GCS..."
+gcloud storage cp --content-disposition='attachment; filename="Omi Beta.dmg"' "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" 2>/dev/null && {
+    echo "  ✓ Uploaded DMG to GCS (versioned)"
+} || {
+    echo "  Warning: Could not upload DMG to GCS"
+}
+# Only update the latest/ pointer for stable releases (macos.omi.me serves this)
+if [ "$RELEASE_CHANNEL" = "stable" ]; then
+    gcloud storage cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg" 2>/dev/null && {
+        echo "  ✓ Updated latest/ pointer (direct download)"
+    } || {
+        echo "  Warning: Could not update latest/ pointer"
+    }
+else
+    echo "  ⏭ Skipping latest/ update (channel: $RELEASE_CHANNEL)"
+fi
+
 # Get the GitHub release download URL for Omi.zip
 DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$RELEASE_TAG/Omi.zip"
 
@@ -633,7 +827,8 @@ if [ -n "$RELEASE_SECRET" ]; then
     "ed_signature": "$ED_SIGNATURE",
     "changelog": $CHANGELOG_JSON,
     "is_live": true,
-    "is_critical": false
+    "is_critical": false,
+    "channel": "${RELEASE_CHANNEL:-staging}"
 }
 EOJSON
 )
@@ -665,6 +860,7 @@ fi
 echo ""
 echo "Creating local git tag..."
 git tag "v$VERSION" 2>/dev/null && echo "  ✓ Created tag v$VERSION" || echo "  Tag v$VERSION already exists"
+
 
 # -----------------------------------------------------------------------------
 # Step 12: Trigger Installation Test

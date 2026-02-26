@@ -1,0 +1,1785 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - link "Contact us" [ref=e9] [cursor=pointer]:
+            - /url: https://www.namecheap.com/support/
+          - generic [ref=e10]:
+            - link " m13v " [ref=e11] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e12]: 
+              - generic [ref=e13]: m13v
+              - generic [ref=e14]: 
+            - text: 
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - link "" [ref=e17] [cursor=pointer]:
+              - /url: https://www.namecheap.com/shoppingcart/
+              - generic [ref=e18]: 
+            - text: 
+          - button "Search" [ref=e19] [cursor=pointer]:
+            - generic [ref=e20]: 
+      - generic [ref=e22]:
+        - generic [ref=e24]:
+          - strong [ref=e26]:
+            - link "Namecheap" [ref=e27] [cursor=pointer]:
+              - /url: https://www.namecheap.com/
+              - img "Namecheap" [ref=e28]
+          - generic [ref=e29]: 
+        - navigation [ref=e30]:
+          - generic [ref=e31]:
+            - generic: 
+            - generic [ref=e32]:
+              - link "Domains NEW" [ref=e33] [cursor=pointer]:
+                - /url: https://www.namecheap.com/domains/
+                - text: Domains
+                - generic [ref=e34]: NEW
+              - text: 
+            - generic [ref=e35]:
+              - link "Hosting" [ref=e36] [cursor=pointer]:
+                - /url: https://www.namecheap.com/hosting/
+              - text: 
+            - generic [ref=e37]:
+              - link "WordPress" [ref=e38] [cursor=pointer]:
+                - /url: https://www.namecheap.com/wordpress/
+              - text: 
+            - generic [ref=e39]:
+              - link "Email" [ref=e40] [cursor=pointer]:
+                - /url: https://www.namecheap.com/hosting/email/
+              - text: 
+            - generic [ref=e41]:
+              - link "Marketing Tools NEW" [ref=e42] [cursor=pointer]:
+                - /url: https://www.namecheap.com/apps/
+                - text: Marketing Tools
+                - generic [ref=e43]: NEW
+              - text:     
+            - generic [ref=e44]:
+              - link "Security NEW" [ref=e45] [cursor=pointer]:
+                - /url: https://www.namecheap.com/security/
+                - text: Security
+                - generic [ref=e46]: NEW
+              - text: 
+            - generic [ref=e47]:
+              - link "Transfer to Us TRY ME" [ref=e48] [cursor=pointer]:
+                - /url: https://www.namecheap.com/domains/transfer/
+                - text: Transfer to Us
+                - generic [ref=e49]: TRY ME
+              - text: 
+            - generic [ref=e50]:
+              - link "Help Center NEW" [ref=e51] [cursor=pointer]:
+                - /url: https://www.namecheap.com/help-center/
+                - text: Help Center
+                - generic [ref=e52]: NEW
+              - text: 
+            - generic [ref=e53]:
+              - link "Account NEW" [ref=e54] [cursor=pointer]:
+                - /url: https://ap.www.namecheap.com
+                - text: Account
+                - generic [ref=e55]: NEW
+              - text: 
+  - main [ref=e56]:
+    - navigation [ref=e57]:
+      - navigation [ref=e58]:
+        - list [ref=e59]:
+          - listitem [ref=e60]:
+            - link "Dashboard" [ref=e61] [cursor=pointer]:
+              - /url: /
+              - generic [ref=e62]: Dashboard
+          - listitem [ref=e63]:
+            - link "Expiring / Expired" [ref=e64] [cursor=pointer]:
+              - /url: /domains/expiringlist/
+              - generic [ref=e65]: Expiring / Expired
+          - listitem [ref=e66]:
+            - link "Domain List" [ref=e67] [cursor=pointer]:
+              - /url: /Domains
+              - generic [ref=e68]: Domain List
+          - listitem [ref=e69]:
+            - link "Hosting List" [ref=e70] [cursor=pointer]:
+              - /url: /ProductList/HostingSubscriptions
+              - generic [ref=e71]: Hosting List
+          - listitem [ref=e72]:
+            - link "Private Email" [ref=e73] [cursor=pointer]:
+              - /url: /ProductList/EmailSubscriptions
+              - generic [ref=e74]: Private Email
+          - listitem [ref=e75]:
+            - link "SSL Certificates" [ref=e76] [cursor=pointer]:
+              - /url: /ProductList/SslCertificates
+              - generic [ref=e77]: SSL Certificates
+          - listitem [ref=e78]:
+            - link "Growth Tools" [ref=e79] [cursor=pointer]:
+              - /url: https://www.namecheap.com/relate
+              - generic [ref=e80]: Growth Tools
+          - listitem [ref=e81]:
+            - link "Apps" [ref=e82] [cursor=pointer]:
+              - /url: https://www.namecheap.com/apps/dashboard
+              - generic [ref=e83]: Apps
+          - listitem [ref=e84]:
+            - link "My Offers" [ref=e85] [cursor=pointer]:
+              - /url: /myoffers/offers
+              - generic [ref=e86]: My Offers
+            - generic [ref=e87]: Feb
+          - listitem [ref=e88]:
+            - link "Profile" [ref=e89] [cursor=pointer]:
+              - /url: /Profile
+              - generic [ref=e90]: Profile
+    - generic [ref=e91]:
+      - navigation [ref=e92]:
+        - paragraph [ref=e93]:
+          - link "Domains" [ref=e94] [cursor=pointer]:
+            - /url: /Domains/DomainList
+          - text: →
+          - strong [ref=e95]: Details
+      - generic [ref=e97]:
+        - generic [ref=e99]:
+          - heading "omi.me 1 product" [level=1] [ref=e100]:
+            - strong [ref=e101]: omi.me
+            - generic [ref=e103] [cursor=pointer]: 1 product
+          - list [ref=e106]:
+            - listitem [ref=e107]:
+              - textbox [ref=e109]
+        - generic [ref=e110]:
+          - list [ref=e114]:
+            - listitem [ref=e115]:
+              - link "Domain" [ref=e116] [cursor=pointer]:
+                - /url: /Domains/DomainControlPanel/omi.me/domain/
+            - listitem [ref=e117]:
+              - link "Products" [ref=e118] [cursor=pointer]:
+                - /url: /Domains/DomainControlPanel/omi.me/apps/
+            - listitem [ref=e119]:
+              - link "Sharing & Transfer" [ref=e120] [cursor=pointer]:
+                - /url: /Domains/DomainControlPanel/omi.me/rights/
+            - listitem [ref=e121]:
+              - link "Advanced DNS" [ref=e122] [cursor=pointer]:
+                - /url: /Domains/DomainControlPanel/omi.me/advancedns
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - generic [ref=e127]:
+                - generic [ref=e129]:
+                  - generic [ref=e130]:
+                    - generic [ref=e131]: Dns Templates
+                    - generic [ref=e132] [cursor=pointer]: alert
+                  - generic [ref=e135]:
+                    - generic [ref=e136]:
+                      - link "Choose DNS Template" [ref=e137] [cursor=pointer]:
+                        - /url: javascript:void(0)
+                        - generic [ref=e138]: Choose DNS Template
+                      - button "Choose DNS Template" [ref=e140]
+                    - combobox [ref=e141]:
+                      - option "Choose DNS Template" [selected]
+                      - option "Shopify" [disabled]
+                      - option "Weebly"
+                      - option "Wix"
+                - separator [ref=e143]
+              - generic [ref=e144]:
+                - generic [ref=e147]:
+                  - generic [ref=e148]: Host Records
+                  - generic [ref=e149] [cursor=pointer]: alert
+                - generic [ref=e150]:
+                  - generic [ref=e152]:
+                    - link "Actions" [ref=e154] [cursor=pointer]:
+                      - /url: "#"
+                      - generic [ref=e155]: Actions
+                    - link "Filters" [ref=e157] [cursor=pointer]:
+                      - /url: ""
+                      - generic [ref=e158]: Filters
+                    - generic [ref=e159]:
+                      - textbox "Search" [ref=e160]
+                      - link "Search" [ref=e161] [cursor=pointer]:
+                        - /url: ""
+                  - table [ref=e164]:
+                    - rowgroup [ref=e165]:
+                      - row "Type Host Value TTL" [ref=e166]:
+                        - columnheader "Type" [ref=e167]:
+                          - checkbox [ref=e169]
+                          - paragraph [ref=e170]:
+                            - generic "Type" [ref=e171]:
+                              - link "Type" [ref=e172] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "Host" [ref=e173]:
+                          - paragraph [ref=e174]:
+                            - generic "Host" [ref=e175]:
+                              - link "Host" [ref=e176] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "Value" [ref=e177]:
+                          - paragraph [ref=e178]:
+                            - generic "Value" [ref=e179]:
+                              - link "Value" [ref=e180] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "TTL" [ref=e181]:
+                          - paragraph [ref=e182]:
+                            - generic "TTL" [ref=e183]:
+                              - link "TTL" [ref=e184] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader [ref=e185]
+                    - rowgroup [ref=e186]:
+                      - row "A Record @ 23.227.38.65 Automatic Remove" [ref=e187]:
+                        - cell "A Record" [ref=e188]:
+                          - checkbox [ref=e190]
+                          - paragraph [ref=e191] [cursor=pointer]: A Record
+                        - cell "@" [ref=e192]:
+                          - paragraph [ref=e193] [cursor=pointer]: "@"
+                        - cell "23.227.38.65" [ref=e194]:
+                          - paragraph [ref=e195] [cursor=pointer]: 23.227.38.65
+                        - cell "Automatic" [ref=e196]:
+                          - paragraph [ref=e197] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e198]:
+                          - link "Remove" [ref=e199] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record affiliate 78.47.222.166 Automatic Remove" [ref=e200]:
+                        - cell "A Record" [ref=e201]:
+                          - checkbox [ref=e203]
+                          - paragraph [ref=e204] [cursor=pointer]: A Record
+                        - cell "affiliate" [ref=e205]:
+                          - paragraph [ref=e206] [cursor=pointer]: affiliate
+                        - cell "78.47.222.166" [ref=e207]:
+                          - paragraph [ref=e208] [cursor=pointer]: 78.47.222.166
+                        - cell "Automatic" [ref=e209]:
+                          - paragraph [ref=e210] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e211]:
+                          - link "Remove" [ref=e212] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record api 34.54.223.100 Automatic Remove" [ref=e213]:
+                        - cell "A Record" [ref=e214]:
+                          - checkbox [ref=e216]
+                          - paragraph [ref=e217] [cursor=pointer]: A Record
+                        - cell "api" [ref=e218]:
+                          - paragraph [ref=e219] [cursor=pointer]: api
+                        - cell "34.54.223.100" [ref=e220]:
+                          - paragraph [ref=e221] [cursor=pointer]: 34.54.223.100
+                        - cell "Automatic" [ref=e222]:
+                          - paragraph [ref=e223] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e224]:
+                          - link "Remove" [ref=e225] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record brain 34.121.150.13 Automatic Remove" [ref=e226]:
+                        - cell "A Record" [ref=e227]:
+                          - checkbox [ref=e229]
+                          - paragraph [ref=e230] [cursor=pointer]: A Record
+                        - cell "brain" [ref=e231]:
+                          - paragraph [ref=e232] [cursor=pointer]: brain
+                        - cell "34.121.150.13" [ref=e233]:
+                          - paragraph [ref=e234] [cursor=pointer]: 34.121.150.13
+                        - cell "Automatic" [ref=e235]:
+                          - paragraph [ref=e236] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e237]:
+                          - link "Remove" [ref=e238] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record contest 35.158.87.123 Automatic Remove" [ref=e239]:
+                        - cell "A Record" [ref=e240]:
+                          - checkbox [ref=e242]
+                          - paragraph [ref=e243] [cursor=pointer]: A Record
+                        - cell "contest" [ref=e244]:
+                          - paragraph [ref=e245] [cursor=pointer]: contest
+                        - cell "35.158.87.123" [ref=e246]:
+                          - paragraph [ref=e247] [cursor=pointer]: 35.158.87.123
+                        - cell "Automatic" [ref=e248]:
+                          - paragraph [ref=e249] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e250]:
+                          - link "Remove" [ref=e251] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record desktop-api 34.149.217.174 Automatic Remove" [ref=e776]:
+                        - cell "A Record" [ref=e777]:
+                          - checkbox [ref=e779]
+                          - paragraph [ref=e780] [cursor=pointer]: A Record
+                        - cell "desktop-api" [ref=e781]:
+                          - paragraph [ref=e782] [cursor=pointer]: desktop-api
+                        - cell "34.149.217.174" [ref=e783]:
+                          - paragraph [ref=e784] [cursor=pointer]: 34.149.217.174
+                        - cell "Automatic" [ref=e785]:
+                          - paragraph [ref=e786] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e787]:
+                          - link "Remove" [ref=e788] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record dev-api 34.54.223.100 60 min Remove" [ref=e789]:
+                        - cell "A Record" [ref=e790]:
+                          - checkbox [ref=e792]
+                          - paragraph [ref=e793] [cursor=pointer]: A Record
+                        - cell "dev-api" [ref=e794]:
+                          - paragraph [ref=e795] [cursor=pointer]: dev-api
+                        - cell "34.54.223.100" [ref=e796]:
+                          - paragraph [ref=e797] [cursor=pointer]: 34.54.223.100
+                        - cell "60 min" [ref=e798]:
+                          - paragraph [ref=e799] [cursor=pointer]: 60 min
+                        - cell "Remove" [ref=e800]:
+                          - link "Remove" [ref=e801] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record dev-cloud-armor-personas 34.54.223.100 60 min Remove" [ref=e802]:
+                        - cell "A Record" [ref=e803]:
+                          - checkbox [ref=e805]
+                          - paragraph [ref=e806] [cursor=pointer]: A Record
+                        - cell "dev-cloud-armor-personas" [ref=e807]:
+                          - paragraph [ref=e808] [cursor=pointer]: dev-cloud-armor-personas
+                        - cell "34.54.223.100" [ref=e809]:
+                          - paragraph [ref=e810] [cursor=pointer]: 34.54.223.100
+                        - cell "60 min" [ref=e811]:
+                          - paragraph [ref=e812] [cursor=pointer]: 60 min
+                        - cell "Remove" [ref=e813]:
+                          - link "Remove" [ref=e814] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record dg 172.16.175.250 Automatic Remove" [ref=e815]:
+                        - cell "A Record" [ref=e816]:
+                          - checkbox [ref=e818]
+                          - paragraph [ref=e819] [cursor=pointer]: A Record
+                        - cell "dg" [ref=e820]:
+                          - paragraph [ref=e821] [cursor=pointer]: dg
+                        - cell "172.16.175.250" [ref=e822]:
+                          - paragraph [ref=e823] [cursor=pointer]: 172.16.175.250
+                        - cell "Automatic" [ref=e824]:
+                          - paragraph [ref=e825] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e826]:
+                          - link "Remove" [ref=e827] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record dg-monitor 34.8.56.11 Automatic Remove" [ref=e828]:
+                        - cell "A Record" [ref=e829]:
+                          - checkbox [ref=e831]
+                          - paragraph [ref=e832] [cursor=pointer]: A Record
+                        - cell "dg-monitor" [ref=e833]:
+                          - paragraph [ref=e834] [cursor=pointer]: dg-monitor
+                        - cell "34.8.56.11" [ref=e835]:
+                          - paragraph [ref=e836] [cursor=pointer]: 34.8.56.11
+                        - cell "Automatic" [ref=e837]:
+                          - paragraph [ref=e838] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e839]:
+                          - link "Remove" [ref=e840] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record diarizer 172.16.160.110 Automatic Remove" [ref=e841]:
+                        - cell "A Record" [ref=e842]:
+                          - checkbox [ref=e844]
+                          - paragraph [ref=e845] [cursor=pointer]: A Record
+                        - cell "diarizer" [ref=e846]:
+                          - paragraph [ref=e847] [cursor=pointer]: diarizer
+                        - cell "172.16.160.110" [ref=e848]:
+                          - paragraph [ref=e849] [cursor=pointer]: 172.16.160.110
+                        - cell "Automatic" [ref=e850]:
+                          - paragraph [ref=e851] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e852]:
+                          - link "Remove" [ref=e853] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record friend 34.121.150.13 Automatic Remove" [ref=e854]:
+                        - cell "A Record" [ref=e855]:
+                          - checkbox [ref=e857]
+                          - paragraph [ref=e858] [cursor=pointer]: A Record
+                        - cell "friend" [ref=e859]:
+                          - paragraph [ref=e860] [cursor=pointer]: friend
+                        - cell "34.121.150.13" [ref=e861]:
+                          - paragraph [ref=e862] [cursor=pointer]: 34.121.150.13
+                        - cell "Automatic" [ref=e863]:
+                          - paragraph [ref=e864] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e865]:
+                          - link "Remove" [ref=e866] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record h 34.54.223.100 60 min Remove" [ref=e867]:
+                        - cell "A Record" [ref=e868]:
+                          - checkbox [ref=e870]
+                          - paragraph [ref=e871] [cursor=pointer]: A Record
+                        - cell "h" [ref=e872]:
+                          - paragraph [ref=e873] [cursor=pointer]: h
+                        - cell "34.54.223.100" [ref=e874]:
+                          - paragraph [ref=e875] [cursor=pointer]: 34.54.223.100
+                        - cell "60 min" [ref=e876]:
+                          - paragraph [ref=e877] [cursor=pointer]: 60 min
+                        - cell "Remove" [ref=e878]:
+                          - link "Remove" [ref=e879] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record jarvis 34.121.150.13 Automatic Remove" [ref=e880]:
+                        - cell "A Record" [ref=e881]:
+                          - checkbox [ref=e883]
+                          - paragraph [ref=e884] [cursor=pointer]: A Record
+                        - cell "jarvis" [ref=e885]:
+                          - paragraph [ref=e886] [cursor=pointer]: jarvis
+                        - cell "34.121.150.13" [ref=e887]:
+                          - paragraph [ref=e888] [cursor=pointer]: 34.121.150.13
+                        - cell "Automatic" [ref=e889]:
+                          - paragraph [ref=e890] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e891]:
+                          - link "Remove" [ref=e892] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record link 34.54.223.100 Automatic Remove" [ref=e893]:
+                        - cell "A Record" [ref=e894]:
+                          - checkbox [ref=e896]
+                          - paragraph [ref=e897] [cursor=pointer]: A Record
+                        - cell "link" [ref=e898]:
+                          - paragraph [ref=e899] [cursor=pointer]: link
+                        - cell "34.54.223.100" [ref=e900]:
+                          - paragraph [ref=e901] [cursor=pointer]: 34.54.223.100
+                        - cell "Automatic" [ref=e902]:
+                          - paragraph [ref=e903] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e904]:
+                          - link "Remove" [ref=e905] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record llm 172.16.160.108 Automatic Remove" [ref=e906]:
+                        - cell "A Record" [ref=e907]:
+                          - checkbox [ref=e909]
+                          - paragraph [ref=e910] [cursor=pointer]: A Record
+                        - cell "llm" [ref=e911]:
+                          - paragraph [ref=e912] [cursor=pointer]: llm
+                        - cell "172.16.160.108" [ref=e913]:
+                          - paragraph [ref=e914] [cursor=pointer]: 172.16.160.108
+                        - cell "Automatic" [ref=e915]:
+                          - paragraph [ref=e916] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e917]:
+                          - link "Remove" [ref=e918] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record macos 34.54.223.100 Automatic Remove" [ref=e919]:
+                        - cell "A Record" [ref=e920]:
+                          - checkbox [ref=e922]
+                          - paragraph [ref=e923] [cursor=pointer]: A Record
+                        - cell "macos" [ref=e924]:
+                          - paragraph [ref=e925] [cursor=pointer]: macos
+                        - cell "34.54.223.100" [ref=e926]:
+                          - paragraph [ref=e927] [cursor=pointer]: 34.54.223.100
+                        - cell "Automatic" [ref=e928]:
+                          - paragraph [ref=e929] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e930]:
+                          - link "Remove" [ref=e931] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record monitor 34.160.137.29 Automatic Remove" [ref=e932]:
+                        - cell "A Record" [ref=e933]:
+                          - checkbox [ref=e935]
+                          - paragraph [ref=e936] [cursor=pointer]: A Record
+                        - cell "monitor" [ref=e937]:
+                          - paragraph [ref=e938] [cursor=pointer]: monitor
+                        - cell "34.160.137.29" [ref=e939]:
+                          - paragraph [ref=e940] [cursor=pointer]: 34.160.137.29
+                        - cell "Automatic" [ref=e941]:
+                          - paragraph [ref=e942] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e943]:
+                          - link "Remove" [ref=e944] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record personas 34.54.223.100 Automatic Remove" [ref=e945]:
+                        - cell "A Record" [ref=e946]:
+                          - checkbox [ref=e948]
+                          - paragraph [ref=e949] [cursor=pointer]: A Record
+                        - cell "personas" [ref=e950]:
+                          - paragraph [ref=e951] [cursor=pointer]: personas
+                        - cell "34.54.223.100" [ref=e952]:
+                          - paragraph [ref=e953] [cursor=pointer]: 34.54.223.100
+                        - cell "Automatic" [ref=e954]:
+                          - paragraph [ref=e955] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e956]:
+                          - link "Remove" [ref=e957] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record pusher 172.16.160.72 Automatic Remove" [ref=e958]:
+                        - cell "A Record" [ref=e959]:
+                          - checkbox [ref=e961]
+                          - paragraph [ref=e962] [cursor=pointer]: A Record
+                        - cell "pusher" [ref=e963]:
+                          - paragraph [ref=e964] [cursor=pointer]: pusher
+                        - cell "172.16.160.72" [ref=e965]:
+                          - paragraph [ref=e966] [cursor=pointer]: 172.16.160.72
+                        - cell "Automatic" [ref=e967]:
+                          - paragraph [ref=e968] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e969]:
+                          - link "Remove" [ref=e970] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record try 34.54.223.100 Automatic Remove" [ref=e971]:
+                        - cell "A Record" [ref=e972]:
+                          - checkbox [ref=e974]
+                          - paragraph [ref=e975] [cursor=pointer]: A Record
+                        - cell "try" [ref=e976]:
+                          - paragraph [ref=e977] [cursor=pointer]: try
+                        - cell "34.54.223.100" [ref=e978]:
+                          - paragraph [ref=e979] [cursor=pointer]: 34.54.223.100
+                        - cell "Automatic" [ref=e980]:
+                          - paragraph [ref=e981] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e982]:
+                          - link "Remove" [ref=e983] [cursor=pointer]:
+                            - /url: ""
+                      - row "A Record vad 172.16.175.245 Automatic Remove" [ref=e984]:
+                        - cell "A Record" [ref=e985]:
+                          - checkbox [ref=e987]
+                          - paragraph [ref=e988] [cursor=pointer]: A Record
+                        - cell "vad" [ref=e989]:
+                          - paragraph [ref=e990] [cursor=pointer]: vad
+                        - cell "172.16.175.245" [ref=e991]:
+                          - paragraph [ref=e992] [cursor=pointer]: 172.16.175.245
+                        - cell "Automatic" [ref=e993]:
+                          - paragraph [ref=e994] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e995]:
+                          - link "Remove" [ref=e996] [cursor=pointer]:
+                            - /url: ""
+                      - 'row "AAAA Record @ 2620:0127:f00f:5:: Automatic Remove" [ref=e997]':
+                        - cell "AAAA Record" [ref=e998]:
+                          - checkbox [ref=e1000]
+                          - paragraph [ref=e1001] [cursor=pointer]: AAAA Record
+                        - cell "@" [ref=e1002]:
+                          - paragraph [ref=e1003] [cursor=pointer]: "@"
+                        - cell "2620:0127:f00f:5::" [ref=e1004]:
+                          - paragraph [ref=e1005] [cursor=pointer]: "2620:0127:f00f:5::"
+                        - cell "Automatic" [ref=e1006]:
+                          - paragraph [ref=e1007] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1008]:
+                          - link "Remove" [ref=e1009] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record _81352eccf8bc28bf59fb395b05c2a398 BA951433BBECBA9FF525BE427029A605.E2766824E8C010D7D955DF4E87858237.67c17c3f5c05e.comodoca.com. 1 min Remove" [ref=e1010]:
+                        - cell "CNAME Record" [ref=e1011]:
+                          - checkbox [ref=e1013]
+                          - paragraph [ref=e1014] [cursor=pointer]: CNAME Record
+                        - cell "_81352eccf8bc28bf59fb395b05c2a398" [ref=e1015]:
+                          - paragraph [ref=e1016] [cursor=pointer]: _81352eccf8bc28bf59fb395b05c2a398
+                        - cell "BA951433BBECBA9FF525BE427029A605.E2766824E8C010D7D955DF4E87858237.67c17c3f5c05e.comodoca.com." [ref=e1017]:
+                          - paragraph [ref=e1018] [cursor=pointer]: BA951433BBECBA9FF525BE427029A605.E2766824E8C010D7D955DF4E87858237.67c17c3f5c05e.comodoca.com.
+                        - cell "1 min" [ref=e1019]:
+                          - paragraph [ref=e1020] [cursor=pointer]: 1 min
+                        - cell "Remove" [ref=e1021]:
+                          - link "Remove" [ref=e1022] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record account shops.myshopify.com. 60 min Remove" [ref=e1023]:
+                        - cell "CNAME Record" [ref=e1024]:
+                          - checkbox [ref=e1026]
+                          - paragraph [ref=e1027] [cursor=pointer]: CNAME Record
+                        - cell "account" [ref=e1028]:
+                          - paragraph [ref=e1029] [cursor=pointer]: account
+                        - cell "shops.myshopify.com." [ref=e1030]:
+                          - paragraph [ref=e1031] [cursor=pointer]: shops.myshopify.com.
+                        - cell "60 min" [ref=e1032]:
+                          - paragraph [ref=e1033] [cursor=pointer]: 60 min
+                        - cell "Remove" [ref=e1034]:
+                          - link "Remove" [ref=e1035] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record admin ghs.googlehosted.com. Automatic Remove" [ref=e1036]:
+                        - cell "CNAME Record" [ref=e1037]:
+                          - checkbox [ref=e1039]
+                          - paragraph [ref=e1040] [cursor=pointer]: CNAME Record
+                        - cell "admin" [ref=e1041]:
+                          - paragraph [ref=e1042] [cursor=pointer]: admin
+                        - cell "ghs.googlehosted.com." [ref=e1043]:
+                          - paragraph [ref=e1044] [cursor=pointer]: ghs.googlehosted.com.
+                        - cell "Automatic" [ref=e1045]:
+                          - paragraph [ref=e1046] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1047]:
+                          - link "Remove" [ref=e1048] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record affiliate partners.goaffpro.com. Automatic Remove" [ref=e1049]:
+                        - cell "CNAME Record" [ref=e1050]:
+                          - checkbox [ref=e1052]
+                          - paragraph [ref=e1053] [cursor=pointer]: CNAME Record
+                        - cell "affiliate" [ref=e1054]:
+                          - paragraph [ref=e1055] [cursor=pointer]: affiliate
+                        - cell "partners.goaffpro.com." [ref=e1056]:
+                          - paragraph [ref=e1057] [cursor=pointer]: partners.goaffpro.com.
+                        - cell "Automatic" [ref=e1058]:
+                          - paragraph [ref=e1059] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1060]:
+                          - link "Remove" [ref=e1061] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record app ghs.googlehosted.com. 1 min Remove" [ref=e1062]:
+                        - cell "CNAME Record" [ref=e1063]:
+                          - checkbox [ref=e1065]
+                          - paragraph [ref=e1066] [cursor=pointer]: CNAME Record
+                        - cell "app" [ref=e1067]:
+                          - paragraph [ref=e1068] [cursor=pointer]: app
+                        - cell "ghs.googlehosted.com." [ref=e1069]:
+                          - paragraph [ref=e1070] [cursor=pointer]: ghs.googlehosted.com.
+                        - cell "1 min" [ref=e1071]:
+                          - paragraph [ref=e1072] [cursor=pointer]: 1 min
+                        - cell "Remove" [ref=e1073]:
+                          - link "Remove" [ref=e1074] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record brevo1._domainkey b1.omi-me.dkim.brevo.com. Automatic Remove" [ref=e1075]:
+                        - cell "CNAME Record" [ref=e1076]:
+                          - checkbox [ref=e1078]
+                          - paragraph [ref=e1079] [cursor=pointer]: CNAME Record
+                        - cell "brevo1._domainkey" [ref=e1080]:
+                          - paragraph [ref=e1081] [cursor=pointer]: brevo1._domainkey
+                        - cell "b1.omi-me.dkim.brevo.com." [ref=e1082]:
+                          - paragraph [ref=e1083] [cursor=pointer]: b1.omi-me.dkim.brevo.com.
+                        - cell "Automatic" [ref=e1084]:
+                          - paragraph [ref=e1085] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1086]:
+                          - link "Remove" [ref=e1087] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record brevo2._domainkey b2.omi-me.dkim.brevo.com. Automatic Remove" [ref=e1088]:
+                        - cell "CNAME Record" [ref=e1089]:
+                          - checkbox [ref=e1091]
+                          - paragraph [ref=e1092] [cursor=pointer]: CNAME Record
+                        - cell "brevo2._domainkey" [ref=e1093]:
+                          - paragraph [ref=e1094] [cursor=pointer]: brevo2._domainkey
+                        - cell "b2.omi-me.dkim.brevo.com." [ref=e1095]:
+                          - paragraph [ref=e1096] [cursor=pointer]: b2.omi-me.dkim.brevo.com.
+                        - cell "Automatic" [ref=e1097]:
+                          - paragraph [ref=e1098] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1099]:
+                          - link "Remove" [ref=e1100] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record distributor ghs.googlehosted.com. Automatic Remove" [ref=e1101]:
+                        - cell "CNAME Record" [ref=e1102]:
+                          - checkbox [ref=e1104]
+                          - paragraph [ref=e1105] [cursor=pointer]: CNAME Record
+                        - cell "distributor" [ref=e1106]:
+                          - paragraph [ref=e1107] [cursor=pointer]: distributor
+                        - cell "ghs.googlehosted.com." [ref=e1108]:
+                          - paragraph [ref=e1109] [cursor=pointer]: ghs.googlehosted.com.
+                        - cell "Automatic" [ref=e1110]:
+                          - paragraph [ref=e1111] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1112]:
+                          - link "Remove" [ref=e1113] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record docs cname.vercel-dns.com. Automatic Remove" [ref=e1114]:
+                        - cell "CNAME Record" [ref=e1115]:
+                          - checkbox [ref=e1117]
+                          - paragraph [ref=e1118] [cursor=pointer]: CNAME Record
+                        - cell "docs" [ref=e1119]:
+                          - paragraph [ref=e1120] [cursor=pointer]: docs
+                        - cell "cname.vercel-dns.com." [ref=e1121]:
+                          - paragraph [ref=e1122] [cursor=pointer]: cname.vercel-dns.com.
+                        - cell "Automatic" [ref=e1123]:
+                          - paragraph [ref=e1124] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1125]:
+                          - link "Remove" [ref=e1126] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record em2403.notify.omi.me u24687408.wl159.sendgrid.net. Automatic Remove" [ref=e1127]:
+                        - cell "CNAME Record" [ref=e1128]:
+                          - checkbox [ref=e1130]
+                          - paragraph [ref=e1131] [cursor=pointer]: CNAME Record
+                        - cell "em2403.notify.omi.me" [ref=e1132]:
+                          - paragraph [ref=e1133] [cursor=pointer]: em2403.notify.omi.me
+                        - cell "u24687408.wl159.sendgrid.net." [ref=e1134]:
+                          - paragraph [ref=e1135] [cursor=pointer]: u24687408.wl159.sendgrid.net.
+                        - cell "Automatic" [ref=e1136]:
+                          - paragraph [ref=e1137] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1138]:
+                          - link "Remove" [ref=e1139] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record enterprise ghs.googlehosted.com. Automatic Remove" [ref=e1140]:
+                        - cell "CNAME Record" [ref=e1141]:
+                          - checkbox [ref=e1143]
+                          - paragraph [ref=e1144] [cursor=pointer]: CNAME Record
+                        - cell "enterprise" [ref=e1145]:
+                          - paragraph [ref=e1146] [cursor=pointer]: enterprise
+                        - cell "ghs.googlehosted.com." [ref=e1147]:
+                          - paragraph [ref=e1148] [cursor=pointer]: ghs.googlehosted.com.
+                        - cell "Automatic" [ref=e1149]:
+                          - paragraph [ref=e1150] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1151]:
+                          - link "Remove" [ref=e1152] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record fb._domainkey.notify.omi.me fb.domainkey.u24687408.wl159.sendgrid.net. Automatic Remove" [ref=e1153]:
+                        - cell "CNAME Record" [ref=e1154]:
+                          - checkbox [ref=e1156]
+                          - paragraph [ref=e1157] [cursor=pointer]: CNAME Record
+                        - cell "fb._domainkey.notify.omi.me" [ref=e1158]:
+                          - paragraph [ref=e1159] [cursor=pointer]: fb._domainkey.notify.omi.me
+                        - cell "fb.domainkey.u24687408.wl159.sendgrid.net." [ref=e1160]:
+                          - paragraph [ref=e1161] [cursor=pointer]: fb.domainkey.u24687408.wl159.sendgrid.net.
+                        - cell "Automatic" [ref=e1162]:
+                          - paragraph [ref=e1163] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1164]:
+                          - link "Remove" [ref=e1165] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record fb2._domainkey.notify.omi.me fb2.domainkey.u24687408.wl159.sendgrid.net. Automatic Remove" [ref=e1166]:
+                        - cell "CNAME Record" [ref=e1167]:
+                          - checkbox [ref=e1169]
+                          - paragraph [ref=e1170] [cursor=pointer]: CNAME Record
+                        - cell "fb2._domainkey.notify.omi.me" [ref=e1171]:
+                          - paragraph [ref=e1172] [cursor=pointer]: fb2._domainkey.notify.omi.me
+                        - cell "fb2.domainkey.u24687408.wl159.sendgrid.net." [ref=e1173]:
+                          - paragraph [ref=e1174] [cursor=pointer]: fb2.domainkey.u24687408.wl159.sendgrid.net.
+                        - cell "Automatic" [ref=e1175]:
+                          - paragraph [ref=e1176] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1177]:
+                          - link "Remove" [ref=e1178] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record feedback customdomains.featurebase.app. Automatic Remove" [ref=e1179]:
+                        - cell "CNAME Record" [ref=e1180]:
+                          - checkbox [ref=e1182]
+                          - paragraph [ref=e1183] [cursor=pointer]: CNAME Record
+                        - cell "feedback" [ref=e1184]:
+                          - paragraph [ref=e1185] [cursor=pointer]: feedback
+                        - cell "customdomains.featurebase.app." [ref=e1186]:
+                          - paragraph [ref=e1187] [cursor=pointer]: customdomains.featurebase.app.
+                        - cell "Automatic" [ref=e1188]:
+                          - paragraph [ref=e1189] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1190]:
+                          - link "Remove" [ref=e1191] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record fhdzkdkj2jog gv-ib4cs37q45vzkp.dv.googlehosted.com. Automatic Remove" [ref=e1192]:
+                        - cell "CNAME Record" [ref=e1193]:
+                          - checkbox [ref=e1195]
+                          - paragraph [ref=e1196] [cursor=pointer]: CNAME Record
+                        - cell "fhdzkdkj2jog" [ref=e1197]:
+                          - paragraph [ref=e1198] [cursor=pointer]: fhdzkdkj2jog
+                        - cell "gv-ib4cs37q45vzkp.dv.googlehosted.com." [ref=e1199]:
+                          - paragraph [ref=e1200] [cursor=pointer]: gv-ib4cs37q45vzkp.dv.googlehosted.com.
+                        - cell "Automatic" [ref=e1201]:
+                          - paragraph [ref=e1202] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1203]:
+                          - link "Remove" [ref=e1204] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record gm-bounces.omi.me pm.mtasv.net. Automatic Remove" [ref=e1205]:
+                        - cell "CNAME Record" [ref=e1206]:
+                          - checkbox [ref=e1208]
+                          - paragraph [ref=e1209] [cursor=pointer]: CNAME Record
+                        - cell "gm-bounces.omi.me" [ref=e1210]:
+                          - paragraph [ref=e1211] [cursor=pointer]: gm-bounces.omi.me
+                        - cell "pm.mtasv.net." [ref=e1212]:
+                          - paragraph [ref=e1213] [cursor=pointer]: pm.mtasv.net.
+                        - cell "Automatic" [ref=e1214]:
+                          - paragraph [ref=e1215] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1216]:
+                          - link "Remove" [ref=e1217] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record help us.intercomhelpcenter.com. Automatic Remove" [ref=e1218]:
+                        - cell "CNAME Record" [ref=e1219]:
+                          - checkbox [ref=e1221]
+                          - paragraph [ref=e1222] [cursor=pointer]: CNAME Record
+                        - cell "help" [ref=e1223]:
+                          - paragraph [ref=e1224] [cursor=pointer]: help
+                        - cell "us.intercomhelpcenter.com." [ref=e1225]:
+                          - paragraph [ref=e1226] [cursor=pointer]: us.intercomhelpcenter.com.
+                        - cell "Automatic" [ref=e1227]:
+                          - paragraph [ref=e1228] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1229]:
+                          - link "Remove" [ref=e1230] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record home ghs.googlehosted.com. Automatic Remove" [ref=e1231]:
+                        - cell "CNAME Record" [ref=e1232]:
+                          - checkbox [ref=e1234]
+                          - paragraph [ref=e1235] [cursor=pointer]: CNAME Record
+                        - cell "home" [ref=e1236]:
+                          - paragraph [ref=e1237] [cursor=pointer]: home
+                        - cell "ghs.googlehosted.com." [ref=e1238]:
+                          - paragraph [ref=e1239] [cursor=pointer]: ghs.googlehosted.com.
+                        - cell "Automatic" [ref=e1240]:
+                          - paragraph [ref=e1241] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1242]:
+                          - link "Remove" [ref=e1243] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record intercom._domainkey df66ac46-1d9e-4118-88d0-db9900d49a9b.dkim.intercom.io. Automatic Remove" [ref=e1244]:
+                        - cell "CNAME Record" [ref=e1245]:
+                          - checkbox [ref=e1247]
+                          - paragraph [ref=e1248] [cursor=pointer]: CNAME Record
+                        - cell "intercom._domainkey" [ref=e1249]:
+                          - paragraph [ref=e1250] [cursor=pointer]: intercom._domainkey
+                        - cell "df66ac46-1d9e-4118-88d0-db9900d49a9b.dkim.intercom.io." [ref=e1251]:
+                          - paragraph [ref=e1252] [cursor=pointer]: df66ac46-1d9e-4118-88d0-db9900d49a9b.dkim.intercom.io.
+                        - cell "Automatic" [ref=e1253]:
+                          - paragraph [ref=e1254] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1255]:
+                          - link "Remove" [ref=e1256] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record mailertup a5645e014d56.p763.email.myshopify.com. Automatic Remove" [ref=e1257]:
+                        - cell "CNAME Record" [ref=e1258]:
+                          - checkbox [ref=e1260]
+                          - paragraph [ref=e1261] [cursor=pointer]: CNAME Record
+                        - cell "mailertup" [ref=e1262]:
+                          - paragraph [ref=e1263] [cursor=pointer]: mailertup
+                        - cell "a5645e014d56.p763.email.myshopify.com." [ref=e1264]:
+                          - paragraph [ref=e1265] [cursor=pointer]: a5645e014d56.p763.email.myshopify.com.
+                        - cell "Automatic" [ref=e1266]:
+                          - paragraph [ref=e1267] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1268]:
+                          - link "Remove" [ref=e1269] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record outbound.intercom rp.omi-12728545c13a.intercom-mail.com. Automatic Remove" [ref=e1270]:
+                        - cell "CNAME Record" [ref=e1271]:
+                          - checkbox [ref=e1273]
+                          - paragraph [ref=e1274] [cursor=pointer]: CNAME Record
+                        - cell "outbound.intercom" [ref=e1275]:
+                          - paragraph [ref=e1276] [cursor=pointer]: outbound.intercom
+                        - cell "rp.omi-12728545c13a.intercom-mail.com." [ref=e1277]:
+                          - paragraph [ref=e1278] [cursor=pointer]: rp.omi-12728545c13a.intercom-mail.com.
+                        - cell "Automatic" [ref=e1279]:
+                          - paragraph [ref=e1280] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1281]:
+                          - link "Remove" [ref=e1282] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record trust fd5ea42a144502d9.vercel-dns-016.com. Automatic Remove" [ref=e1283]:
+                        - cell "CNAME Record" [ref=e1284]:
+                          - checkbox [ref=e1286]
+                          - paragraph [ref=e1287] [cursor=pointer]: CNAME Record
+                        - cell "trust" [ref=e1288]:
+                          - paragraph [ref=e1289] [cursor=pointer]: trust
+                        - cell "fd5ea42a144502d9.vercel-dns-016.com." [ref=e1290]:
+                          - paragraph [ref=e1291] [cursor=pointer]: fd5ea42a144502d9.vercel-dns-016.com.
+                        - cell "Automatic" [ref=e1292]:
+                          - paragraph [ref=e1293] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1294]:
+                          - link "Remove" [ref=e1295] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record tup._domainkey dkim1.a5645e014d56.p763.email.myshopify.com. Automatic Remove" [ref=e1296]:
+                        - cell "CNAME Record" [ref=e1297]:
+                          - checkbox [ref=e1299]
+                          - paragraph [ref=e1300] [cursor=pointer]: CNAME Record
+                        - cell "tup._domainkey" [ref=e1301]:
+                          - paragraph [ref=e1302] [cursor=pointer]: tup._domainkey
+                        - cell "dkim1.a5645e014d56.p763.email.myshopify.com." [ref=e1303]:
+                          - paragraph [ref=e1304] [cursor=pointer]: dkim1.a5645e014d56.p763.email.myshopify.com.
+                        - cell "Automatic" [ref=e1305]:
+                          - paragraph [ref=e1306] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1307]:
+                          - link "Remove" [ref=e1308] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record tup2._domainkey dkim2.a5645e014d56.p763.email.myshopify.com. Automatic Remove" [ref=e1309]:
+                        - cell "CNAME Record" [ref=e1310]:
+                          - checkbox [ref=e1312]
+                          - paragraph [ref=e1313] [cursor=pointer]: CNAME Record
+                        - cell "tup2._domainkey" [ref=e1314]:
+                          - paragraph [ref=e1315] [cursor=pointer]: tup2._domainkey
+                        - cell "dkim2.a5645e014d56.p763.email.myshopify.com." [ref=e1316]:
+                          - paragraph [ref=e1317] [cursor=pointer]: dkim2.a5645e014d56.p763.email.myshopify.com.
+                        - cell "Automatic" [ref=e1318]:
+                          - paragraph [ref=e1319] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1320]:
+                          - link "Remove" [ref=e1321] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record tup3._domainkey dkim3.a5645e014d56.p763.email.myshopify.com. Automatic Remove" [ref=e1322]:
+                        - cell "CNAME Record" [ref=e1323]:
+                          - checkbox [ref=e1325]
+                          - paragraph [ref=e1326] [cursor=pointer]: CNAME Record
+                        - cell "tup3._domainkey" [ref=e1327]:
+                          - paragraph [ref=e1328] [cursor=pointer]: tup3._domainkey
+                        - cell "dkim3.a5645e014d56.p763.email.myshopify.com." [ref=e1329]:
+                          - paragraph [ref=e1330] [cursor=pointer]: dkim3.a5645e014d56.p763.email.myshopify.com.
+                        - cell "Automatic" [ref=e1331]:
+                          - paragraph [ref=e1332] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1333]:
+                          - link "Remove" [ref=e1334] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record www shops.myshopify.com. Automatic Remove" [ref=e1335]:
+                        - cell "CNAME Record" [ref=e1336]:
+                          - checkbox [ref=e1338]
+                          - paragraph [ref=e1339] [cursor=pointer]: CNAME Record
+                        - cell "www" [ref=e1340]:
+                          - paragraph [ref=e1341] [cursor=pointer]: www
+                        - cell "shops.myshopify.com." [ref=e1342]:
+                          - paragraph [ref=e1343] [cursor=pointer]: shops.myshopify.com.
+                        - cell "Automatic" [ref=e1344]:
+                          - paragraph [ref=e1345] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1346]:
+                          - link "Remove" [ref=e1347] [cursor=pointer]:
+                            - /url: ""
+                      - row "CNAME Record ys6oteiuodn5 gv-hlnwpp32iffcx2.dv.googlehosted.com. Automatic Remove" [ref=e1348]:
+                        - cell "CNAME Record" [ref=e1349]:
+                          - checkbox [ref=e1351]
+                          - paragraph [ref=e1352] [cursor=pointer]: CNAME Record
+                        - cell "ys6oteiuodn5" [ref=e1353]:
+                          - paragraph [ref=e1354] [cursor=pointer]: ys6oteiuodn5
+                        - cell "gv-hlnwpp32iffcx2.dv.googlehosted.com." [ref=e1355]:
+                          - paragraph [ref=e1356] [cursor=pointer]: gv-hlnwpp32iffcx2.dv.googlehosted.com.
+                        - cell "Automatic" [ref=e1357]:
+                          - paragraph [ref=e1358] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1359]:
+                          - link "Remove" [ref=e1360] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=g9D0_Rw_vtiS77krFGj5a1oZDjRJgCANtwnQlv85q1c Automatic Remove" [ref=e1364]:
+                        - cell "TXT Record" [ref=e1365]:
+                          - checkbox [ref=e1367]
+                          - paragraph [ref=e1368] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1369]:
+                          - paragraph [ref=e1370] [cursor=pointer]: "@"
+                        - cell "google-site-verification=g9D0_Rw_vtiS77krFGj5a1oZDjRJgCANtwnQlv85q1c" [ref=e1371]:
+                          - paragraph [ref=e1372] [cursor=pointer]: google-site-verification=g9D0_Rw_vtiS77krFGj5a1oZDjRJgCANtwnQlv85q1c
+                        - cell "Automatic" [ref=e1373]:
+                          - paragraph [ref=e1374] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1375]:
+                          - link "Remove" [ref=e1376] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=i-KgE40I1wjZABQXuFQ0zES51b5K-cM83ksIfQTyPQk Automatic Remove" [ref=e1377]:
+                        - cell "TXT Record" [ref=e1378]:
+                          - checkbox [ref=e1380]
+                          - paragraph [ref=e1381] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1382]:
+                          - paragraph [ref=e1383] [cursor=pointer]: "@"
+                        - cell "google-site-verification=i-KgE40I1wjZABQXuFQ0zES51b5K-cM83ksIfQTyPQk" [ref=e1384]:
+                          - paragraph [ref=e1385] [cursor=pointer]: google-site-verification=i-KgE40I1wjZABQXuFQ0zES51b5K-cM83ksIfQTyPQk
+                        - cell "Automatic" [ref=e1386]:
+                          - paragraph [ref=e1387] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1388]:
+                          - link "Remove" [ref=e1389] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=gYDiH18NcexzCfrido1nO1n2-nPyANZ_4UILA5-afL0 Automatic Remove" [ref=e1390]:
+                        - cell "TXT Record" [ref=e1391]:
+                          - checkbox [ref=e1393]
+                          - paragraph [ref=e1394] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1395]:
+                          - paragraph [ref=e1396] [cursor=pointer]: "@"
+                        - cell "google-site-verification=gYDiH18NcexzCfrido1nO1n2-nPyANZ_4UILA5-afL0" [ref=e1397]:
+                          - paragraph [ref=e1398] [cursor=pointer]: google-site-verification=gYDiH18NcexzCfrido1nO1n2-nPyANZ_4UILA5-afL0
+                        - cell "Automatic" [ref=e1399]:
+                          - paragraph [ref=e1400] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1401]:
+                          - link "Remove" [ref=e1402] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=JqKdawBTp3LAO8mQPhbF-P3sQq2MFsvzssBd0vYGE0M 1 min Remove" [ref=e1403]:
+                        - cell "TXT Record" [ref=e1404]:
+                          - checkbox [ref=e1406]
+                          - paragraph [ref=e1407] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1408]:
+                          - paragraph [ref=e1409] [cursor=pointer]: "@"
+                        - cell "google-site-verification=JqKdawBTp3LAO8mQPhbF-P3sQq2MFsvzssBd0vYGE0M" [ref=e1410]:
+                          - paragraph [ref=e1411] [cursor=pointer]: google-site-verification=JqKdawBTp3LAO8mQPhbF-P3sQq2MFsvzssBd0vYGE0M
+                        - cell "1 min" [ref=e1412]:
+                          - paragraph [ref=e1413] [cursor=pointer]: 1 min
+                        - cell "Remove" [ref=e1414]:
+                          - link "Remove" [ref=e1415] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ brevo-code:de2ea82f3f73a2044a3662bb8e49d4ee Automatic Remove" [ref=e1416]:
+                        - cell "TXT Record" [ref=e1417]:
+                          - checkbox [ref=e1419]
+                          - paragraph [ref=e1420] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1421]:
+                          - paragraph [ref=e1422] [cursor=pointer]: "@"
+                        - cell "brevo-code:de2ea82f3f73a2044a3662bb8e49d4ee" [ref=e1423]:
+                          - paragraph [ref=e1424] [cursor=pointer]: brevo-code:de2ea82f3f73a2044a3662bb8e49d4ee
+                        - cell "Automatic" [ref=e1425]:
+                          - paragraph [ref=e1426] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1427]:
+                          - link "Remove" [ref=e1428] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ openai-domain-verification=dv-FsK9VRhlwZh5oCRtlsUJsTE2 Automatic Remove" [ref=e1429]:
+                        - cell "TXT Record" [ref=e1430]:
+                          - checkbox [ref=e1432]
+                          - paragraph [ref=e1433] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1434]:
+                          - paragraph [ref=e1435] [cursor=pointer]: "@"
+                        - cell "openai-domain-verification=dv-FsK9VRhlwZh5oCRtlsUJsTE2" [ref=e1436]:
+                          - paragraph [ref=e1437] [cursor=pointer]: openai-domain-verification=dv-FsK9VRhlwZh5oCRtlsUJsTE2
+                        - cell "Automatic" [ref=e1438]:
+                          - paragraph [ref=e1439] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1440]:
+                          - link "Remove" [ref=e1441] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=onVtuxlYZFgpd7ax3PiSMw-tfPgVRpHGJua_Ldjq-zw Automatic Remove" [ref=e1442]:
+                        - cell "TXT Record" [ref=e1443]:
+                          - checkbox [ref=e1445]
+                          - paragraph [ref=e1446] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1447]:
+                          - paragraph [ref=e1448] [cursor=pointer]: "@"
+                        - cell "google-site-verification=onVtuxlYZFgpd7ax3PiSMw-tfPgVRpHGJua_Ldjq-zw" [ref=e1449]:
+                          - paragraph [ref=e1450] [cursor=pointer]: google-site-verification=onVtuxlYZFgpd7ax3PiSMw-tfPgVRpHGJua_Ldjq-zw
+                        - cell "Automatic" [ref=e1451]:
+                          - paragraph [ref=e1452] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1453]:
+                          - link "Remove" [ref=e1454] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=6M8EYqddb81SuVBiOWUJfpxYHlRecm-PpgpCqXmFatE Automatic Remove" [ref=e1455]:
+                        - cell "TXT Record" [ref=e1456]:
+                          - checkbox [ref=e1458]
+                          - paragraph [ref=e1459] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1460]:
+                          - paragraph [ref=e1461] [cursor=pointer]: "@"
+                        - cell "google-site-verification=6M8EYqddb81SuVBiOWUJfpxYHlRecm-PpgpCqXmFatE" [ref=e1462]:
+                          - paragraph [ref=e1463] [cursor=pointer]: google-site-verification=6M8EYqddb81SuVBiOWUJfpxYHlRecm-PpgpCqXmFatE
+                        - cell "Automatic" [ref=e1464]:
+                          - paragraph [ref=e1465] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1466]:
+                          - link "Remove" [ref=e1467] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ google-site-verification=VXLxiQkrqJi9WRBOWXw5cyjc9WsmJ8_9ZLVQQz28g5o Automatic Remove" [ref=e1468]:
+                        - cell "TXT Record" [ref=e1469]:
+                          - checkbox [ref=e1471]
+                          - paragraph [ref=e1472] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1473]:
+                          - paragraph [ref=e1474] [cursor=pointer]: "@"
+                        - cell "google-site-verification=VXLxiQkrqJi9WRBOWXw5cyjc9WsmJ8_9ZLVQQz28g5o" [ref=e1475]:
+                          - paragraph [ref=e1476] [cursor=pointer]: google-site-verification=VXLxiQkrqJi9WRBOWXw5cyjc9WsmJ8_9ZLVQQz28g5o
+                        - cell "Automatic" [ref=e1477]:
+                          - paragraph [ref=e1478] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1479]:
+                          - link "Remove" [ref=e1480] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record @ v=spf1 include:_spf.google.com include:sendinblue.com include:sendgrid.net include:intercom.io include:spf.mtasv.net include:shops.shopify.com ~all Automatic Remove" [ref=e1481]:
+                        - cell "TXT Record" [ref=e1482]:
+                          - checkbox [ref=e1484]
+                          - paragraph [ref=e1485] [cursor=pointer]: TXT Record
+                        - cell "@" [ref=e1486]:
+                          - paragraph [ref=e1487] [cursor=pointer]: "@"
+                        - cell "v=spf1 include:_spf.google.com include:sendinblue.com include:sendgrid.net include:intercom.io include:spf.mtasv.net include:shops.shopify.com ~all" [ref=e1488]:
+                          - paragraph [ref=e1489] [cursor=pointer]: v=spf1 include:_spf.google.com include:sendinblue.com include:sendgrid.net include:intercom.io include:spf.mtasv.net include:shops.shopify.com ~all
+                        - cell "Automatic" [ref=e1490]:
+                          - paragraph [ref=e1491] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1492]:
+                          - link "Remove" [ref=e1493] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record _dmarc v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me; Automatic Remove" [ref=e1494]:
+                        - cell "TXT Record" [ref=e1495]:
+                          - checkbox [ref=e1497]
+                          - paragraph [ref=e1498] [cursor=pointer]: TXT Record
+                        - cell "_dmarc" [ref=e1499]:
+                          - paragraph [ref=e1500] [cursor=pointer]: _dmarc
+                        - cell "v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me;" [ref=e1501]:
+                          - paragraph [ref=e1502] [cursor=pointer]: v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me;
+                        - cell "Automatic" [ref=e1503]:
+                          - paragraph [ref=e1504] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1505]:
+                          - link "Remove" [ref=e1506] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record _dmarc.enterprise v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me; Automatic Remove" [ref=e1507]:
+                        - cell "TXT Record" [ref=e1508]:
+                          - checkbox [ref=e1510]
+                          - paragraph [ref=e1511] [cursor=pointer]: TXT Record
+                        - cell "_dmarc.enterprise" [ref=e1512]:
+                          - paragraph [ref=e1513] [cursor=pointer]: _dmarc.enterprise
+                        - cell "v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me;" [ref=e1514]:
+                          - paragraph [ref=e1515] [cursor=pointer]: v=DMARC1; p=none; rua=mailto:dmarcreports@omi.me;
+                        - cell "Automatic" [ref=e1516]:
+                          - paragraph [ref=e1517] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1518]:
+                          - link "Remove" [ref=e1519] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record _vercel.omi.me vc-domain-verify=trust.omi.me,5d2bc907d6b359f0d966 Automatic Remove" [ref=e1520]:
+                        - cell "TXT Record" [ref=e1521]:
+                          - checkbox [ref=e1523]
+                          - paragraph [ref=e1524] [cursor=pointer]: TXT Record
+                        - cell "_vercel.omi.me" [ref=e1525]:
+                          - paragraph [ref=e1526] [cursor=pointer]: _vercel.omi.me
+                        - cell "vc-domain-verify=trust.omi.me,5d2bc907d6b359f0d966" [ref=e1527]:
+                          - paragraph [ref=e1528] [cursor=pointer]: vc-domain-verify=trust.omi.me,5d2bc907d6b359f0d966
+                        - cell "Automatic" [ref=e1529]:
+                          - paragraph [ref=e1530] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1531]:
+                          - link "Remove" [ref=e1532] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record 20240912065230pm._domainkey.omi.me k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCdfSTo91OQAps//EK/Zn6dGmCDymOWk58aeIpJ8yKzE1YKYE2SLwtmseCTvg3LFc63UrPEYZENkBPbZAScF0bBZYm+AowOeUMrDBULhTZLqTK0h9fx4ud6VZZOiM7f6rTIx8sbAvqt1vhWj/dZXHp/vKSdN25pluo7IXn9i35BvQIDAQAB Automatic Remove" [ref=e1533]:
+                        - cell "TXT Record" [ref=e1534]:
+                          - checkbox [ref=e1536]
+                          - paragraph [ref=e1537] [cursor=pointer]: TXT Record
+                        - cell "20240912065230pm._domainkey.omi.me" [ref=e1538]:
+                          - paragraph [ref=e1539] [cursor=pointer]: 20240912065230pm._domainkey.omi.me
+                        - cell "k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCdfSTo91OQAps//EK/Zn6dGmCDymOWk58aeIpJ8yKzE1YKYE2SLwtmseCTvg3LFc63UrPEYZENkBPbZAScF0bBZYm+AowOeUMrDBULhTZLqTK0h9fx4ud6VZZOiM7f6rTIx8sbAvqt1vhWj/dZXHp/vKSdN25pluo7IXn9i35BvQIDAQAB" [ref=e1540]:
+                          - paragraph [ref=e1541] [cursor=pointer]: k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCdfSTo91OQAps//EK/Zn6dGmCDymOWk58aeIpJ8yKzE1YKYE2SLwtmseCTvg3LFc63UrPEYZENkBPbZAScF0bBZYm+AowOeUMrDBULhTZLqTK0h9fx4ud6VZZOiM7f6rTIx8sbAvqt1vhWj/dZXHp/vKSdN25pluo7IXn9i35BvQIDAQAB
+                        - cell "Automatic" [ref=e1542]:
+                          - paragraph [ref=e1543] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1544]:
+                          - link "Remove" [ref=e1545] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record notificationapi v=spf1 include:example.com include:amazonses.com ~all Automatic Remove" [ref=e1546]:
+                        - cell "TXT Record" [ref=e1547]:
+                          - checkbox [ref=e1549]
+                          - paragraph [ref=e1550] [cursor=pointer]: TXT Record
+                        - cell "notificationapi" [ref=e1551]:
+                          - paragraph [ref=e1552] [cursor=pointer]: notificationapi
+                        - cell "v=spf1 include:example.com include:amazonses.com ~all" [ref=e1553]:
+                          - paragraph [ref=e1554] [cursor=pointer]: v=spf1 include:example.com include:amazonses.com ~all
+                        - cell "Automatic" [ref=e1555]:
+                          - paragraph [ref=e1556] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1557]:
+                          - link "Remove" [ref=e1558] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record notificationapi._domainkey p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDd3oNzEFkzeZSDmUobj7oh4u4HGO9WeV3pMy1HWqXQxCJ6hRcYU2z13J8rd2iqazZMPE7FGJA7gPms/EnGCntc9P8MSjuaKbJvUjQHmSErlMM5OzQGUFhYyFcceDkAkxm+H5jyFMau35j4RkTs7MXSaqqvYJEpDsS+FFePdnx0twIDAQAB Automatic Remove" [ref=e1559]:
+                        - cell "TXT Record" [ref=e1560]:
+                          - checkbox [ref=e1562]
+                          - paragraph [ref=e1563] [cursor=pointer]: TXT Record
+                        - cell "notificationapi._domainkey" [ref=e1564]:
+                          - paragraph [ref=e1565] [cursor=pointer]: notificationapi._domainkey
+                        - cell "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDd3oNzEFkzeZSDmUobj7oh4u4HGO9WeV3pMy1HWqXQxCJ6hRcYU2z13J8rd2iqazZMPE7FGJA7gPms/EnGCntc9P8MSjuaKbJvUjQHmSErlMM5OzQGUFhYyFcceDkAkxm+H5jyFMau35j4RkTs7MXSaqqvYJEpDsS+FFePdnx0twIDAQAB" [ref=e1566]:
+                          - paragraph [ref=e1567] [cursor=pointer]: p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDd3oNzEFkzeZSDmUobj7oh4u4HGO9WeV3pMy1HWqXQxCJ6hRcYU2z13J8rd2iqazZMPE7FGJA7gPms/EnGCntc9P8MSjuaKbJvUjQHmSErlMM5OzQGUFhYyFcceDkAkxm+H5jyFMau35j4RkTs7MXSaqqvYJEpDsS+FFePdnx0twIDAQAB
+                        - cell "Automatic" [ref=e1568]:
+                          - paragraph [ref=e1569] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1570]:
+                          - link "Remove" [ref=e1571] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record resend._domainkey.enterprise p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCliHlqTF5j1dA9cqJh7Lg9g4eQlWXODJtHRJVvJf9yhGSSUooSzouGLoA2n4QnNpkuayh4b/4foRJU0av0NJxi8fe3YcikcRc5MOx8MvbRxXwO57cHbZD5PhPnZdTUsZ07/luiJzqx2HkQv4pOj/9Hy2Z/7N/0+yJl3zsGZGQgbwIDAQAB Automatic Remove" [ref=e1572]:
+                        - cell "TXT Record" [ref=e1573]:
+                          - checkbox [ref=e1575]
+                          - paragraph [ref=e1576] [cursor=pointer]: TXT Record
+                        - cell "resend._domainkey.enterprise" [ref=e1577]:
+                          - paragraph [ref=e1578] [cursor=pointer]: resend._domainkey.enterprise
+                        - cell "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCliHlqTF5j1dA9cqJh7Lg9g4eQlWXODJtHRJVvJf9yhGSSUooSzouGLoA2n4QnNpkuayh4b/4foRJU0av0NJxi8fe3YcikcRc5MOx8MvbRxXwO57cHbZD5PhPnZdTUsZ07/luiJzqx2HkQv4pOj/9Hy2Z/7N/0+yJl3zsGZGQgbwIDAQAB" [ref=e1579]:
+                          - paragraph [ref=e1580] [cursor=pointer]: p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCliHlqTF5j1dA9cqJh7Lg9g4eQlWXODJtHRJVvJf9yhGSSUooSzouGLoA2n4QnNpkuayh4b/4foRJU0av0NJxi8fe3YcikcRc5MOx8MvbRxXwO57cHbZD5PhPnZdTUsZ07/luiJzqx2HkQv4pOj/9Hy2Z/7N/0+yJl3zsGZGQgbwIDAQAB
+                        - cell "Automatic" [ref=e1581]:
+                          - paragraph [ref=e1582] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1583]:
+                          - link "Remove" [ref=e1584] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record resend._domainkey.mail p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2voqRRxzm65ONl3dk3JahDx3Yy7JLvrJ43k5pN7YobJvohKqV+wQNtHZrmnaAIGvG42JqKdC2NDCPb9GXfTMskL4EBLasw9cFhBb3oxYVe8Bv5/m29lxZGgrhr8B4su9R1uNj/v3lFdKRycS3CKm/Hw0LPhCjrf+DEIOA8zn4vQIDAQAB Automatic Remove" [ref=e1585]:
+                        - cell "TXT Record" [ref=e1586]:
+                          - checkbox [ref=e1588]
+                          - paragraph [ref=e1589] [cursor=pointer]: TXT Record
+                        - cell "resend._domainkey.mail" [ref=e1590]:
+                          - paragraph [ref=e1591] [cursor=pointer]: resend._domainkey.mail
+                        - cell "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2voqRRxzm65ONl3dk3JahDx3Yy7JLvrJ43k5pN7YobJvohKqV+wQNtHZrmnaAIGvG42JqKdC2NDCPb9GXfTMskL4EBLasw9cFhBb3oxYVe8Bv5/m29lxZGgrhr8B4su9R1uNj/v3lFdKRycS3CKm/Hw0LPhCjrf+DEIOA8zn4vQIDAQAB" [ref=e1592]:
+                          - paragraph [ref=e1593] [cursor=pointer]: p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC2voqRRxzm65ONl3dk3JahDx3Yy7JLvrJ43k5pN7YobJvohKqV+wQNtHZrmnaAIGvG42JqKdC2NDCPb9GXfTMskL4EBLasw9cFhBb3oxYVe8Bv5/m29lxZGgrhr8B4su9R1uNj/v3lFdKRycS3CKm/Hw0LPhCjrf+DEIOA8zn4vQIDAQAB
+                        - cell "Automatic" [ref=e1594]:
+                          - paragraph [ref=e1595] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1596]:
+                          - link "Remove" [ref=e1597] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record send.enterprise v=spf1 include:amazonses.com ~all Automatic Remove" [ref=e1598]:
+                        - cell "TXT Record" [ref=e1599]:
+                          - checkbox [ref=e1601]
+                          - paragraph [ref=e1602] [cursor=pointer]: TXT Record
+                        - cell "send.enterprise" [ref=e1603]:
+                          - paragraph [ref=e1604] [cursor=pointer]: send.enterprise
+                        - cell "v=spf1 include:amazonses.com ~all" [ref=e1605]:
+                          - paragraph [ref=e1606] [cursor=pointer]: v=spf1 include:amazonses.com ~all
+                        - cell "Automatic" [ref=e1607]:
+                          - paragraph [ref=e1608] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1609]:
+                          - link "Remove" [ref=e1610] [cursor=pointer]:
+                            - /url: ""
+                      - row "TXT Record send.mail v=spf1 include:amazonses.com ~all Automatic Remove" [ref=e1611]:
+                        - cell "TXT Record" [ref=e1612]:
+                          - checkbox [ref=e1614]
+                          - paragraph [ref=e1615] [cursor=pointer]: TXT Record
+                        - cell "send.mail" [ref=e1616]:
+                          - paragraph [ref=e1617] [cursor=pointer]: send.mail
+                        - cell "v=spf1 include:amazonses.com ~all" [ref=e1618]:
+                          - paragraph [ref=e1619] [cursor=pointer]: v=spf1 include:amazonses.com ~all
+                        - cell "Automatic" [ref=e1620]:
+                          - paragraph [ref=e1621] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e1622]:
+                          - link "Remove" [ref=e1623] [cursor=pointer]:
+                            - /url: ""
+                      - row "URL Redirect Record apps https://h.omi.me/apps Unmasked Remove" [ref=e1624]:
+                        - cell "URL Redirect Record" [ref=e1625]:
+                          - checkbox [ref=e1627]
+                          - paragraph [ref=e1628] [cursor=pointer]: URL Redirect Record
+                        - cell "apps" [ref=e1629]:
+                          - paragraph [ref=e1630] [cursor=pointer]: apps
+                        - cell "https://h.omi.me/apps Unmasked" [ref=e1631]:
+                          - paragraph [ref=e1633] [cursor=pointer]: https://h.omi.me/apps
+                          - paragraph [ref=e1635] [cursor=pointer]: Unmasked
+                        - cell [ref=e1636]
+                        - cell "Remove" [ref=e1637]:
+                          - link "Remove" [ref=e1638] [cursor=pointer]:
+                            - /url: ""
+                      - row "URL Redirect Record discord https://discord.gg/TdRNp5U7cy Unmasked Remove" [ref=e1639]:
+                        - cell "URL Redirect Record" [ref=e1640]:
+                          - checkbox [ref=e1642]
+                          - paragraph [ref=e1643] [cursor=pointer]: URL Redirect Record
+                        - cell "discord" [ref=e1644]:
+                          - paragraph [ref=e1645] [cursor=pointer]: discord
+                        - cell "https://discord.gg/TdRNp5U7cy Unmasked" [ref=e1646]:
+                          - paragraph [ref=e1648] [cursor=pointer]: https://discord.gg/TdRNp5U7cy
+                          - paragraph [ref=e1650] [cursor=pointer]: Unmasked
+                        - cell [ref=e1651]
+                        - cell "Remove" [ref=e1652]:
+                          - link "Remove" [ref=e1653] [cursor=pointer]:
+                            - /url: ""
+                      - row "URL Redirect Record submit https://docs.omi.me/docs/developer/apps/Introduction Unmasked Remove" [ref=e1654]:
+                        - cell "URL Redirect Record" [ref=e1655]:
+                          - checkbox [ref=e1657]
+                          - paragraph [ref=e1658] [cursor=pointer]: URL Redirect Record
+                        - cell "submit" [ref=e1659]:
+                          - paragraph [ref=e1660] [cursor=pointer]: submit
+                        - cell "https://docs.omi.me/docs/developer/apps/Introduction Unmasked" [ref=e1661]:
+                          - paragraph [ref=e1663] [cursor=pointer]: https://docs.omi.me/docs/developer/apps/Introduction
+                          - paragraph [ref=e1665] [cursor=pointer]: Unmasked
+                        - cell [ref=e1666]
+                        - cell "Remove" [ref=e1667]:
+                          - link "Remove" [ref=e1668] [cursor=pointer]:
+                            - /url: ""
+                      - row "URL Redirect Record subs https://h.omi.me/apps/01K2MAYVBNGYF68C17FWK4FHJF Unmasked Remove" [ref=e1669]:
+                        - cell "URL Redirect Record" [ref=e1670]:
+                          - checkbox [ref=e1672]
+                          - paragraph [ref=e1673] [cursor=pointer]: URL Redirect Record
+                        - cell "subs" [ref=e1674]:
+                          - paragraph [ref=e1675] [cursor=pointer]: subs
+                        - cell "https://h.omi.me/apps/01K2MAYVBNGYF68C17FWK4FHJF Unmasked" [ref=e1676]:
+                          - paragraph [ref=e1678] [cursor=pointer]: https://h.omi.me/apps/01K2MAYVBNGYF68C17FWK4FHJF
+                          - paragraph [ref=e1680] [cursor=pointer]: Unmasked
+                        - cell [ref=e1681]
+                        - cell "Remove" [ref=e1682]:
+                          - link "Remove" [ref=e1683] [cursor=pointer]:
+                            - /url: ""
+                      - row "URL Redirect Record status https://p.us5.datadoghq.com/sb/8c9ed44d-9370-11ef-86c8-faa22449e9db-e82497c0119c6ce8fc9d1ce3f85cd5f7 Permanent (301) Remove" [ref=e1684]:
+                        - cell "URL Redirect Record" [ref=e1685]:
+                          - checkbox [ref=e1687]
+                          - paragraph [ref=e1688] [cursor=pointer]: URL Redirect Record
+                        - cell "status" [ref=e1689]:
+                          - paragraph [ref=e1690] [cursor=pointer]: status
+                        - cell "https://p.us5.datadoghq.com/sb/8c9ed44d-9370-11ef-86c8-faa22449e9db-e82497c0119c6ce8fc9d1ce3f85cd5f7 Permanent (301)" [ref=e1691]:
+                          - paragraph [ref=e1693] [cursor=pointer]: https://p.us5.datadoghq.com/sb/8c9ed44d-9370-11ef-86c8-faa22449e9db-e82497c0119c6ce8fc9d1ce3f85cd5f7
+                          - paragraph [ref=e1695] [cursor=pointer]: Permanent (301)
+                        - cell [ref=e1696]
+                        - cell "Remove" [ref=e1697]:
+                          - link "Remove" [ref=e1698] [cursor=pointer]:
+                            - /url: ""
+                    - rowgroup [ref=e253]:
+                      - row "Add New Record Show Less" [ref=e1361]:
+                        - cell "Add New Record Show Less" [ref=e1362]:
+                          - link "Add New Record" [ref=e257] [cursor=pointer]:
+                            - /url: ""
+                          - link "Show Less" [ref=e1363] [cursor=pointer]:
+                            - /url: ""
+                - separator [ref=e261]
+              - generic [ref=e263]:
+                - generic [ref=e265]:
+                  - generic [ref=e268]:
+                    - generic [ref=e269]: DNSSEC
+                    - generic [ref=e270] [cursor=pointer]: alert
+                  - generic:
+                    - generic [ref=e272]: Status
+                    - checkbox [ref=e275]
+                - separator [ref=e278]
+              - generic [ref=e279]:
+                - generic [ref=e281]:
+                  - generic [ref=e282]:
+                    - generic [ref=e283]: Mail Settings
+                    - generic [ref=e284] [cursor=pointer]: alert
+                  - generic [ref=e285]:
+                    - generic [ref=e286]:
+                      - link "Custom MX" [ref=e287] [cursor=pointer]:
+                        - /url: javascript:void(0)
+                        - generic [ref=e288]: Custom MX
+                      - button "Custom MX" [ref=e290]
+                    - combobox [ref=e291]:
+                      - option "No Email Service"
+                      - option "Email Forwarding"
+                      - option "MXE Record"
+                      - option "Custom MX" [selected]
+                      - option "Private Email"
+                      - option "Gmail"
+                - generic [ref=e292]:
+                  - generic [ref=e294]:
+                    - link "Actions" [ref=e296] [cursor=pointer]:
+                      - /url: "#"
+                      - generic [ref=e297]: Actions
+                    - generic [ref=e298]:
+                      - textbox "Search" [ref=e299]
+                      - link "Search" [ref=e300] [cursor=pointer]:
+                        - /url: ""
+                  - table [ref=e303]:
+                    - rowgroup [ref=e304]:
+                      - row "Type Host Value TTL" [ref=e305]:
+                        - columnheader "Type" [ref=e306]:
+                          - checkbox [ref=e308]
+                          - paragraph [ref=e309]:
+                            - generic "Type" [ref=e310]:
+                              - link "Type" [ref=e311] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "Host" [ref=e312]:
+                          - paragraph [ref=e313]:
+                            - generic "Host" [ref=e314]:
+                              - link "Host" [ref=e315] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "Value" [ref=e316]:
+                          - paragraph [ref=e317]:
+                            - generic "Value" [ref=e318]:
+                              - link "Value" [ref=e319] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader "TTL" [ref=e320]:
+                          - paragraph [ref=e321]:
+                            - generic "TTL" [ref=e322]:
+                              - link "TTL" [ref=e323] [cursor=pointer]:
+                                - /url: ""
+                        - columnheader [ref=e324]
+                    - rowgroup [ref=e325]:
+                      - row "MX Record @ smtp.google.com. 1 Automatic Remove" [ref=e326]:
+                        - cell "MX Record" [ref=e327]:
+                          - checkbox [ref=e329]
+                          - paragraph [ref=e330]: MX Record
+                        - cell "@" [ref=e331]:
+                          - paragraph [ref=e332] [cursor=pointer]: "@"
+                        - cell "smtp.google.com. 1" [ref=e333]:
+                          - paragraph [ref=e335] [cursor=pointer]: smtp.google.com.
+                          - paragraph [ref=e337] [cursor=pointer]: "1"
+                        - cell "Automatic" [ref=e338]:
+                          - paragraph [ref=e339] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e340]:
+                          - link "Remove" [ref=e341] [cursor=pointer]:
+                            - /url: ""
+                      - row "MX Record mail inbound-smtp.us-east-1.amazonaws.com. 10 Automatic Remove" [ref=e342]:
+                        - cell "MX Record" [ref=e343]:
+                          - checkbox [ref=e345]
+                          - paragraph [ref=e346]: MX Record
+                        - cell "mail" [ref=e347]:
+                          - paragraph [ref=e348] [cursor=pointer]: mail
+                        - cell "inbound-smtp.us-east-1.amazonaws.com. 10" [ref=e349]:
+                          - paragraph [ref=e351] [cursor=pointer]: inbound-smtp.us-east-1.amazonaws.com.
+                          - paragraph [ref=e353] [cursor=pointer]: "10"
+                        - cell "Automatic" [ref=e354]:
+                          - paragraph [ref=e355] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e356]:
+                          - link "Remove" [ref=e357] [cursor=pointer]:
+                            - /url: ""
+                      - row "MX Record notificationapi feedback-smtp.us-east-1.amazonses.com. 10 Automatic Remove" [ref=e358]:
+                        - cell "MX Record" [ref=e359]:
+                          - checkbox [ref=e361]
+                          - paragraph [ref=e362]: MX Record
+                        - cell "notificationapi" [ref=e363]:
+                          - paragraph [ref=e364] [cursor=pointer]: notificationapi
+                        - cell "feedback-smtp.us-east-1.amazonses.com. 10" [ref=e365]:
+                          - paragraph [ref=e367] [cursor=pointer]: feedback-smtp.us-east-1.amazonses.com.
+                          - paragraph [ref=e369] [cursor=pointer]: "10"
+                        - cell "Automatic" [ref=e370]:
+                          - paragraph [ref=e371] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e372]:
+                          - link "Remove" [ref=e373] [cursor=pointer]:
+                            - /url: ""
+                      - row "MX Record send.enterprise feedback-smtp.us-east-1.amazonses.com. 10 Automatic Remove" [ref=e374]:
+                        - cell "MX Record" [ref=e375]:
+                          - checkbox [ref=e377]
+                          - paragraph [ref=e378]: MX Record
+                        - cell "send.enterprise" [ref=e379]:
+                          - paragraph [ref=e380] [cursor=pointer]: send.enterprise
+                        - cell "feedback-smtp.us-east-1.amazonses.com. 10" [ref=e381]:
+                          - paragraph [ref=e383] [cursor=pointer]: feedback-smtp.us-east-1.amazonses.com.
+                          - paragraph [ref=e385] [cursor=pointer]: "10"
+                        - cell "Automatic" [ref=e386]:
+                          - paragraph [ref=e387] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e388]:
+                          - link "Remove" [ref=e389] [cursor=pointer]:
+                            - /url: ""
+                      - row "MX Record send.mail feedback-smtp.us-east-1.amazonses.com. 10 Automatic Remove" [ref=e390]:
+                        - cell "MX Record" [ref=e391]:
+                          - checkbox [ref=e393]
+                          - paragraph [ref=e394]: MX Record
+                        - cell "send.mail" [ref=e395]:
+                          - paragraph [ref=e396] [cursor=pointer]: send.mail
+                        - cell "feedback-smtp.us-east-1.amazonses.com. 10" [ref=e397]:
+                          - paragraph [ref=e399] [cursor=pointer]: feedback-smtp.us-east-1.amazonses.com.
+                          - paragraph [ref=e401] [cursor=pointer]: "10"
+                        - cell "Automatic" [ref=e402]:
+                          - paragraph [ref=e403] [cursor=pointer]: Automatic
+                        - cell "Remove" [ref=e404]:
+                          - link "Remove" [ref=e405] [cursor=pointer]:
+                            - /url: ""
+                    - rowgroup [ref=e406]:
+                      - row "Add New Record" [ref=e407]:
+                        - cell "Add New Record" [ref=e408]:
+                          - link "Add New Record" [ref=e410] [cursor=pointer]:
+                            - /url: ""
+                - separator [ref=e412]
+              - generic [ref=e413]:
+                - generic [ref=e415]:
+                  - generic [ref=e416]:
+                    - generic [ref=e417]: Dynamic DNS
+                    - generic [ref=e418] [cursor=pointer]: alert
+                  - generic [ref=e420]: Status
+                  - checkbox [ref=e423]
+                - separator [ref=e426]
+            - generic [ref=e428]:
+              - generic [ref=e429]:
+                - generic [ref=e430]:
+                  - generic [ref=e431]: Personal DNS Server
+                  - generic [ref=e432] [cursor=pointer]: alert
+                - generic [ref=e434]: Register Nameserver
+                - link "Add Nameserver" [ref=e437] [cursor=pointer]:
+                  - /url: ""
+              - generic [ref=e438]:
+                - generic [ref=e440]: Find Nameservers
+                - generic [ref=e441]:
+                  - generic [ref=e442]:
+                    - link "Standard Nameservers" [ref=e443] [cursor=pointer]:
+                      - /url: javascript:void(0)
+                      - generic [ref=e444]: Standard Nameservers
+                    - button "Standard Nameservers" [ref=e446]
+                  - combobox [ref=e447]:
+                    - option "Standard Nameservers" [selected]
+                    - option "Custom Nameservers"
+                - link "Search" [ref=e449] [cursor=pointer]:
+                  - /url: ""
+  - generic [ref=e453]:
+    - paragraph [ref=e455]: Need help? We're always here for you.
+    - link " Chat with a Live Person" [ref=e457] [cursor=pointer]:
+      - /url: https://www.namecheap.com/support/live-chat/general/
+      - generic [ref=e458]: 
+      - text: Chat with a Live Person
+  - contentinfo [ref=e459]:
+    - generic [ref=e460]:
+      - generic [ref=e462]:
+        - generic [ref=e463]:
+          - generic [ref=e464]:
+            - link "Namecheap" [ref=e466] [cursor=pointer]:
+              - /url: /
+              - img "Namecheap" [ref=e468]
+            - paragraph [ref=e469]: We make registering, hosting, and managing domains for yourself or others easy and affordable, because the internet needs people.
+            - generic [ref=e470]:
+              - paragraph [ref=e471]:
+                - link "About Namecheap " [ref=e472] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/about/
+                  - generic [ref=e473]: About Namecheap
+                  - generic [ref=e474]: 
+              - paragraph [ref=e475]:
+                - link "Read our blog " [ref=e476] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/blog/
+                  - generic [ref=e477]: Read our blog
+                  - generic [ref=e478]: 
+            - paragraph [ref=e479]:
+              - text: Join Our Newsletter & Marketing Communication
+              - generic [ref=e480]: We'll send you news and offers.
+            - group [ref=e483]:
+              - textbox [ref=e484]:
+                - /placeholder: you@yours.com
+              - button "Join" [ref=e485] [cursor=pointer]:
+                - generic [ref=e486]: Join
+            - list [ref=e487]:
+              - listitem [ref=e488]:
+                - link "Twitter" [ref=e489] [cursor=pointer]:
+                  - /url: https://twitter.com/namecheap
+              - listitem [ref=e491]:
+                - link "Facebook" [ref=e492] [cursor=pointer]:
+                  - /url: https://www.facebook.com/NameCheap
+              - listitem [ref=e494]:
+                - link "Instagram" [ref=e495] [cursor=pointer]:
+                  - /url: https://www.instagram.com/namecheap/
+              - listitem [ref=e497]:
+                - link "Pinterest" [ref=e498] [cursor=pointer]:
+                  - /url: https://www.pinterest.com/namecheap/
+          - generic [ref=e501]:
+            - generic [ref=e502]:
+              - generic [ref=e503]:
+                - paragraph [ref=e504]:
+                  - link "Domains" [ref=e505] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/domains/
+                - list [ref=e506]:
+                  - listitem [ref=e507]:
+                    - link "Domain Name Search" [ref=e508] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/domain-name-search/
+                  - listitem [ref=e509]:
+                    - link "Domain Transfer" [ref=e510] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/transfer/
+                  - listitem [ref=e511]:
+                    - link "New TLDs" [ref=e512] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/new-tlds/explore/
+                  - listitem [ref=e513]:
+                    - link "Handshake domains NEW" [ref=e514] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/handshake-domains/
+                      - text: Handshake domains
+                      - generic [ref=e515]: NEW
+                  - listitem [ref=e516]:
+                    - link "Personal Domain" [ref=e517] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/personal/
+                  - listitem [ref=e518]:
+                    - link "Namecheap Market" [ref=e519] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/market/
+                  - listitem [ref=e520]:
+                    - link "Whois Lookup" [ref=e521] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/whois/
+                  - listitem [ref=e522]:
+                    - link "PremiumDNS" [ref=e523] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/premiumdns/
+                  - listitem [ref=e524]:
+                    - link "FreeDNS" [ref=e525] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/freedns/
+              - generic [ref=e526]:
+                - paragraph [ref=e527]:
+                  - link "Hosting" [ref=e528] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/hosting/
+                - list [ref=e529]:
+                  - listitem [ref=e530]:
+                    - link "Shared Hosting" [ref=e531] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/shared/
+                  - listitem [ref=e532]:
+                    - link "Hosting for WordPress" [ref=e533] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/wordpress/
+                  - listitem [ref=e534]:
+                    - link "Reseller Hosting" [ref=e535] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/reseller/
+                  - listitem [ref=e536]:
+                    - link "VPS Hosting" [ref=e537] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/vps/
+                  - listitem [ref=e538]:
+                    - link "Dedicated Servers" [ref=e539] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/dedicated-servers/
+                  - listitem [ref=e540]:
+                    - link "Private Email Hosting" [ref=e541] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/email/
+                  - listitem [ref=e542]:
+                    - link "Migrate to Namecheap" [ref=e543] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/hosting-migrate-to-namecheap/
+              - generic [ref=e544]:
+                - paragraph [ref=e545]:
+                  - link "WordPress" [ref=e546] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/wordpress/
+                - list [ref=e547]:
+                  - listitem [ref=e548]:
+                    - link "Shared Hosting" [ref=e549] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/shared/
+                  - listitem [ref=e550]:
+                    - link "Hosting for WordPress" [ref=e551] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/wordpress/
+                  - listitem [ref=e552]:
+                    - link "Migrate WordPress" [ref=e553] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/wordpress/migrate/
+            - generic [ref=e554]:
+              - generic [ref=e555]:
+                - paragraph [ref=e556]:
+                  - link "Security" [ref=e557] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/security/
+                - list [ref=e558]:
+                  - listitem [ref=e559]:
+                    - link "Domain Privacy" [ref=e560] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/domain-privacy-service/
+                  - listitem [ref=e561]:
+                    - link "Website Security NEW" [ref=e562] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/protect-website/
+                      - text: Website Security
+                      - generic [ref=e563]: NEW
+                  - listitem [ref=e564]:
+                    - link "Fix Hacked Website SOS" [ref=e565] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/fix-hacked-website/
+                      - text: Fix Hacked Website
+                      - generic [ref=e566]: SOS
+                  - listitem [ref=e567]:
+                    - link "Domain Vault NEW" [ref=e568] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/domain-vault/
+                      - text: Domain Vault
+                      - generic [ref=e569]: NEW
+                  - listitem [ref=e570]:
+                    - link "PremiumDNS" [ref=e571] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/premiumdns/
+                  - listitem [ref=e572]:
+                    - link "CDN" [ref=e573] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/supersonic-cdn/
+                  - listitem [ref=e574]:
+                    - link "FastVPN UPDATED" [ref=e575] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/vpn/
+                      - text: FastVPN
+                      - generic [ref=e576]: UPDATED
+                  - listitem [ref=e577]:
+                    - link "Cyber Insurance NEW" [ref=e578] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/cyber-insurance/
+                      - text: Cyber Insurance
+                      - generic [ref=e579]: NEW
+                  - listitem [ref=e580]:
+                    - link "2FA" [ref=e581] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/2fa-two-factor-authentication/
+                  - listitem [ref=e582]:
+                    - link "Public DNS" [ref=e583] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/dns/free-public-dns/
+                  - listitem [ref=e584]:
+                    - link "Anti-Spam Protection" [ref=e585] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/anti-spam-protection/
+              - generic [ref=e586]:
+                - paragraph [ref=e587]:
+                  - link "Transfer to Us TRY ME" [ref=e588] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/domains/transfer/
+                    - text: Transfer to Us
+                    - generic [ref=e589]: TRY ME
+                - list [ref=e590]:
+                  - listitem [ref=e591]:
+                    - link "Domain Transfer" [ref=e592] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/domains/transfer/
+                  - listitem [ref=e593]:
+                    - link "Migrate Hosting" [ref=e594] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/hosting-migrate-to-namecheap/
+                  - listitem [ref=e595]:
+                    - link "Migrate WordPress" [ref=e596] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/wordpress/migrate/
+                  - listitem [ref=e597]:
+                    - link "Migrate Email" [ref=e598] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/email/migrate-email/
+              - generic [ref=e599]:
+                - paragraph [ref=e600]:
+                  - link "SSL Certificates" [ref=e601] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/security/ssl-certificates/
+                - list [ref=e602]:
+                  - listitem [ref=e603]:
+                    - link "Comodo" [ref=e604] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/comodo/
+                  - listitem [ref=e605]:
+                    - link "Organization Validation" [ref=e606] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/organization-validation/
+                  - listitem [ref=e607]:
+                    - link "Domain Validation" [ref=e608] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/domain-validation/
+                  - listitem [ref=e609]:
+                    - link "Extended Validation" [ref=e610] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/extended-validation/
+                  - listitem [ref=e611]:
+                    - link "Single Domain" [ref=e612] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/single-domain/
+                  - listitem [ref=e613]:
+                    - link "Wildcard" [ref=e614] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/wildcard/
+                  - listitem [ref=e615]:
+                    - link "Multi-Domain" [ref=e616] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/security/ssl-certificates/multi-domain/
+              - generic [ref=e617]:
+                - paragraph [ref=e618]:
+                  - link "Resellers" [ref=e619] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/resellers/ssl-certificates/join-the-program/
+                - list [ref=e620]:
+                  - listitem [ref=e621]:
+                    - link "SSL Certificates" [ref=e622] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/resellers/ssl-certificates/join-the-program/
+                  - listitem [ref=e623]:
+                    - link "Reseller Hosting" [ref=e624] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/hosting/reseller/
+              - paragraph [ref=e626]:
+                - link "Promos" [ref=e627] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/promos/
+            - generic [ref=e628]:
+              - paragraph [ref=e630]:
+                - link "Guru Guides" [ref=e631] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/guru-guides/
+              - generic [ref=e632]:
+                - paragraph [ref=e633]:
+                  - link "Help Center" [ref=e634] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/help-center/
+                - list [ref=e635]:
+                  - listitem [ref=e636]:
+                    - link "Status Updates" [ref=e637] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/status-updates/
+                  - listitem [ref=e638]:
+                    - link "Knowledgebase" [ref=e639] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/support/knowledgebase/
+                  - listitem [ref=e640]:
+                    - link "How-To Videos" [ref=e641] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/support/knowledgebase/category/2253/howto-videos/
+                  - listitem [ref=e642]:
+                    - link "Submit Ticket" [ref=e643] [cursor=pointer]:
+                      - /url: https://support.namecheap.com/index.php?/Tickets/Submit
+                  - listitem [ref=e644]:
+                    - link "Live Chat" [ref=e645] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/help-center/live-chat/
+                  - listitem [ref=e646]:
+                    - link "Report Abuse" [ref=e647] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/support/knowledgebase/article.aspx/9196/5/how-and-where-can-i-file-abuse-complaints/
+              - generic [ref=e648]:
+                - paragraph [ref=e649]:
+                  - link "Marketing Tools" [ref=e650] [cursor=pointer]:
+                    - /url: https://www.namecheap.com/apps/
+                - list [ref=e651]:
+                  - listitem [ref=e652]:
+                    - link "Marketplace" [ref=e653] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/apps/
+                  - listitem [ref=e654]:
+                    - link "How to Get Started NEW" [ref=e655] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/build-and-grow-hub/
+                      - text: How to Get Started
+                      - generic [ref=e656]: NEW
+                  - listitem [ref=e657]:
+                    - link "Business Starter Kit FREE" [ref=e658] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/apps/business-starter-kit/?aff_sub2=top_nav
+                      - text: Business Starter Kit
+                      - generic [ref=e659]: FREE
+                  - listitem [ref=e660]:
+                    - link "Business Formation FREE" [ref=e661] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/apps/business-starter-kit/?aff_sub2=top_nav
+                      - text: Business Formation
+                      - generic [ref=e662]: FREE
+                  - listitem [ref=e663]:
+                    - link "Relate Marketing Suite SAVE" [ref=e664] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/
+                      - text: Relate Marketing Suite
+                      - generic [ref=e665]: SAVE
+                  - listitem [ref=e666]:
+                    - link "RelateSEO AI" [ref=e667] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/seo/
+                      - text: RelateSEO
+                      - generic [ref=e668]: AI
+                  - listitem [ref=e669]:
+                    - link "RelateSocial NEW AI" [ref=e670] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/social/
+                      - text: RelateSocial
+                      - generic [ref=e671]: NEW
+                      - generic [ref=e672]: AI
+                  - listitem [ref=e673]:
+                    - link "RelateReviews NEW AI" [ref=e674] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/reviews/
+                      - text: RelateReviews
+                      - generic [ref=e675]: NEW
+                      - generic [ref=e676]: AI
+                  - listitem [ref=e677]:
+                    - link "RelateAds AI" [ref=e678] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/ads/
+                      - text: RelateAds
+                      - generic [ref=e679]: AI
+                  - listitem [ref=e680]:
+                    - link "RelateLocal AI" [ref=e681] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/local/
+                      - text: RelateLocal
+                      - generic [ref=e682]: AI
+                  - listitem [ref=e683]:
+                    - link "Brand Monitoring AI" [ref=e684] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/relate/radar/
+                      - text: Brand Monitoring
+                      - generic [ref=e685]: AI
+                  - listitem [ref=e686]:
+                    - link "Visual" [ref=e687] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/
+                  - listitem [ref=e688]:
+                    - link "Site Maker NEW" [ref=e689] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/site-maker/
+                      - text: Site Maker
+                      - generic [ref=e690]: NEW
+                  - listitem [ref=e691]:
+                    - link "Font Maker NEW" [ref=e692] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/font-generator/
+                      - text: Font Maker
+                      - generic [ref=e693]: NEW
+                  - listitem [ref=e694]:
+                    - link "Logo Maker AI" [ref=e695] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/logo-maker/
+                      - text: Logo Maker
+                      - generic [ref=e696]: AI
+                  - listitem [ref=e697]:
+                    - link "Business Name Generator" [ref=e698] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/business-name-generator/
+                  - listitem [ref=e699]:
+                    - link "Stencil Graphics" [ref=e700] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/stencil/
+                  - listitem [ref=e701]:
+                    - link "Business Card Maker" [ref=e702] [cursor=pointer]:
+                      - /url: https://www.namecheap.com/visual/card-maker/
+              - paragraph [ref=e704]:
+                - link "Careers" [ref=e705] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/careers/
+              - paragraph [ref=e707]:
+                - link "Affiliates" [ref=e708] [cursor=pointer]:
+                  - /url: https://www.namecheap.com/affiliates/
+              - paragraph [ref=e710]:
+                - link "Send us Feedback" [ref=e711] [cursor=pointer]:
+                  - /url: mailto:feedback@namecheap.com?subject=Send us Feedback
+              - generic:
+                - paragraph
+                - paragraph
+        - generic [ref=e712]:
+          - generic [ref=e713]:
+            - paragraph [ref=e714]: The entirety of this site is protected by copyright © 2000–2026 Namecheap, Inc.
+            - paragraph [ref=e715]: 4600 East Washington Street, Suite 305, Phoenix, AZ 85034, USA
+          - generic [ref=e716]:
+            - link "Terms and Conditions" [ref=e717] [cursor=pointer]:
+              - /url: /legal/
+            - link "Privacy Policy" [ref=e718] [cursor=pointer]:
+              - /url: /legal/general/privacy-policy/
+            - link "UDRP" [ref=e719] [cursor=pointer]:
+              - /url: /legal/domains/udrp/
+              - generic [ref=e720]: UDRP
+            - link "Domain Registration Data Disclosure Policy" [ref=e721] [cursor=pointer]:
+              - /url: /legal/general/domain-registration-data-disclosure-policy-guide/
+            - link "Cookie Preferences" [ref=e722] [cursor=pointer]:
+              - /url: javascript:void(0);
+      - generic [ref=e725]:
+        - strong [ref=e727]: WE SUPPORT
+        - generic [ref=e729]: Electronic Frontier Foundation
+        - generic [ref=e731]: Fight For The Future
+      - generic [ref=e734]:
+        - paragraph [ref=e739]:
+          - generic [ref=e740]:
+            - text: We are an ICANN-accredited registrar.
+            - text: Serving customers since 2001.
+        - generic [ref=e742]:
+          - paragraph [ref=e743]: Payment Options
+          - list [ref=e744]:
+            - listitem "American Express" [ref=e745]:
+              - generic [ref=e746]: American Express
+            - listitem "Bitcoin" [ref=e747]:
+              - generic [ref=e748]: Bitcoin
+            - listitem "MasterCard" [ref=e749]:
+              - generic [ref=e750]: MasterCard
+            - listitem "PayPal" [ref=e751]:
+              - generic [ref=e752]: PayPal
+            - listitem "Visa" [ref=e753]:
+              - generic [ref=e754]: Visa
+            - listitem "Discover" [ref=e755]:
+              - generic [ref=e756]: Discover
+        - list [ref=e758]:
+          - listitem [ref=e759]:
+            - link "Sectigo" [ref=e760] [cursor=pointer]:
+              - /url: https://secure.trust-provider.com/ttb_searcher/trustlogo?v_querytype=W&v_shortname=SECEV&v_search=https://ap.www.namecheap.com/Domains/DomainControlPanel/omi.me/advancedns&x=1&y=1
+              - img "Sectigo" [ref=e761]
+          - listitem [ref=e762]:
+            - link "Android app on google play" [ref=e763] [cursor=pointer]:
+              - /url: https://nc1.app.link/W1qV0gjLZG
+              - generic [ref=e764]: Android app on google play
+          - listitem [ref=e765]:
+            - link "iOS App Store" [ref=e766] [cursor=pointer]:
+              - /url: https://nc1.app.link/W1qV0gjLZG
+              - generic [ref=e767]: iOS App Store
+  - text: ;
+  - status [ref=e768]
+  - status [ref=e769]
+  - status [ref=e770]
+  - status [ref=e771]
+  - text: Ask, enter @ to select an item
+  - status [ref=e772]
+  - generic [ref=e774]:
+    - img "pointer"
+  - status [ref=e775]

@@ -16,6 +16,9 @@ import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import llm_mini, llm_medium
 from utils.llm.usage_tracker import track_usage, Features
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
@@ -44,7 +47,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                     if overview:
                         conv_summaries.append(f"[Relevant] {overview[:300]}")
     except Exception as e:
-        print(f"[GOAL-ADVICE] Vector search error: {e}")
+        logger.error(f"[GOAL-ADVICE] Vector search error: {e}")
 
     # 2. Recent conversations (last 7 days) - for current context
     try:
@@ -65,7 +68,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                         if len(conv_summaries) >= 10:
                             break
     except Exception as e:
-        print(f"[GOAL-ADVICE] Recent conversations error: {e}")
+        logger.error(f"[GOAL-ADVICE] Recent conversations error: {e}")
 
     # 3. Recent chat messages
     chat_context = ""
@@ -80,7 +83,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
                     chat_lines.append(f"{sender}: {text}")
             chat_context = '\n'.join(chat_lines[-10:])  # Last 10 messages
     except Exception as e:
-        print(f"[GOAL-ADVICE] Chat messages error: {e}")
+        logger.error(f"[GOAL-ADVICE] Chat messages error: {e}")
 
     # 4. User memories/facts
     memory_context = ""
@@ -89,7 +92,7 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
         memory_texts = [m.get('content', '')[:150] for m in memories[:15] if m.get('content')]
         memory_context = '\n'.join(memory_texts)
     except Exception as e:
-        print(f"[GOAL-ADVICE] Memories error: {e}")
+        logger.error(f"[GOAL-ADVICE] Memories error: {e}")
 
     return {
         'conversation_context': '\n'.join(conv_summaries),
@@ -164,7 +167,7 @@ Make the goal specific, measurable, and relevant to their interests."""
         }
 
     except Exception as e:
-        print(f"Error generating goal suggestion: {e}")
+        logger.error(f"Error generating goal suggestion: {e}")
         return {
             'suggested_title': 'Make progress every day',
             'suggested_type': 'scale',
@@ -216,7 +219,7 @@ USER FACTS:
 
 Give ONE specific action in 1-2 sentences. Be concise but complete. No generic advice."""
 
-        print(
+        logger.info(
             f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat"
         )
 
@@ -230,7 +233,7 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
         return advice
 
     except Exception as e:
-        print(f"[GOAL-ADVICE] Error: {e}")
+        logger.error(f"[GOAL-ADVICE] Error: {e}")
         traceback.print_exc()
         return 'Focus on the next small step toward your goal.'
 
@@ -238,67 +241,115 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
     """
     Extract goal progress from text and update if found.
-    Checks all active goals. Returns dict with update info if successful, None otherwise.
+    Checks all active goals in a SINGLE LLM call. Returns dict with update info if successful, None otherwise.
     """
     try:
         goals = goals_db.get_user_goals(uid)
         if not goals or not text or len(text) < 5:
             return None
 
-        updates = []
+        # Build a single prompt that evaluates all goals at once
+        goals_list = []
+        goals_by_id = {}
         for goal in goals:
+            goal_id = goal.get('id', '')
+            if not goal_id:
+                continue
             goal_title = goal.get('title', '')
             current_value = goal.get('current_value', 0)
             target_value = goal.get('target_value', 10)
             goal_type = goal.get('goal_type', 'numeric')
+            goals_list.append(
+                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
+            )
+            goals_by_id[goal_id] = goal
 
-            prompt = f"""Analyze this message to see if it mentions progress toward this goal:
+        if not goals_list:
+            return None
 
-Goal: "{goal_title}"
-Goal Type: {goal_type}
-Current Progress: {current_value} / {target_value}
+        goals_text = '\n'.join(goals_list)
+
+        prompt = f"""Analyze this message to see if it mentions progress toward ANY of these goals:
+
+Goals:
+{goals_text}
 
 User Message: "{text[:500]}"
 
-If the message mentions a NEW progress value for this goal, extract it.
-Handle formats like:
-- "1k users" → 1000
-- "500k" → 500000
-- "1.5 million" → 1500000
-- "1000" → 1000
-- Percentages relative to goal
+For each goal where the message mentions a NEW absolute progress value, extract it.
+Convert shorthand to numbers: "1k" → 1000, "500k" → 500000, "1.5 million" → 1500000.
+The "value" MUST be the absolute current total, NOT a relative change or percentage.
 
-Return JSON only: {{"found": true/false, "value": number_or_null, "reasoning": "brief explanation"}}
-Only return found=true if you're confident this is about the SPECIFIC goal mentioned above."""
+Return ONLY a JSON array, no other text. Include ONLY goals where progress was found.
+If no goals match, return an empty array: []
 
-            with track_usage(uid, Features.GOALS):
-                response = llm_mini.invoke(prompt).content
+Example output: [{{"goal_id": "goal_abc123", "found": true, "value": 2500, "reasoning": "user said total is $2,500"}}]
 
-            # Extract JSON from response
-            match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
-            if match:
-                result = json.loads(match.group())
-                if result.get('found') and result.get('value') is not None:
-                    new_value = float(result['value'])
-                    old_value = current_value
-                    if new_value != old_value:
-                        goals_db.update_goal_progress(uid, goal['id'], new_value)
-                        print(
-                            f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
-                        )
-                        updates.append(
-                            {
-                                "goal_id": goal['id'],
-                                "goal_title": goal_title,
-                                "old_value": old_value,
-                                "new_value": new_value,
-                                "reasoning": result.get('reasoning'),
-                            }
-                        )
+Only include a goal if you're confident the message is about that SPECIFIC goal."""
+
+        with track_usage(uid, Features.GOALS):
+            response = llm_mini.invoke(prompt).content
+
+        # Parse JSON array from response using non-greedy extraction
+        results = _parse_json_array(response)
+        if results is None:
+            return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
+
+        updates = []
+        seen_goal_ids = set()
+        for result in results:
+            try:
+                if not isinstance(result, dict) or not result.get('found') or result.get('value') is None:
+                    continue
+                goal_id = result.get('goal_id', '')
+                if not goal_id or goal_id in seen_goal_ids:
+                    continue
+                seen_goal_ids.add(goal_id)
+                goal = goals_by_id.get(goal_id)
+                if not goal:
+                    continue
+                new_value = float(result['value'])
+                # Validate: reject NaN, inf, and negative values
+                if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
+                    continue
+                old_value = goal.get('current_value', 0)
+                if new_value != old_value:
+                    goals_db.update_goal_progress(uid, goal_id, new_value)
+                    goal_title = goal.get('title', '')
+                    logger.info(
+                        f"[GOAL-AUTO] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})"
+                    )
+                    updates.append(
+                        {
+                            "goal_id": goal_id,
+                            "goal_title": goal_title,
+                            "old_value": old_value,
+                            "new_value": new_value,
+                            "reasoning": result.get('reasoning'),
+                        }
+                    )
+            except (ValueError, TypeError, KeyError):
+                continue
 
         if updates:
             return {"status": "updated", "updates": updates}
         return {"status": "no_update", "message": "No relevant progress mentioned or extracted."}
     except Exception as e:
-        print(f"Error in extract_and_update_goal_progress: {e}")
+        logger.error(f"Error in extract_and_update_goal_progress: {e}")
         return {"status": "error", "message": str(e)}
+
+
+def _parse_json_array(text: str) -> Optional[List]:
+    """Extract and parse the first JSON array from LLM response text."""
+    # Find the first '[' and try to parse from there
+    start = text.find('[')
+    if start == -1:
+        return None
+    try:
+        decoder = json.JSONDecoder()
+        result, _ = decoder.raw_decode(text, start)
+        if isinstance(result, list):
+            return result
+        return [result]
+    except (json.JSONDecodeError, ValueError):
+        return None

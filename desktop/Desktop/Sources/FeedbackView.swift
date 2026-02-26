@@ -18,7 +18,7 @@ class FeedbackWindow {
             window = nil
         }
 
-        let hostingController = NSHostingController(rootView: feedbackView)
+        let hostingController = NSHostingController(rootView: feedbackView.withFontScaling())
 
         let newWindow = NSWindow(contentViewController: hostingController)
         newWindow.title = "Report Issue"
@@ -60,7 +60,7 @@ struct FeedbackView: View {
                 // Success state
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
+                        .scaledFont(size: 48)
                         .foregroundColor(.green)
 
                     Text("Report sent!")
@@ -141,9 +141,11 @@ struct FeedbackView: View {
 
             // Capture event with log file attached via scope
             let eventId = SentrySDK.capture(message: sentryMessage) { scope in
-                let logPath = "/tmp/omi.log"
+                let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
+                let logPath = isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
+                let logFilename = isDev ? "omi-dev.log" : "omi.log"
                 if FileManager.default.fileExists(atPath: logPath) {
-                    let attachment = Attachment(path: logPath, filename: "omi.log", contentType: "text/plain")
+                    let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
                     scope.addAttachment(attachment)
                 }
             }

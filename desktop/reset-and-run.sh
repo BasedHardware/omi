@@ -294,6 +294,18 @@ for i in {1..30}; do
     sleep 0.5
 done
 
+# Build acp-bridge
+echo "Building acp-bridge..."
+ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
+if [ -d "$ACP_BRIDGE_DIR" ]; then
+    cd "$ACP_BRIDGE_DIR"
+    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
+        npm install --no-fund --no-audit 2>&1 | tail -1
+    fi
+    npx tsc
+    cd - > /dev/null
+fi
+
 # Build debug
 echo "Building app..."
 xcrun swift build -c debug --package-path Desktop
@@ -325,6 +337,15 @@ RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Comput
 if [ -d "$RESOURCE_BUNDLE" ]; then
     cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
     echo "  Copied resource bundle"
+fi
+
+# Copy acp-bridge
+if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
+    mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
+    cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    echo "  Copied acp-bridge to bundle"
 fi
 
 # Copy and fix Info.plist

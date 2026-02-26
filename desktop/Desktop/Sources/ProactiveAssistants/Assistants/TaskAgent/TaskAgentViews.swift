@@ -8,21 +8,23 @@ struct TaskClassificationBadge: View {
 
     var body: some View {
         Text(category.capitalized)
-            .font(.system(size: 10, weight: .medium))
+            .scaledFont(size: 10, weight: .medium)
             .foregroundColor(OmiColors.textSecondary)
     }
 }
 
 // MARK: - Agent Status Indicator
 
-/// Shows the status of a Claude agent working on a task
-/// Main click opens the detail modal; terminal icon opens Terminal directly
-/// Shows a launch button when no session exists
+/// Shows the status of a Claude agent working on a task.
+/// Terminal icon launches the agent (if none) or opens Terminal directly (if running/done).
+/// No detail modal — purely a quick-action control.
 struct AgentStatusIndicator: View {
     let task: TaskActionItem
-    @Binding var showAgentDetail: Bool
-    var onLaunchWithChat: ((TaskActionItem) -> Void)? = nil
     @ObservedObject private var manager = TaskAgentManager.shared
+    @ObservedObject private var settings = TaskAgentSettings.shared
+    @State private var isLaunching = false
+    @State private var showError = false
+    @State private var errorMessage = ""
 
     private var taskId: String { task.id }
 
@@ -49,37 +51,77 @@ struct AgentStatusIndicator: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            // Terminal icon — always visible, opens detail modal
-            Button {
-                showAgentDetail = true
-            } label: {
-                Image(systemName: "terminal")
-                    .font(.system(size: 10))
-                    .foregroundColor(OmiColors.textTertiary)
-                    .frame(width: 20, height: 20)
-            }
-            .buttonStyle(.plain)
-            .help("View Agent Details")
-
             if let session = session {
-                // Status text — opens detail modal
+                // Has a session — terminal icon opens Terminal directly
                 Button {
-                    showAgentDetail = true
+                    manager.openInTerminal(taskId: taskId)
                 } label: {
-                    HStack(spacing: 4) {
-                        statusIcon(for: session.status)
-
-                        Text(statusText)
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                    .foregroundColor(statusColor(for: session.status))
+                    Image(systemName: "terminal")
+                        .scaledFont(size: 10)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
-                .help("View Agent Details")
-            } else {
-                // Run Agent button — launches immediately
-                AgentLaunchButton(task: task, onLaunchWithChat: onLaunchWithChat)
+                .help("Open in Terminal")
+
+                // Status text
+                HStack(spacing: 4) {
+                    statusIcon(for: session.status)
+
+                    Text(statusText)
+                        .scaledFont(size: 10, weight: .medium)
+                }
+                .foregroundColor(statusColor(for: session.status))
+            } else if settings.isEnabled {
+                // No session — terminal icon launches the agent
+                Button {
+                    launchAgent()
+                } label: {
+                    HStack(spacing: 4) {
+                        if isLaunching {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "terminal")
+                                .scaledFont(size: 10)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Text(isLaunching ? "Launching..." : "Run Agent")
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(isLaunching)
+                .help("Launch Claude agent for this task")
+                .alert("Agent Error", isPresented: $showError) {
+                    Button("OK") {}
+                } message: {
+                    Text(errorMessage)
+                }
             }
+        }
+    }
+
+    private func launchAgent() {
+        isLaunching = true
+
+        Task {
+            do {
+                let store = TasksStore.shared
+                let latestTask = store.incompleteTasks.first(where: { $0.id == task.id })
+                    ?? store.completedTasks.first(where: { $0.id == task.id })
+                    ?? task
+
+                let context = TaskAgentContext()
+                try await manager.launchAgent(for: latestTask, context: context)
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+            isLaunching = false
         }
     }
 
@@ -92,10 +134,10 @@ struct AgentStatusIndicator: View {
                 .frame(width: 10, height: 10)
         case .completed:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
         case .failed:
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 10))
+                .scaledFont(size: 10)
         }
     }
 
@@ -106,80 +148,6 @@ struct AgentStatusIndicator: View {
         case .editing: return OmiColors.textSecondary
         case .completed: return OmiColors.textPrimary
         case .failed: return OmiColors.textTertiary
-        }
-    }
-}
-
-// MARK: - Agent Launch Button
-
-/// Button to launch a Claude agent for a task
-struct AgentLaunchButton: View {
-    let task: TaskActionItem
-    var onLaunchWithChat: ((TaskActionItem) -> Void)? = nil
-    @ObservedObject private var manager = TaskAgentManager.shared
-    @ObservedObject private var settings = TaskAgentSettings.shared
-    @State private var isLaunching = false
-    @State private var showError = false
-    @State private var errorMessage = ""
-
-    private var canLaunch: Bool {
-        settings.isEnabled && !manager.hasSession(for: task.id)
-    }
-
-    var body: some View {
-        if canLaunch {
-            Button {
-                launchAgent()
-            } label: {
-                HStack(spacing: 4) {
-                    if isLaunching {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 12, height: 12)
-                    }
-
-                    Text(isLaunching ? "Launching..." : "Run Agent")
-                        .font(.system(size: 10, weight: .medium))
-                }
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule()
-                        .fill(OmiColors.textSecondary.opacity(0.15))
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(isLaunching)
-            .alert("Agent Error", isPresented: $showError) {
-                Button("OK") {}
-            } message: {
-                Text(errorMessage)
-            }
-        }
-    }
-
-    private func launchAgent() {
-        isLaunching = true
-
-        Task {
-            do {
-                // Re-fetch the latest task from the store in case the user edited it
-                let store = TasksStore.shared
-                let latestTask = store.incompleteTasks.first(where: { $0.id == task.id })
-                    ?? store.completedTasks.first(where: { $0.id == task.id })
-                    ?? task
-
-                let context = TaskAgentContext()
-                try await manager.launchAgent(for: latestTask, context: context)
-
-                // Also open chat panel for this task
-                onLaunchWithChat?(latestTask)
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
-            isLaunching = false
         }
     }
 }
@@ -266,7 +234,7 @@ struct TaskAgentDetailView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Task Agent")
-                    .font(.system(size: 16, weight: .semibold))
+                    .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 4) {
@@ -287,11 +255,11 @@ struct TaskAgentDetailView: View {
     private var taskInfoSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Task")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             Text(task.description)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -305,25 +273,25 @@ struct TaskAgentDetailView: View {
     private func agentStatusSection(session: TaskAgentManager.AgentSession) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             HStack(spacing: 16) {
                 // Status badge
                 HStack(spacing: 8) {
                     Image(systemName: session.status.icon)
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(statusColor(for: session.status))
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(session.status.displayName)
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             if !session.editedFiles.isEmpty {
                                 Text("\(session.editedFiles.count) files edited")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .scaledFont(size: 11, weight: .medium)
                                     .foregroundColor(OmiColors.textSecondary)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
@@ -335,7 +303,7 @@ struct TaskAgentDetailView: View {
                         }
 
                         Text("Session: \(session.sessionName)")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
@@ -349,9 +317,9 @@ struct TaskAgentDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "terminal")
-                                .font(.system(size: 11))
+                                .scaledFont(size: 11)
                             Text("Open Terminal")
-                                .font(.system(size: 12, weight: .medium))
+                                .scaledFont(size: 12, weight: .medium)
                         }
                         .foregroundColor(OmiColors.textSecondary)
                         .padding(.horizontal, 10)
@@ -369,9 +337,9 @@ struct TaskAgentDetailView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "stop.fill")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                 Text("Stop")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .scaledFont(size: 12, weight: .medium)
                             }
                             .foregroundColor(OmiColors.textSecondary)
                             .padding(.horizontal, 10)
@@ -396,24 +364,22 @@ struct TaskAgentDetailView: View {
     private var launchSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             VStack(spacing: 12) {
                 Image(systemName: "terminal")
-                    .font(.system(size: 32))
+                    .scaledFont(size: 32)
                     .foregroundColor(OmiColors.textTertiary)
 
                 Text("No agent running")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Launch a Claude agent to analyze this task and create an implementation plan.")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
-
-                AgentLaunchButton(task: task)
             }
             .frame(maxWidth: .infinity)
             .padding(20)
@@ -427,20 +393,20 @@ struct TaskAgentDetailView: View {
     private var disabledSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Agent Status")
-                .font(.system(size: 13, weight: .semibold))
+                .scaledFont(size: 13, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
 
             VStack(spacing: 12) {
                 Image(systemName: "terminal")
-                    .font(.system(size: 32))
+                    .scaledFont(size: 32)
                     .foregroundColor(OmiColors.textTertiary)
 
                 Text("Task Agent Disabled")
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Text("Enable Task Agent in settings to launch Claude agents for code-related tasks.")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .multilineTextAlignment(.center)
 
@@ -452,7 +418,7 @@ struct TaskAgentDetailView: View {
                     dismissSheet()
                 } label: {
                     Text("Open Settings")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .buttonStyle(.plain)
@@ -470,7 +436,7 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Prompt")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -482,9 +448,9 @@ struct TaskAgentDetailView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 10))
+                                .scaledFont(size: 10)
                             Text("Edit")
-                                .font(.system(size: 11, weight: .medium))
+                                .scaledFont(size: 11, weight: .medium)
                         }
                         .foregroundColor(OmiColors.textSecondary)
                     }
@@ -495,7 +461,7 @@ struct TaskAgentDetailView: View {
             if isEditingPrompt {
                 VStack(spacing: 8) {
                     TextEditor(text: $editedPrompt)
-                        .font(.system(size: 12, design: .monospaced))
+                        .scaledFont(size: 12, design: .monospaced)
                         .frame(minHeight: 150)
                         .padding(8)
                         .background(
@@ -534,7 +500,7 @@ struct TaskAgentDetailView: View {
                 }
             } else {
                 Text(session.prompt)
-                    .font(.system(size: 12, design: .monospaced))
+                    .scaledFont(size: 12, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -550,7 +516,7 @@ struct TaskAgentDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Agent Output")
-                    .font(.system(size: 13, weight: .semibold))
+                    .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
@@ -561,9 +527,9 @@ struct TaskAgentDetailView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10))
+                            .scaledFont(size: 10)
                         Text("Copy")
-                            .font(.system(size: 11, weight: .medium))
+                            .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(OmiColors.textSecondary)
                 }
@@ -572,7 +538,7 @@ struct TaskAgentDetailView: View {
 
             ScrollView {
                 Text(output)
-                    .font(.system(size: 11, design: .monospaced))
+                    .scaledFont(size: 11, design: .monospaced)
                     .foregroundColor(OmiColors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -650,7 +616,7 @@ struct TaskAgentDetailView: View {
 
 #Preview("Agent Status") {
     VStack(spacing: 16) {
-        AgentStatusIndicator(task: TaskActionItem(id: "test-1", description: "Test task", completed: false, createdAt: Date()), showAgentDetail: .constant(false))
+        AgentStatusIndicator(task: TaskActionItem(id: "test-1", description: "Test task", completed: false, createdAt: Date()))
     }
     .padding()
 }

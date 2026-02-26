@@ -41,8 +41,12 @@ class PushToTalkManager: ObservableObject {
   private var finalizeWorkItem: DispatchWorkItem?
   private var hasMicPermission: Bool = false
 
-  // Screenshot
-  private var capturedScreenshotURL: URL?
+  // Batch mode: accumulate raw audio for post-recording transcription
+  private var batchAudioBuffer = Data()
+  private let batchAudioLock = NSLock()
+
+  // Live mode: timeout for waiting on final transcript after CloseStream
+  private var liveFinalizationTimeout: DispatchWorkItem?
 
   private init() {}
 
@@ -98,6 +102,9 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Option Key Handling
 
   private func handleFlagsChanged(_ event: NSEvent) {
+    // Don't process PTT when the floating bar is hidden
+    guard FloatingControlBarManager.shared.isVisible else { return }
+
     let settings = ShortcutSettings.shared
 
     let pttActive: Bool
@@ -190,19 +197,26 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
 
-    updateBarState()
-
-    // Capture screenshot in background — do NOT block the main thread
-    Task.detached { [weak self] in
-      let url = ScreenCaptureManager.captureScreen()
-      await MainActor.run {
-        self?.capturedScreenshotURL = url
-        log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
-      }
+    // Play start-of-PTT sound
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Funk")
+      sound?.volume = 0.3
+      sound?.play()
     }
 
+    // Check if an AI conversation is already active — enter follow-up mode
+    let isFollowUp = barState?.showingAIResponse == true
+    if isFollowUp {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
+    updateBarState()
+
+
     startAudioTranscription()
-    log("PushToTalkManager: started listening (hold mode)")
+    log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
   }
 
   private func enterLockedListening() {
@@ -210,52 +224,132 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
     state = .lockedListening
 
+    // Play start-of-PTT sound for locked mode
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Funk")
+      sound?.volume = 0.3
+      sound?.play()
+    }
+
+    // Check if an AI conversation is already active — enter follow-up mode
+    let isFollowUp = barState?.showingAIResponse == true
+    if isFollowUp {
+      barState?.isVoiceFollowUp = true
+      barState?.voiceFollowUpTranscript = ""
+    }
+
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
+
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
     if transcriptionService == nil {
       transcriptSegments = []
       lastInterimText = ""
 
-      Task.detached { [weak self] in
-        let url = ScreenCaptureManager.captureScreen()
-        await MainActor.run {
-          self?.capturedScreenshotURL = url
-        }
-      }
 
       startAudioTranscription()
     }
 
     updateBarState()
-    log("PushToTalkManager: entered locked listening mode")
+    log("PushToTalkManager: entered locked listening mode (followUp=\(isFollowUp))")
   }
 
   private func stopListening() {
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
+    liveFinalizationTimeout?.cancel()
+    liveFinalizationTimeout = nil
     stopAudioTranscription()
     state = .idle
-    capturedScreenshotURL = nil
     transcriptSegments = []
     lastInterimText = ""
+    batchAudioLock.lock()
+    batchAudioBuffer = Data()
+    batchAudioLock.unlock()
     updateBarState()
   }
+
+  /// Cancel PTT without sending — used when conversation is closed mid-PTT.
+  func cancelListening() {
+    guard state != .idle else { return }
+    log("PushToTalkManager: cancelling listening")
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
+    stopListening()
+  }
+
+  private var finalizedMode: String = "hold"
 
   private func finalize() {
     guard state == .listening || state == .lockedListening else { return }
 
+    finalizedMode = state == .lockedListening ? "locked" : "hold"
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
     updateBarState()
 
-    log("PushToTalkManager: finalizing — waiting for last segments")
+    // Stop mic immediately — no more audio capture
+    audioCaptureService?.stopCapture()
 
-    // Wait 500ms for DeepGram to flush final segments, then send
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-      Task { @MainActor in
-        self?.sendTranscript()
+    // Play end-of-PTT sound
+    if ShortcutSettings.shared.pttSoundsEnabled {
+      let sound = NSSound(named: "Bottle")
+      sound?.volume = 0.3
+      sound?.play()
+    }
+
+    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
+
+    if isBatchMode {
+      // Batch mode: send accumulated audio to pre-recorded API
+      log("PushToTalkManager: finalizing (batch) — mic stopped, transcribing recorded audio")
+      batchAudioLock.lock()
+      let audioData = batchAudioBuffer
+      batchAudioBuffer = Data()
+      batchAudioLock.unlock()
+
+      // Stop streaming service (was not used in batch mode, but clean up)
+      stopAudioTranscription()
+
+      guard !audioData.isEmpty else {
+        log("PushToTalkManager: batch mode — no audio recorded")
+        sendTranscript()
+        return
       }
+
+      barState?.voiceTranscript = "Transcribing..."
+
+      Task {
+        do {
+          let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+          let transcript = try await TranscriptionService.batchTranscribe(
+            audioData: audioData,
+            language: language
+          )
+          if let transcript, !transcript.isEmpty {
+            self.transcriptSegments = [transcript]
+          }
+        } catch {
+          logError("PushToTalkManager: batch transcription failed", error: error)
+        }
+        self.sendTranscript()
+      }
+    } else {
+      // Live mode: flush remaining audio and wait for final transcript from Deepgram
+      transcriptionService?.finishStream()
+      log("PushToTalkManager: finalizing (live) — mic stopped, waiting for final transcript")
+
+      // Safety timeout: if Deepgram doesn't send a final segment within 3s, send what we have
+      let timeout = DispatchWorkItem { [weak self] in
+        Task { @MainActor in
+          guard let self, self.state == .finalizing else { return }
+          log("PushToTalkManager: live finalization timeout — sending transcript")
+          self.sendTranscript()
+        }
+      }
+      liveFinalizationTimeout = timeout
+      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
     }
   }
 
@@ -268,22 +362,39 @@ class PushToTalkManager: ObservableObject {
     if query.isEmpty {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let screenshot = capturedScreenshotURL
+    let hasQuery = !query.isEmpty
+    let wasFollowUp = barState?.isVoiceFollowUp == true
 
-    // Reset state
+    AnalyticsManager.shared.floatingBarPTTEnded(
+      mode: finalizedMode,
+      hadTranscript: hasQuery,
+      transcriptLength: query.count
+    )
+
+    // Clear follow-up state
+    barState?.isVoiceFollowUp = false
+    barState?.voiceFollowUpTranscript = ""
+
+    // Reset state — skip PTT collapse resize when we have a query,
+    // because openAIInputWithQuery will resize to the correct size.
+    // Also skip resize when in follow-up mode (panel is already at response size).
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
-    capturedScreenshotURL = nil
-    updateBarState()
+    updateBarState(skipResize: hasQuery || wasFollowUp)
 
-    guard !query.isEmpty else {
+    guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
       return
     }
 
-    log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
-    FloatingControlBarManager.shared.openAIInputWithQuery(query, screenshot: screenshot)
+    if wasFollowUp {
+      log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
+      FloatingControlBarManager.shared.sendFollowUpQuery(query)
+    } else {
+      log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
+      FloatingControlBarManager.shared.openAIInputWithQuery(query)
+    }
   }
 
   // MARK: - Audio Transcription (Dedicated Session)
@@ -307,55 +418,78 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    // Start mic capture immediately (before DeepGram connects) so audio is ready
-    startMicCapture()
+    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
 
-    do {
-      let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-      let service = try TranscriptionService(language: language, channels: 1)
-      transcriptionService = service
+    if isBatchMode {
+      // Batch mode: just capture audio into buffer, no streaming connection
+      batchAudioLock.lock()
+      batchAudioBuffer = Data()
+      batchAudioLock.unlock()
+      startMicCapture(batchMode: true)
+      log("PushToTalkManager: started audio capture (batch mode)")
+    } else {
+      // Live mode: start mic capture and stream to Deepgram
+      startMicCapture()
 
-      service.start(
-        onTranscript: { [weak self] segment in
-          Task { @MainActor in
-            self?.handleTranscript(segment)
+      do {
+        let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let service = try TranscriptionService(language: language, channels: 1)
+        transcriptionService = service
+
+        service.start(
+          onTranscript: { [weak self] segment in
+            Task { @MainActor in
+              self?.handleTranscript(segment)
+            }
+          },
+          onError: { [weak self] error in
+            Task { @MainActor in
+              logError("PushToTalkManager: transcription error", error: error)
+              self?.stopListening()
+            }
+          },
+          onConnected: {
+            Task { @MainActor in
+              log("PushToTalkManager: DeepGram connected")
+            }
           }
-        },
-        onError: { [weak self] error in
-          Task { @MainActor in
-            logError("PushToTalkManager: transcription error", error: error)
-            self?.stopListening()
-          }
-        },
-        onConnected: { [weak self] in
-          Task { @MainActor in
-            log("PushToTalkManager: DeepGram connected")
-          }
-        }
-      )
-    } catch {
-      logError("PushToTalkManager: failed to create TranscriptionService", error: error)
-      stopListening()
+        )
+      } catch {
+        logError("PushToTalkManager: failed to create TranscriptionService", error: error)
+        stopListening()
+      }
     }
   }
 
-  private func startMicCapture() {
+  private func startMicCapture(batchMode: Bool = false) {
     if audioCaptureService == nil {
       audioCaptureService = AudioCaptureService()
     }
     guard let capture = audioCaptureService else { return }
 
-    do {
-      try capture.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          self?.transcriptionService?.sendAudio(audioData)
-        },
-        onAudioLevel: { _ in }
-      )
-      log("PushToTalkManager: mic capture started")
-    } catch {
-      logError("PushToTalkManager: mic capture failed", error: error)
-      stopListening()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await capture.startCapture(
+          onAudioChunk: { [weak self] audioData in
+            guard let self else { return }
+            if batchMode {
+              // Batch mode: accumulate audio in buffer
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
+            } else {
+              // Live mode: stream to Deepgram
+              self.transcriptionService?.sendAudio(audioData)
+            }
+          },
+          onAudioLevel: { _ in }
+        )
+        log("PushToTalkManager: mic capture started (batch=\(batchMode))")
+      } catch {
+        logError("PushToTalkManager: mic capture failed", error: error)
+        self.stopListening()
+      }
     }
   }
 
@@ -366,7 +500,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func handleTranscript(_ segment: TranscriptionService.TranscriptSegment) {
-    guard state == .listening || state == .lockedListening else { return }
+    guard state == .listening || state == .lockedListening || state == .finalizing else { return }
 
     if segment.speechFinal || segment.isFinal {
       transcriptSegments.append(segment.text)
@@ -385,11 +519,24 @@ class PushToTalkManager: ObservableObject {
       liveText = committed.isEmpty ? segment.text : committed + " " + segment.text
     }
     barState?.voiceTranscript = liveText
+
+    // Also update follow-up transcript if in follow-up mode
+    if barState?.isVoiceFollowUp == true {
+      barState?.voiceFollowUpTranscript = liveText
+    }
+
+    // In finalizing state, a final segment means Deepgram is done — send immediately
+    if state == .finalizing && (segment.speechFinal || segment.isFinal) {
+      log("PushToTalkManager: received final transcript during finalization — sending now")
+      liveFinalizationTimeout?.cancel()
+      liveFinalizationTimeout = nil
+      sendTranscript()
+    }
   }
 
   // MARK: - Bar State Sync
 
-  private func updateBarState() {
+  private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
     let wasListening = barState.isVoiceListening
     barState.isVoiceListening =
@@ -399,7 +546,8 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
     }
 
-    // Resize the floating bar window for PTT state changes
+    // Skip resize when in follow-up mode or expanded AI conversation (already at full size)
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {

@@ -10,11 +10,14 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:
     result = query_vectors(topic, uid, starts_at=start_timestamp, ends_at=end_timestamp, k=k)
-    print('retrieve_for_topic', topic, [start_timestamp, end_timestamp], 'found:', len(result), 'vectors')
+    logger.info(f'retrieve_for_topic {topic} {[start_timestamp, end_timestamp]} found: {len(result)} vectors')
     for memory_id in result:
         memories_id[memory_id].append(topic)
     return result
@@ -50,7 +53,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 def get_better_conversation_chunk(
     memory: Conversation, topics: List[str], context_data: dict, people: List[Person] = None
 ) -> str:
-    print('get_better_memory_chunk', memory.id, topics)
+    logger.info(f'get_better_memory_chunk {memory.id} {topics}')
     conversation = TranscriptSegment.segments_as_string(
         memory.transcript_segments, include_timestamps=True, people=people
     )
@@ -64,7 +67,7 @@ def get_better_conversation_chunk(
 
 def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[str, List[Conversation]]:
     topics = retrieve_memory_context_params(uid, memory)
-    print('retrieve_memory_rag_context', topics)
+    logger.info(f'retrieve_memory_rag_context {topics}')
     if not topics:
         return '', []
 

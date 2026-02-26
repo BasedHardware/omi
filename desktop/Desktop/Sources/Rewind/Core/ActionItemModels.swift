@@ -23,6 +23,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var tagsJson: String?               // JSON array: ["work", "code"]
     var deletedBy: String?              // "user", "ai_dedup"
     var dueAt: Date?
+    var recurrenceRule: String?          // "daily", "weekdays", "weekly", "biweekly", "monthly"
+    var recurrenceParentId: String?      // ID of original parent task in recurrence chain
 
     // Desktop extraction fields
     var screenshotId: Int64?
@@ -33,6 +35,10 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     var currentActivity: String?
     var metadataJson: String?           // Additional extraction metadata
     var embedding: Data?                // 3072 Float32s for vector search (Gemini embedding-001)
+
+    // Ordering (synced to backend)
+    var sortOrder: Int?                  // Sort position within category
+    var indentLevel: Int?                // 0-3 indent depth
 
     // Prioritization
     var relevanceScore: Int?             // 0-100 score from TaskPrioritizationService
@@ -49,6 +55,9 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
 
     // Chat session (local-only, not synced to backend)
     var chatSessionId: String?           // Firestore chat session ID for task-scoped chat
+
+    // Promotion tracking
+    var fromStaged: Bool                 // Whether this task was promoted from staged_tasks
 
     // Timestamps
     var createdAt: Date
@@ -72,6 +81,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         tagsJson: String? = nil,
         deletedBy: String? = nil,
         dueAt: Date? = nil,
+        recurrenceRule: String? = nil,
+        recurrenceParentId: String? = nil,
         screenshotId: Int64? = nil,
         confidence: Double? = nil,
         sourceApp: String? = nil,
@@ -80,6 +91,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         currentActivity: String? = nil,
         metadataJson: String? = nil,
         embedding: Data? = nil,
+        sortOrder: Int? = nil,
+        indentLevel: Int? = nil,
         relevanceScore: Int? = nil,
         scoredAt: Date? = nil,
         agentStatus: String? = nil,
@@ -90,6 +103,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         agentCompletedAt: Date? = nil,
         agentEditedFilesJson: String? = nil,
         chatSessionId: String? = nil,
+        fromStaged: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -106,6 +120,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.tagsJson = tagsJson
         self.deletedBy = deletedBy
         self.dueAt = dueAt
+        self.recurrenceRule = recurrenceRule
+        self.recurrenceParentId = recurrenceParentId
         self.screenshotId = screenshotId
         self.confidence = confidence
         self.sourceApp = sourceApp
@@ -114,6 +130,8 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.currentActivity = currentActivity
         self.metadataJson = metadataJson
         self.embedding = embedding
+        self.sortOrder = sortOrder
+        self.indentLevel = indentLevel
         self.relevanceScore = relevanceScore
         self.scoredAt = scoredAt
         self.agentStatus = agentStatus
@@ -124,6 +142,7 @@ struct ActionItemRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
         self.agentCompletedAt = agentCompletedAt
         self.agentEditedFilesJson = agentEditedFilesJson
         self.chatSessionId = chatSessionId
+        self.fromStaged = fromStaged
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -277,6 +296,8 @@ extension ActionItemRecord {
             tagsJson: tagsJson,
             deletedBy: item.deletedBy,
             dueAt: item.dueAt,
+            recurrenceRule: item.recurrenceRule,
+            recurrenceParentId: item.recurrenceParentId,
             screenshotId: nil,
             confidence: nil,
             sourceApp: item.sourceApp,
@@ -284,7 +305,10 @@ extension ActionItemRecord {
             contextSummary: nil,
             currentActivity: nil,
             metadataJson: item.metadata,
+            sortOrder: item.sortOrder,
+            indentLevel: item.indentLevel,
             relevanceScore: item.relevanceScore,
+            fromStaged: item.fromStaged ?? false,
             createdAt: item.createdAt,
             updatedAt: item.updatedAt ?? item.createdAt
         )
@@ -315,7 +339,12 @@ extension ActionItemRecord {
         self.priority = item.priority
         self.category = item.category
         self.dueAt = item.dueAt
+        self.recurrenceRule = item.recurrenceRule
+        self.recurrenceParentId = item.recurrenceParentId
         self.metadataJson = item.metadata
+        if let staged = item.fromStaged {
+            self.fromStaged = staged
+        }
 
         // Only update updatedAt if the incoming timestamp is newer than local
         // This prevents sync from resetting local timestamps when backend data hasn't changed
@@ -335,6 +364,14 @@ extension ActionItemRecord {
         // Adopt API score when local record has none (avoids overwriting recent Gemini re-ranking)
         if self.relevanceScore == nil, let apiScore = item.relevanceScore {
             self.relevanceScore = apiScore
+        }
+
+        // Sync sort order and indent level from backend
+        if let apiSortOrder = item.sortOrder {
+            self.sortOrder = apiSortOrder
+        }
+        if let apiIndentLevel = item.indentLevel {
+            self.indentLevel = apiIndentLevel
         }
     }
 
@@ -391,7 +428,15 @@ extension ActionItemRecord {
             deletedAt: nil,  // Not stored locally
             deletedReason: nil,  // Not stored locally
             keptTaskId: nil,  // Not stored locally
+            fromStaged: fromStaged,
+            recurrenceRule: recurrenceRule,
+            recurrenceParentId: recurrenceParentId,
+            sortOrder: sortOrder,
+            indentLevel: indentLevel,
             relevanceScore: relevanceScore,
+            contextSummary: contextSummary,
+            currentActivity: currentActivity,
+            agentEditedFiles: agentEditedFiles.isEmpty ? nil : agentEditedFiles,
             agentStatus: agentStatus,
             agentPrompt: agentPrompt,
             agentPlan: agentPlan,
@@ -580,7 +625,12 @@ struct StagedTaskRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
             deletedAt: nil,
             deletedReason: nil,
             keptTaskId: nil,
+            sortOrder: nil,
+            indentLevel: nil,
             relevanceScore: relevanceScore,
+            contextSummary: contextSummary,
+            currentActivity: currentActivity,
+            agentEditedFiles: nil,
             agentStatus: nil,
             agentPrompt: nil,
             agentPlan: nil,
@@ -658,6 +708,18 @@ struct StagedTaskRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
             updatedAt: item.updatedAt ?? item.createdAt
         )
     }
+}
+
+// MARK: - TableDocumented
+
+extension ActionItemRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["action_items"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["action_items"] ?? [:] }
+}
+
+extension StagedTaskRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["staged_tasks"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["staged_tasks"] ?? [:] }
 }
 
 // MARK: - Action Item Storage Error

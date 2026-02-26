@@ -9,6 +9,7 @@ class SettingsSyncManager {
 
     /// Pull settings from server and apply non-nil values to local singletons.
     func syncFromServer() async {
+        guard AuthService.shared.isSignedIn else { return }
         do {
             let remote = try await APIClient.shared.getAssistantSettings()
             applyRemoteSettings(remote)
@@ -89,6 +90,11 @@ class SettingsSyncManager {
             if let v = memory.minConfidence { MemoryAssistantSettings.shared.minConfidence = v }
             if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
+        }
+
+        // Update channel (server-authoritative override)
+        if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
+            UpdaterViewModel.shared.updateChannel = parsed
         }
     }
 

@@ -8102,4 +8102,84 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => 'กดปุ่มเปิด/ปิดค้างจนกว่า LED จะกะพริบ อุปกรณ์จะสามารถค้นหาได้';
+
+  @override
+  String get downloadingFromDevice => 'กำลังดาวน์โหลดจากอุปกรณ์';
+
+  @override
+  String get reconnectingToInternet => 'กำลังเชื่อมต่ออินเทอร์เน็ตอีกครั้ง...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'กำลังอัปโหลด $current จาก $total';
+  }
+
+  @override
+  String get processedStatus => 'ประมวลผลแล้ว';
+
+  @override
+  String get corruptedStatus => 'เสียหาย';
+
+  @override
+  String nPending(int count) {
+    return '$count รอดำเนินการ';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count ประมวลผลแล้ว';
+  }
+
+  @override
+  String get synced => 'ซิงค์แล้ว';
+
+  @override
+  String get noPendingRecordings => 'ไม่มีการบันทึกที่รอดำเนินการ';
+
+  @override
+  String get noProcessedRecordings => 'ยังไม่มีการบันทึกที่ประมวลผลแล้ว';
+
+  @override
+  String get pending => 'รอดำเนินการ';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'มีอะไรใหม่ใน $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'เพิ่มในรายการงานของคุณ?';
+
+  @override
+  String get failedToCreateShareLink => 'ไม่สามารถสร้างลิงก์แชร์ได้';
+
+  @override
+  String get deleteGoal => 'ลบเป้าหมาย';
+
+  @override
+  String get deviceUpToDate => 'อุปกรณ์ของคุณเป็นเวอร์ชันล่าสุดแล้ว';
+
+  @override
+  String get wifiConfiguration => 'การตั้งค่า WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle => 'ป้อนข้อมูล WiFi เพื่อให้อุปกรณ์ดาวน์โหลดเฟิร์มแวร์ได้';
+
+  @override
+  String get networkNameSsid => 'ชื่อเครือข่าย (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'ป้อนชื่อเครือข่าย WiFi';
+
+  @override
+  String get enterWifiPassword => 'ป้อนรหัสผ่าน WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

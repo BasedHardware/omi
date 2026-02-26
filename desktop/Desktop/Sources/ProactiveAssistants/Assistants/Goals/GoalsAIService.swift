@@ -8,7 +8,7 @@ actor GoalsAIService {
 
     private init() {
         do {
-            self.geminiClient = try GeminiClient(model: "gemini-3-pro-preview")
+            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
         } catch {
             log("GoalsAIService: Failed to initialize GeminiClient: \(error)")
             self.geminiClient = nil
@@ -124,7 +124,7 @@ actor GoalsAIService {
             .replacingOccurrences(of: "{completed_goals}", with: ctx.completedGoals)
             .replacingOccurrences(of: "{abandoned_goals}", with: ctx.abandonedGoals)
 
-        log("GoalsAI: Model: gemini-3-pro-preview")
+        log("GoalsAI: Model: gemini-pro-latest")
         log("GoalsAI: Context sizes — memories: \(ctx.memories.count) chars, conversations: \(ctx.conversations.count) chars, tasks: \(ctx.actionItems.count) chars, persona: \(ctx.persona.count) chars, existing goals: \(ctx.existingGoals), completed: \(ctx.completedGoals.count) chars, abandoned: \(ctx.abandonedGoals.count) chars")
         log("GoalsAI: Full prompt:\n\(prompt)")
 
@@ -150,11 +150,12 @@ actor GoalsAIService {
             targetValue: suggestion.suggestedTarget,
             currentValue: 0,
             minValue: suggestion.suggestedMin,
-            maxValue: suggestion.suggestedMax
+            maxValue: suggestion.suggestedMax,
+            source: "ai"
         )
 
         // Sync to local storage
-        try? await GoalStorage.shared.syncServerGoal(goal)
+        _ = try? await GoalStorage.shared.syncServerGoal(goal)
 
         log("GoalsAI: Auto-created goal '\(goal.title)' (id: \(goal.id))")
 

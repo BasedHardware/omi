@@ -42,6 +42,9 @@ from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.retrieval.agentic import execute_agentic_chat_stream
 from utils.observability.langsmith import get_chat_tracer_callbacks
+import logging
+
+logger = logging.getLogger(__name__)
 
 model = ChatOpenAI(model="gpt-4.1-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
@@ -82,7 +85,7 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         await self.end()
 
     async def on_llm_error(self, error: Exception, **kwargs) -> None:
-        print(f"Error on LLM {error}")
+        logger.error(f"Error on LLM {error}")
         await self.end()
 
     def put_data_nowait(self, text):
@@ -117,9 +120,9 @@ class GraphState(TypedDict):
 
 
 def determine_conversation(state: GraphState):
-    print("determine_conversation")
+    logger.info("determine_conversation")
     question = extract_question_from_conversation(state.get("messages", []))
-    print("determine_conversation parsed question:", question)
+    logger.info(f"determine_conversation parsed question: {question}")
 
     # # stream
     # if state.get('streaming', False):
@@ -130,8 +133,12 @@ def determine_conversation(state: GraphState):
 
 def determine_conversation_type(
     state: GraphState,
-) -> Literal["no_context_conversation", "agentic_context_dependent_conversation", "persona_question",]:
-    print("determine_conversation_type")
+) -> Literal[
+    "no_context_conversation",
+    "agentic_context_dependent_conversation",
+    "persona_question",
+]:
+    logger.info("determine_conversation_type")
 
     # persona
     app: App = state.get("plugin_selected")
@@ -151,7 +158,7 @@ def determine_conversation_type(
 
 
 def no_context_conversation(state: GraphState):
-    print("no_context_conversation node")
+    logger.info("no_context_conversation node")
 
     # streaming
     streaming = state.get("streaming")
@@ -172,7 +179,7 @@ def no_context_conversation(state: GraphState):
 
 
 def omi_question(state: GraphState):
-    print("no_context_omi_question node")
+    logger.info("no_context_omi_question node")
 
     context: dict = get_github_docs_content()
     context_str = 'Documentation:\n\n'.join([f'{k}:\n {v}' for k, v in context.items()])
@@ -192,7 +199,7 @@ def omi_question(state: GraphState):
 
 
 def persona_question(state: GraphState):
-    print("persona_question node")
+    logger.info("persona_question node")
 
     # streaming
     streaming = state.get("streaming")
@@ -213,7 +220,7 @@ def context_dependent_conversation(state: GraphState):
 
 def agentic_context_dependent_conversation(state: GraphState):
     """Handle context-dependent conversations using the agentic system"""
-    print("agentic_context_dependent_conversation node")
+    logger.info("agentic_context_dependent_conversation node")
 
     uid = state.get("uid")
     messages = state.get("messages", [])
@@ -265,7 +272,7 @@ def agentic_context_dependent_conversation(state: GraphState):
 
 
 def retrieve_topics_filters(state: GraphState):
-    print("retrieve_topics_filters")
+    logger.info("retrieve_topics_filters")
     filters = {
         "people": get_filter_category_items(state.get("uid"), "people", limit=1000),
         "topics": get_filter_category_items(state.get("uid"), "topics", limit=1000),
@@ -279,22 +286,22 @@ def retrieve_topics_filters(state: GraphState):
         "entities": result.get("entities", []),
         # 'dates': result.get('dates', []),
     }
-    print("retrieve_topics_filters filters", filters)
+    logger.info(f"retrieve_topics_filters filters {filters}")
     return {"filters": filters}
 
 
 def retrieve_date_filters(state: GraphState):
-    print('retrieve_date_filters')
+    logger.info('retrieve_date_filters')
     # TODO: if this makes vector search fail further, query firestore instead
     dates_range = retrieve_context_dates_by_question(state.get("parsed_question", ""), state.get("tz", "UTC"))
-    print('retrieve_date_filters dates_range:', dates_range)
+    logger.info(f'retrieve_date_filters dates_range: {dates_range}')
     if dates_range and len(dates_range) >= 2:
         return {"date_filters": {"start": dates_range[0], "end": dates_range[1]}}
     return {"date_filters": {}}
 
 
 def query_vectors(state: GraphState):
-    print("query_vectors")
+    logger.info("query_vectors")
 
     # # stream
     # if state.get('streaming', False):
@@ -310,7 +317,7 @@ def query_vectors(state: GraphState):
 
     # Use [1] * dimension to trigger the score distance to fetch all vectors by meta filters
     vector = [1] * 3072
-    print("query_vectors vector:", vector[:5])
+    logger.info(f"query_vectors vector: {vector[:5]}")
 
     # TODO: enable it when the in-accurate topic filter get fixed
     is_topic_filter_enabled = date_filters.get("start") is None
@@ -386,7 +393,7 @@ def qa_handler(state: GraphState):
 
 
 def file_chat_question(state: GraphState):
-    print("chat_with_file_question node")
+    logger.info("chat_with_file_question node")
 
     uid = state.get("uid", "")
     question = state.get("parsed_question", "")
@@ -398,17 +405,19 @@ def file_chat_question(state: GraphState):
 
     chat_session = state.get("chat_session")
     if not chat_session:
-        print("ERROR: Chat session required for file chat but not found")
+        logger.error("ERROR: Chat session required for file chat but not found")
         raise ValueError("Chat session required for file chat")
 
-    print(f"Creating FileChatTool for user {uid}, session {chat_session.id}")
+    logger.info(f"Creating FileChatTool for user {uid}, session {chat_session.id}")
 
     try:
         # Create FileChatTool with session context
         fc_tool = FileChatTool(uid, chat_session.id)
-        print(f"FileChatTool created successfully. Thread: {fc_tool.thread_id}, Assistant: {fc_tool.assistant_id}")
+        logger.info(
+            f"FileChatTool created successfully. Thread: {fc_tool.thread_id}, Assistant: {fc_tool.assistant_id}"
+        )
     except Exception as e:
-        print(f"ERROR: Failed to create FileChatTool: {e}")
+        logger.error(f"ERROR: Failed to create FileChatTool: {e}")
         raise
 
     # Determine which files to use
@@ -418,22 +427,22 @@ def file_chat_question(state: GraphState):
         # if user asked about file but not attach new file, will get all file in session
         file_ids = chat_session.file_ids if chat_session.file_ids else []
 
-    print(f"Processing file chat with {len(file_ids)} files")
+    logger.info(f"Processing file chat with {len(file_ids)} files")
 
     streaming = state.get("streaming")
     try:
         if streaming:
-            print("Processing with streaming")
+            logger.info("Processing with streaming")
             answer = fc_tool.process_chat_with_file_stream(question, file_ids, callback=state.get('callback'))
-            print("Streaming completed")
+            logger.info("Streaming completed")
             return {'answer': answer, 'ask_for_nps': True}
 
-        print("Processing without streaming")
+        logger.info("Processing without streaming")
         answer = fc_tool.process_chat_with_file(question, file_ids)
-        print("Processing completed")
+        logger.info("Processing completed")
         return {'answer': answer, 'ask_for_nps': True}
     except Exception as e:
-        print(f"ERROR in file_chat_question: {e}")
+        logger.error(f"ERROR in file_chat_question: {e}")
         raise
 
 
@@ -484,7 +493,7 @@ graph_stream = workflow.compile()
 def execute_graph_chat(
     uid: str, messages: List[Message], app: Optional[App] = None, cited: Optional[bool] = False
 ) -> Tuple[str, bool, List[Conversation]]:
-    print('execute_graph_chat app    :', app.id if app else '<none>')
+    logger.info(f'execute_graph_chat app    : {app.id if app else "<none>"}')
     tz = notification_db.get_user_time_zone(uid)
 
     # Get per-request LangSmith tracer callbacks (enables tracing without global env)
@@ -529,7 +538,7 @@ async def execute_graph_chat_stream(
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
-    print('execute_graph_chat_stream app: ', app.id if app else '<none>')
+    logger.info(f'execute_graph_chat_stream app:  {app.id if app else "<none>"}')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
 
@@ -698,7 +707,7 @@ async def execute_persona_chat_stream(
         return
 
     except Exception as e:
-        print(f"Error in execute_persona_chat_stream: {e}")
+        logger.error(f"Error in execute_persona_chat_stream: {e}")
         if callback_data is not None:
             callback_data['error'] = str(e)
         yield None

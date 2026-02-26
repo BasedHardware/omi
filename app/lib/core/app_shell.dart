@@ -69,7 +69,7 @@ class _AppShellState extends State<AppShell> {
       return;
     }
 
-    if (uri.pathSegments.first == 'apps') {
+    if (uri.pathSegments.first == 'apps' && uri.pathSegments.length > 1) {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
@@ -333,8 +333,14 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    initDeepLinks();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeProviders());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initializeProviders();
+      // Start deep link handling AFTER providers are ready,
+      // so getInitialLink() doesn't race against cache loading (#4763)
+      if (mounted) {
+        initDeepLinks();
+      }
+    });
   }
 
   Future<void> _initializeProviders() async {
@@ -380,7 +386,8 @@ class _AppShellState extends State<AppShell> {
       builder: (context, constraints) {
         // Route to appropriate app tree based on screen width
         if (constraints.maxWidth >= 1100) {
-          return const DesktopApp(); // Desktop app tree
+          // DEPRECATED: Flutter desktop is deprecated. See /desktop/ for the native Swift macOS app.
+          return const DesktopApp();
         } else {
           return const MobileApp(); // Mobile app tree
         }

@@ -7996,4 +7996,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => '按住电源按钮直到LED闪烁。设备将变为可发现状态。';
+
+  @override
+  String get downloadingFromDevice => '正在从设备下载';
+
+  @override
+  String get reconnectingToInternet => '正在重新连接互联网...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '正在上传 $current/$total';
+  }
+
+  @override
+  String get processedStatus => '已处理';
+
+  @override
+  String get corruptedStatus => '已损坏';
+
+  @override
+  String nPending(int count) {
+    return '$count 个待处理';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count 个已处理';
+  }
+
+  @override
+  String get synced => '已同步';
+
+  @override
+  String get noPendingRecordings => '没有待处理的录音';
+
+  @override
+  String get noProcessedRecordings => '暂无已处理的录音';
+
+  @override
+  String get pending => '待处理';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version 的新功能';
+  }
+
+  @override
+  String get addToYourTaskList => '添加到您的任务列表？';
+
+  @override
+  String get failedToCreateShareLink => '无法创建分享链接';
+
+  @override
+  String get deleteGoal => '删除目标';
+
+  @override
+  String get deviceUpToDate => '您的设备已是最新版本';
+
+  @override
+  String get wifiConfiguration => 'WiFi 配置';
+
+  @override
+  String get wifiConfigurationSubtitle => '输入您的WiFi凭据以允许设备下载固件。';
+
+  @override
+  String get networkNameSsid => '网络名称 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => '输入WiFi网络名称';
+
+  @override
+  String get enterWifiPassword => '输入WiFi密码';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

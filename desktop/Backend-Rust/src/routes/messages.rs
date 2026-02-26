@@ -48,6 +48,7 @@ async fn save_message(
             &request.sender,
             request.app_id.as_deref(),
             request.session_id.as_deref(),
+            request.metadata.as_deref(),
         )
         .await
     {

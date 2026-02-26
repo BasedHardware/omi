@@ -12,19 +12,19 @@ struct CitationCardView: View {
             HStack(spacing: 10) {
                 // Emoji or icon
                 Text(citation.emoji ?? "📝")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
                     // Title
                     Text(citation.title)
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     // Preview
                     Text(citation.preview)
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textSecondary)
                         .lineLimit(1)
                 }
@@ -33,7 +33,7 @@ struct CitationCardView: View {
 
                 // Chevron
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .medium))
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .padding(.horizontal, 12)
@@ -62,10 +62,10 @@ struct CitationCardsView: View {
             // Section header
             HStack(spacing: 4) {
                 Image(systemName: "quote.opening")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.textTertiary)
                 Text("Sources")
-                    .font(.system(size: 11, weight: .medium))
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .padding(.top, 4)

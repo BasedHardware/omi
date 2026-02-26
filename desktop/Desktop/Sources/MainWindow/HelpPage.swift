@@ -5,9 +5,16 @@ struct HelpPage: View {
     var body: some View {
         CrispWebView()
             .ignoresSafeArea()
+            .onAppear {
+                CrispManager.shared.isViewingHelp = true
+            }
+            .onDisappear {
+                CrispManager.shared.isViewingHelp = false
+            }
     }
 }
 
+/// Visible Crisp chat webview — separate from CrispManager's background monitoring webview.
 struct CrispWebView: NSViewRepresentable {
     private let websiteID = "0dcf3d1f-863d-4576-a534-31f2bb102ae5"
 

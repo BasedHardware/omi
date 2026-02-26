@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Optional
 @dataclass
 class CacheEntry:
     """Represents a cache entry with metadata."""
+
     data: Any
     timestamp: float
     size_bytes: int
@@ -149,12 +150,7 @@ class InMemoryCacheManager:
             self._evict_if_needed(size_bytes)
 
             # Add new entry
-            entry = CacheEntry(
-                data=data,
-                timestamp=time.time(),
-                size_bytes=size_bytes,
-                ttl=ttl
-            )
+            entry = CacheEntry(data=data, timestamp=time.time(), size_bytes=size_bytes, ttl=ttl)
             self.cache[key] = entry
             self.current_size += size_bytes
 
@@ -195,8 +191,7 @@ class InMemoryCacheManager:
         Args:
             required_bytes: Bytes needed for new entry
         """
-        while (self.current_size + required_bytes > self.max_memory_bytes
-               and len(self.cache) > 0):
+        while self.current_size + required_bytes > self.max_memory_bytes and len(self.cache) > 0:
             # Remove oldest (first item in OrderedDict)
             key, entry = self.cache.popitem(last=False)
             self.current_size -= entry.size_bytes
@@ -237,5 +232,5 @@ class InMemoryCacheManager:
                 'hits': self.hits,
                 'misses': self.misses,
                 'hit_rate': round(hit_rate, 2),
-                'evictions': self.evictions
+                'evictions': self.evictions,
             }

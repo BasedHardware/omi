@@ -15,8 +15,12 @@ struct DesktopHomeView: View {
     // Settings sidebar state
     @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
     @State private var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection? = nil
+    @State private var highlightedSettingId: String? = nil
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
+
+    // File indexing sheet for existing users
+    @State private var showFileIndexingSheet = false
 
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
@@ -57,7 +61,7 @@ struct DesktopHomeView: View {
                         appState.hasCompletedOnboarding = true
                     }
                 } else {
-                    OnboardingView(appState: appState, onComplete: nil)
+                    OnboardingView(appState: appState, chatProvider: viewModelContainer.chatProvider, onComplete: nil)
                         .onAppear {
                             log("DesktopHomeView: Showing OnboardingView (signed in, not onboarded)")
                         }
@@ -72,6 +76,11 @@ struct DesktopHomeView: View {
                             // Check all permissions on launch
                             appState.checkAllPermissions()
 
+                            // Show file indexing sheet for existing users who haven't done it
+                            if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+                                showFileIndexingSheet = true
+                            }
+
                             let settings = AssistantSettings.shared
 
                             // Auto-start transcription if enabled in settings
@@ -82,22 +91,42 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
                             }
 
+                            // Migration: one-time reset for users whose screenAnalysisEnabled
+                            // was incorrectly set to false by a bug in syncMonitoringState() that
+                            // persisted false whenever monitoring stopped for any reason.
+                            // v2: re-run because the root cause (syncMonitoringState disabling the
+                            // setting) was only fixed in this release, so v1 users got re-broken.
+                            let migrationKey = "screenAnalysisAutoStartFixed_v2"
+                            if !UserDefaults.standard.bool(forKey: migrationKey) {
+                                UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
+                                AssistantSettings.shared.screenAnalysisEnabled = true
+                                UserDefaults.standard.set(true, forKey: migrationKey)
+                                log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
+                                // Push true to server so syncFromServer() doesn't revert it
+                                Task { await SettingsSyncManager.shared.syncToServer() }
+                            }
+
                             // Start proactive assistants monitoring if enabled in settings
                             if settings.screenAnalysisEnabled {
                                 ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
                                     if success {
                                         log("DesktopHomeView: Screen analysis started")
                                     } else {
-                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown")")
+                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch")
                                     }
                                 }
                             } else {
                                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
                             }
 
-                            // Set up and show floating control bar
-                            FloatingControlBarManager.shared.setup(appState: appState)
-                            FloatingControlBarManager.shared.show()
+                            // Start Crisp chat in background for notifications
+                            CrispManager.shared.start()
+
+                            // Set up floating control bar (only show if user hasn't disabled it)
+                            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: viewModelContainer.chatProvider)
+                            if FloatingControlBarManager.shared.isEnabled {
+                                FloatingControlBarManager.shared.show()
+                            }
 
                             // Set up push-to-talk voice input
                             if let barState = FloatingControlBarManager.shared.barState {
@@ -111,6 +140,71 @@ struct DesktopHomeView: View {
                             async let conversations: Void = appState.loadConversations()
                             async let folders: Void = appState.loadFolders()
                             _ = await (vmLoad, conversations, folders)
+
+                            // Backend-based check: ensure user has a cloud agent VM
+                            await AgentVMService.shared.ensureProvisioned()
+                        }
+                        // Refresh conversations when app becomes active (e.g. switching back from another app)
+                        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                            Task { await appState.refreshConversations() }
+                            // Auto-start monitoring when returning to app if screen analysis is enabled
+                            // but monitoring is not running. Handles the case where the user granted
+                            // screen recording permission in System Settings and switched back.
+                            let plugin = ProactiveAssistantsPlugin.shared
+                            if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
+                                plugin.refreshScreenRecordingPermission()
+                                if plugin.hasScreenRecordingPermission {
+                                    log("DesktopHomeView: Permission available on app active — starting monitoring")
+                                    plugin.startMonitoring { _, _ in }
+                                }
+                            }
+                        }
+                        // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
+                        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+                            Task { await appState.refreshConversations() }
+                        }
+                        // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
+                        // hasCompletedOnboarding must be set here (in a View) because @AppStorage
+                        // on ObservableObject caches internally and ignores UserDefaults.removeObject().
+                        // Stopping transcription here prevents FOREIGN KEY errors from an old
+                        // transcription session writing to a new user's database.
+                        .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+                            log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
+                            appState.hasCompletedOnboarding = false
+                            appState.stopTranscription()
+                        }
+                        // Handle transcription toggle from menu bar
+                        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) { notification in
+                            if let enabled = notification.userInfo?["enabled"] as? Bool {
+                                log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+                                if enabled {
+                                    appState.startTranscription()
+                                } else {
+                                    appState.stopTranscription()
+                                }
+                            }
+                        }
+                        // Periodic file re-scan (every 3 hours)
+                        .task {
+                            while !Task.isCancelled {
+                                try? await Task.sleep(for: .seconds(3 * 60 * 60))
+                                guard !Task.isCancelled else { break }
+                                guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else { continue }
+                                log("DesktopHomeView: Triggering background file rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
+                            showFileIndexingSheet = true
+                        }
+                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
+                            FileIndexingView(
+                                chatProvider: viewModelContainer.chatProvider,
+                                onComplete: { fileCount in
+                                    showFileIndexingSheet = false
+                                }
+                            )
+                            .frame(width: 600, height: 650)
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -131,7 +225,7 @@ struct DesktopHomeView: View {
                             }
 
                             Text(viewModelContainer.initStatusMessage)
-                                .font(.system(size: 14, weight: .medium))
+                                .scaledFont(size: 14, weight: .medium)
                                 .foregroundColor(OmiColors.textTertiary)
 
                             ProgressView()
@@ -154,7 +248,7 @@ struct DesktopHomeView: View {
             // Force dark appearance on the window
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title == "Omi" {
+                    if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                     }
                 }
@@ -191,6 +285,24 @@ struct DesktopHomeView: View {
     }
 
     /// Update store auto-refresh based on which page is visible
+    /// On launch, if the user quit with the task chat panel open, macOS restores the
+    /// expanded window frame but the chat panel itself is not shown. Shrink the window
+    /// back to its pre-chat width so the layout isn't unexpectedly wide.
+    private func restorePreChatWindowWidth() {
+        let key = "tasksPreChatWindowWidth"
+        let saved = UserDefaults.standard.double(forKey: key)
+        guard saved > 0 else { return }
+        // Reset the persisted value immediately so TasksPage won't double-shrink
+        UserDefaults.standard.set(Double(0), forKey: key)
+        // Delay slightly so the window is fully visible
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+            var frame = window.frame
+            frame.size.width = saved
+            window.setFrame(frame, display: true)
+        }
+    }
+
     private func updateStoreActivity(for index: Int) {
         viewModelContainer.tasksStore.isActive =
             index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
@@ -200,26 +312,37 @@ struct DesktopHomeView: View {
 
     private var mainContent: some View {
         HStack(spacing: 0) {
-            // Show settings sidebar when in settings (always visible, even in rewind mode)
-            if isInSettings {
-                SettingsSidebar(
-                    selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
-                    onBack: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedIndex = previousIndexBeforeSettings
+            // Sidebar slot: settings sidebar overlays main sidebar
+            // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
+            // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
+            // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
+            // tracking system still tries to evaluate them during window key state changes.
+            ZStack {
+                if !hideSidebar {
+                    SidebarView(
+                        selectedIndex: $selectedIndex,
+                        isCollapsed: $isSidebarCollapsed,
+                        appState: appState
+                    )
+                    .clickThrough(enabled: !isInSettings)
+                    .opacity(isInSettings ? 0 : 1)
+                    .allowsHitTesting(!isInSettings)
+                }
+
+                if isInSettings {
+                    SettingsSidebar(
+                        selectedSection: $selectedSettingsSection,
+                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        highlightedSettingId: $highlightedSettingId,
+                        onBack: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedIndex = previousIndexBeforeSettings
+                            }
                         }
-                    }
-                )
-            } else if !hideSidebar {
-                // Main sidebar only in full mode (hidden in rewind mode)
-                SidebarView(
-                    selectedIndex: $selectedIndex,
-                    isCollapsed: $isSidebarCollapsed,
-                    appState: appState
-                )
-                .clickThrough()
+                    )
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
 
             // Main content area with rounded container
             ZStack {
@@ -233,43 +356,17 @@ struct DesktopHomeView: View {
                     .shadow(color: .black.opacity(0.05), radius: 20, x: 0, y: 4)
 
                 // Page content - switch recreates views on tab change
-                Group {
-                    switch selectedIndex {
-                    case 0:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 1:
-                        // Conversations moved into Dashboard — redirect
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    case 2:
-                        ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
-                    case 3:
-                        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
-                    case 4:
-                        TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
-                    case 5:
-                        FocusPage()
-                    case 6:
-                        AdvicePage()
-                    case 7:
-                        RewindPage(appState: appState)
-                    case 8:
-                        AppsPage(appProvider: viewModelContainer.appProvider)
-                    case 9:
-                        SettingsPage(
-                            appState: appState,
-                            selectedSection: $selectedSettingsSection,
-                            selectedAdvancedSubsection: $selectedAdvancedSubsection
-                        )
-                    case 10:
-                        PermissionsPage(appState: appState)
-                    case 11:
-                        DeviceSettingsPage()
-                    case 12:
-                        HelpPage()
-                    default:
-                        DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedIndex)
-                    }
-                }
+                // Extracted into a separate struct so that pages like TasksPage
+                // are not re-rendered when AppState publishes unrelated changes.
+                PageContentView(
+                    selectedIndex: selectedIndex,
+                    appState: appState,
+                    viewModelContainer: viewModelContainer,
+                    selectedSettingsSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    highlightedSettingId: $highlightedSettingId,
+                    selectedTabIndex: $selectedIndex
+                )
                 .id(selectedIndex)
                 .transition(.opacity.combined(with: .move(edge: .trailing)))
                 .animation(.easeInOut(duration: 0.2), value: selectedIndex)
@@ -296,8 +393,22 @@ struct DesktopHomeView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
-            // Navigate to settings > advanced where Task Agent settings live
+            // Navigate to settings > advanced > task assistant subsection
             selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .taskAssistant
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.settings.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSettingsSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.settings.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
+            selectedSettingsSection = .aiChat
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
@@ -307,6 +418,16 @@ struct DesktopHomeView: View {
             log("DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))")
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.rewind.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.chat.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.tasks.rawValue
             }
         }
         .onChange(of: selectedIndex) { oldValue, newValue in
@@ -319,6 +440,65 @@ struct DesktopHomeView: View {
         }
         .onAppear {
             updateStoreActivity(for: selectedIndex)
+            // Restore window width if the user quit with task chat panel open.
+            // The chat panel is never open on startup (showChatPanel defaults to false),
+            // but macOS restores the expanded window frame from the previous session.
+            restorePreChatWindowWidth()
+        }
+    }
+}
+
+/// Isolated page content switch — does NOT observe AppState or ViewModelContainer
+/// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
+/// AppState properties (conversations, permissions, etc.) change.
+private struct PageContentView: View {
+    let selectedIndex: Int
+    let appState: AppState
+    let viewModelContainer: ViewModelContainer
+    @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
+    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
+    @Binding var selectedTabIndex: Int
+
+    var body: some View {
+        let _ = log("RENDER: PageContentView body evaluated (index=\(selectedIndex))")
+        Group {
+            switch selectedIndex {
+            case 0:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 1:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            case 2:
+                ChatPage(appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider)
+            case 3:
+                MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+            case 4:
+                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatCoordinator: viewModelContainer.taskChatCoordinator, chatProvider: viewModelContainer.chatProvider)
+            case 5:
+                FocusPage()
+            case 6:
+                AdvicePage()
+            case 7:
+                RewindPage(appState: appState)
+            case 8:
+                AppsPage(appProvider: viewModelContainer.appProvider)
+            case 9:
+                SettingsPage(
+                    appState: appState,
+                    selectedSection: $selectedSettingsSection,
+                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                    highlightedSettingId: $highlightedSettingId,
+                    chatProvider: viewModelContainer.chatProvider
+                )
+            case 10:
+                PermissionsPage(appState: appState)
+            case 11:
+                DeviceSettingsPage()
+            case 12:
+                HelpPage()
+            default:
+                DashboardPage(viewModel: viewModelContainer.dashboardViewModel, appState: appState, selectedIndex: $selectedTabIndex)
+            }
         }
     }
 }

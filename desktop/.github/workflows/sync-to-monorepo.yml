@@ -1,0 +1,88 @@
+name: Sync to OMI monorepo
+
+on:
+  workflow_dispatch:  # Manual only — local bi-directional sync handles this now
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout omi-desktop
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout omi monorepo
+        uses: actions/checkout@v4
+        with:
+          repository: BasedHardware/omi
+          token: ${{ secrets.OMI_MONOREPO_TOKEN }}
+          path: monorepo
+          fetch-depth: 0
+
+      - name: Check for upstream desktop/ changes
+        id: conflict-check
+        run: |
+          cd monorepo
+
+          # Find the last sync commit (committed by this workflow)
+          LAST_SYNC=$(git log --oneline --author="github-actions\[bot\]" --grep="Sync desktop/" -1 --format="%H" -- desktop/)
+
+          if [ -z "$LAST_SYNC" ]; then
+            echo "No previous sync commit found — first sync, skipping conflict check"
+            echo "has_conflicts=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Last sync commit: $(git log --oneline -1 $LAST_SYNC)"
+
+          # Check if anyone else committed to desktop/ since the last sync
+          UPSTREAM_COMMITS=$(git log --oneline "$LAST_SYNC"..HEAD --not --author="github-actions\[bot\]" -- desktop/)
+
+          if [ -n "$UPSTREAM_COMMITS" ]; then
+            echo "::error::Conflicting changes detected in desktop/ folder!"
+            echo ""
+            echo "The following commits were made directly to desktop/ in the monorepo:"
+            echo "$UPSTREAM_COMMITS"
+            echo ""
+            echo "These changes would be overwritten by the sync."
+            echo "Please cherry-pick them into omi-desktop first, then re-run."
+            echo "has_conflicts=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          echo "No conflicting upstream changes — safe to sync"
+          echo "has_conflicts=false" >> "$GITHUB_OUTPUT"
+
+      - name: Sync desktop/ folder
+        if: steps.conflict-check.outputs.has_conflicts != 'true'
+        run: |
+          # Copy current repo into monorepo desktop/ using rsync
+          rsync -a --delete --exclude='.git' --exclude='monorepo' . monorepo/desktop/
+
+          cd monorepo
+
+          # Check if there are actual changes
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes to sync"
+            exit 0
+          fi
+
+          # Stage and commit
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/
+          git commit -m "Sync desktop/ from omi-desktop ($(git -C ../. rev-parse --short HEAD))"
+
+          # Push with retry in case of concurrent pushes
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "Push successful"
+              exit 0
+            fi
+            echo "Push failed (attempt $i/3), pulling and retrying..."
+            git pull --rebase origin main
+          done
+
+          echo "::error::Failed to push after 3 attempts"
+          exit 1

@@ -8,6 +8,9 @@ from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
 from utils.other.endpoints import timeit
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize Deepgram client for pre-recorded transcription
 # WARN: the pre-recorded transcription is available on deepgram cloud
@@ -129,7 +132,7 @@ def deepgram_prerecorded(
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
         Or tuple of (words, language) if return_language=True
     """
-    print('deepgram_prerecorded', audio_url, speakers_count, attempts)
+    logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts}')
 
     try:
         # 'multi' language means auto-detection
@@ -192,7 +195,7 @@ def deepgram_prerecorded(
         return words
 
     except Exception as e:
-        print(f'Deepgram prerecorded error: {e}')
+        logger.error(f'Deepgram prerecorded error: {e}')
         if attempts < 2:
             return deepgram_prerecorded(
                 audio_url,
@@ -228,7 +231,7 @@ def deepgram_prerecorded_from_bytes(
     Returns:
         List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
     """
-    print('deepgram_prerecorded_from_bytes', f'bytes_len={len(audio_bytes)}', sample_rate, diarize, attempts)
+    logger.info(f'deepgram_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
 
     try:
         options = {
@@ -276,7 +279,7 @@ def deepgram_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        print(f'Deepgram prerecorded from bytes error: {e}')
+        logger.error(f'Deepgram prerecorded from bytes error: {e}')
         if attempts < 2:
             return deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1)
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts: {e}')
@@ -291,7 +294,7 @@ def fal_whisperx(
     diarize: bool = True,
     chunk_level: str = 'word',
 ) -> List[dict]:
-    print('fal_whisperx', audio_url, speakers_count, attempts)
+    logger.info(f'fal_whisperx {audio_url} {speakers_count} {attempts}')
 
     try:
         handler = fal_client.submit(
@@ -317,7 +320,7 @@ def fal_whisperx(
             return words, language
         return words
     except Exception as e:
-        print(e)
+        logger.error(e)
         if attempts < 2:
             return fal_whisperx(audio_url, speakers_count, attempts + 1, return_language)
         if return_language:

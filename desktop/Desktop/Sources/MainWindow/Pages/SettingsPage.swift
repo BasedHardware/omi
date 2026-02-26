@@ -7,6 +7,8 @@ struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
     @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
+    var chatProvider: ChatProvider? = nil
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -14,8 +16,10 @@ struct SettingsPage: View {
                 VStack(spacing: 0) {
                     // Section header
                     HStack {
-                        Text(selectedSection.rawValue)
-                            .font(.system(size: 28, weight: .bold))
+                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
+                             ? selectedAdvancedSubsection!.rawValue
+                             : selectedSection.rawValue)
+                            .scaledFont(size: 28, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
                             .id(selectedSection)
                             .transition(.opacity)
@@ -31,23 +35,31 @@ struct SettingsPage: View {
                     SettingsContentView(
                         appState: appState,
                         selectedSection: $selectedSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection
+                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
+                        highlightedSettingId: $highlightedSettingId,
+                        chatProvider: chatProvider
                     )
                     .padding(.horizontal, 32)
 
                     Spacer()
                 }
             }
-            .background(OmiColors.backgroundSecondary.opacity(0.3))
-            .onAppear {
-                AnalyticsManager.shared.settingsPageOpened()
-            }
-            .onChange(of: selectedAdvancedSubsection) { _, newValue in
-                if let subsection = newValue {
-                    withAnimation {
-                        proxy.scrollTo(subsection, anchor: .top)
+            .onChange(of: highlightedSettingId) { _, newId in
+                guard let newId = newId else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(newId, anchor: .center)
                     }
                 }
+            }
+        }
+        .background(OmiColors.backgroundSecondary.opacity(0.3))
+        .onAppear {
+            AnalyticsManager.shared.settingsPageOpened()
+        }
+        .onChange(of: selectedSection) { _, newValue in
+            if newValue == .advanced && selectedAdvancedSubsection == nil {
+                selectedAdvancedSubsection = .aiUserProfile
             }
         }
     }
@@ -58,6 +70,9 @@ struct SettingsContentView: View {
     // AppState for transcription control
     @ObservedObject var appState: AppState
 
+    // ChatProvider for browser extension setup
+    var chatProvider: ChatProvider? = nil
+
     // Updater view model
     @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
 
@@ -65,6 +80,9 @@ struct SettingsContentView: View {
     @State private var isMonitoring: Bool
     @State private var isToggling: Bool = false
     @State private var permissionError: String?
+
+    // Ask Omi floating bar state
+    @State private var showAskOmiBar: Bool = false
 
     // Transcription state
     @State private var isTranscribing: Bool
@@ -83,6 +101,8 @@ struct SettingsContentView: View {
 
     // Task Assistant states
     @State private var taskEnabled: Bool
+    @State private var taskChatAgentEnabled: Bool
+    @State private var taskAgentWorkingDirectory: String
     @State private var taskExtractionInterval: Double
     @State private var taskMinConfidence: Double
     @State private var taskNotificationsEnabled: Bool
@@ -103,6 +123,9 @@ struct SettingsContentView: View {
     @State private var memoryMinConfidence: Double
     @State private var memoryNotificationsEnabled: Bool
     @State private var memoryExcludedApps: Set<String>
+
+    // Goals states
+    @State private var goalsAutoGenerateEnabled: Bool = GoalGenerationService.shared.isAutoGenerationEnabled
 
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
@@ -128,6 +151,7 @@ struct SettingsContentView: View {
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
     @Binding var selectedAdvancedSubsection: AdvancedSubsection?
+    @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
     @State private var dailySummaryEnabled: Bool = true
@@ -138,6 +162,7 @@ struct SettingsContentView: View {
     // Privacy settings (from backend)
     @State private var recordingPermissionEnabled: Bool = false
     @State private var privateCloudSyncEnabled: Bool = true
+    @State private var isTrackingExpanded: Bool = false
 
     // Transcription settings (from backend)
     @State private var singleLanguageMode: Bool = false
@@ -175,6 +200,32 @@ struct SettingsContentView: View {
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
     @AppStorage("conversationsCompactView") private var conversationsCompactView = true
 
+    // AI Chat settings
+    @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "agentSDK"
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
+    @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
+    @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
+    @AppStorage("aiChatWorkingDirectory") private var aiChatWorkingDirectory: String = ""
+    @State private var aiChatClaudeMdContent: String?
+    @State private var aiChatClaudeMdPath: String?
+    @State private var aiChatProjectClaudeMdContent: String?
+    @State private var aiChatProjectClaudeMdPath: String?
+    @State private var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @State private var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
+    @State private var aiChatDisabledSkills: Set<String> = []
+    @State private var showFileViewer = false
+    @State private var fileViewerContent = ""
+    @State private var fileViewerTitle = ""
+    @State private var skillSearchQuery = ""
+
+    // Dev Mode setting
+    @AppStorage("devModeEnabled") private var devModeEnabled = false
+
+    // Browser Extension settings
+    @AppStorage("playwrightUseExtension") private var playwrightUseExtension = true
+    @State private var playwrightExtensionToken: String = ""
+    @State private var showBrowserSetup = false
+
     // Launch at login manager
     @ObservedObject private var launchAtLoginManager = LaunchAtLoginManager.shared
 
@@ -187,6 +238,7 @@ struct SettingsContentView: View {
         case notifications = "Notifications"
         case privacy = "Privacy"
         case account = "Account"
+        case aiChat = "AI Chat"
         case advanced = "Advanced"
         case about = "About"
     }
@@ -199,6 +251,11 @@ struct SettingsContentView: View {
         case taskAssistant = "Task Assistant"
         case adviceAssistant = "Advice Assistant"
         case memoryAssistant = "Memory Assistant"
+        case analysisThrottle = "Analysis Throttle"
+        case goals = "Goals"
+        case askOmiFloatingBar = "Ask Omi Floating Bar"
+        case preferences = "Preferences"
+        case troubleshooting = "Troubleshooting"
 
         var icon: String {
             switch self {
@@ -209,20 +266,30 @@ struct SettingsContentView: View {
             case .taskAssistant: return "checklist"
             case .adviceAssistant: return "lightbulb.fill"
             case .memoryAssistant: return "brain.head.profile"
+            case .analysisThrottle: return "clock.arrow.2.circlepath"
+            case .goals: return "target"
+            case .askOmiFloatingBar: return "sparkles"
+            case .preferences: return "slider.horizontal.3"
+            case .troubleshooting: return "wrench.and.screwdriver"
             }
         }
     }
 
     @State private var showResetOnboardingAlert: Bool = false
+    @State private var showRescanFilesAlert: Bool = false
 
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>
+        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
+        highlightedSettingId: Binding<String?> = .constant(nil),
+        chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
         self._selectedAdvancedSubsection = selectedAdvancedSubsection
+        self._highlightedSettingId = highlightedSettingId
+        self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
         _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
         _isTranscribing = State(initialValue: appState.isTranscribing)
@@ -233,6 +300,8 @@ struct SettingsContentView: View {
         _focusNotificationsEnabled = State(initialValue: FocusAssistantSettings.shared.notificationsEnabled)
         _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
         _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
+        _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
+        _taskAgentWorkingDirectory = State(initialValue: TaskAgentSettings.shared.workingDirectory)
         _taskExtractionInterval = State(initialValue: TaskAssistantSettings.shared.extractionInterval)
         _taskMinConfidence = State(initialValue: TaskAssistantSettings.shared.minConfidence)
         _taskNotificationsEnabled = State(initialValue: TaskAssistantSettings.shared.notificationsEnabled)
@@ -282,6 +351,8 @@ struct SettingsContentView: View {
                     privacySection
                 case .account:
                     accountSection
+                case .aiChat:
+                    aiChatSection
                 case .advanced:
                     advancedSection
                 case .about:
@@ -296,6 +367,8 @@ struct SettingsContentView: View {
             loadBackendSettings()
             // Sync transcription state with appState
             isTranscribing = appState.isTranscribing
+            // Sync floating bar state
+            showAskOmiBar = FloatingControlBarManager.shared.isVisible
             // Refresh notification permission state
             appState.checkNotificationPermission()
         }
@@ -309,6 +382,11 @@ struct SettingsContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
+            selectedAdvancedSubsection = .taskAssistant
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+            selectedSection = .advanced
+            selectedAdvancedSubsection = .askOmiFloatingBar
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -320,76 +398,57 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Screen Analysis toggle
-            settingsCard {
+            // Rewind toggle (controls both screen + audio)
+            settingsCard(settingId: "general.rewind") {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Analysis")
-                            .font(.system(size: 16, weight: .semibold))
+                        Text("Rewind")
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? (isMonitoring ? "Analyzing your screen" : "Screen analysis is paused"))
-                            .font(.system(size: 13))
-                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isToggling {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: $isMonitoring)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isMonitoring) { _, newValue in
-                                toggleMonitoring(enabled: newValue)
+                        Text(permissionError ?? transcriptionError ?? {
+                            if isMonitoring && isTranscribing {
+                                return "Screen capture and audio are active"
+                            } else if !isMonitoring && !isTranscribing {
+                                return "Screen capture and audio are paused"
+                            } else if isMonitoring {
+                                return "Screen capture is active, audio is paused"
+                            } else {
+                                return "Audio is active, screen capture is paused"
                             }
-                    }
-                }
-            }
-
-            // Transcription toggle
-            settingsCard {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Transcription")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Transcription is paused"))
-                            .font(.system(size: 13))
-                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                        }())
+                            .scaledFont(size: 13)
+                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isTogglingTranscription {
+                    if isToggling || isTogglingTranscription {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
-                        Toggle("", isOn: $isTranscribing)
-                            .toggleStyle(.switch)
-                            .labelsHidden()
-                            .onChange(of: isTranscribing) { _, newValue in
+                        Toggle("", isOn: Binding(
+                            get: { isMonitoring || isTranscribing },
+                            set: { newValue in
+                                isMonitoring = newValue
+                                isTranscribing = newValue
+                                toggleMonitoring(enabled: newValue)
                                 toggleTranscription(enabled: newValue)
                             }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
                     }
                 }
             }
 
             // Notifications toggle
-            settingsCard {
+            settingsCard(settingId: "general.notifications") {
                 VStack(spacing: 12) {
                     HStack(spacing: 16) {
                         Circle()
@@ -402,11 +461,11 @@ struct SettingsContentView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Notifications")
-                                .font(.system(size: 16, weight: .semibold))
+                                .scaledFont(size: 16, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text(notificationStatusText)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(appState.isNotificationBannerDisabled ? OmiColors.warning : OmiColors.textTertiary)
                         }
 
@@ -415,7 +474,7 @@ struct SettingsContentView: View {
                         if appState.hasNotificationPermission && !appState.isNotificationBannerDisabled {
                             // Show enabled badge
                             Text("Enabled")
-                                .font(.system(size: 12, weight: .medium))
+                                .scaledFont(size: 12, weight: .medium)
                                 .foregroundColor(.green)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
@@ -426,10 +485,21 @@ struct SettingsContentView: View {
                         } else {
                             // Show button to enable or fix
                             Button(action: {
-                                appState.openNotificationPreferences()
+                                if appState.isNotificationBannerDisabled {
+                                    // Banners off — user needs to change style in System Settings
+                                    appState.openNotificationPreferences()
+                                } else {
+                                    // Auth not granted — try lsregister repair first
+                                    AnalyticsManager.shared.notificationRepairTriggered(
+                                        reason: "settings_fix_button",
+                                        previousStatus: "not_authorized",
+                                        currentStatus: "not_authorized"
+                                    )
+                                    appState.repairNotificationAndFallback()
+                                }
                             }) {
                                 Text(appState.isNotificationBannerDisabled ? "Fix" : "Enable")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .scaledFont(size: 12, weight: .semibold)
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 6)
@@ -446,11 +516,11 @@ struct SettingsContentView: View {
                     if appState.isNotificationBannerDisabled {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.warning)
 
                             Text("Banners disabled - you won't see visual alerts. Set style to \"Banners\" in System Settings.")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.warning)
 
                             Spacer()
@@ -464,30 +534,262 @@ struct SettingsContentView: View {
                 }
             }
 
+            // Ask Omi floating bar toggle
+            settingsCard(settingId: "general.askomi") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(showAskOmiBar ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Ask Omi")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(showAskOmiBar ? "Floating bar is visible (⌘\\)" : "Floating bar is hidden (⌘\\)")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $showAskOmiBar)
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .onChange(of: showAskOmiBar) { _, newValue in
+                            if newValue {
+                                FloatingControlBarManager.shared.show()
+                            } else {
+                                FloatingControlBarManager.shared.hide()
+                            }
+                        }
+                }
+            }
+
+            // Font Size
+            settingsCard(settingId: "general.fontsize") {
+                VStack(spacing: 12) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "textformat.size")
+                            .scaledFont(size: 16, weight: .medium)
+                            .foregroundColor(OmiColors.purplePrimary)
+                            .frame(width: 12)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Font Size")
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        if fontScaleSettings.scale != 1.0 {
+                            Button("Reset") {
+                                fontScaleSettings.resetToDefault()
+                            }
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(OmiColors.purplePrimary)
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        Text("A")
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
+                            .tint(OmiColors.purplePrimary)
+
+                        Text("A")
+                            .scaledFont(size: 18, weight: .medium)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Text("The quick brown fox jumps over the lazy dog")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+
+                    // Keyboard shortcuts for font size
+                    VStack(spacing: 6) {
+                        fontShortcutRow(label: "Increase font size", keys: "\u{2318}+")
+                        fontShortcutRow(label: "Decrease font size", keys: "\u{2318}\u{2212}")
+                        fontShortcutRow(label: "Reset font size", keys: "\u{2318}0")
+                    }
+                    .padding(.top, 4)
+
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            resetWindowToDefaultSize()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.uturn.backward")
+                                    .scaledFont(size: 11)
+                                Text("Reset Window Size")
+                                    .scaledFont(size: 12, weight: .medium)
+                            }
+                            .foregroundColor(OmiColors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.backgroundTertiary)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
         }
     }
 
     // MARK: - Rewind Section
 
+    @ObservedObject private var fontScaleSettings = FontScaleSettings.shared
     @ObservedObject private var rewindSettings = RewindSettings.shared
+
+    @State private var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 
     private var rewindSection: some View {
         VStack(spacing: 20) {
+            // Screen Capture toggle
+            settingsCard(settingId: "rewind.screencapture") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "rectangle.dashed.badge.record")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Screen Capture")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
+                            .scaledFont(size: 13)
+                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isToggling {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { isMonitoring },
+                            set: { newValue in
+                                isMonitoring = newValue
+                                toggleMonitoring(enabled: newValue)
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                    }
+                }
+            }
+
+            // Audio Recording toggle
+            settingsCard(settingId: "rewind.audiorecording") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "mic.fill")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Audio Recording")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
+                            .scaledFont(size: 13)
+                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isTogglingTranscription {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { isTranscribing },
+                            set: { newValue in
+                                isTranscribing = newValue
+                                toggleTranscription(enabled: newValue)
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                    }
+                }
+            }
+
+            // Storage Stats
+            settingsCard(settingId: "rewind.storage") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "internaldrive.fill")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Storage")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if let stats = rewindStats {
+                                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            } else {
+                                Text("Loading...")
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                }
+            }
+            .task {
+                rewindStats = await RewindIndexer.shared.getStats()
+            }
+
             // Excluded Apps
-            settingsCard {
+            settingsCard(settingId: "rewind.excludedapps") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.slash.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Excluded Apps")
-                                .font(.system(size: 15, weight: .medium))
+                                .scaledFont(size: 15, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text("Screen capture is paused when these apps are active")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -509,10 +811,10 @@ struct SettingsContentView: View {
                             Spacer()
                             VStack(spacing: 8) {
                                 Image(systemName: "checkmark.shield")
-                                    .font(.system(size: 24))
+                                    .scaledFont(size: 24)
                                     .foregroundColor(OmiColors.textTertiary)
                                 Text("No apps excluded")
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .padding(.vertical, 16)
@@ -545,20 +847,20 @@ struct SettingsContentView: View {
             }
 
             // Battery Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.battery") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "battery.75percent")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Battery Optimization")
-                                .font(.system(size: 15, weight: .medium))
+                                .scaledFont(size: 15, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text("Pause text recognition on battery to save energy. OCR runs automatically when plugged back in.")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -572,20 +874,20 @@ struct SettingsContentView: View {
             }
 
             // Retention Settings
-            settingsCard {
+            settingsCard(settingId: "rewind.retention") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "clock.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Data Retention")
-                                .font(.system(size: 15, weight: .medium))
+                                .scaledFont(size: 15, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text("How long to keep screen recordings")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -610,15 +912,15 @@ struct SettingsContentView: View {
     private var transcriptionSection: some View {
         VStack(spacing: 20) {
             // Language Mode
-            settingsCard {
+            settingsCard(settingId: "transcription.languagemode") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "globe")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Language Mode")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -633,21 +935,21 @@ struct SettingsContentView: View {
                     }) {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 20))
+                                .scaledFont(size: 20)
                                 .foregroundColor(transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Auto-Detect (Multi-Language)")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .scaledFont(size: 14, weight: .medium)
                                     .foregroundColor(OmiColors.textPrimary)
 
                                 Text("Automatically detects and transcribes:")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
 
                                 // List of supported languages
                                 Text("English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian, Dutch")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                                     .foregroundColor(OmiColors.textTertiary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -675,23 +977,23 @@ struct SettingsContentView: View {
                     }) {
                         HStack(alignment: .top, spacing: 12) {
                             Image(systemName: !transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 20))
+                                .scaledFont(size: 20)
                                 .foregroundColor(!transcriptionAutoDetect ? OmiColors.purplePrimary : OmiColors.textTertiary)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Single Language (Better Accuracy)")
-                                    .font(.system(size: 14, weight: .medium))
+                                    .scaledFont(size: 14, weight: .medium)
                                     .foregroundColor(OmiColors.textPrimary)
 
                                 Text("Best for speaking in one specific language")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
 
                                 // Language picker (only shown when single language is selected)
                                 if !transcriptionAutoDetect {
                                     HStack {
                                         Text("Language:")
-                                            .font(.system(size: 12))
+                                            .scaledFont(size: 12)
                                             .foregroundColor(OmiColors.textTertiary)
 
                                         Picker("", selection: $transcriptionLanguage) {
@@ -728,31 +1030,31 @@ struct SettingsContentView: View {
                     // Info about language support
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
 
                         Text("Single language mode supports 42 languages including Ukrainian, Russian, and more.")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
             }
 
             // Custom Vocabulary
-            settingsCard {
+            settingsCard(settingId: "transcription.vocabulary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.book.closed")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Custom Vocabulary")
-                                .font(.system(size: 15, weight: .medium))
+                                .scaledFont(size: 15, weight: .medium)
                                 .foregroundColor(OmiColors.textPrimary)
 
                             Text("Improve recognition of names, brands, and technical terms")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -760,7 +1062,7 @@ struct SettingsContentView: View {
 
                         if !vocabularyList.isEmpty {
                             Text("\(vocabularyList.count) terms")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     }
@@ -771,14 +1073,14 @@ struct SettingsContentView: View {
                             ForEach(vocabularyList, id: \.self) { term in
                                 HStack(spacing: 4) {
                                     Text(term)
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundColor(OmiColors.textSecondary)
 
                                     Button(action: {
                                         removeVocabularyWord(term)
                                     }) {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 9, weight: .medium))
+                                            .scaledFont(size: 9, weight: .medium)
                                             .foregroundColor(OmiColors.textTertiary)
                                     }
                                     .buttonStyle(.plain)
@@ -808,7 +1110,7 @@ struct SettingsContentView: View {
                             addVocabularyWord()
                         }) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 20))
+                                .scaledFont(size: 20)
                                 .foregroundColor(newVocabularyWord.trimmingCharacters(in: .whitespaces).isEmpty ? OmiColors.textTertiary : OmiColors.purplePrimary)
                         }
                         .buttonStyle(.plain)
@@ -816,7 +1118,7 @@ struct SettingsContentView: View {
                     }
 
                     Text("Press Enter or click + to add • Click × to remove")
-                        .font(.system(size: 11))
+                        .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -872,15 +1174,15 @@ struct SettingsContentView: View {
     private var notificationsSection: some View {
         VStack(spacing: 20) {
             // Notifications
-            settingsCard {
+            settingsCard(settingId: "notifications.settings") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Notifications")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -894,14 +1196,14 @@ struct SettingsContentView: View {
                     }
 
                     Text("Control how often you receive notifications")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if notificationsEnabled {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Frequency", subtitle: "How often to receive notifications") {
+                        settingRow(title: "Frequency", subtitle: "How often to receive notifications", settingId: "notifications.frequency") {
                             Picker("", selection: $notificationFrequency) {
                                 ForEach(frequencyOptions, id: \.0) { option in
                                     Text(option.1).tag(option.0)
@@ -914,7 +1216,7 @@ struct SettingsContentView: View {
                             }
                         }
 
-                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes") {
+                        settingRow(title: "Focus Notifications", subtitle: "Show notification on focus changes", settingId: "notifications.focus") {
                             Toggle("", isOn: $focusNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -924,7 +1226,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted") {
+                        settingRow(title: "Task Notifications", subtitle: "Show notification when a task is extracted", settingId: "notifications.task") {
                             Toggle("", isOn: $taskNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -934,7 +1236,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated") {
+                        settingRow(title: "Advice Notifications", subtitle: "Show notification when advice is generated", settingId: "notifications.advice") {
                             Toggle("", isOn: $adviceNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -944,7 +1246,7 @@ struct SettingsContentView: View {
                                 }
                         }
 
-                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted") {
+                        settingRow(title: "Memory Notifications", subtitle: "Show notification when a memory is extracted", settingId: "notifications.memory") {
                             Toggle("", isOn: $memoryNotificationsEnabled)
                                 .toggleStyle(.switch)
                                 .labelsHidden()
@@ -958,15 +1260,15 @@ struct SettingsContentView: View {
             }
 
             // Daily Summary
-            settingsCard {
+            settingsCard(settingId: "notifications.dailysummary") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "text.badge.checkmark")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Daily Summary")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -980,14 +1282,14 @@ struct SettingsContentView: View {
                     }
 
                     Text("Receive a daily summary of your conversations and activities")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if dailySummaryEnabled {
                         Divider()
                             .background(OmiColors.backgroundQuaternary)
 
-                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary") {
+                        settingRow(title: "Summary Time", subtitle: "When to send your daily summary", settingId: "notifications.summarytime") {
                             Picker("", selection: $dailySummaryHour) {
                                 ForEach(hourOptions, id: \.self) { hour in
                                     Text(formatHour(hour)).tag(hour)
@@ -1009,92 +1311,180 @@ struct SettingsContentView: View {
     // MARK: - Privacy Section
 
     private var privacySection: some View {
-        VStack(spacing: 20) {
-            // Recording Permission
-            settingsCard {
-                VStack(alignment: .leading, spacing: 16) {
+        VStack(spacing: 16) {
+            // Data Controls
+            settingsCard(settingId: "privacy.storerecordings") {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.purplePrimary)
+                            .frame(width: 20)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Store Recordings")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            Text("Allow Omi to store audio recordings of your conversations")
-                                .font(.system(size: 13))
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
+                        Text("Store Recordings")
+                            .scaledFont(size: 14, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
 
                         Toggle("", isOn: $recordingPermissionEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .controlSize(.small)
                             .onChange(of: recordingPermissionEnabled) { _, newValue in
                                 updateRecordingPermission(newValue)
                             }
                     }
-                }
-            }
+                    .padding(.bottom, 4)
 
-            // Private Cloud Sync
-            settingsCard {
-                VStack(alignment: .leading, spacing: 16) {
+                    Text("Allow Omi to store audio recordings of your conversations")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.leading, 34)
+
+                    Divider()
+                        .padding(.vertical, 12)
+
                     HStack {
                         Image(systemName: "cloud.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.purplePrimary)
+                            .frame(width: 20)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Private Cloud Sync")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(OmiColors.textPrimary)
-
-                            Text("Sync your data securely to your private cloud storage")
-                                .font(.system(size: 13))
-                                .foregroundColor(OmiColors.textTertiary)
-                        }
+                        Text("Private Cloud Sync")
+                            .scaledFont(size: 14, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
 
                         Toggle("", isOn: $privateCloudSyncEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
+                            .controlSize(.small)
                             .onChange(of: privateCloudSyncEnabled) { _, newValue in
                                 updatePrivateCloudSync(newValue)
                             }
                     }
+                    .padding(.bottom, 4)
+
+                    Text("Sync your data securely to your private cloud storage")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.leading, 34)
                 }
             }
 
-            // Data Management
-            settingsCard {
-                HStack(spacing: 16) {
-                    Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 16))
-                        .foregroundColor(OmiColors.purplePrimary)
+            // Encryption
+            settingsCard(settingId: "privacy.encryption") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.purplePrimary)
+                            .frame(width: 20)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Data & Privacy")
-                            .font(.system(size: 15, weight: .medium))
+                        Text("Encryption")
+                            .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
-
-                        Text("Manage your data and privacy settings")
-                            .font(.system(size: 13))
-                            .foregroundColor(OmiColors.textTertiary)
                     }
 
-                    Spacer()
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .scaledFont(size: 12)
+                            .foregroundColor(.green)
+                            .frame(width: 20)
 
-                    Button("Manage") {
-                        if let url = URL(string: "https://omi.me/privacy") {
-                            NSWorkspace.shared.open(url)
+                        Text("Server-side encryption")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+
+                        Text("Active")
+                            .scaledFont(size: 10, weight: .semibold)
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(3)
+                    }
+                    .padding(.leading, 14)
+
+                    Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.leading, 34)
+                }
+            }
+
+            // What We Track
+            settingsCard(settingId: "privacy.tracking") {
+                VStack(alignment: .leading, spacing: 0) {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isTrackingExpanded.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "list.bullet")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.purplePrimary)
+                                .frame(width: 20)
+
+                            Text("What We Track")
+                                .scaledFont(size: 14, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .scaledFont(size: 11, weight: .semibold)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .rotationEffect(.degrees(isTrackingExpanded ? 90 : 0))
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.plain)
+
+                    if isTrackingExpanded {
+                        VStack(alignment: .leading, spacing: 6) {
+                            trackingItem("Onboarding steps completed")
+                            trackingItem("Settings changes")
+                            trackingItem("App installations and usage")
+                            trackingItem("Device connection status")
+                            trackingItem("Transcript processing events")
+                            trackingItem("Conversation creation and updates")
+                            trackingItem("Memory extraction events")
+                            trackingItem("Chat interactions")
+                            trackingItem("Speech profile creation")
+                            trackingItem("Focus session events")
+                            trackingItem("App open/close events")
+                        }
+                        .padding(.top, 10)
+                        .padding(.leading, 34)
+                        .transition(.opacity)
+                    }
+                }
+            }
+
+            // Privacy Guarantees
+            settingsCard(settingId: "privacy.privacy") {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "hand.raised.fill")
+                            .scaledFont(size: 14)
+                            .foregroundColor(OmiColors.purplePrimary)
+                            .frame(width: 20)
+
+                        Text("Privacy Guarantees")
+                            .scaledFont(size: 14, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        privacyBullet("Anonymous tracking with randomly generated IDs")
+                        privacyBullet("No personal info stored in analytics")
+                        privacyBullet("Data is never sold or shared with third parties")
+                        privacyBullet("Opt out of tracking at any time")
+                    }
+                    .padding(.leading, 34)
                 }
             }
         }
@@ -1104,20 +1494,20 @@ struct SettingsContentView: View {
 
     private var accountSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "account.account") {
                 HStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
-                        .font(.system(size: 40))
+                        .scaledFont(size: 40)
                         .foregroundColor(OmiColors.textTertiary)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         if let email = AuthState.shared.userEmail {
                             Text(email)
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     }
@@ -1125,6 +1515,7 @@ struct SettingsContentView: View {
                     Spacer()
 
                     Button("Sign Out") {
+                        appState.stopTranscription()
                         ProactiveAssistantsPlugin.shared.stopMonitoring()
                         try? AuthService.shared.signOut()
                     }
@@ -1135,16 +1526,16 @@ struct SettingsContentView: View {
 //            settingsCard {
 //                HStack(spacing: 16) {
 //                    Image(systemName: "bolt.fill")
-//                        .font(.system(size: 16))
+//                        .scaledFont(size: 16)
 //                        .foregroundColor(.yellow)
 //
 //                    VStack(alignment: .leading, spacing: 4) {
 //                        Text("Upgrade to Pro")
-//                            .font(.system(size: 15, weight: .medium))
+//                            .scaledFont(size: 15, weight: .medium)
 //                            .foregroundColor(OmiColors.textPrimary)
 //
 //                        Text("Unlock all features and unlimited usage")
-//                            .font(.system(size: 13))
+//                            .scaledFont(size: 13)
 //                            .foregroundColor(OmiColors.textTertiary)
 //                    }
 //
@@ -1159,6 +1550,719 @@ struct SettingsContentView: View {
 //                    .tint(OmiColors.purplePrimary)
 //                }
 //            }
+        }
+    }
+
+    // MARK: - AI Chat Section
+
+    private var aiChatSection: some View {
+        VStack(spacing: 20) {
+            // AI Provider card
+            settingsCard(settingId: "aichat.provider") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "cpu")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("AI Provider")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Picker("", selection: $chatBridgeMode) {
+                            Text("Omi account").tag("agentSDK")
+                            Text("Your Claude Account").tag("claudeCode")
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 200)
+                        .onChange(of: chatBridgeMode) { _, newMode in
+                            if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
+                                Task {
+                                    await chatProvider?.switchBridgeMode(to: mode)
+                                }
+                            }
+                        }
+                    }
+
+                    Text(chatBridgeMode == "claudeCode"
+                         ? "Using your Claude Pro/Max subscription. You'll be prompted to sign in with your Claude account."
+                         : "Using your Omi account.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
+                        Divider()
+
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .scaledFont(size: 12)
+                            Text("Connected to Claude")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textSecondary)
+
+                            Spacer()
+
+                            Button("Disconnect") {
+                                Task {
+                                    await chatProvider?.disconnectClaude()
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .scaledFont(size: 12, weight: .medium)
+                            .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                chatProvider?.checkClaudeConnectionStatus()
+            }
+
+            // Ask Mode card
+            settingsCard(settingId: "aichat.askmode") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Ask Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $askModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                    }
+
+                    Text("When enabled, shows an Ask/Act toggle in the chat. Ask mode restricts the AI to read-only actions. When disabled, the AI always runs in Act mode.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
+            // Workspace card
+            settingsCard(settingId: "aichat.workspace") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "folder")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Workspace")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Button("Browse...") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.message = "Select a project directory"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                aiChatWorkingDirectory = url.path
+                                refreshAIChatConfig()
+                                // Update ChatProvider
+                                chatProvider?.aiChatWorkingDirectory = url.path
+                                Task { await chatProvider?.discoverClaudeConfig() }
+                                if chatProvider?.workingDirectory == nil {
+                                    chatProvider?.workingDirectory = url.path
+                                }
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        if !aiChatWorkingDirectory.isEmpty {
+                            Button("Clear") {
+                                aiChatWorkingDirectory = ""
+                                refreshAIChatConfig()
+                                chatProvider?.aiChatWorkingDirectory = ""
+                                Task { await chatProvider?.discoverClaudeConfig() }
+                                chatProvider?.workingDirectory = nil
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+
+                    if !aiChatWorkingDirectory.isEmpty {
+                        Text(aiChatWorkingDirectory)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text("Project-level CLAUDE.md and skills will be discovered from this directory")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("No workspace set. Set a project directory to discover project-level CLAUDE.md and skills.")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+            }
+
+            // CLAUDE.md card
+            settingsCard(settingId: "aichat.claudemd") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "doc.text")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("CLAUDE.md")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+                    }
+
+                    // Global CLAUDE.md
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Global")
+                                .scaledFont(size: 11, weight: .medium)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                                )
+
+                            Spacer()
+
+                            if aiChatClaudeMdContent != nil {
+                                Button("View") {
+                                    fileViewerTitle = "Global CLAUDE.md"
+                                    fileViewerContent = aiChatClaudeMdContent ?? ""
+                                    showFileViewer = true
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Toggle("", isOn: $claudeMdEnabled)
+                                    .toggleStyle(.switch)
+                                    .controlSize(.small)
+                                    .labelsHidden()
+                            }
+                        }
+
+                        if let path = aiChatClaudeMdPath, let content = aiChatClaudeMdContent {
+                            let sizeKB = Double(content.utf8.count) / 1024.0
+                            Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text("No CLAUDE.md found at ~/.claude/CLAUDE.md")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
+                    // Project CLAUDE.md (only show if workspace is set)
+                    if !aiChatWorkingDirectory.isEmpty {
+                        Divider().opacity(0.3)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Project")
+                                    .scaledFont(size: 11, weight: .medium)
+                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .fill(OmiColors.purplePrimary.opacity(0.1))
+                                    )
+
+                                Spacer()
+
+                                if aiChatProjectClaudeMdContent != nil {
+                                    Button("View") {
+                                        fileViewerTitle = "Project CLAUDE.md"
+                                        fileViewerContent = aiChatProjectClaudeMdContent ?? ""
+                                        showFileViewer = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+
+                                    Toggle("", isOn: $projectClaudeMdEnabled)
+                                        .toggleStyle(.switch)
+                                        .controlSize(.small)
+                                        .labelsHidden()
+                                }
+                            }
+
+                            if let path = aiChatProjectClaudeMdPath, let content = aiChatProjectClaudeMdContent {
+                                let sizeKB = Double(content.utf8.count) / 1024.0
+                                Text("\(path) (\(String(format: "%.1f", sizeKB)) KB)")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text("No CLAUDE.md found at \(aiChatWorkingDirectory)/CLAUDE.md")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Skills card
+            settingsCard(settingId: "aichat.skills") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        if aiChatProjectDiscoveredSkills.isEmpty {
+                            Text("Skills (\(aiChatDiscoveredSkills.count) discovered)")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+                        } else {
+                            Text("Skills (\(aiChatDiscoveredSkills.count) global + \(aiChatProjectDiscoveredSkills.count) project)")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+                        }
+
+                        Spacer()
+
+                        Button(action: { refreshAIChatConfig() }) {
+                            Image(systemName: "arrow.clockwise")
+                                .scaledFont(size: 13)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    let allSkills: [(skill: (name: String, description: String, path: String), origin: String)] =
+                        aiChatDiscoveredSkills.map { ($0, "Global") } +
+                        aiChatProjectDiscoveredSkills.map { ($0, "Project") }
+
+                    if allSkills.isEmpty {
+                        Text("No skills found in ~/.claude/skills/")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    } else {
+                        Text("Skill descriptions are included in the AI chat system prompt")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        // Search field
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            TextField("Search skills...", text: $skillSearchQuery)
+                                .textFieldStyle(.plain)
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            if !skillSearchQuery.isEmpty {
+                                Button(action: { skillSearchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .scaledFont(size: 12)
+                                        .foregroundColor(OmiColors.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                        )
+
+                        ScrollView {
+                            let filteredSkills = allSkills.enumerated().filter { _, item in
+                                skillSearchQuery.isEmpty ||
+                                item.skill.name.localizedCaseInsensitiveContains(skillSearchQuery) ||
+                                item.skill.description.localizedCaseInsensitiveContains(skillSearchQuery)
+                            }
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(filteredSkills.enumerated()), id: \.offset) { filteredIndex, item in
+                                    let skill = item.element.skill
+                                    let origin = item.element.origin
+                                    HStack(spacing: 10) {
+                                        Toggle("", isOn: Binding(
+                                            get: { !aiChatDisabledSkills.contains(skill.name) },
+                                            set: { enabled in
+                                                if enabled {
+                                                    aiChatDisabledSkills.remove(skill.name)
+                                                } else {
+                                                    aiChatDisabledSkills.insert(skill.name)
+                                                }
+                                                saveDisabledSkills()
+                                            }
+                                        ))
+                                        .toggleStyle(.checkbox)
+                                        .labelsHidden()
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            HStack(spacing: 6) {
+                                                Text(skill.name)
+                                                    .scaledFont(size: 13, weight: .medium)
+                                                    .foregroundColor(OmiColors.textPrimary)
+
+                                                Text(origin)
+                                                    .scaledFont(size: 9, weight: .medium)
+                                                    .foregroundColor(origin == "Project" ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                                                    .padding(.horizontal, 4)
+                                                    .padding(.vertical, 1)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 3)
+                                                            .fill(origin == "Project" ? OmiColors.purplePrimary.opacity(0.1) : OmiColors.backgroundPrimary.opacity(0.5))
+                                                    )
+                                            }
+
+                                            if !skill.description.isEmpty {
+                                                Text(skill.description)
+                                                    .scaledFont(size: 11)
+                                                    .foregroundColor(OmiColors.textTertiary)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
+                                            }
+                                        }
+
+                                        Spacer()
+
+                                        Button("View") {
+                                            fileViewerTitle = "\(skill.name)/SKILL.md"
+                                            fileViewerContent = (try? String(contentsOfFile: skill.path, encoding: .utf8)) ?? "Unable to read file"
+                                            showFileViewer = true
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.mini)
+                                    }
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 4)
+
+                                    if filteredIndex < filteredSkills.count - 1 {
+                                        Divider()
+                                            .opacity(0.3)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 300)
+                    }
+                }
+            }
+
+            // Browser Extension card
+            settingsCard(settingId: "aichat.browserextension") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "globe")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Browser Extension")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        if !playwrightExtensionToken.isEmpty {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 6, height: 6)
+                                Text("Connected")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Toggle("", isOn: $playwrightUseExtension)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: playwrightUseExtension) { _, _ in
+                            }
+                    }
+
+                    Text("Lets the AI use your Chrome browser with all your logged-in sessions.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if playwrightUseExtension {
+                        if playwrightExtensionToken.isEmpty {
+                            // No token — show "Set Up" button
+                            Button(action: {
+                                showBrowserSetup = true
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .scaledFont(size: 12)
+                                    Text("Set Up")
+                                        .scaledFont(size: 13, weight: .medium)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                        } else {
+                            // Token is set — show compact view
+                            HStack(spacing: 8) {
+                                Text("Token")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textTertiary)
+
+                                Text(String(playwrightExtensionToken.prefix(8)) + "...")
+                                    .scaledFont(size: 12, weight: .medium)
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .font(.system(.body, design: .monospaced))
+
+                                Spacer()
+
+                                Button(action: {
+                                    showBrowserSetup = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "arrow.clockwise")
+                                            .scaledFont(size: 11)
+                                        Text("Reconfigure")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                                Button(action: {
+                                    playwrightExtensionToken = ""
+                                    UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "xmark")
+                                            .scaledFont(size: 11)
+                                        Text("Reset")
+                                            .scaledFont(size: 12)
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dev Mode card
+            settingsCard(settingId: "aichat.devmode") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "hammer")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        Text("Dev Mode")
+                            .scaledFont(size: 15, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+
+                        Toggle("", isOn: $devModeEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.small)
+                            .labelsHidden()
+                            .onChange(of: devModeEnabled) { _, newValue in
+                                AnalyticsManager.shared.settingToggled(setting: "dev_mode", enabled: newValue)
+                            }
+                    }
+
+                    Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    if devModeEnabled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .scaledFont(size: 12)
+                                Text("AI can modify UI, add features, create custom SQLite tables")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                            }
+                            HStack(spacing: 6) {
+                                Image(systemName: "lock.fill")
+                                    .foregroundColor(.orange)
+                                    .scaledFont(size: 12)
+                                Text("Backend API, auth, and sync logic are read-only")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear {
+            refreshAIChatConfig()
+            playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+        }
+        .sheet(isPresented: $showFileViewer) {
+            fileViewerSheet
+        }
+        .sheet(isPresented: $showBrowserSetup) {
+            BrowserExtensionSetup(
+                onComplete: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                onDismiss: {
+                    showBrowserSetup = false
+                    playwrightExtensionToken = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
+                },
+                chatProvider: chatProvider
+            )
+            .fixedSize()
+        }
+    }
+
+    private var fileViewerSheet: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text(fileViewerTitle)
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button(action: { showFileViewer = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .scaledFont(size: 18)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+
+            Divider().opacity(0.3)
+
+            // Content
+            ScrollView {
+                Text(fileViewerContent)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(OmiColors.textSecondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+        }
+        .frame(width: 600, height: 500)
+        .background(OmiColors.backgroundSecondary)
+    }
+
+    private func refreshAIChatConfig() {
+        // Pull skill and CLAUDE.md data directly from ChatProvider (already discovered at startup).
+        // Fall back to reading from disk only when ChatProvider is unavailable.
+        if let provider = chatProvider {
+            aiChatClaudeMdContent = provider.claudeMdContent
+            aiChatClaudeMdPath = provider.claudeMdPath
+            aiChatDiscoveredSkills = provider.discoveredSkills
+            aiChatProjectClaudeMdContent = provider.projectClaudeMdContent
+            aiChatProjectClaudeMdPath = provider.projectClaudeMdPath
+            aiChatProjectDiscoveredSkills = provider.projectDiscoveredSkills
+            loadDisabledSkills()
+            return
+        }
+
+        // Fallback: read from disk (used when Settings is shown before ChatProvider initializes)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let claudeDir = "\(home)/.claude"
+
+        let mdPath = "\(claudeDir)/CLAUDE.md"
+        if FileManager.default.fileExists(atPath: mdPath),
+           let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
+            aiChatClaudeMdContent = content
+            aiChatClaudeMdPath = mdPath
+        } else {
+            aiChatClaudeMdContent = nil
+            aiChatClaudeMdPath = nil
+        }
+
+        var skills: [(name: String, description: String, path: String)] = []
+        let skillsDir = "\(claudeDir)/skills"
+        if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
+            for dir in skillDirs.sorted() {
+                let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+                if FileManager.default.fileExists(atPath: skillPath),
+                   let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                    let desc = ChatProvider.extractSkillDescription(from: content)
+                    skills.append((name: dir, description: desc, path: skillPath))
+                }
+            }
+        }
+        aiChatDiscoveredSkills = skills
+
+        let workspace = aiChatWorkingDirectory
+        if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
+            let projectMdPath = "\(workspace)/CLAUDE.md"
+            if FileManager.default.fileExists(atPath: projectMdPath),
+               let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
+                aiChatProjectClaudeMdContent = content
+                aiChatProjectClaudeMdPath = projectMdPath
+            } else {
+                aiChatProjectClaudeMdContent = nil
+                aiChatProjectClaudeMdPath = nil
+            }
+
+            var projectSkills: [(name: String, description: String, path: String)] = []
+            let projectSkillsDir = "\(workspace)/.claude/skills"
+            if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
+                for dir in skillDirs.sorted() {
+                    let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
+                    if FileManager.default.fileExists(atPath: skillPath),
+                       let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
+                        let desc = ChatProvider.extractSkillDescription(from: content)
+                        projectSkills.append((name: dir, description: desc, path: skillPath))
+                    }
+                }
+            }
+            aiChatProjectDiscoveredSkills = projectSkills
+        } else {
+            aiChatProjectClaudeMdContent = nil
+            aiChatProjectClaudeMdPath = nil
+            aiChatProjectDiscoveredSkills = []
+        }
+
+        loadDisabledSkills()
+    }
+
+    private func loadDisabledSkills() {
+        let json = UserDefaults.standard.string(forKey: "disabledSkillsJSON") ?? ""
+        guard let data = json.data(using: .utf8),
+              let names = try? JSONDecoder().decode([String].self, from: data) else {
+            aiChatDisabledSkills = [] // Default: nothing disabled = all enabled
+            return
+        }
+        aiChatDisabledSkills = Set(names)
+    }
+
+    private func saveDisabledSkills() {
+        if let data = try? JSONEncoder().encode(Array(aiChatDisabledSkills)),
+           let json = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(json, forKey: "disabledSkillsJSON")
         }
     }
 
@@ -1179,17 +2283,49 @@ struct SettingsContentView: View {
     }
 
     private var advancedSection: some View {
+        Group {
+            switch selectedAdvancedSubsection {
+            case .aiUserProfile, .none:
+                aiUserProfileSubsection
+            case .stats:
+                statsSubsection
+            case .featureTiers:
+                featureTiersSubsection
+            case .focusAssistant:
+                focusAssistantSubsection
+            case .taskAssistant:
+                taskAssistantSubsection
+            case .adviceAssistant:
+                adviceAssistantSubsection
+            case .memoryAssistant:
+                memoryAssistantSubsection
+            case .analysisThrottle:
+                analysisThrottleSubsection
+            case .goals:
+                goalsSubsection
+            case .askOmiFloatingBar:
+                askOmiFloatingBarSubsection
+            case .preferences:
+                preferencesSubsection
+            case .troubleshooting:
+                troubleshootingSubsection
+            }
+        }
+    }
+
+    // MARK: - Advanced Subsections
+
+    private var aiUserProfileSubsection: some View {
         VStack(spacing: 20) {
-            // AI User Profile card
-            settingsCard {
+            settingsCard(settingId: "advanced.aiuserprofile") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "brain")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("AI User Profile")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1202,7 +2338,7 @@ struct SettingsContentView: View {
                                 regenerateAIProfile()
                             }) {
                                 Text(aiProfileText == nil ? "Generate Now" : "Regenerate")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
@@ -1215,7 +2351,7 @@ struct SettingsContentView: View {
                     if let text = aiProfileText {
                         if isEditingAIProfile {
                             TextEditor(text: $aiProfileEditText)
-                                .font(.system(size: 13, design: .monospaced))
+                                .scaledFont(size: 13, design: .monospaced)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .scrollContentBackground(.hidden)
                                 .frame(maxHeight: 200)
@@ -1248,7 +2384,7 @@ struct SettingsContentView: View {
                         } else {
                             ScrollView {
                                 Text(text)
-                                    .font(.system(size: 13, design: .monospaced))
+                                    .scaledFont(size: 13, design: .monospaced)
                                     .foregroundColor(OmiColors.textSecondary)
                                     .textSelection(.enabled)
                                     .if_available_writingToolsNone()
@@ -1259,7 +2395,7 @@ struct SettingsContentView: View {
                             HStack {
                                 if let date = aiProfileGeneratedAt {
                                     Text("Last updated: \(date.formatted(.relative(presentation: .named)))")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundColor(OmiColors.textTertiary)
                                 }
 
@@ -1267,7 +2403,7 @@ struct SettingsContentView: View {
 
                                 if aiProfileDataSourcesUsed > 0 {
                                     Text("Data sources: \(aiProfileDataSourcesUsed) items")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                         .foregroundColor(OmiColors.textTertiary)
                                 }
 
@@ -1276,7 +2412,7 @@ struct SettingsContentView: View {
                                     isEditingAIProfile = true
                                 }) {
                                     Image(systemName: "pencil")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Edit profile")
@@ -1285,7 +2421,7 @@ struct SettingsContentView: View {
                                     deleteCurrentAIProfile()
                                 }) {
                                     Image(systemName: "trash")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                         .foregroundColor(.red.opacity(0.7))
                                 }
                                 .buttonStyle(.borderless)
@@ -1294,7 +2430,7 @@ struct SettingsContentView: View {
                         }
                     } else if !isGeneratingAIProfile {
                         Text("Your AI user profile will be generated automatically on next launch, or click \"Generate Now\" to create it now.")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     } else {
                         HStack {
@@ -1302,7 +2438,7 @@ struct SettingsContentView: View {
                             VStack(spacing: 8) {
                                 ProgressView()
                                 Text("Generating profile...")
-                                    .font(.system(size: 13))
+                                    .scaledFont(size: 13)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             Spacer()
@@ -1311,17 +2447,41 @@ struct SettingsContentView: View {
                     }
                 }
             }
-            .id(AdvancedSubsection.aiUserProfile)
+        }
+        .task {
+            // Try loading immediately (covers all restarts after first generation)
+            if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                aiProfileId = profile.id
+                aiProfileText = profile.profileText
+                aiProfileGeneratedAt = profile.generatedAt
+                aiProfileDataSourcesUsed = profile.dataSourcesUsed
+                return
+            }
+            // No profile yet — first-ever generation may be in progress, poll briefly
+            for _ in 0..<6 {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                    aiProfileId = profile.id
+                    aiProfileText = profile.profileText
+                    aiProfileGeneratedAt = profile.generatedAt
+                    aiProfileDataSourcesUsed = profile.dataSourcesUsed
+                    return
+                }
+            }
+        }
+    }
 
-            settingsCard {
+    private var statsSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.stats") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "chart.bar")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Your Stats")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1336,7 +2496,7 @@ struct SettingsContentView: View {
                         if isLoadingChatMessages {
                             HStack {
                                 Text("AI Chat Messages")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Spacer()
                                 ProgressView()
@@ -1365,23 +2525,31 @@ struct SettingsContentView: View {
                         statRowLoading(label: "Memories")
                     } else {
                         Text("Unable to load stats")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 }
             }
-            .id(AdvancedSubsection.stats)
+        }
+        .task {
+            await loadAdvancedStats()
+        }
+        .task {
+            await loadChatMessageCount()
+        }
+    }
 
-            // Feature Tiers card
-            settingsCard {
+    private var featureTiersSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.featuretiers") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 10) {
                         Image(systemName: "lock.shield")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Feature Tiers")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1406,7 +2574,7 @@ struct SettingsContentView: View {
                             .background(OmiColors.backgroundQuaternary)
 
                         Text("Progress")
-                            .font(.system(size: 13, weight: .semibold))
+                            .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textSecondary)
 
                         // Tier 1 — always unlocked
@@ -1458,18 +2626,20 @@ struct SettingsContentView: View {
                     }
                 }
             }
-            .id(AdvancedSubsection.featureTiers)
+        }
+    }
 
-            // Focus Assistant Settings
-            settingsCard {
+    private var focusAssistantSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.focusassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "eye.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Focus Assistant")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1484,14 +2654,14 @@ struct SettingsContentView: View {
                     }
 
                     Text("Detect distractions and help you stay focused")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if focusEnabled {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes") {
+                    settingRow(title: "Visual Glow Effect", subtitle: "Show colored border when focus changes", settingId: "advanced.focusassistant.glow") {
                         Toggle("", isOn: $glowOverlayEnabled)
                             .toggleStyle(.switch)
                             .labelsHidden()
@@ -1505,7 +2675,7 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts") {
+                    settingRow(title: "Focus Cooldown", subtitle: "Minimum time between distraction alerts", settingId: "advanced.focusassistant.cooldown") {
                         Picker("", selection: $cooldownInterval) {
                             ForEach(cooldownOptions, id: \.self) { minutes in
                                 Text(formatMinutes(minutes)).tag(minutes)
@@ -1519,15 +2689,15 @@ struct SettingsContentView: View {
                         }
                     }
 
-                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis") {
+                    settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
                         Button(action: {
                             PromptEditorWindow.show()
                         }) {
                             HStack(spacing: 4) {
                                 Text("Edit")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                 Image(systemName: "arrow.up.right.square")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                             }
                         }
                         .buttonStyle(.bordered)
@@ -1541,10 +2711,10 @@ struct SettingsContentView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Excluded Apps")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("Focus coaching won't trigger for these apps")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -1556,7 +2726,7 @@ struct SettingsContentView: View {
                                         AppIconView(appName: appName, size: 20)
 
                                         Text(appName)
-                                            .font(.system(size: 13))
+                                            .scaledFont(size: 13)
                                             .foregroundColor(OmiColors.textTertiary)
 
                                         Spacer()
@@ -1567,7 +2737,7 @@ struct SettingsContentView: View {
                             }
                         } label: {
                             Text("System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .tint(OmiColors.textTertiary)
@@ -1597,18 +2767,20 @@ struct SettingsContentView: View {
                     } // end if focusEnabled
                 }
             }
-            .id(AdvancedSubsection.focusAssistant)
+        }
+    }
 
-            // Task Assistant Settings
-            settingsCard {
+    private var taskAssistantSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.taskassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "checklist")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Task Assistant")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1623,10 +2795,75 @@ struct SettingsContentView: View {
                     }
 
                     Text("Extract tasks and action items from your screen")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if taskEnabled {
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    // Task Agent (chat / investigate) toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Task Agent")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text("Investigate button and sidebar chat for tasks")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $taskChatAgentEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: taskChatAgentEnabled) { _, newValue in
+                                TaskAgentSettings.shared.isChatEnabled = newValue
+                            }
+                    }
+
+                    // Working Directory (shared by chat agent and terminal agent)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Working Directory")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text(taskAgentWorkingDirectory.isEmpty ? "Not set — chat agent defaults to ~" : taskAgentWorkingDirectory)
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        Spacer()
+
+                        Button("Browse...") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.canCreateDirectories = true
+                            if !taskAgentWorkingDirectory.isEmpty {
+                                panel.directoryURL = URL(fileURLWithPath: taskAgentWorkingDirectory)
+                            }
+                            if panel.runModal() == .OK, let url = panel.url {
+                                taskAgentWorkingDirectory = url.path
+                                TaskAgentSettings.shared.workingDirectory = url.path
+                            }
+                        }
+                        .scaledFont(size: 13)
+
+                        if !taskAgentWorkingDirectory.isEmpty {
+                            Button("Clear") {
+                                taskAgentWorkingDirectory = ""
+                                TaskAgentSettings.shared.workingDirectory = ""
+                            }
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
@@ -1635,17 +2872,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Extraction Interval")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("How often to scan for new tasks")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text(formatExtractionInterval(taskExtractionInterval))
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
                         }
@@ -1666,17 +2903,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Minimum Confidence")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("Only show tasks above this confidence level")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text("\(Int(taskMinConfidence * 100))%")
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 40, alignment: .trailing)
                         }
@@ -1689,16 +2926,16 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction") {
+                    settingRow(title: "Task Extraction Prompt", subtitle: "Customize AI instructions for task extraction", settingId: "advanced.taskassistant.prompt") {
                         HStack(spacing: 8) {
                             Button(action: {
                                 TaskTestRunnerWindow.show()
                             }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "play.circle")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                     Text("Test Run")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -1709,9 +2946,9 @@ struct SettingsContentView: View {
                             }) {
                                 HStack(spacing: 4) {
                                     Text("Edit")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                     Image(systemName: "arrow.up.right.square")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -1726,10 +2963,10 @@ struct SettingsContentView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Allowed Apps")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("Tasks will only be extracted from these apps. Browsers are also filtered by keywords below.")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -1740,12 +2977,12 @@ struct SettingsContentView: View {
                                     AppIconView(appName: appName, size: 20)
 
                                     Text(appName)
-                                        .font(.system(size: 13))
+                                        .scaledFont(size: 13)
                                         .foregroundColor(OmiColors.textPrimary)
 
                                     if TaskAssistantSettings.isBrowser(appName) {
                                         Text("browser")
-                                            .font(.system(size: 10))
+                                            .scaledFont(size: 10)
                                             .foregroundColor(OmiColors.purplePrimary)
                                             .padding(.horizontal, 6)
                                             .padding(.vertical, 2)
@@ -1760,7 +2997,7 @@ struct SettingsContentView: View {
                                         taskAllowedApps = TaskAssistantSettings.shared.allowedApps
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 14))
+                                            .scaledFont(size: 14)
                                             .foregroundColor(OmiColors.textTertiary)
                                     }
                                     .buttonStyle(.plain)
@@ -1786,10 +3023,10 @@ struct SettingsContentView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Browser Window Keywords")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("For browser apps, only analyze windows whose title contains one of these keywords.")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -1811,7 +3048,7 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     // Task Prioritization Re-score
-                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals") {
+                    settingRow(title: "Task Prioritization", subtitle: "Re-score all tasks by relevance to your profile and goals", settingId: "advanced.taskassistant.prioritization") {
                         if isRescoringTasks {
                             ProgressView()
                                 .controlSize(.small)
@@ -1825,9 +3062,9 @@ struct SettingsContentView: View {
                             }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "arrow.trianglehead.counterclockwise")
-                                        .font(.system(size: 11))
+                                        .scaledFont(size: 11)
                                     Text("Re-score")
-                                        .font(.system(size: 12))
+                                        .scaledFont(size: 12)
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -1837,18 +3074,26 @@ struct SettingsContentView: View {
                     } // end if taskEnabled
                 }
             }
-            .id(AdvancedSubsection.taskAssistant)
 
-            // Advice Assistant Settings
-            settingsCard {
+
+            // Task Agent Settings (merged into Task Assistant subsection)
+            settingsCard(settingId: "advanced.taskassistant.agent") {
+                TaskAgentSettingsView()
+            }
+        }
+    }
+
+    private var adviceAssistantSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.adviceassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "lightbulb.fill")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Advice Assistant")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -1863,7 +3108,7 @@ struct SettingsContentView: View {
                     }
 
                     Text("Get proactive tips and suggestions")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if adviceEnabled {
@@ -1875,17 +3120,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Frequency")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("How often to check for advice opportunities")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text(formatExtractionInterval(adviceExtractionInterval))
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
                         }
@@ -1906,17 +3151,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Minimum Confidence")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("Only show advice above this confidence level")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text("\(Int(adviceMinConfidence * 100))%")
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 40, alignment: .trailing)
                         }
@@ -1929,15 +3174,15 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice") {
+                    settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
                         Button(action: {
                             AdvicePromptEditorWindow.show()
                         }) {
                             HStack(spacing: 4) {
                                 Text("Edit")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                 Image(systemName: "arrow.up.right.square")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                             }
                         }
                         .buttonStyle(.bordered)
@@ -1951,10 +3196,10 @@ struct SettingsContentView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Excluded Apps")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("Advice won't be generated from these apps")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -1966,7 +3211,7 @@ struct SettingsContentView: View {
                                         AppIconView(appName: appName, size: 20)
 
                                         Text(appName)
-                                            .font(.system(size: 13))
+                                            .scaledFont(size: 13)
                                             .foregroundColor(OmiColors.textTertiary)
 
                                         Spacer()
@@ -1977,7 +3222,7 @@ struct SettingsContentView: View {
                             }
                         } label: {
                             Text("System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .tint(OmiColors.textTertiary)
@@ -2007,18 +3252,20 @@ struct SettingsContentView: View {
                     } // end if adviceEnabled
                 }
             }
-            .id(AdvancedSubsection.adviceAssistant)
+        }
+    }
 
-            // Memory Assistant Settings
-            settingsCard {
+    private var memoryAssistantSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.memoryassistant") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "brain.head.profile")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Memory Assistant")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -2033,7 +3280,7 @@ struct SettingsContentView: View {
                     }
 
                     Text("Extract facts and wisdom from your screen")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     if memoryEnabled {
@@ -2045,17 +3292,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Extraction Interval")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("How often to scan for new memories")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text(formatExtractionInterval(memoryExtractionInterval))
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 80, alignment: .trailing)
                         }
@@ -2076,17 +3323,17 @@ struct SettingsContentView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Minimum Confidence")
-                                    .font(.system(size: 14))
+                                    .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textSecondary)
                                 Text("Only save memories above this confidence level")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
 
                             Spacer()
 
                             Text("\(Int(memoryMinConfidence * 100))%")
-                                .font(.system(size: 13, weight: .medium))
+                                .scaledFont(size: 13, weight: .medium)
                                 .foregroundColor(OmiColors.textSecondary)
                                 .frame(width: 40, alignment: .trailing)
                         }
@@ -2099,15 +3346,15 @@ struct SettingsContentView: View {
                             }
                     }
 
-                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction") {
+                    settingRow(title: "Memory Extraction Prompt", subtitle: "Customize AI instructions for memory extraction", settingId: "advanced.memoryassistant.prompt") {
                         Button(action: {
                             MemoryPromptEditorWindow.show()
                         }) {
                             HStack(spacing: 4) {
                                 Text("Edit")
-                                    .font(.system(size: 12))
+                                    .scaledFont(size: 12)
                                 Image(systemName: "arrow.up.right.square")
-                                    .font(.system(size: 11))
+                                    .scaledFont(size: 11)
                             }
                         }
                         .buttonStyle(.bordered)
@@ -2121,10 +3368,10 @@ struct SettingsContentView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Excluded Apps")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("Memories won't be extracted from these apps")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
@@ -2136,7 +3383,7 @@ struct SettingsContentView: View {
                                         AppIconView(appName: appName, size: 20)
 
                                         Text(appName)
-                                            .font(.system(size: 13))
+                                            .scaledFont(size: 13)
                                             .foregroundColor(OmiColors.textTertiary)
 
                                         Spacer()
@@ -2147,7 +3394,7 @@ struct SettingsContentView: View {
                             }
                         } label: {
                             Text("System apps always excluded (\(TaskAssistantSettings.builtInExcludedApps.count))")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                         .tint(OmiColors.textTertiary)
@@ -2177,25 +3424,27 @@ struct SettingsContentView: View {
                     } // end if memoryEnabled
                 }
             }
-            .id(AdvancedSubsection.memoryAssistant)
+        }
+    }
 
-            // Analysis Throttle (global — affects all assistants)
-            settingsCard {
+    private var analysisThrottleSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.analysisthrottle") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Analysis Throttle")
-                                .font(.system(size: 14))
+                                .scaledFont(size: 14)
                                 .foregroundColor(OmiColors.textSecondary)
                             Text("Wait before analyzing after switching apps")
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
 
                         Spacer()
 
                         Text(formatAnalysisDelay(analysisDelay))
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 80, alignment: .trailing)
                     }
@@ -2211,24 +3460,70 @@ struct SettingsContentView: View {
                         }
                 }
             }
+        }
+    }
 
+    private var goalsSubsection: some View {
+        VStack(spacing: 20) {
+            settingsCard(settingId: "advanced.goals") {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Image(systemName: "target")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        Text("Goals")
+                            .scaledFont(size: 15, weight: .medium)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Spacer()
+                    }
+
+                    Text("Track personal goals with AI-powered progress detection from your conversations")
+                        .scaledFont(size: 13)
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Auto-Generate Goals", subtitle: "Automatically suggest new goals daily based on your conversations and tasks", settingId: "advanced.goals.autogenerate") {
+                        Toggle("", isOn: $goalsAutoGenerateEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: goalsAutoGenerateEnabled) { _, newValue in
+                                GoalGenerationService.shared.isAutoGenerationEnabled = newValue
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private var askOmiFloatingBarSubsection: some View {
+        VStack(spacing: 20) {
+            ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+        }
+    }
+
+    private var preferencesSubsection: some View {
+        VStack(spacing: 20) {
             // Multiple Chat Sessions toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.multichat") {
                 HStack(spacing: 16) {
                     Image(systemName: "bubble.left.and.bubble.right")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 24, height: 24)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Multiple Chat Sessions")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(multiChatEnabled
                              ? "Create separate chat threads"
                              : "Single chat synced with mobile app")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2241,22 +3536,22 @@ struct SettingsContentView: View {
             }
 
             // Conversation View toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.compact") {
                 HStack(spacing: 16) {
                     Image(systemName: conversationsCompactView ? "list.bullet" : "list.bullet.rectangle")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 24, height: 24)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Compact Conversations")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(conversationsCompactView
                              ? "Showing compact conversation list"
                              : "Showing expanded conversation list")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2269,20 +3564,20 @@ struct SettingsContentView: View {
             }
 
             // Launch at Login toggle
-            settingsCard {
+            settingsCard(settingId: "advanced.preferences.launchatlogin") {
                 HStack(spacing: 16) {
                     Image(systemName: "power")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 24, height: 24)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Launch at Login")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text(launchAtLoginManager.statusDescription)
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2300,22 +3595,26 @@ struct SettingsContentView: View {
                         .labelsHidden()
                 }
             }
+        }
+    }
 
+    private var troubleshootingSubsection: some View {
+        VStack(spacing: 20) {
             // Report Issue
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 24, height: 24)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Report Issue")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("Send app logs and report a problem")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2325,7 +3624,7 @@ struct SettingsContentView: View {
                         FeedbackWindow.show(userEmail: AuthState.shared.userEmail)
                     }) {
                         Text("Report")
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
@@ -2338,21 +3637,65 @@ struct SettingsContentView: View {
                 }
             }
 
+            // Rescan Files
+            settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
+                HStack(spacing: 16) {
+                    Image(systemName: "folder.badge.gearshape")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .frame(width: 24, height: 24)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Rescan Files")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text("Re-index your files and update your AI profile")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Button(action: { showRescanFilesAlert = true }) {
+                        Text("Rescan")
+                            .scaledFont(size: 13, weight: .medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(OmiColors.purplePrimary)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Rescan") {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
+                    NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
+                }
+            } message: {
+                Text("This will re-scan your files and update your AI profile with the latest information about your projects and interests.")
+            }
+
             // Reset Onboarding
-            settingsCard {
+            settingsCard(settingId: "advanced.troubleshooting.resetonboarding") {
                 HStack(spacing: 16) {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 24, height: 24)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Reset Onboarding")
-                            .font(.system(size: 16, weight: .semibold))
+                            .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("Restart setup wizard and reset permissions")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2360,7 +3703,7 @@ struct SettingsContentView: View {
 
                     Button(action: { showResetOnboardingAlert = true }) {
                         Text("Reset")
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(.black)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
@@ -2380,38 +3723,6 @@ struct SettingsContentView: View {
             } message: {
                 Text("This will reset all permissions and restart the app. You'll need to grant permissions again during setup.")
             }
-
-            // Task Agent Settings
-            settingsCard {
-                TaskAgentSettingsView()
-            }
-        }
-        .task {
-            await loadAdvancedStats()
-        }
-        .task {
-            await loadChatMessageCount()
-        }
-        .task {
-            // Try loading immediately (covers all restarts after first generation)
-            if let profile = await AIUserProfileService.shared.getLatestProfile() {
-                aiProfileId = profile.id
-                aiProfileText = profile.profileText
-                aiProfileGeneratedAt = profile.generatedAt
-                aiProfileDataSourcesUsed = profile.dataSourcesUsed
-                return
-            }
-            // No profile yet — first-ever generation may be in progress, poll briefly
-            for _ in 0..<6 {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                if let profile = await AIUserProfileService.shared.getLatestProfile() {
-                    aiProfileId = profile.id
-                    aiProfileText = profile.profileText
-                    aiProfileGeneratedAt = profile.generatedAt
-                    aiProfileDataSourcesUsed = profile.dataSourcesUsed
-                    return
-                }
-            }
         }
     }
 
@@ -2422,16 +3733,16 @@ struct SettingsContentView: View {
         }) {
             HStack(spacing: 10) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
-                        .font(.system(size: 14, weight: isSelected ? .medium : .regular))
+                        .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
                         .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -2451,7 +3762,7 @@ struct SettingsContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("Tier \(tier)")
-                    .font(.system(size: 11, weight: .semibold))
+                    .scaledFont(size: 11, weight: .semibold)
                     .foregroundColor(unlocked ? OmiColors.purplePrimary : OmiColors.textTertiary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -2461,30 +3772,30 @@ struct SettingsContentView: View {
                     )
 
                 Text(name)
-                    .font(.system(size: 14, weight: .medium))
+                    .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(unlocked ? OmiColors.textPrimary : OmiColors.textTertiary)
 
                 Spacer()
 
                 if unlocked {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(.green)
                 } else {
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
 
             HStack(spacing: 8) {
                 Text(requirement)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
 
                 if let progress = progress, !unlocked {
                     Text("(\(progress))")
-                        .font(.system(size: 12).monospacedDigit())
+                        .scaledMonospacedDigitFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.7))
                 }
             }
@@ -2495,13 +3806,13 @@ struct SettingsContentView: View {
     private func statRow(label: String, value: Int) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
 
             Text(formatNumber(value))
-                .font(.system(size: 14, weight: .medium).monospacedDigit())
+                .scaledMonospacedDigitFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
         }
     }
@@ -2509,7 +3820,7 @@ struct SettingsContentView: View {
     private func statRowLoading(label: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textSecondary)
 
             Spacer()
@@ -2582,7 +3893,7 @@ struct SettingsContentView: View {
 
     private var aboutSection: some View {
         VStack(spacing: 20) {
-            settingsCard {
+            settingsCard(settingId: "about.version") {
                 VStack(spacing: 16) {
                     // App info
                     HStack(spacing: 16) {
@@ -2594,13 +3905,31 @@ struct SettingsContentView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Omi")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(OmiColors.textPrimary)
+                            HStack(spacing: 6) {
+                                Text("Omi")
+                                    .scaledFont(size: 18, weight: .bold)
+                                    .foregroundColor(OmiColors.textPrimary)
+
+                                if !updaterViewModel.activeChannelLabel.isEmpty {
+                                    Text("(\(updaterViewModel.activeChannelLabel))")
+                                        .scaledFont(size: 13, weight: .medium)
+                                        .foregroundColor(OmiColors.purplePrimary)
+                                }
+                            }
 
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
-                                .font(.system(size: 13))
+                                .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
+                                .onTapGesture {
+                                    // Hidden: Option+click to enable staging channel
+                                    if NSEvent.modifierFlags.contains(.option) {
+                                        // Set staging directly in UserDefaults, bypassing the
+                                        // updateChannel didSet which would overwrite with "beta"
+                                        UserDefaults.standard.set("staging", forKey: "update_channel")
+                                        updaterViewModel.activeChannelLabel = "Staging"
+                                        logSync("Settings: Staging channel enabled via hidden gesture")
+                                    }
+                                }
                         }
 
                         Spacer()
@@ -2612,21 +3941,36 @@ struct SettingsContentView: View {
                     // Links
                     linkRow(title: "Visit Website", url: "https://omi.me")
                     linkRow(title: "Help Center", url: "https://help.omi.me")
-                    linkRow(title: "Privacy Policy", url: "https://omi.me/privacy")
+                    Button(action: {
+                        selectedSection = .privacy
+                    }) {
+                        HStack {
+                            Text("Privacy Policy")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+
+                            Spacer()
+
+                            Image(systemName: "arrow.right")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                     linkRow(title: "Terms of Service", url: "https://omi.me/terms")
                 }
             }
 
             // Software Updates
-            settingsCard {
+            settingsCard(settingId: "about.updates") {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 16))
+                            .scaledFont(size: 16)
                             .foregroundColor(OmiColors.purplePrimary)
 
                         Text("Software Updates")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
@@ -2640,34 +3984,56 @@ struct SettingsContentView: View {
 
                     if let lastCheck = updaterViewModel.lastUpdateCheckDate {
                         Text("Last checked: \(lastCheck, style: .relative) ago")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background") {
+                    settingRow(title: "Automatic Updates", subtitle: "Check for updates automatically in the background", settingId: "about.autoupdates") {
                         Toggle("", isOn: $updaterViewModel.automaticallyChecksForUpdates)
                             .toggleStyle(.switch)
                             .labelsHidden()
                     }
+
+                    if updaterViewModel.automaticallyChecksForUpdates {
+                        settingRow(title: "Auto-Install Updates", subtitle: "Automatically download and install updates when available", settingId: "about.autoinstall") {
+                            Toggle("", isOn: $updaterViewModel.automaticallyDownloadsUpdates)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                        }
+                    }
+
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
+                        Picker("", selection: $updaterViewModel.updateChannel) {
+                            ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                                Text(channel.displayName).tag(channel)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 100)
+                    }
                 }
             }
 
-            settingsCard {
+            settingsCard(settingId: "about.reportissue") {
                 HStack(spacing: 16) {
                     Image(systemName: "exclamationmark.bubble.fill")
-                        .font(.system(size: 16))
+                        .scaledFont(size: 16)
                         .foregroundColor(OmiColors.purplePrimary)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Report an Issue")
-                            .font(.system(size: 15, weight: .medium))
+                            .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Text("Help us improve Omi")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
 
@@ -2684,8 +4050,24 @@ struct SettingsContentView: View {
 
     // MARK: - Helper Views
 
-    private func settingsCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
+    private func fontShortcutRow(label: String, keys: String) -> some View {
+        HStack {
+            Text(label)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textTertiary)
+            Spacer()
+            Text(keys)
+                .scaledMonospacedFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(OmiColors.backgroundTertiary.opacity(0.8))
+                .cornerRadius(5)
+        }
+    }
+
+    private func settingsCard<Content: View>(settingId: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        let card = content()
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -2695,22 +4077,36 @@ struct SettingsContentView: View {
                             .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
                     )
             )
+        return Group {
+            if let settingId = settingId {
+                card.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                card
+            }
+        }
     }
 
-    private func settingRow<Content: View>(title: String, subtitle: String, @ViewBuilder control: () -> Content) -> some View {
-        HStack {
+    private func settingRow<Content: View>(title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content) -> some View {
+        let row = HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
 
             Spacer()
 
             control()
+        }
+        return Group {
+            if let settingId = settingId {
+                row.modifier(SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+            } else {
+                row
+            }
         }
     }
 
@@ -2722,17 +4118,41 @@ struct SettingsContentView: View {
         }) {
             HStack {
                 Text(title)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Spacer()
 
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private func trackingItem(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(OmiColors.textTertiary.opacity(0.5))
+                .frame(width: 4, height: 4)
+
+            Text(text)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+        }
+    }
+
+    private func privacyBullet(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark")
+                .scaledFont(size: 9, weight: .bold)
+                .foregroundColor(.green)
+
+            Text(text)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textSecondary)
+        }
     }
 
     // MARK: - Language Helpers
@@ -3043,10 +4463,9 @@ struct SettingsContentView: View {
     }
 
     private func updateLanguage(_ language: String) {
-        // Track language change
-        AnalyticsManager.shared.languageChanged(language: language)
-
         Task {
+            // Track language change
+            AnalyticsManager.shared.languageChanged(language: language)
             do {
                 let _ = try await APIClient.shared.updateUserLanguage(language)
             } catch {
@@ -3108,14 +4527,14 @@ struct ExcludedAppRow: View {
             AppIconView(appName: appName, size: 24)
 
             Text(appName)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .foregroundColor(isHovered ? OmiColors.error : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -3145,7 +4564,7 @@ struct AddExcludedAppView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add App to Exclusion List")
-                .font(.system(size: 13, weight: .medium))
+                .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             HStack(spacing: 8) {
@@ -3166,7 +4585,7 @@ struct AddExcludedAppView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Currently Running Apps")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Spacer()
@@ -3175,7 +4594,7 @@ struct AddExcludedAppView: View {
                         refreshRunningApps()
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -3229,7 +4648,7 @@ struct AddAllowedAppView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add App to Allowed List")
-                .font(.system(size: 13, weight: .medium))
+                .scaledFont(size: 13, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
 
             HStack(spacing: 8) {
@@ -3250,7 +4669,7 @@ struct AddAllowedAppView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Currently Running Apps")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Spacer()
@@ -3259,7 +4678,7 @@ struct AddAllowedAppView: View {
                         refreshRunningApps()
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -3323,17 +4742,17 @@ struct BrowserKeywordListView: View {
             // Filter field
             HStack(spacing: 8) {
                 Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                 TextField("Filter keywords...", text: $filterText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                 if !filterText.isEmpty {
                     Button {
                         filterText = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
+                            .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -3350,13 +4769,13 @@ struct BrowserKeywordListView: View {
                     ForEach(filteredKeywords, id: \.self) { keyword in
                         HStack(spacing: 4) {
                             Text(keyword)
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                                 .foregroundColor(OmiColors.textPrimary)
                             Button {
                                 onRemove(keyword)
                             } label: {
                                 Image(systemName: "xmark")
-                                    .font(.system(size: 8, weight: .bold))
+                                    .scaledFont(size: 8, weight: .bold)
                                     .foregroundColor(OmiColors.textTertiary)
                             }
                             .buttonStyle(.plain)
@@ -3375,7 +4794,7 @@ struct BrowserKeywordListView: View {
             HStack(spacing: 8) {
                 TextField("Add keyword...", text: $newKeyword)
                     .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .onSubmit { addKeyword() }
 
                 Button("Add") { addKeyword() }
@@ -3385,7 +4804,7 @@ struct BrowserKeywordListView: View {
             }
 
             Text("\(keywords.count) keywords")
-                .font(.system(size: 11))
+                .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }
@@ -3413,11 +4832,11 @@ struct RunningAppChip: View {
                 AppIconView(appName: appName, size: 16)
 
                 Text(appName)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textSecondary)
 
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(isHovered ? OmiColors.purplePrimary : OmiColors.textTertiary)
             }
             .padding(.horizontal, 10)
@@ -3438,6 +4857,7 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile)
+        selectedAdvancedSubsection: .constant(.aiUserProfile),
+        highlightedSettingId: .constant(nil)
     )
 }

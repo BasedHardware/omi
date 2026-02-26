@@ -68,6 +68,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Key: notification identifier, Value: (title, assistantId)
     private var notificationMetadata: [String: (title: String, assistantId: String)] = [:]
 
+    /// Last time we triggered a notification repair (debounce to avoid hammering lsregister)
+    private var lastRepairAttempt: Date?
+
     private override init() {
         super.init()
         // Set ourselves as the delegate to show notifications even when app is in foreground
@@ -195,6 +198,37 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {
+        // Check permission before attempting delivery to avoid UNErrorDomain code 1 errors
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            Task { @MainActor in
+                guard settings.authorizationStatus == .authorized else {
+                    log("Notification skipped (auth=\(settings.authorizationStatus.rawValue)): \(title)")
+
+                    // If auth reverted to notDetermined (not explicitly denied), trigger repair
+                    // Debounce: at most once per 10 minutes to avoid hammering lsregister
+                    if settings.authorizationStatus == .notDetermined {
+                        let now = Date()
+                        if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
+                            self?.lastRepairAttempt = now
+                            log("Notification auth is notDetermined at send time — triggering repair")
+                            AnalyticsManager.shared.notificationRepairTriggered(
+                                reason: "send_time_not_determined",
+                                previousStatus: "unknown",
+                                currentStatus: "notDetermined"
+                            )
+                            ProactiveAssistantsPlugin.repairNotificationRegistration()
+                        }
+                    }
+
+                    return
+                }
+
+                self?.deliverNotification(title: title, message: message, assistantId: assistantId, sound: sound)
+            }
+        }
+    }
+
+    private func deliverNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message

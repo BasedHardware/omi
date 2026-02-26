@@ -208,42 +208,7 @@ class TaskAgentManager: ObservableObject {
     // MARK: - Private Implementation
 
     private func buildPrompt(for task: TaskActionItem, context: TaskAgentContext) -> String {
-        var prompt = """
-        # Task: \(task.description)
-
-        Tags: \(task.tags.isEmpty ? "unknown" : task.tags.joined(separator: ", "))
-        Priority: \(task.priority ?? "medium")
-        """
-
-        if let sourceApp = task.sourceApp {
-            prompt += "\nSource App: \(sourceApp)"
-        }
-
-        if let contextSummary = context.contextSummary {
-            prompt += "\n\nContext from screen:\n\(contextSummary)"
-        }
-
-        // Add custom prefix if configured
-        let customPrefix = TaskAgentSettings.shared.customPromptPrefix
-        if !customPrefix.isEmpty {
-            prompt += "\n\nAdditional context:\n\(customPrefix)"
-        }
-
-        prompt += """
-
-
-        ## Instructions
-
-        Analyze this task and create an implementation plan. Consider:
-        1. What files need to be modified
-        2. What is the approach
-        3. Any potential issues or considerations
-        4. Estimated complexity
-
-        After creating the plan, wait for user approval before implementing.
-        """
-
-        return prompt
+        TaskAgentSettings.shared.buildTaskPrompt(for: task)
     }
 
     private func launchTmuxSession(sessionName: String, prompt: String, workingDir: String) async throws {
@@ -318,6 +283,9 @@ class TaskAgentManager: ObservableObject {
         try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
     }
 
+    /// Number of consecutive unchanged polls before considering a session idle
+    private let idleThreshold = 3
+
     private func startPolling(taskId: String, sessionName: String) {
         // Cancel any existing polling for this task
         pollingTasks[taskId]?.cancel()
@@ -326,6 +294,9 @@ class TaskAgentManager: ObservableObject {
             // Track last persisted state to avoid redundant writes
             var lastPersistedStatus: AgentStatus?
             var lastPersistedFileCount = 0
+            // Track consecutive unchanged outputs to detect idle sessions
+            var lastOutput: String?
+            var unchangedCount = 0
 
             while !Task.isCancelled {
                 guard let self = self else { break }
@@ -336,8 +307,13 @@ class TaskAgentManager: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                let output = self.readTmuxOutput(sessionName: sessionName)
-                let editedFiles = self.parseEditedFiles(from: output)
+                let rawOutput = self.readTmuxOutput(sessionName: sessionName)
+                // Cap stored output to 100KB — tmux scrollback can grow very large
+                let maxOutputSize = 100_000
+                let output = rawOutput.count > maxOutputSize
+                    ? String(rawOutput.suffix(maxOutputSize))
+                    : rawOutput
+                let editedFiles = self.parseEditedFiles(from: rawOutput)
 
                 await MainActor.run {
                     self.activeSessions[taskId]?.output = output
@@ -357,6 +333,24 @@ class TaskAgentManager: ObservableObject {
                     logMessage("TaskAgentManager: Session completed for task \(taskId) (\(editedFiles.count) files edited)")
                     break
                 }
+
+                // Detect idle sessions: if output hasn't changed for consecutive polls,
+                // the agent is done and waiting at the prompt
+                if output == lastOutput {
+                    unchangedCount += 1
+                    if unchangedCount >= self.idleThreshold {
+                        await MainActor.run {
+                            self.activeSessions[taskId]?.status = .completed
+                            self.activeSessions[taskId]?.completedAt = Date()
+                        }
+                        if let s = self.activeSessions[taskId] { self.persistSession(s) }
+                        logMessage("TaskAgentManager: Session idle for task \(taskId) (output unchanged for \(unchangedCount) polls, \(editedFiles.count) files edited), stopping poll")
+                        break
+                    }
+                } else {
+                    unchangedCount = 0
+                }
+                lastOutput = output
 
                 // Update status based on activity
                 if !editedFiles.isEmpty {
@@ -489,9 +483,9 @@ class TaskAgentManager: ObservableObject {
     }
 
     private func extractPlan(from output: String) -> String {
-        // Extract the plan section from Claude's output
-        // For now, return the full output - could be refined later
-        return output
+        // Truncate to 2000 chars — the UI only displays plan.prefix(2000) anyway.
+        // Returning the full output string would duplicate the output buffer in memory.
+        return String(output.suffix(2000))
     }
 
     private func openTmuxSessionInTerminal(sessionName: String) {
@@ -613,11 +607,34 @@ class TaskAgentManager: ObservableObject {
                 )
 
                 if isSessionAlive(sessionName: sessionName) {
-                    await MainActor.run {
-                        activeSessions[taskId] = session
+                    // Check if the session is actually idle (Claude waiting at prompt)
+                    // by reading output twice with a short delay
+                    let output1 = readTmuxOutput(sessionName: sessionName)
+                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+                    let output2 = readTmuxOutput(sessionName: sessionName)
+
+                    if output1 == output2 && !output1.isEmpty {
+                        // Output unchanged — session is idle, mark completed without polling
+                        var completedSession = session
+                        completedSession.status = .completed
+                        completedSession.completedAt = completedSession.completedAt ?? Date()
+                        completedSession.output = output1
+                        completedSession.editedFiles = parseEditedFiles(from: output1)
+
+                        let sessionToStore = completedSession
+                        await MainActor.run {
+                            activeSessions[taskId] = sessionToStore
+                        }
+                        persistSession(sessionToStore)
+                        logMessage("TaskAgentManager: Session idle for task \(taskId), marked completed (no polling needed)")
+                    } else {
+                        // Output is changing — session is actively working, start polling
+                        await MainActor.run {
+                            activeSessions[taskId] = session
+                        }
+                        startPolling(taskId: taskId, sessionName: sessionName)
+                        logMessage("TaskAgentManager: Restored active session for task \(taskId)")
                     }
-                    startPolling(taskId: taskId, sessionName: sessionName)
-                    logMessage("TaskAgentManager: Restored live session for task \(taskId)")
                 } else {
                     // Session is dead — mark final state
                     let finalStatus: AgentStatus = session.editedFiles.isEmpty ? .failed : .completed

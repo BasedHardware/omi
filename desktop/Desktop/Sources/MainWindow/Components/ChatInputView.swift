@@ -1,53 +1,171 @@
+import Cocoa
 import SwiftUI
 
 /// Reusable chat input field with send button, extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
+///
+/// When `isSending` is true:
+///   - Input stays enabled so the user can type a follow-up
+///   - If input is empty, the button becomes a stop button
+///   - If input has text, pressing send calls `onFollowUp` (redirects the agent)
 struct ChatInputView: View {
     let onSend: (String) -> Void
+    var onFollowUp: ((String) -> Void)? = nil
+    var onStop: (() -> Void)? = nil
     let isSending: Bool
+    var isStopping: Bool = false
     var placeholder: String = "Type a message..."
+    @Binding var mode: ChatMode
+    /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
+    var pendingText: Binding<String>?
 
-    @State private var inputText = ""
-    @FocusState private var isInputFocused: Bool
+    @AppStorage("askModeEnabled") private var askModeEnabled = false
+    @Environment(\.fontScale) private var fontScale
+    @Binding var inputText: String
 
-    private var canSend: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+    private var hasText: Bool {
+        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var body: some View {
-        HStack(spacing: 12) {
-            TextField(placeholder, text: $inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .foregroundColor(OmiColors.textPrimary)
-                .focused($isInputFocused)
-                .padding(12)
-                .lineLimit(1...5)
-                .onSubmit {
-                    sendMessage()
-                }
-                .frame(maxWidth: .infinity)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(20)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isInputFocused = true
-                }
+    /// Padding used for both the NSTextView (via textContainerInset) and the
+    /// placeholder overlay — guaranteeing the cursor and placeholder align.
+    private let inputPaddingH: CGFloat = 12
+    private let inputPaddingV: CGFloat = 12
 
-            Button(action: sendMessage) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textTertiary)
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            // Input field with floating toggle
+            ZStack(alignment: .topTrailing) {
+                // Hidden Text drives the SwiftUI height; OmiTextEditor overlays it exactly.
+                // This lets SwiftUI measure height from text content without fighting AppKit's
+                // scroll view layout — the onHeightChange pattern caused layout loops inside
+                // the TaskChatPanel VStack with frame(maxHeight: .infinity).
+                Text(inputText.isEmpty ? " " : inputText + " ")
+                    .scaledFont(size: 14)
+                    .padding(.horizontal, inputPaddingH)
+                    .padding(.vertical, inputPaddingV)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .overlay(alignment: .topLeading) {
+                        // Placeholder text — padding matches textContainerInset exactly
+                        if inputText.isEmpty {
+                            Text(placeholder)
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.horizontal, inputPaddingH)
+                                .padding(.vertical, inputPaddingV)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .overlay {
+                        OmiTextEditor(
+                            text: $inputText,
+                            fontSize: round(14 * fontScale),
+                            textColor: NSColor(OmiColors.textPrimary),
+                            textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
+                            onSubmit: handleSubmit
+                        )
+                    }
+                    .frame(maxHeight: 200)
+                    .clipped()
+                    .background(OmiColors.backgroundSecondary)
+                    .cornerRadius(12)
+
+                // Floating Ask/Act toggle (top-right, inside the input area)
+                if askModeEnabled {
+                    ChatModeToggle(mode: $mode)
+                        .padding(.top, 8)
+                        .padding(.trailing, 8)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
+
+            // Send/Stop button — inline to the right of the input
+            if isSending && !hasText {
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                } else {
+                    Button(action: { onStop?() }) {
+                        Image(systemName: "stop.circle.fill")
+                            .scaledFont(size: 24)
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button(action: handleSubmit) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .scaledFont(size: 24)
+                        .foregroundColor(hasText ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasText)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear {
+            // When ask mode is disabled, ensure we're always in act mode
+            if !askModeEnabled {
+                mode = .act
+            }
+            if let pending = pendingText?.wrappedValue, !pending.isEmpty {
+                inputText = pending
+                pendingText?.wrappedValue = ""
+            }
+        }
+        .onChange(of: pendingText?.wrappedValue ?? "") { _, newValue in
+            if !newValue.isEmpty {
+                inputText = newValue
+                pendingText?.wrappedValue = ""
+            }
+        }
+        .onChange(of: askModeEnabled) { _, enabled in
+            if !enabled {
+                mode = .act
+            }
         }
     }
 
-    private func sendMessage() {
-        guard canSend else { return }
+    private func handleSubmit() {
+        guard hasText else { return }
         let text = inputText
         inputText = ""
-        onSend(text)
+        if isSending {
+            onFollowUp?(text)
+        } else {
+            onSend(text)
+        }
+    }
+}
+
+// MARK: - Ask/Act Mode Toggle
+
+struct ChatModeToggle: View {
+    @Binding var mode: ChatMode
+
+    var body: some View {
+        HStack(spacing: 0) {
+            modeButton(for: .ask, label: "Ask")
+            modeButton(for: .act, label: "Act")
+        }
+        .background(OmiColors.backgroundSecondary)
+        .cornerRadius(14)
+    }
+
+    private func modeButton(for targetMode: ChatMode, label: String) -> some View {
+        Button(action: { mode = targetMode }) {
+            Text(label)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(mode == targetMode ? OmiColors.purplePrimary : Color.clear)
+                .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
     }
 }

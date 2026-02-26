@@ -74,12 +74,19 @@ class TranscriptionService {
 
     // Reconnection
     private var reconnectAttempts = 0
-    private let maxReconnectAttempts = 5
+    private let maxReconnectAttempts = 10
     private var reconnectTask: Task<Void, Never>?
 
     // Keepalive
     private var keepaliveTask: Task<Void, Never>?
     private let keepaliveInterval: TimeInterval = 8.0  // Send ping every 8 seconds
+
+    // Watchdog: detect stale connections where WebSocket dies silently
+    private var watchdogTask: Task<Void, Never>?
+    private var lastDataReceivedAt: Date?
+    private var lastKeepaliveSuccessAt: Date?
+    private let watchdogInterval: TimeInterval = 30.0   // Check every 30 seconds
+    private let staleThreshold: TimeInterval = 60.0     // Reconnect if no data for 60 seconds
 
     // Audio buffering
     private var audioBuffer = Data()
@@ -130,11 +137,37 @@ class TranscriptionService {
         reconnectTask = nil
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
 
         // Flush any remaining audio
         flushAudioBuffer()
 
         disconnect()
+    }
+
+    /// Signal Deepgram that no more audio will be sent, but keep connection open
+    /// to receive final transcription results. Call stop() later to fully disconnect.
+    func finishStream() {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
+
+        flushAudioBuffer()
+
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+
+        let closeMsg = "{\"type\": \"CloseStream\"}"
+        webSocketTask.send(.string(closeMsg)) { error in
+            if let error = error {
+                logError("TranscriptionService: CloseStream send error", error: error)
+            }
+        }
+        log("TranscriptionService: CloseStream sent, waiting for final results")
     }
 
     /// Send audio data to DeepGram (buffered for efficiency)
@@ -228,6 +261,7 @@ class TranscriptionService {
         // Create URLSession and WebSocket task
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 0  // No resource timeout for long-lived WebSocket
         urlSession = URLSession(configuration: configuration)
         webSocketTask = urlSession?.webSocketTask(with: request)
 
@@ -242,8 +276,11 @@ class TranscriptionService {
             guard let self = self, self.webSocketTask?.state == .running else { return }
             self.isConnected = true
             self.reconnectAttempts = 0
+            self.lastDataReceivedAt = Date()
+            self.lastKeepaliveSuccessAt = Date()
             log("TranscriptionService: Connected")
             self.startKeepalive()
+            self.startWatchdog()
             self.onConnected?()
         }
     }
@@ -271,6 +308,33 @@ class TranscriptionService {
             if let error = error {
                 logError("TranscriptionService: Keepalive error", error: error)
                 self?.handleDisconnection()
+            } else {
+                self?.lastKeepaliveSuccessAt = Date()
+            }
+        }
+    }
+
+    /// Start watchdog to detect stale connections (WebSocket dies silently)
+    private func startWatchdog() {
+        watchdogTask?.cancel()
+        watchdogTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(self?.watchdogInterval ?? 30.0) * 1_000_000_000)
+                guard !Task.isCancelled, let self = self, self.isConnected else { break }
+
+                if let lastData = self.lastDataReceivedAt,
+                   Date().timeIntervalSince(lastData) > self.staleThreshold {
+                    // Check if keepalives are still succeeding — if so, the connection
+                    // is alive and Deepgram just has nothing to return (silent room).
+                    // Only force reconnect when keepalives have also gone stale.
+                    if let lastKeepalive = self.lastKeepaliveSuccessAt,
+                       Date().timeIntervalSince(lastKeepalive) < self.staleThreshold {
+                        // Keepalives working — connection is alive, just no speech to transcribe
+                        continue
+                    }
+                    log("TranscriptionService: Watchdog detected stale connection (no data for \(String(format: "%.0f", Date().timeIntervalSince(lastData)))s, keepalives also failing) - forcing reconnect")
+                    self.handleDisconnection()
+                }
             }
         }
     }
@@ -279,6 +343,8 @@ class TranscriptionService {
         isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
         urlSession?.invalidateAndCancel()
@@ -293,7 +359,11 @@ class TranscriptionService {
         isConnected = false
         keepaliveTask?.cancel()
         keepaliveTask = nil
+        watchdogTask?.cancel()
+        watchdogTask = nil
         webSocketTask = nil
+        urlSession?.invalidateAndCancel()
+        urlSession = nil
         onDisconnected?()
 
         // Attempt reconnection if enabled
@@ -324,6 +394,7 @@ class TranscriptionService {
                 self.receiveMessage()
 
             case .failure(let error):
+                guard self.isConnected else { return }
                 logError("TranscriptionService: Receive error", error: error)
                 self.handleDisconnection()
             }
@@ -331,6 +402,9 @@ class TranscriptionService {
     }
 
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
+        // Track that we received data (for watchdog stale detection)
+        lastDataReceivedAt = Date()
+
         switch message {
         case .string(let text):
             parseResponse(text)
@@ -409,6 +483,80 @@ class TranscriptionService {
             words: words,
             channelIndex: channelIndex
         )
+    }
+}
+
+// MARK: - Batch (Pre-Recorded) Transcription
+
+extension TranscriptionService {
+    /// Transcribe a complete audio buffer using Deepgram's pre-recorded REST API.
+    /// Returns the transcript string, or nil if transcription failed.
+    static func batchTranscribe(
+        audioData: Data,
+        language: String = "en",
+        apiKey: String? = nil
+    ) async throws -> String? {
+        guard let key = apiKey ?? ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] else {
+            throw TranscriptionError.missingAPIKey
+        }
+
+        var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
+        components.queryItems = [
+            URLQueryItem(name: "model", value: "nova-3"),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "diarize", value: "true"),
+            // Raw PCM parameters (same as streaming API uses)
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+        ]
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+
+        log("TranscriptionService: Batch transcribing \(audioData.count) bytes")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Batch transcription failed with status \(statusCode): \(body)", error: nil)
+            throw TranscriptionError.invalidResponse
+        }
+
+        // Parse the response — same structure as streaming but wrapped in "results"
+        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
+        let transcript = json.results?.channels.first?.alternatives.first?.transcript
+        log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
+        return transcript
+    }
+}
+
+/// Response model for Deepgram pre-recorded API
+private struct BatchResponse: Decodable {
+    let results: BatchResults?
+
+    struct BatchResults: Decodable {
+        let channels: [BatchChannel]
+    }
+
+    struct BatchChannel: Decodable {
+        let alternatives: [BatchAlternative]
+    }
+
+    struct BatchAlternative: Decodable {
+        let transcript: String
+        let confidence: Double
     }
 }
 

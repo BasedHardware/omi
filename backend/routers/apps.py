@@ -115,6 +115,9 @@ from utils.social import (
     upsert_persona_from_twitter_profile,
     add_twitter_to_persona,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -761,6 +764,66 @@ def update_app(
     return {'status': 'ok'}
 
 
+@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
+def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Refresh chat tools manifest for an app.
+
+    Forces a fresh fetch of the manifest from the external URL, bypassing cache.
+    Only the app owner can refresh their app's manifest.
+    """
+    app = get_available_app_by_id(app_id, uid)
+    if not app:
+        raise HTTPException(status_code=404, detail='App not found')
+    if app['uid'] != uid:
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    external_integration = app.get('external_integration')
+    if not external_integration:
+        raise HTTPException(status_code=400, detail='App does not have external integration')
+
+    manifest_url = external_integration.get('chat_tools_manifest_url')
+    if not manifest_url:
+        raise HTTPException(status_code=400, detail='App does not have a chat tools manifest URL')
+
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
+    if not manifest_result:
+        raise HTTPException(status_code=502, detail='Failed to fetch manifest from external URL')
+
+    update_dict = {'id': app_id, 'updated_at': datetime.now(timezone.utc)}
+
+    fetched_tools = manifest_result.get('tools')
+    if fetched_tools:
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        if base_url:
+            for tool in fetched_tools:
+                endpoint = tool.get('endpoint', '')
+                if endpoint.startswith('/') and not endpoint.startswith('//'):
+                    tool['endpoint'] = f"{base_url}{endpoint}"
+        update_dict['chat_tools'] = fetched_tools
+
+    chat_messages = manifest_result.get('chat_messages')
+    ext_int_update = {}
+    if chat_messages:
+        ext_int_update['chat_messages_enabled'] = chat_messages.get('enabled', False)
+        ext_int_update['chat_messages_target'] = chat_messages.get('target', 'app')
+        ext_int_update['chat_messages_notify'] = chat_messages.get('notify', False)
+    else:
+        ext_int_update['chat_messages_enabled'] = False
+        ext_int_update['chat_messages_target'] = 'app'
+        ext_int_update['chat_messages_notify'] = False
+    update_dict['external_integration'] = ext_int_update
+
+    update_app_in_db(update_dict)
+
+    if app['approved'] and (app['private'] is None or app['private'] is False):
+        invalidate_approved_apps_cache()
+    delete_app_cache_by_id(app_id)
+
+    tools_count = len(fetched_tools) if fetched_tools else 0
+    return {'status': 'ok', 'tools_count': tools_count}
+
+
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
 def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = get_available_app_by_id(app_id, uid)
@@ -1137,7 +1200,7 @@ Be creative, fun, and varied. No generic ideas."""
                 ]
             }
     except Exception as e:
-        print(f"Error generating prompts: {e}")
+        logger.error(f"Error generating prompts: {e}")
         return {
             "prompts": [
                 "Mind map generator from conversations",
@@ -1183,7 +1246,7 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
             },
         }
     except Exception as e:
-        print(f"Error generating app: {e}")
+        logger.error(f"Error generating app: {e}")
         raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
 
 
@@ -1215,7 +1278,7 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
 
         return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
     except Exception as e:
-        print(f"Error generating icon: {e}")
+        logger.error(f"Error generating icon: {e}")
         raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
 
 
@@ -1332,7 +1395,7 @@ async def update_omi_persona_connected_accounts(uid: str):
                 update_app_in_db(update_data)
                 delete_app_cache_by_id(persona['id'])
     except Exception as e:
-        print(f"Error updating persona connected accounts: {e}")
+        logger.error(f"Error updating persona connected accounts: {e}")
 
 
 # ******************************************************
@@ -1425,8 +1488,8 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             scopes=oauth_meta.get('scopes_supported'),
             code_challenge=code_challenge,
         )
-        print(f"[MCP OAuth] client_id={client_info['client_id']}, redirect_uri={redirect_uri}")
-        print(f"[MCP OAuth] auth_url={auth_url}")
+        logger.info(f"[MCP OAuth] client_id={client_info['client_id']}, redirect_uri={redirect_uri}")
+        logger.info(f"[MCP OAuth] auth_url={auth_url}")
 
         # Create app in pending state (no tools yet)
         app_dict = {
@@ -1575,7 +1638,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1592,7 +1656,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
@@ -1671,7 +1736,7 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
         res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
-        print('enable_app_endpoint', res.status_code, res.content)
+        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
@@ -1850,7 +1915,7 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
     persona = get_personas_by_username_db(persona_id)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
-    print(persona)
+    logger.info(persona)
     return persona
 
 
@@ -1911,7 +1976,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
         raise HTTPException(status_code=403, detail='Forbidden')
 
     app_ids = get_conversation_summary_app_ids()
-    print(app_ids)
+    logger.info(app_ids)
     return {'app_ids': app_ids or []}
 
 

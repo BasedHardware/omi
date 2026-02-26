@@ -9958,5 +9958,79 @@
   "pairingDescNeoOne": "Press and hold the power button until the LED blinks. The device will be discoverable.",
   "@pairingDescNeoOne": {
     "description": "Pairing description for Neo One device"
+  },
+  "downloadingFromDevice": "Downloading from device",
+  "reconnectingToInternet": "Reconnecting to internet...",
+  "uploadingToCloud": "Uploading {current} of {total}",
+  "@uploadingToCloud": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "processedStatus": "Processed",
+  "corruptedStatus": "Corrupted",
+  "nPending": "{count} pending",
+  "@nPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nProcessed": "{count} processed",
+  "@nProcessed": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "synced": "Synced",
+  "@synced": {
+    "description": "Label for synced/processed recordings tab"
+  },
+  "noPendingRecordings": "No pending recordings",
+  "@noPendingRecordings": {
+    "description": "Empty state when no pending recordings"
+  },
+  "noProcessedRecordings": "No processed recordings yet",
+  "@noProcessedRecordings": {
+    "description": "Empty state when no processed recordings"
+  },
+  "pending": "Pending",
+  "@pending": {
+    "description": "Pending tab label for sync page"
+  },
+  "whatsNewInVersion": "What's New in {version}",
+  "@whatsNewInVersion": {
+    "description": "Title for changelog with version number",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "addToYourTaskList": "Add to your task list?",
+  "failedToCreateShareLink": "Failed to create share link",
+  "deleteGoal": "Delete Goal",
+  "deviceUpToDate": "Your device is up to date",
+  "wifiConfiguration": "WiFi Configuration",
+  "wifiConfigurationSubtitle": "Enter your WiFi credentials to allow the device to download the firmware.",
+  "networkNameSsid": "Network Name (SSID)",
+  "enterWifiNetworkName": "Enter WiFi network name",
+  "enterWifiPassword": "Enter WiFi password",
+  "appIconLabel": "App Icon",
+  "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
+  "@onboardingWhatIKnowAboutYouTitle": {
+    "description": "Title for onboarding step that previews the memory graph"
+  },
+  "onboardingWhatIKnowAboutYouDescription": "This map updates as Omi learns from your conversations.",
+  "@onboardingWhatIKnowAboutYouDescription": {
+    "description": "Description for onboarding memory graph preview step"
   }
 }

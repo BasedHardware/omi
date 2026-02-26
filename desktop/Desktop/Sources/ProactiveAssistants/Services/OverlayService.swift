@@ -55,7 +55,7 @@ class OverlayService {
 
             // Create the SwiftUI glow view for this edge
             let glowView = GlowEdgeView(edge: edge, colorMode: colorMode)
-            let hostingView = NSHostingView(rootView: glowView)
+            let hostingView = NSHostingView(rootView: glowView.withFontScaling())
             hostingView.frame = edgeWindow.contentView?.bounds ?? .zero
             hostingView.autoresizingMask = [.width, .height]
 
@@ -128,6 +128,9 @@ class OverlayService {
         let focusResult = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow)
 
         guard focusResult == .success, let windowElement = focusedWindow else {
+            if focusResult == .apiDisabled || focusResult == .cannotComplete {
+                log("ACCESSIBILITY_AX: getWindowFrameViaAccessibility failed with \(focusResult.rawValue) — permission may be stuck")
+            }
             return nil
         }
 

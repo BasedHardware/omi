@@ -104,7 +104,7 @@ struct FocusPage: View {
                 ProgressView()
                     .scaleEffect(1.2)
                 Text("Loading focus data...")
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
                     .padding(.top, 12)
                 Spacer()
@@ -126,14 +126,14 @@ struct FocusPage: View {
                         .frame(width: 8, height: 8)
 
                     Text(viewModel.isMonitoring ? "Monitoring" : "Not monitoring")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text("•")
                         .foregroundColor(OmiColors.textTertiary)
 
                     Text("\(viewModel.todayCount) sessions today")
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                 }
 
@@ -143,7 +143,7 @@ struct FocusPage: View {
                 HStack(spacing: 12) {
                     Toggle(isOn: $viewModel.showHistorical) {
                         Text("Show all")
-                            .font(.system(size: 13))
+                            .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
                     }
                     .toggleStyle(.switch)
@@ -166,7 +166,7 @@ struct FocusPage: View {
                         .disabled(storage.sessions.isEmpty)
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18))
+                            .scaledFont(size: 18)
                             .foregroundColor(OmiColors.textSecondary)
                     }
                     .menuStyle(.borderlessButton)
@@ -256,19 +256,19 @@ struct FocusPage: View {
                     .frame(width: 56, height: 56)
 
                 Image(systemName: "clock.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(Color.blue)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Waiting to Analyze")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
                     if let app = storage.detectedAppName {
                         Text(app)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
 
                         Text("•")
@@ -276,7 +276,7 @@ struct FocusPage: View {
                     }
 
                     Text("Analyzing in \(seconds)s")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -285,7 +285,7 @@ struct FocusPage: View {
 
             // Countdown indicator
             Text("\(seconds)")
-                .font(.system(size: 24, weight: .bold, design: .monospaced))
+                .scaledFont(size: 24, weight: .bold, design: .monospaced)
                 .foregroundColor(Color.blue)
         }
         .padding(20)
@@ -314,19 +314,19 @@ struct FocusPage: View {
                     .frame(width: 56, height: 56)
 
                 Image(systemName: "pause.circle.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(Color.orange)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Cooldown Active")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 HStack(spacing: 8) {
                     if let app = storage.detectedAppName ?? viewModel.currentApp {
                         Text(app)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textSecondary)
 
                         Text("•")
@@ -334,7 +334,7 @@ struct FocusPage: View {
                     }
 
                     Text("Next check in \(minutes):\(String(format: "%02d", seconds))")
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -344,10 +344,10 @@ struct FocusPage: View {
             // Countdown indicator
             VStack(spacing: 2) {
                 Text("\(minutes):\(String(format: "%02d", seconds))")
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .scaledFont(size: 20, weight: .bold, design: .monospaced)
                     .foregroundColor(Color.orange)
                 Text("remaining")
-                    .font(.system(size: 10))
+                    .scaledFont(size: 10)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
@@ -373,17 +373,17 @@ struct FocusPage: View {
                     .frame(width: 56, height: 56)
 
                 Image(systemName: "eye.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(Color.gray)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Analyzing...")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Text(appName)
-                    .font(.system(size: 14))
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
             }
 
@@ -418,18 +418,18 @@ struct FocusPage: View {
                     .frame(width: 56, height: 56)
 
                 Image(systemName: status == .focused ? "eye.fill" : "eye.slash.fill")
-                    .font(.system(size: 24))
+                    .scaledFont(size: 24)
                     .foregroundColor(status == .focused ? Color.green : Color.orange)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(status == .focused ? "Focused" : "Distracted")
-                    .font(.system(size: 20, weight: .semibold))
+                    .scaledFont(size: 20, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 if let app = appName {
                     Text(app)
-                        .font(.system(size: 14))
+                        .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
                 }
             }
@@ -465,7 +465,7 @@ struct FocusPage: View {
     private var statsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Today's Summary")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
                 .textCase(.uppercase)
 
@@ -515,7 +515,7 @@ struct FocusPage: View {
     private var topDistractionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Top Distractions")
-                .font(.system(size: 14, weight: .semibold))
+                .scaledFont(size: 14, weight: .semibold)
                 .foregroundColor(OmiColors.textSecondary)
                 .textCase(.uppercase)
 
@@ -523,22 +523,22 @@ struct FocusPage: View {
                 ForEach(viewModel.stats.topDistractions.prefix(5), id: \.appOrSite) { entry in
                     HStack {
                         Image(systemName: "app.fill")
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(Color.orange)
                             .frame(width: 24)
 
                         Text(entry.appOrSite)
-                            .font(.system(size: 14))
+                            .scaledFont(size: 14)
                             .foregroundColor(OmiColors.textPrimary)
 
                         Spacer()
 
                         Text("\(entry.count)x")
-                            .font(.system(size: 12))
+                            .scaledFont(size: 12)
                             .foregroundColor(OmiColors.textTertiary)
 
                         Text(formatDuration(entry.totalSeconds))
-                            .font(.system(size: 13, weight: .medium))
+                            .scaledFont(size: 13, weight: .medium)
                             .foregroundColor(OmiColors.textSecondary)
                             .frame(width: 50, alignment: .trailing)
                     }
@@ -559,7 +559,7 @@ struct FocusPage: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(viewModel.showHistorical ? "All Sessions" : "Today's Sessions")
-                    .font(.system(size: 14, weight: .semibold))
+                    .scaledFont(size: 14, weight: .semibold)
                     .foregroundColor(OmiColors.textSecondary)
                     .textCase(.uppercase)
 
@@ -569,12 +569,12 @@ struct FocusPage: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(OmiColors.textTertiary)
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
 
                     TextField("Search...", text: $viewModel.searchText)
                         .textFieldStyle(.plain)
                         .foregroundColor(OmiColors.textPrimary)
-                        .font(.system(size: 13))
+                        .scaledFont(size: 13)
 
                     if !viewModel.searchText.isEmpty {
                         Button {
@@ -582,7 +582,7 @@ struct FocusPage: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(OmiColors.textTertiary)
-                                .font(.system(size: 12))
+                                .scaledFont(size: 12)
                         }
                         .buttonStyle(.plain)
                     }
@@ -612,15 +612,15 @@ struct FocusPage: View {
     private var emptyHistoryView: some View {
         VStack(spacing: 12) {
             Image(systemName: "eye.fill")
-                .font(.system(size: 36))
+                .scaledFont(size: 36)
                 .foregroundColor(OmiColors.textTertiary)
 
             Text("No Sessions Yet")
-                .font(.system(size: 16, weight: .semibold))
+                .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text("Focus sessions will appear here as you work.\nMake sure Focus monitoring is enabled in Settings.")
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
         }
@@ -659,14 +659,14 @@ struct FocusSessionRow: View {
 
             // App/site
             Text(session.appOrSite)
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(1)
                 .frame(width: 120, alignment: .leading)
 
             // Description
             Text(session.description)
-                .font(.system(size: 13))
+                .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
                 .lineLimit(1)
 
@@ -675,7 +675,7 @@ struct FocusSessionRow: View {
             // Message (if any)
             if let message = session.message, !message.isEmpty {
                 Text(message)
-                    .font(.system(size: 12))
+                    .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                     .lineLimit(1)
                     .frame(maxWidth: 150, alignment: .trailing)
@@ -684,14 +684,14 @@ struct FocusSessionRow: View {
             // Sync status
             if !session.isSynced {
                 Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 11))
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
                     .help("Pending sync")
             }
 
             // Time
             Text(formatTime(session.createdAt))
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
                 .foregroundColor(OmiColors.textTertiary)
                 .frame(width: 60, alignment: .trailing)
 
@@ -701,7 +701,7 @@ struct FocusSessionRow: View {
                     showDeleteConfirmation = true
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 12))
+                        .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
@@ -737,16 +737,22 @@ struct FocusSessionRow: View {
         }
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d h:mm a"
+        return f
+    }()
+
     private func formatTime(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "h:mm a"
-            return formatter.string(from: date)
+        if Calendar.current.isDateInToday(date) {
+            return Self.timeFormatter.string(from: date)
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "M/d h:mm a"
-            return formatter.string(from: date)
+            return Self.dateTimeFormatter.string(from: date)
         }
     }
 }

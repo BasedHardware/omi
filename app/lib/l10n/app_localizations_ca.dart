@@ -8194,4 +8194,85 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get pairingDescNeoOne =>
       'Manteniu premut el botó d\'engegada fins que el LED parpellegi. El dispositiu serà detectable.';
+
+  @override
+  String get downloadingFromDevice => 'Descarregant del dispositiu';
+
+  @override
+  String get reconnectingToInternet => 'Reconnectant a internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Pujant $current de $total';
+  }
+
+  @override
+  String get processedStatus => 'Processat';
+
+  @override
+  String get corruptedStatus => 'Corrupte';
+
+  @override
+  String nPending(int count) {
+    return '$count pendents';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count processats';
+  }
+
+  @override
+  String get synced => 'Sincronitzat';
+
+  @override
+  String get noPendingRecordings => 'No hi ha enregistraments pendents';
+
+  @override
+  String get noProcessedRecordings => 'Encara no hi ha enregistraments processats';
+
+  @override
+  String get pending => 'Pendent';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Novetats a $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Afegir a la llista de tasques?';
+
+  @override
+  String get failedToCreateShareLink => 'No s\'ha pogut crear l\'enllaç per compartir';
+
+  @override
+  String get deleteGoal => 'Eliminar objectiu';
+
+  @override
+  String get deviceUpToDate => 'El dispositiu està actualitzat';
+
+  @override
+  String get wifiConfiguration => 'Configuració WiFi';
+
+  @override
+  String get wifiConfigurationSubtitle =>
+      'Introduïu les credencials WiFi per permetre al dispositiu descarregar el firmware.';
+
+  @override
+  String get networkNameSsid => 'Nom de la xarxa (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Introduïu el nom de la xarxa WiFi';
+
+  @override
+  String get enterWifiPassword => 'Introduïu la contrasenya WiFi';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

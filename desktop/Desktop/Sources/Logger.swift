@@ -1,12 +1,46 @@
 import Foundation
 import Sentry
 
-private let logFile = "/tmp/omi.log"
+private let logFile: String = {
+    let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
+    return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
+}()
+private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "HH:mm:ss.SSS"  // Added milliseconds for perf tracking
     return formatter
 }()
+
+/// Append data to the log file on a background queue (non-blocking)
+private func appendToLogFile(_ line: String) {
+    guard let data = (line + "\n").data(using: .utf8) else { return }
+    logQueue.async {
+        writeToLogFile(data)
+    }
+}
+
+/// Append data to the log file synchronously (blocks caller until written).
+/// Use for critical events that must survive imminent app termination (e.g. Sparkle updates).
+private func appendToLogFileSync(_ line: String) {
+    guard let data = (line + "\n").data(using: .utf8) else { return }
+    logQueue.sync {
+        writeToLogFile(data)
+    }
+}
+
+/// Shared file-write implementation (must be called on logQueue)
+private func writeToLogFile(_ data: Data) {
+    if FileManager.default.fileExists(atPath: logFile) {
+        if let handle = FileHandle(forWritingAtPath: logFile) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            handle.closeFile()
+        }
+    } else {
+        FileManager.default.createFile(atPath: logFile, contents: data)
+    }
+}
 
 // MARK: - Performance Logging
 
@@ -33,18 +67,7 @@ func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
     print(line)
     fflush(stdout)
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }
 
 /// Timer for measuring operation duration
@@ -90,6 +113,21 @@ func measurePerfAsync<T>(_ name: String, logCPU: Bool = false, _ block: () async
 /// Check if this is a development build
 private let isDevBuild: Bool = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
 
+/// Write to log file synchronously — guaranteed to persist even if the app terminates immediately after.
+/// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
+func logSync(_ message: String) {
+    let timestamp = dateFormatter.string(from: Date())
+    let line = "[\(timestamp)] [app] \(message)"
+    print(line)
+    fflush(stdout)
+
+    let breadcrumb = Breadcrumb(level: .info, category: "app")
+    breadcrumb.message = message
+    SentrySDK.addBreadcrumb(breadcrumb)
+
+    appendToLogFileSync(line)
+}
+
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
     let timestamp = dateFormatter.string(from: Date())
@@ -102,18 +140,7 @@ func log(_ message: String) {
     breadcrumb.message = message
     SentrySDK.addBreadcrumb(breadcrumb)
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }
 
 /// Log an error and capture it in Sentry
@@ -130,27 +157,18 @@ func logError(_ message: String, error: Error? = nil) {
     breadcrumb.message = fullMessage
     SentrySDK.addBreadcrumb(breadcrumb)
 
-    // Capture the error in Sentry
-    if let error = error {
+    // Capture the error in Sentry (skip intentional cancellations — they're noise)
+    let isCancelledRequest = (error as? URLError)?.code == .cancelled ||
+        (error as NSError?)?.domain == NSURLErrorDomain && (error as NSError?)?.code == NSURLErrorCancelled
+    if let error = error, !isCancelledRequest {
         SentrySDK.capture(error: error) { scope in
             scope.setContext(value: ["message": message], key: "app_context")
         }
-    } else {
+    } else if error == nil {
         SentrySDK.capture(message: fullMessage) { scope in
             scope.setLevel(.error)
         }
     }
 
-    // Append to log file
-    if let data = (line + "\n").data(using: .utf8) {
-        if FileManager.default.fileExists(atPath: logFile) {
-            if let handle = FileHandle(forWritingAtPath: logFile) {
-                handle.seekToEndOfFile()
-                handle.write(data)
-                handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: logFile, contents: data)
-        }
-    }
+    appendToLogFile(line)
 }

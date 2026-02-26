@@ -8008,4 +8008,84 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => '전원 버튼을 LED가 깜빡일 때까지 길게 누르세요. 기기가 검색 가능해집니다.';
+
+  @override
+  String get downloadingFromDevice => '기기에서 다운로드 중';
+
+  @override
+  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total 업로드 중';
+  }
+
+  @override
+  String get processedStatus => '처리됨';
+
+  @override
+  String get corruptedStatus => '손상됨';
+
+  @override
+  String nPending(int count) {
+    return '$count개 대기 중';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count개 처리됨';
+  }
+
+  @override
+  String get synced => '동기화됨';
+
+  @override
+  String get noPendingRecordings => '대기 중인 녹음이 없습니다';
+
+  @override
+  String get noProcessedRecordings => '아직 처리된 녹음이 없습니다';
+
+  @override
+  String get pending => '대기 중';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return '$version의 새로운 기능';
+  }
+
+  @override
+  String get addToYourTaskList => '작업 목록에 추가하시겠습니까?';
+
+  @override
+  String get failedToCreateShareLink => '공유 링크 생성에 실패했습니다';
+
+  @override
+  String get deleteGoal => '목표 삭제';
+
+  @override
+  String get deviceUpToDate => '기기가 최신 상태입니다';
+
+  @override
+  String get wifiConfiguration => 'WiFi 설정';
+
+  @override
+  String get wifiConfigurationSubtitle => '기기가 펌웨어를 다운로드할 수 있도록 WiFi 자격 증명을 입력하세요.';
+
+  @override
+  String get networkNameSsid => '네트워크 이름 (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'WiFi 네트워크 이름을 입력하세요';
+
+  @override
+  String get enterWifiPassword => 'WiFi 비밀번호를 입력하세요';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

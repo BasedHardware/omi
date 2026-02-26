@@ -442,7 +442,7 @@ struct ChatPrompts {
     <user_context>
     Current date/time in {user_name}'s timezone ({tz}): {current_datetime_str}
     {memories_section}
-    {goal_section}{ai_profile_section}
+    {goal_section}{tasks_section}{ai_profile_section}
     </user_context>
 
     <mentor_behavior>
@@ -473,36 +473,56 @@ struct ChatPrompts {
 
     <critical_accuracy_rules>
     NEVER MAKE UP INFORMATION - THIS IS CRITICAL:
-    1. If you don't have information about something, give a SHORT 1-2 line response saying you don't know.
+    1. If you don't have information about something, USE YOUR TOOLS to look it up before saying you don't know.
     2. Do NOT generate plausible-sounding details even if they seem helpful.
     3. Sound like a human: "I don't have that" not "no data available"
-    4. If you don't know something, say "I don't know" in 1-2 lines max.
+    4. Only say "I don't know" AFTER you've checked the database. 1-2 lines max.
     </critical_accuracy_rules>
 
     <tools>
-    You have 2 tools. Use them — don't guess when you can look it up.
+    You have 2 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
     - SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-    - Use for: app usage stats, time queries, task management, aggregations, anything structured.
+    - Use for: personal facts, app usage stats, time queries, task management, aggregations, anything structured.
 
     **semantic_search**: Vector similarity search on screen history.
     - Use for: fuzzy conceptual queries where exact SQL keywords won't work.
     - e.g. "reading about machine learning", "working on design mockups"
     - Parameters: query (required), days (default 7), app_filter (optional)
 
-    **When to use which:**
+    **CRITICAL — When to use tools proactively:**
+    The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
+    For ANY personal question (age, preferences, relationships, habits, past events, "what do you know about me", etc.):
+    1. FIRST check <user_facts> — if the answer is there, use it directly.
+    2. If NOT in <user_facts>, ALWAYS query the memories table before saying you don't know.
+    3. For questions about past events or conversations, query transcription_sessions/transcription_segments.
+    NEVER say "I don't know" or "I don't have that info" without checking the database first.
+
+    **When to use which tool:**
+    - "how old am I?" / "what's my name?" / personal facts → execute_sql (query memories table)
     - "what did I do yesterday?" → execute_sql (query screenshots by timestamp)
     - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
     - "find where I was reading about AI" → semantic_search (conceptual)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
     - "what are my tasks?" → execute_sql (SELECT FROM action_items)
     - "show my conversations" → execute_sql (SELECT FROM transcription_sessions)
+    - "what did I talk about with John?" → execute_sql (search transcription_segments)
 
     {database_schema}
 
     **Common SQL patterns:**
+
+    -- Look up personal facts/preferences (ALWAYS try this for personal questions):
+    SELECT content FROM memories WHERE deleted = 0 AND isDismissed = 0
+    ORDER BY createdAt DESC LIMIT 50
+
+    -- Search memories by keyword:
+    SELECT content, category, createdAt FROM memories
+    WHERE deleted = 0 AND isDismissed = 0 AND content LIKE '%keyword%'
+    ORDER BY createdAt DESC
+
     -- What did I do today (app breakdown):
     SELECT appName, COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
     FROM screenshots WHERE timestamp >= datetime('now', 'start of day', 'localtime')
@@ -528,6 +548,12 @@ struct ChatPrompts {
     -- Conversation transcript:
     SELECT ts.text, ts.speaker, ts.startTime FROM transcription_segments ts
     WHERE ts.sessionId = ? ORDER BY ts.segmentOrder
+
+    -- Search conversation content:
+    SELECT s.id, s.title, s.overview, s.startedAt FROM transcription_sessions s
+    JOIN transcription_segments seg ON seg.sessionId = s.id
+    WHERE s.deleted = 0 AND seg.text LIKE '%keyword%'
+    GROUP BY s.id ORDER BY s.startedAt DESC LIMIT 10
 
     -- Time in user's timezone: use datetime('now', 'localtime') or datetime('now', '-N hours', 'localtime')
     -- "yesterday": datetime('now', 'start of day', '-1 day', 'localtime') to datetime('now', 'start of day', 'localtime')
@@ -562,18 +588,246 @@ struct ChatPrompts {
         "proactive_extractions": "memories, advice, tasks extracted from screenshots",
         "focus_sessions": "focus tracking",
         "live_notes": "AI-generated notes during recording",
-        "memories": "user facts and extracted knowledge (bidirectional sync with backend)",
+        "memories": "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
         "ai_user_profiles": "daily AI-generated user profile summaries",
+        "indexed_files": "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
+        "goals": "user goals with progress tracking",
+        "staged_tasks": "AI-extracted task candidates pending user review",
+        "task_chat_messages": "Claude Code agent ↔ user chat history, one thread per task (action item)",
+        "observations": "per-screenshot AI observations used to detect tasks and activities",
+    ]
+
+    /// Per-column descriptions for every non-excluded table.
+    /// Used by formatSchema() to annotate each column with a human-readable hint.
+    /// Key = table name, value = (column name → description).
+    static let columnAnnotations: [String: [String: String]] = [
+        "screenshots": [
+            "timestamp": "When the screenshot was captured",
+            "appName": "Active application name at capture time",
+            "windowTitle": "Active window title at capture time",
+            "ocrText": "Full OCR-extracted text from the screen",
+            "focusStatus": "Whether user was focused or distracted (focused/distracted)",
+            "skippedForBattery": "OCR was skipped on battery; text may be missing",
+        ],
+        "action_items": [
+            "description": "The task text shown to the user",
+            "completed": "Whether the task is marked done",
+            "deleted": "Soft-delete flag",
+            "source": "Origin: screenshot | conversation | omi | manual",
+            "conversationId": "Backend conversation ID if extracted from a voice session",
+            "priority": "high | medium | low",
+            "category": "AI-assigned category label",
+            "tagsJson": "JSON array of tag strings",
+            "deletedBy": "Who deleted it: user | ai_dedup",
+            "dueAt": "Optional due date/time",
+            "screenshotId": "FK to screenshots — screen context at extraction time",
+            "confidence": "Extraction confidence 0–1",
+            "sourceApp": "App that was active when task was extracted",
+            "windowTitle": "Window title at extraction time",
+            "contextSummary": "AI summary of what was happening on screen",
+            "currentActivity": "Short label of user activity at capture time",
+            "metadataJson": "Arbitrary extra metadata JSON",
+            "sortOrder": "Manual user-defined sort position",
+            "indentLevel": "Nesting level 0–3 for subtasks",
+            "relevanceScore": "AI-scored relevance 0–100; higher = more important",
+            "scoredAt": "When relevanceScore was last computed",
+            "agentStatus": "AI agent execution state: pending | processing | editing | completed | failed",
+            "agentSessionName": "tmux session name for the running agent",
+            "agentPrompt": "Prompt that was sent to the Claude agent",
+            "agentPlan": "Claude agent's response / execution plan",
+            "agentStartedAt": "When the agent started working on this task",
+            "agentCompletedAt": "When the agent finished",
+            "agentEditedFilesJson": "JSON array of file paths the agent modified",
+            "chatSessionId": "Firestore session ID for the task-scoped sidebar chat",
+            "recurrenceRule": "Recurrence pattern: daily | weekdays | weekly | biweekly | monthly",
+            "recurrenceParentId": "backendId of the parent recurring task template",
+        ],
+        "task_chat_messages": [
+            "taskId": "FK to action_items.backendId — which task this message belongs to",
+            "acpSessionId": "ACP session ID for conversation continuity across restarts",
+            "messageId": "Stable UUID for this message (dedup key)",
+            "sender": "user | ai",
+            "messageText": "Plain text content of the message",
+            "contentBlocksJson": "JSON-encoded Claude content blocks: text, toolCall, thinking",
+            "createdAt": "When the message was sent",
+            "updatedAt": "Last modification time",
+        ],
+        "memories": [
+            "content": "The remembered fact, preference, or personal detail",
+            "category": "system | interesting | manual",
+            "tagsJson": "JSON array of tag strings (e.g. [\"tip\", \"preference\"])",
+            "visibility": "private | public",
+            "reviewed": "Whether a human has reviewed this memory",
+            "userReview": "User thumbs-up (true) / thumbs-down (false) / unreviewed (null)",
+            "manuallyAdded": "True if user typed this directly rather than AI-extracted",
+            "scoring": "Internal scoring metadata from extraction",
+            "source": "desktop | omi | screenshot | phone — how the memory was created",
+            "conversationId": "Backend conversation ID if extracted from a voice session",
+            "screenshotId": "FK to screenshots if extracted from screen",
+            "confidence": "Extraction confidence 0–1",
+            "reasoning": "AI reasoning for why this was saved as a memory",
+            "sourceApp": "App that was active when memory was extracted",
+            "windowTitle": "Window title at extraction time",
+            "contextSummary": "AI summary of screen context at extraction",
+            "currentActivity": "User activity label at extraction time",
+            "inputDeviceName": "Audio device used if from a voice session",
+            "isRead": "Whether the user has seen this memory in the UI",
+            "isDismissed": "Whether the user dismissed this memory",
+            "deleted": "Soft-delete flag",
+        ],
+        "transcription_sessions": [
+            "startedAt": "When recording began",
+            "finishedAt": "When recording ended (null if still recording)",
+            "source": "Recording source: desktop | omi | phone | etc",
+            "language": "BCP-47 language code (e.g. en, fr)",
+            "timezone": "IANA timezone of the device at recording time",
+            "inputDeviceName": "Audio input device name",
+            "status": "recording | pending_upload | uploading | completed | failed",
+            "retryCount": "Number of upload retry attempts",
+            "lastError": "Last upload error message if status=failed",
+            "title": "AI-generated session title",
+            "overview": "AI-generated session summary",
+            "emoji": "AI-assigned emoji representing the session",
+            "category": "AI-assigned topic category",
+            "actionItemsJson": "JSON array of tasks extracted by backend",
+            "eventsJson": "JSON array of calendar events detected",
+            "geolocationJson": "Location data if available",
+            "photosJson": "Referenced photo metadata",
+            "appsResultsJson": "App integrations results",
+            "conversationStatus": "User-set status label for the conversation",
+            "discarded": "True if user discarded/deleted this session",
+            "deleted": "Soft-delete flag",
+            "isLocked": "True if user has locked the session from edits",
+            "starred": "True if user starred/favorited this session",
+            "folderId": "Folder the session is organized into",
+        ],
+        "transcription_segments": [
+            "sessionId": "FK to transcription_sessions",
+            "speaker": "Speaker index (0, 1, 2…) within this session",
+            "text": "Transcribed text for this segment",
+            "startTime": "Segment start time in seconds from session start",
+            "endTime": "Segment end time in seconds from session start",
+            "segmentOrder": "Sequential order within the session",
+            "segmentId": "Backend segment ID",
+            "speakerLabel": "Human-readable speaker label if identified",
+            "isUser": "True if this speaker is the primary user",
+            "personId": "Identified person ID if speaker was recognized",
+        ],
+        "live_notes": [
+            "sessionId": "FK to transcription_sessions — which session this note belongs to",
+            "text": "Note text content",
+            "timestamp": "When the note was created",
+            "isAiGenerated": "True if AI generated; false if user typed manually",
+            "segmentStartOrder": "First segment order this note references",
+            "segmentEndOrder": "Last segment order this note references",
+        ],
+        "proactive_extractions": [
+            "screenshotId": "FK to screenshots — source screen",
+            "type": "memory | task | advice",
+            "content": "The extracted text content",
+            "category": "Topic category assigned by AI",
+            "confidence": "Extraction confidence 0–1",
+            "reasoning": "AI explanation for this extraction",
+            "sourceApp": "App active at extraction time",
+            "contextSummary": "AI summary of screen context",
+            "priority": "Priority if type=task: high | medium | low",
+            "isRead": "Whether user has seen this extraction",
+            "isDismissed": "Whether user dismissed it",
+        ],
+        "focus_sessions": [
+            "screenshotId": "FK to screenshots",
+            "status": "focused | distracted",
+            "appOrSite": "App or website being used",
+            "windowTitle": "Window title at the time",
+            "description": "AI description of what the user was doing",
+            "message": "Motivational or coaching message for the user",
+            "durationSeconds": "How long the focus/distraction period lasted",
+        ],
+        "observations": [
+            "screenshotId": "FK to screenshots",
+            "appName": "App that was active",
+            "contextSummary": "AI-generated summary of what was happening",
+            "currentActivity": "Short activity label",
+            "hasTask": "Whether a task was found in this screenshot",
+            "taskTitle": "Task title if hasTask=true",
+            "sourceCategory": "High-level category (work/personal/social/etc)",
+            "sourceSubcategory": "More specific subcategory",
+            "metadataJson": "Additional structured metadata",
+        ],
+        "goals": [
+            "title": "Short goal name shown in UI",
+            "goalDescription": "Longer description of the goal",
+            "goalType": "boolean (done/not done) | scale (0–N) | numeric (measured value)",
+            "targetValue": "The value to reach for completion",
+            "currentValue": "Current progress value",
+            "minValue": "Minimum possible value",
+            "maxValue": "Maximum possible value",
+            "unit": "Unit label (e.g. km, hours, pages)",
+            "isActive": "Whether goal is currently being tracked",
+            "completedAt": "When the goal was completed (null if in progress)",
+            "deleted": "Soft-delete flag",
+        ],
+        "staged_tasks": [
+            "description": "Task text proposed by AI",
+            "completed": "Whether promoted task was completed",
+            "deleted": "Soft-delete flag",
+            "source": "Origin: screenshot | conversation | omi",
+            "conversationId": "Backend conversation ID if from voice",
+            "priority": "high | medium | low",
+            "category": "AI-assigned category",
+            "tagsJson": "JSON array of tag strings",
+            "deletedBy": "user | ai_dedup",
+            "dueAt": "Proposed due date",
+            "screenshotId": "FK to screenshots",
+            "confidence": "Extraction confidence 0–1",
+            "sourceApp": "App active at extraction",
+            "windowTitle": "Window title at extraction",
+            "contextSummary": "AI summary of screen context",
+            "currentActivity": "Activity label at extraction time",
+            "metadataJson": "Extra metadata JSON",
+            "relevanceScore": "AI relevance score 0–100",
+            "scoredAt": "When relevanceScore was computed",
+        ],
+        "ai_user_profiles": [
+            "profileText": "Full AI-generated profile summary text",
+            "dataSourcesUsed": "Bitmask of data sources used to generate the profile",
+            "generatedAt": "When this profile was generated",
+        ],
+        "indexed_files": [
+            "path": "File path relative to home directory",
+            "filename": "File name with extension",
+            "fileExtension": "Extension without dot (e.g. pdf, swift)",
+            "fileType": "document | code | image | video | audio | spreadsheet | presentation | archive | data | other",
+            "sizeBytes": "File size in bytes",
+            "folder": "Top-level scanned folder (Downloads/Documents/Desktop)",
+            "depth": "Directory nesting depth from the scanned root",
+            "createdAt": "File creation date",
+            "modifiedAt": "File last-modified date",
+            "indexedAt": "When the file was added to the index",
+        ],
     ]
 
     /// Tables to exclude from the schema prompt (internal/GRDB tables)
     static let excludedTablePrefixes = ["sqlite_", "grdb_"]
-    static let excludedTables: Set<String> = ["screenshots_fts", "screenshots_fts_content", "screenshots_fts_segments", "screenshots_fts_segdir",
-                                               "action_items_fts", "action_items_fts_content", "action_items_fts_segments", "action_items_fts_segdir"]
+    /// Any table whose name contains "_fts" is an FTS virtual or internal table — exclude all.
+    /// Specific infra tables also excluded.
+    static let excludedTables: Set<String> = ["migration_status", "task_dedup_log"]
 
-    /// Static suffix appended after the dynamic schema (FTS tables + common patterns)
+    /// Infrastructure columns to strip from schema — file paths, binary blobs, sync state, internal flags.
+    /// New migrations are still picked up automatically; only these specific names are hidden.
+    /// Claude can always query: SELECT sql FROM sqlite_master WHERE name='table_name'
+    static let excludedColumns: Set<String> = [
+        "imagePath", "videoChunkPath", "frameOffset",
+        "ocrDataJson", "extractedTasksJson", "adviceJson",
+        "isIndexed", "backendId", "backendSynced", "backendSyncedAt",
+        "embeddingData", "embedding", "normalizedOcrTextId",
+        "fromStaged",
+    ]
+
+    /// Static suffix appended after the dynamic schema
     static let schemaFooter = """
     FTS tables: screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description)
+    Full DDL for any table: SELECT sql FROM sqlite_master WHERE name='table_name'
     """
 
     // MARK: - Helper Prompts
@@ -818,6 +1072,7 @@ struct ChatPromptBuilder {
         userName: String,
         memoriesSection: String = "",
         goalSection: String = "",
+        tasksSection: String = "",
         aiProfileSection: String = "",
         databaseSchema: String = ""
     ) -> String {
@@ -827,6 +1082,7 @@ struct ChatPromptBuilder {
             memoriesSection: memoriesSection,
             goalSection: goalSection
         )
+        prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: tasksSection)
         prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: aiProfileSection)
         prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
         return prompt

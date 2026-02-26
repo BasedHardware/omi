@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::TranscriptSegment;
+use super::{ConversationSource, TranscriptSegment};
 
 /// Request to create a conversation from transcript segments
 /// Copied from Python CreateConversationRequest
@@ -16,6 +16,9 @@ pub struct CreateConversationRequest {
     pub language: String,
     #[serde(default = "default_timezone")]
     pub timezone: String,
+    /// Source of the conversation (e.g., desktop, omi, bee)
+    #[serde(default)]
+    pub source: ConversationSource,
     /// Name of the input device (microphone) used for recording
     pub input_device_name: Option<String>,
 }

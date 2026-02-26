@@ -526,6 +526,24 @@ Future changeAppVisibilityServer(String appId, bool makePublic) async {
   }
 }
 
+Future<bool> refreshAppManifestServer(String appId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/$appId/refresh-manifest',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) return false;
+    log('refreshAppManifestServer: ${response.body}');
+    return true;
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
+}
+
 Future deleteAppServer(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId',

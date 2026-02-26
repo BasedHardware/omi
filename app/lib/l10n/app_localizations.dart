@@ -15218,6 +15218,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press and hold the power button until the LED blinks. The device will be discoverable.'**
   String get pairingDescNeoOne;
+
+  /// No description provided for @downloadingFromDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from device'**
+  String get downloadingFromDevice;
+
+  /// No description provided for @reconnectingToInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting to internet...'**
+  String get reconnectingToInternet;
+
+  /// No description provided for @uploadingToCloud.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {current} of {total}'**
+  String uploadingToCloud(int current, int total);
+
+  /// No description provided for @processedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Processed'**
+  String get processedStatus;
+
+  /// No description provided for @corruptedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Corrupted'**
+  String get corruptedStatus;
+
+  /// No description provided for @nPending.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} pending'**
+  String nPending(int count);
+
+  /// No description provided for @nProcessed.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} processed'**
+  String nProcessed(int count);
+
+  /// Label for synced/processed recordings tab
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get synced;
+
+  /// Empty state when no pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'No pending recordings'**
+  String get noPendingRecordings;
+
+  /// Empty state when no processed recordings
+  ///
+  /// In en, this message translates to:
+  /// **'No processed recordings yet'**
+  String get noProcessedRecordings;
+
+  /// Pending tab label for sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get pending;
+
+  /// Title for changelog with version number
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s New in {version}'**
+  String whatsNewInVersion(String version);
+
+  /// No description provided for @addToYourTaskList.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to your task list?'**
+  String get addToYourTaskList;
+
+  /// No description provided for @failedToCreateShareLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create share link'**
+  String get failedToCreateShareLink;
+
+  /// No description provided for @deleteGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Goal'**
+  String get deleteGoal;
+
+  /// No description provided for @deviceUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device is up to date'**
+  String get deviceUpToDate;
+
+  /// No description provided for @wifiConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Configuration'**
+  String get wifiConfiguration;
+
+  /// No description provided for @wifiConfigurationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your WiFi credentials to allow the device to download the firmware.'**
+  String get wifiConfigurationSubtitle;
+
+  /// No description provided for @networkNameSsid.
+  ///
+  /// In en, this message translates to:
+  /// **'Network Name (SSID)'**
+  String get networkNameSsid;
+
+  /// No description provided for @enterWifiNetworkName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi network name'**
+  String get enterWifiNetworkName;
+
+  /// No description provided for @enterWifiPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter WiFi password'**
+  String get enterWifiPassword;
+
+  /// No description provided for @appIconLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'App Icon'**
+  String get appIconLabel;
+
+  /// Title for onboarding step that previews the memory graph
+  ///
+  /// In en, this message translates to:
+  /// **'Here is what I know about you'**
+  String get onboardingWhatIKnowAboutYouTitle;
+
+  /// Description for onboarding memory graph preview step
+  ///
+  /// In en, this message translates to:
+  /// **'This map updates as Omi learns from your conversations.'**
+  String get onboardingWhatIKnowAboutYouDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

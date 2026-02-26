@@ -8143,4 +8143,84 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => 'Vajutage ja hoidke toitenuppu, kuni LED vilgub. Seade on leitav.';
+
+  @override
+  String get downloadingFromDevice => 'Seadmest allalaadimine';
+
+  @override
+  String get reconnectingToInternet => 'Internetiga uuesti ühendamine...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return '$current/$total üleslaadimine';
+  }
+
+  @override
+  String get processedStatus => 'Töödeldud';
+
+  @override
+  String get corruptedStatus => 'Rikutud';
+
+  @override
+  String nPending(int count) {
+    return '$count ootel';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count töödeldud';
+  }
+
+  @override
+  String get synced => 'Sünkroonitud';
+
+  @override
+  String get noPendingRecordings => 'Ootel salvestisi pole';
+
+  @override
+  String get noProcessedRecordings => 'Töödeldud salvestisi pole veel';
+
+  @override
+  String get pending => 'Ootel';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Mis on uut versioonis $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lisada oma ülesannete loendisse?';
+
+  @override
+  String get failedToCreateShareLink => 'Jagamislingi loomine ebaõnnestus';
+
+  @override
+  String get deleteGoal => 'Kustuta eesmärk';
+
+  @override
+  String get deviceUpToDate => 'Teie seade on ajakohane';
+
+  @override
+  String get wifiConfiguration => 'WiFi seadistamine';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Sisestage WiFi andmed, et seade saaks püsivara alla laadida.';
+
+  @override
+  String get networkNameSsid => 'Võrgu nimi (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Sisestage WiFi võrgu nimi';
+
+  @override
+  String get enterWifiPassword => 'Sisestage WiFi parool';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

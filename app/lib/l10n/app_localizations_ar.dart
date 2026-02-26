@@ -8087,4 +8087,84 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => 'اضغط مع الاستمرار على زر الطاقة حتى يومض مؤشر LED. سيكون الجهاز قابلاً للاكتشاف.';
+
+  @override
+  String get downloadingFromDevice => 'جارٍ التنزيل من الجهاز';
+
+  @override
+  String get reconnectingToInternet => 'جارٍ إعادة الاتصال بالإنترنت...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'جارٍ رفع $current من $total';
+  }
+
+  @override
+  String get processedStatus => 'تمت المعالجة';
+
+  @override
+  String get corruptedStatus => 'تالف';
+
+  @override
+  String nPending(int count) {
+    return '$count قيد الانتظار';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count تمت معالجتها';
+  }
+
+  @override
+  String get synced => 'تمت المزامنة';
+
+  @override
+  String get noPendingRecordings => 'لا توجد تسجيلات قيد الانتظار';
+
+  @override
+  String get noProcessedRecordings => 'لا توجد تسجيلات معالجة بعد';
+
+  @override
+  String get pending => 'قيد الانتظار';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'ما الجديد في $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'إضافة إلى قائمة مهامك؟';
+
+  @override
+  String get failedToCreateShareLink => 'فشل إنشاء رابط المشاركة';
+
+  @override
+  String get deleteGoal => 'حذف الهدف';
+
+  @override
+  String get deviceUpToDate => 'جهازك محدّث';
+
+  @override
+  String get wifiConfiguration => 'إعدادات الواي فاي';
+
+  @override
+  String get wifiConfigurationSubtitle => 'أدخل بيانات الواي فاي للسماح للجهاز بتنزيل البرنامج الثابت.';
+
+  @override
+  String get networkNameSsid => 'اسم الشبكة (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'أدخل اسم شبكة الواي فاي';
+
+  @override
+  String get enterWifiPassword => 'أدخل كلمة مرور الواي فاي';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

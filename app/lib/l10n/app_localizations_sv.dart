@@ -8149,4 +8149,84 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get pairingDescNeoOne => 'Tryck och håll strömknappen tills LED:en blinkar. Enheten kommer att vara synlig.';
+
+  @override
+  String get downloadingFromDevice => 'Laddar ner från enhet';
+
+  @override
+  String get reconnectingToInternet => 'Återansluter till internet...';
+
+  @override
+  String uploadingToCloud(int current, int total) {
+    return 'Laddar upp $current av $total';
+  }
+
+  @override
+  String get processedStatus => 'Bearbetad';
+
+  @override
+  String get corruptedStatus => 'Skadad';
+
+  @override
+  String nPending(int count) {
+    return '$count väntande';
+  }
+
+  @override
+  String nProcessed(int count) {
+    return '$count bearbetade';
+  }
+
+  @override
+  String get synced => 'Synkroniserad';
+
+  @override
+  String get noPendingRecordings => 'Inga väntande inspelningar';
+
+  @override
+  String get noProcessedRecordings => 'Inga bearbetade inspelningar ännu';
+
+  @override
+  String get pending => 'Väntande';
+
+  @override
+  String whatsNewInVersion(String version) {
+    return 'Nyheter i $version';
+  }
+
+  @override
+  String get addToYourTaskList => 'Lägg till i din uppgiftslista?';
+
+  @override
+  String get failedToCreateShareLink => 'Kunde inte skapa delningslänk';
+
+  @override
+  String get deleteGoal => 'Ta bort mål';
+
+  @override
+  String get deviceUpToDate => 'Din enhet är uppdaterad';
+
+  @override
+  String get wifiConfiguration => 'WiFi-konfiguration';
+
+  @override
+  String get wifiConfigurationSubtitle => 'Ange dina WiFi-uppgifter så att enheten kan ladda ner firmware.';
+
+  @override
+  String get networkNameSsid => 'Nätverksnamn (SSID)';
+
+  @override
+  String get enterWifiNetworkName => 'Ange WiFi-nätverksnamn';
+
+  @override
+  String get enterWifiPassword => 'Ange WiFi-lösenord';
+
+  @override
+  String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
 }

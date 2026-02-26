@@ -41,6 +41,12 @@ class RecordingTimer: ObservableObject {
         duration = 0
     }
 
+    /// Restart the timer from zero (keeps running)
+    func restart() {
+        stop()
+        start()
+    }
+
     /// Formatted duration string (HH:MM:SS)
     var formattedDuration: String {
         let total = Int(duration)

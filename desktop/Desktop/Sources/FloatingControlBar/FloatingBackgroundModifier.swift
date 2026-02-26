@@ -4,31 +4,45 @@ import SwiftUI
 struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material
     var blendingMode: NSVisualEffectView.BlendingMode
+    var alphaValue: CGFloat
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
         view.blendingMode = blendingMode
         view.state = .active
+        view.alphaValue = alphaValue
         return view
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
+        nsView.alphaValue = alphaValue
     }
 }
 
-/// Background modifier using NSVisualEffectView with dark blur.
+/// Background modifier using NSVisualEffectView with dark blur or solid background.
 struct FloatingBackgroundModifier: ViewModifier {
     let cornerRadius: CGFloat
+    @ObservedObject private var settings = ShortcutSettings.shared
 
     func body(content: Content) -> some View {
         content
             .background(
-                VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                Group {
+                    if settings.solidBackground {
+                        Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
+                    } else {
+                        VisualEffectView(material: .fullScreenUI, blendingMode: .behindWindow, alphaValue: 0.6)
+                    }
+                }
             )
             .cornerRadius(cornerRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
+            )
     }
 }
 

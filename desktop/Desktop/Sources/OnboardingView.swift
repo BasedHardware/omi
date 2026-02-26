@@ -4,6 +4,7 @@ import AVKit
 
 struct OnboardingView: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var chatProvider: ChatProvider
     var onComplete: (() -> Void)? = nil
     @AppStorage("onboardingStep") private var currentStep = 0
     @Environment(\.dismiss) private var dismiss
@@ -11,7 +12,7 @@ struct OnboardingView: View {
     // Timer to periodically check permission status when on permissions step
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
-    let steps = ["Video", "Name", "Language", "Permissions", "Done"]
+    let steps = ["Video", "Name", "Language", "Permissions", "Get to Know You"]
 
     // State for name input
     @State private var nameInput: String = ""
@@ -22,8 +23,13 @@ struct OnboardingView: View {
     @State private var selectedLanguage: String = "en"
     @State private var autoDetectEnabled: Bool = false
 
-    // Track whether we've initialized bluetooth on the permissions step
-    @State private var hasInitializedBluetoothForPermissions = false
+    // State for file indexing step (step 4)
+    @State private var fileIndexingDone = false
+    @State private var isBrainMapPhase = false
+
+
+    // Privacy sheet
+    @State private var showPrivacySheet = false
 
     var body: some View {
         ZStack {
@@ -103,18 +109,13 @@ struct OnboardingView: View {
                 bringToFront()
             }
         }
-        .onChange(of: appState.hasBluetoothPermission) { _, granted in
-            if granted && currentStep == 3 {
-                log("Bluetooth permission granted on permissions step, bringing to front")
-                bringToFront()
-            }
-        }
-        .onChange(of: currentStep) { _, newStep in
-            // Initialize Bluetooth when reaching permissions step
-            if newStep == 3 && !hasInitializedBluetoothForPermissions {
-                log("Reached Permissions step, initializing Bluetooth manager")
-                appState.initializeBluetoothIfNeeded()
-                hasInitializedBluetoothForPermissions = true
+        .onAppear {
+            // Handle relaunch case: if app restarts on step 3 (e.g., after Screen Recording quit & reopen),
+            // immediately check all permissions.
+            // onChange(of: currentStep) won't fire since the value didn't change.
+            if currentStep == 3 {
+                log("OnboardingView onAppear: on permissions step, checking all permissions immediately")
+                appState.checkAllPermissions()
             }
         }
     }
@@ -134,7 +135,7 @@ struct OnboardingView: View {
             // Bring the main window to front
             var foundWindow = false
             for window in NSApp.windows {
-                if window.title == "Omi" {
+                if window.title.hasPrefix("Omi") {
                     foundWindow = true
                     log("Found 'Omi' window, making key and ordering front")
                     window.makeKeyAndOrderFront(nil)
@@ -155,8 +156,8 @@ struct OnboardingView: View {
         case 0: return true // Video step - always valid
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step - valid if name entered
         case 2: return true // Language step - always valid (has default)
-        case 3: return true // Permissions step - always allow continuing (Skip exists)
-        case 4: return true // Done step
+        case 3: return requiredPermissionsGranted
+        case 4: return fileIndexingDone // File indexing step
         default: return true
         }
     }
@@ -167,98 +168,114 @@ struct OnboardingView: View {
             && appState.hasNotificationPermission
             && appState.hasAccessibilityPermission
             && appState.hasAutomationPermission
-            && (appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied)
+    }
+
+    private var requiredPermissionsGranted: Bool {
+        appState.hasScreenRecordingPermission
+            && appState.hasMicrophonePermission
+            && appState.hasNotificationPermission
+            && appState.hasAccessibilityPermission
+            && appState.hasAutomationPermission
+    }
+
+    /// Index of the first ungranted permission (determines which GIF/guide to show)
+    private var activePermissionIndex: Int {
+        if !appState.hasScreenRecordingPermission { return 0 }
+        if !appState.hasMicrophonePermission { return 1 }
+        if !appState.hasNotificationPermission { return 2 }
+        if !appState.hasAccessibilityPermission { return 3 }
+        if !appState.hasAutomationPermission { return 4 }
+        return -1 // All granted
+    }
+
+    private var activePermissionGifName: String? {
+        switch activePermissionIndex {
+        case 0: return "permissions"
+        case 2: return "enable_notifications"
+        case 3: return "accessibility_permission"
+        default: return nil
+        }
+    }
+
+    private var activePermissionGuideText: String {
+        switch activePermissionIndex {
+        case 0: return "Click 'Grant Access', then toggle ON Screen Recording for Omi in System Settings and click 'Quit & Reopen'."
+        case 1: return "Click 'Grant Access' and allow Omi to use your microphone for live transcription."
+        case 2: return "Click 'Grant Access' and allow notifications so Omi can keep you updated."
+        case 3: return "Click 'Grant Access', then find Omi in System Settings and toggle the Accessibility switch ON."
+        case 4:
+            if appState.automationPermissionError != 0 {
+                return "Having trouble? Open System Settings → Privacy & Security → Automation, find Omi and toggle it ON. If Omi isn't listed, try quitting and reopening the app."
+            }
+            return "Click 'Grant Access', then find Omi in the Automation list and toggle the switch ON."
+        default: return "All permissions granted! Click Continue to finish setup."
+        }
+    }
+
+    private var activePermissionIcon: String {
+        switch activePermissionIndex {
+        case 0: return "record.circle"
+        case 1: return "mic"
+        case 2: return "bell"
+        case 3: return "hand.raised"
+        case 4: return "gearshape.2"
+        default: return "checkmark.circle"
+        }
+    }
+
+    private var activePermissionName: String {
+        switch activePermissionIndex {
+        case 0: return "Screen Recording"
+        case 1: return "Microphone"
+        case 2: return "Notifications"
+        case 3: return "Accessibility"
+        case 4: return "Automation"
+        default: return ""
+        }
     }
 
     private var onboardingContent: some View {
         Group {
             if currentStep == 0 {
-                // Full-window video with overlaid controls, capped at native resolution
+                // Full-window video
                 ZStack {
                     OnboardingVideoView()
                         .aspectRatio(16.0 / 9.0, contentMode: .fit)
                         .frame(maxWidth: 960)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                    // Overlay progress indicators and button
                     VStack {
-                        // Progress indicators at top
-                        HStack(spacing: 12) {
-                            ForEach(0..<steps.count, id: \.self) { index in
-                                progressIndicator(for: index)
-                            }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
-
                         Spacer()
-
-                        // Continue button at bottom
                         Button(action: handleMainAction) {
                             Text("Continue")
-                                .frame(maxWidth: 200)
-                                .padding(.vertical, 8)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: 220)
+                                .padding(.vertical, 12)
+                                .background(OmiColors.purplePrimary)
+                                .cornerRadius(12)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .padding(.bottom, 24)
+                        .buttonStyle(.plain)
+                        .padding(.bottom, 32)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if currentStep == 4 && isBrainMapPhase {
+                // Full-bleed brain map
+                stepContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Standard card layout for all other steps
-                VStack(spacing: 24) {
-                    Spacer()
-
+                // Minimal centered content — no card
+                ZStack {
                     VStack(spacing: 24) {
-                        // Progress indicators + Skip button row
-                        ZStack {
-                            HStack(spacing: 12) {
-                                ForEach(0..<steps.count, id: \.self) { index in
-                                    progressIndicator(for: index)
-                                }
-                            }
-
-                            // Skip button in top-right corner (only on Permissions step)
-                            if currentStep == 3 {
-                                HStack {
-                                    Spacer()
-                                    Button(action: {
-                                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Permissions")
-                                        currentStep = 4
-                                    }) {
-                                        Text("Skip")
-                                            .font(.system(size: 13))
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        .padding(.top, 20)
-                        .padding(.horizontal, 20)
-
-                        Spacer()
-                            .frame(height: 20)
-
                         stepContent
 
-                        Spacer()
-                            .frame(height: 20)
-
-                        buttonSection
+                        if currentStep != 4 {
+                            buttonSection
+                        }
                     }
-                    .frame(width: currentStep == 3 ? 480 : 420)
-                    .frame(height: currentStep == 3 ? 520 : 420)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(OmiColors.backgroundSecondary)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-
-                    Spacer()
+                    .frame(maxWidth: currentStep == 3 ? 720 : 420)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -273,7 +290,7 @@ struct OnboardingView: View {
             // Completed or granted - show checkmark
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.white)
-                .font(.system(size: 12))
+                .scaledFont(size: 12)
         } else if index == currentStep {
             // Current step, not yet granted - filled circle
             Circle()
@@ -293,7 +310,7 @@ struct OnboardingView: View {
         case 1: return !nameInput.trimmingCharacters(in: .whitespaces).isEmpty // Name step
         case 2: return true // Language step - always "granted" (has default)
         case 3: return allPermissionsGranted // Permissions step
-        case 4: return true // Done - always "granted"
+        case 4: return fileIndexingDone // File indexing step
         default: return false
         }
     }
@@ -310,21 +327,8 @@ struct OnboardingView: View {
         case 3:
             permissionsStepView
         case 4:
-            VStack(spacing: 16) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 48))
-                    .foregroundColor(OmiColors.purplePrimary)
-
-                Text("You're All Set!")
-                    .font(.title)
-                    .fontWeight(.semibold)
-
-                Text("Just use Omi in the background for 2 days and you'll start getting useful feedback after!")
-                    .font(.title3)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .fixedSize(horizontal: false, vertical: true)
+            FileIndexingView(chatProvider: chatProvider, isBrainMapPhase: $isBrainMapPhase) { fileCount in
+                handleFileIndexingComplete(fileCount: fileCount)
             }
         default:
             EmptyView()
@@ -336,7 +340,7 @@ struct OnboardingView: View {
     private var nameStepView: some View {
         VStack(spacing: 16) {
             Image(systemName: "person.circle")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.purplePrimary)
 
             Text("What's your name?")
@@ -405,7 +409,7 @@ struct OnboardingView: View {
     private var languageStepView: some View {
         VStack(spacing: 16) {
             Image(systemName: "globe")
-                .font(.system(size: 48))
+                .scaledFont(size: 48)
                 .foregroundColor(OmiColors.purplePrimary)
 
             Text("Language")
@@ -430,13 +434,73 @@ struct OnboardingView: View {
         .onAppear {
             selectedLanguage = AssistantSettings.shared.transcriptionLanguage
             autoDetectEnabled = false
+            // Fetch language from Firestore (source of truth) for returning users
+            Task {
+                if let response = try? await APIClient.shared.getUserLanguage(),
+                   !response.language.isEmpty {
+                    await MainActor.run {
+                        selectedLanguage = response.language
+                        AssistantSettings.shared.transcriptionLanguage = response.language
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - File Indexing Completion
+
+    private func handleFileIndexingComplete(fileCount: Int) {
+        fileIndexingDone = true
+
+        // Mark file indexing as done so DesktopHomeView doesn't show it again as a sheet
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+
+        if fileCount > 0 {
+            log("OnboardingView: File indexing completed with \(fileCount) files")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing")
+        } else {
+            log("OnboardingView: File indexing skipped")
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "FileIndexing_Skipped")
+        }
+
+        AnalyticsManager.shared.onboardingCompleted()
+        appState.hasCompletedOnboarding = true
+        // Start cloud agent VM pipeline
+        Task {
+            await AgentVMService.shared.startPipeline()
+        }
+        if LaunchAtLoginManager.shared.setEnabled(true) {
+            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
+        }
+        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+        appState.startTranscription()
+
+        // Create a welcome task for the new user
+        Task {
+            await TasksStore.shared.createTask(
+                description: "Run Omi for two days to start receiving helpful advice",
+                dueAt: Date(),
+                priority: "low"
+            )
+        }
+
+        // Send a welcome notification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            NotificationService.shared.sendNotification(
+                title: "You're all set!",
+                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
+            )
+        }
+
+        if let onComplete = onComplete {
+            onComplete()
         }
     }
 
     // MARK: - Consolidated Permissions Step View
 
     private var permissionsStepView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Text("Permissions")
                 .font(.title2)
                 .fontWeight(.semibold)
@@ -445,37 +509,27 @@ struct OnboardingView: View {
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
 
-            ScrollView {
-                VStack(spacing: 10) {
-                    VStack(spacing: 4) {
-                        permissionRow(
-                            number: 1,
-                            icon: "record.circle",
-                            name: "Screen Recording",
-                            isGranted: appState.hasScreenRecordingPermission,
-                            action: {
-                                AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
-                                appState.triggerScreenRecordingPermission()
-                            }
-                        )
-                        VStack(spacing: 2) {
-                            Text("Used for Rewind — your personal screen history.")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.secondary)
-                            Text("All data stays on your device. Nothing is uploaded to the cloud.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+            HStack(spacing: 16) {
+                // Left side: permission rows
+                VStack(spacing: 8) {
+                    permissionRow(
+                        number: 1,
+                        icon: "record.circle",
+                        name: "Screen Recording",
+                        isGranted: appState.hasScreenRecordingPermission,
+                        isActive: activePermissionIndex == 0,
+                        action: {
+                            AnalyticsManager.shared.permissionRequested(permission: "screen_recording")
+                            appState.triggerScreenRecordingPermission()
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 4)
-                    }
+                    )
                     permissionRow(
                         number: 2,
                         icon: "mic",
                         name: "Microphone",
                         isGranted: appState.hasMicrophonePermission,
+                        isActive: activePermissionIndex == 1,
                         action: {
                             AnalyticsManager.shared.permissionRequested(permission: "microphone")
                             appState.requestMicrophonePermission()
@@ -486,6 +540,7 @@ struct OnboardingView: View {
                         icon: "bell",
                         name: "Notifications",
                         isGranted: appState.hasNotificationPermission,
+                        isActive: activePermissionIndex == 2,
                         action: {
                             AnalyticsManager.shared.permissionRequested(permission: "notifications")
                             appState.requestNotificationPermission()
@@ -496,6 +551,7 @@ struct OnboardingView: View {
                         icon: "hand.raised",
                         name: "Accessibility",
                         isGranted: appState.hasAccessibilityPermission,
+                        isActive: activePermissionIndex == 3,
                         action: {
                             AnalyticsManager.shared.permissionRequested(permission: "accessibility")
                             appState.triggerAccessibilityPermission()
@@ -506,55 +562,103 @@ struct OnboardingView: View {
                         icon: "gearshape.2",
                         name: "Automation",
                         isGranted: appState.hasAutomationPermission,
+                        isActive: activePermissionIndex == 4,
                         action: {
                             AnalyticsManager.shared.permissionRequested(permission: "automation")
                             appState.triggerAutomationPermission()
                         }
                     )
-                    permissionRow(
-                        number: 6,
-                        icon: "antenna.radiowaves.left.and.right",
-                        name: "Bluetooth",
-                        isGranted: appState.hasBluetoothPermission || isBluetoothUnsupported || isBluetoothPermissionDenied,
-                        action: {
-                            AnalyticsManager.shared.permissionRequested(permission: "bluetooth")
-                            appState.initializeBluetoothIfNeeded()
-                            appState.triggerBluetoothPermission()
+                    // Privacy link
+                    Button(action: { showPrivacySheet = true }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "shield.lefthalf.filled")
+                                .scaledFont(size: 11)
+                            Text("Data & Privacy")
+                                .scaledFont(size: 12)
                         }
-                    )
+                        .foregroundColor(OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
                 }
-                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity)
+
+                // Right side: GIF / guide for active permission
+                permissionGuidePanel
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxHeight: 260)
+            .padding(.horizontal, 16)
+        }
+        .sheet(isPresented: $showPrivacySheet) {
+            OnboardingPrivacySheet(isPresented: $showPrivacySheet)
         }
     }
 
+    private var permissionGuidePanel: some View {
+        VStack(spacing: 12) {
+            if let gifName = activePermissionGifName {
+                AnimatedGIFView(gifName: gifName)
+                    .id(gifName)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 280)
+            } else if activePermissionIndex >= 0 {
+                Image(systemName: activePermissionIcon)
+                    .scaledFont(size: 40)
+                    .foregroundColor(OmiColors.purplePrimary)
+                Text(activePermissionName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Text(activePermissionGuideText)
+                    .scaledFont(size: 13)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .scaledFont(size: 48)
+                    .foregroundColor(.green)
+                Text("All Set!")
+                    .font(.headline)
+                Text("All permissions granted. Click Continue.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(OmiColors.backgroundPrimary.opacity(0.5))
+        )
+    }
+
     @ViewBuilder
-    private func permissionRow(number: Int, icon: String, name: String, isGranted: Bool, action: @escaping () -> Void) -> some View {
+    private func permissionRow(number: Int, icon: String, name: String, isGranted: Bool, isActive: Bool, action: @escaping () -> Void) -> some View {
         HStack(spacing: 12) {
             Text("\(number).")
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
                 .foregroundColor(.secondary)
                 .frame(width: 20, alignment: .trailing)
 
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .scaledFont(size: 14)
                 .foregroundColor(isGranted ? .green : OmiColors.purplePrimary)
                 .frame(width: 20)
 
             Text(name)
-                .font(.system(size: 14, weight: .medium))
+                .scaledFont(size: 14, weight: .medium)
 
             Spacer()
 
             if isGranted {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 16))
+                    .scaledFont(size: 16)
                     .foregroundColor(.green)
             } else {
                 Button(action: action) {
                     Text("Grant Access")
-                        .font(.system(size: 12, weight: .medium))
+                        .scaledFont(size: 12, weight: .medium)
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
@@ -570,54 +674,56 @@ struct OnboardingView: View {
         .padding(.horizontal, 12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isGranted ? Color.green.opacity(0.08) : OmiColors.backgroundPrimary.opacity(0.5))
+                .fill(isGranted ? Color.green.opacity(0.08) : (isActive ? OmiColors.purplePrimary.opacity(0.08) : OmiColors.backgroundPrimary.opacity(0.5)))
         )
-    }
-
-    private var isBluetoothPermissionDenied: Bool {
-        appState.isBluetoothPermissionDenied()
-    }
-
-    private var isBluetoothUnsupported: Bool {
-        appState.isBluetoothUnsupported()
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActive && !isGranted ? OmiColors.purplePrimary.opacity(0.4) : Color.clear, lineWidth: 1.5)
+        )
     }
 
     @ViewBuilder
     private var buttonSection: some View {
-        HStack(spacing: 16) {
-            // Back button (not shown on first step or name step)
-            if currentStep > 0 && currentStep != 1 {
-                Button(action: { currentStep -= 1 }) {
-                    Text("Back")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
+        VStack(spacing: 8) {
+            // Step 4 has its own buttons inside FileIndexingView
+            if currentStep != 4 {
+                HStack(spacing: 16) {
+                    // Back button (not shown on first step or name step)
+                    if currentStep > 0 && currentStep != 1 {
+                        Button(action: {
+                            currentStep -= 1
+                        }) {
+                            Text("Back")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    }
+
+                    // Main action / Continue button
+                    Button(action: handleMainAction) {
+                        Text(mainButtonTitle)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
             }
 
-            // Main action / Continue button
-            Button(action: handleMainAction) {
-                Text(mainButtonTitle)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+            if currentStep == 3 && !requiredPermissionsGranted {
+                Text("You can grant permissions later in Settings")
+                    .scaledFont(size: 12)
+                    .foregroundColor(.secondary)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
         }
         .padding(.horizontal, 40)
         .padding(.bottom, 20)
     }
 
     private var mainButtonTitle: String {
-        switch currentStep {
-        case 0: return "Continue"
-        case 1: return "Continue"
-        case 2: return "Continue"
-        case 3: return "Continue"
-        case 4: return "Start Using Omi"
-        default: return "Continue"
-        }
+        return "Continue"
     }
 
     private func handleMainAction() {
@@ -673,8 +779,21 @@ struct OnboardingView: View {
             if appState.hasAutomationPermission {
                 AnalyticsManager.shared.permissionGranted(permission: "automation")
             }
-            if appState.hasBluetoothPermission {
-                AnalyticsManager.shared.permissionGranted(permission: "bluetooth")
+            // Log skipped permissions
+            if !appState.hasScreenRecordingPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "screen_recording")
+            }
+            if !appState.hasMicrophonePermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "microphone")
+            }
+            if !appState.hasNotificationPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "notifications")
+            }
+            if !appState.hasAccessibilityPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "accessibility")
+            }
+            if !appState.hasAutomationPermission {
+                AnalyticsManager.shared.permissionSkipped(permission: "automation")
             }
             // Trigger proactive monitoring if screen recording is granted
             if appState.hasScreenRecordingPermission {
@@ -682,24 +801,7 @@ struct OnboardingView: View {
             }
             currentStep += 1
         case 4:
-            log("OnboardingView: Step 4 - Completing onboarding")
-            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Done")
-            AnalyticsManager.shared.onboardingCompleted()
-            appState.hasCompletedOnboarding = true
-            // Enable launch at login by default for new users
-            if LaunchAtLoginManager.shared.setEnabled(true) {
-                AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-            }
-            ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-            appState.startTranscription()
-            // Only call completion handler if provided (for sheet presentations)
-            // Don't dismiss - DesktopHomeView will automatically transition to mainContent
-            if let onComplete = onComplete {
-                log("OnboardingView: Calling onComplete handler")
-                onComplete()
-            } else {
-                log("OnboardingView: Onboarding complete, DesktopHomeView will show mainContent")
-            }
+            break // FileIndexingView handles step 4 actions via handleFileIndexingComplete
         default:
             break
         }
@@ -718,8 +820,9 @@ struct OnboardingVideoView: NSViewRepresentable {
         if let url = Bundle.resourceBundle.url(forResource: "omi-demo", withExtension: "mp4") {
             let player = AVPlayer(url: url)
             playerView.player = player
-            playerView.controlsStyle = .inline
+            playerView.controlsStyle = .none
             playerView.showsFullScreenToggleButton = false
+            playerView.showsSharingServiceButton = false
             player.play()
 
             NotificationCenter.default.addObserver(
@@ -767,5 +870,150 @@ struct AnimatedGIFView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSImageView, context: Context) {
         nsView.animates = true
+    }
+}
+
+// MARK: - Onboarding Privacy Sheet
+
+struct OnboardingPrivacySheet: View {
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "shield.lefthalf.filled")
+                    .scaledFont(size: 16)
+                    .foregroundColor(OmiColors.purplePrimary)
+
+                Text("Data & Privacy")
+                    .scaledFont(size: 16, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Spacer()
+
+                Button(action: { isPresented = false }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .scaledFont(size: 18)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Encryption
+                    privacyCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("Encryption", systemImage: "lock.shield")
+                                .scaledFont(size: 13, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .scaledFont(size: 11)
+                                    .foregroundColor(.green)
+                                Text("Server-side encryption")
+                                    .scaledFont(size: 12)
+                                    .foregroundColor(OmiColors.textSecondary)
+                                Text("Active")
+                                    .scaledFont(size: 10, weight: .semibold)
+                                    .foregroundColor(.green)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Color.green.opacity(0.15))
+                                    .cornerRadius(3)
+                            }
+
+                            Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.top, 2)
+                        }
+                    }
+
+                    // What We Track
+                    privacyCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("What We Track", systemImage: "list.bullet")
+                                .scaledFont(size: 13, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                sheetTrackingItem("Onboarding steps completed")
+                                sheetTrackingItem("Settings changes")
+                                sheetTrackingItem("App installations and usage")
+                                sheetTrackingItem("Device connection status")
+                                sheetTrackingItem("Transcript processing events")
+                                sheetTrackingItem("Conversation creation and updates")
+                                sheetTrackingItem("Memory extraction events")
+                                sheetTrackingItem("Chat interactions")
+                                sheetTrackingItem("Speech profile creation")
+                                sheetTrackingItem("Focus session events")
+                                sheetTrackingItem("App open/close events")
+                            }
+                        }
+                    }
+
+                    // Privacy Guarantees
+                    privacyCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Privacy Guarantees", systemImage: "hand.raised.fill")
+                                .scaledFont(size: 13, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            VStack(alignment: .leading, spacing: 5) {
+                                sheetBullet("Anonymous tracking with randomly generated IDs")
+                                sheetBullet("No personal info stored in analytics")
+                                sheetBullet("Data is never sold or shared with third parties")
+                                sheetBullet("Opt out of tracking at any time")
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .frame(width: 400, height: 480)
+        .background(OmiColors.backgroundSecondary)
+    }
+
+    private func privacyCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+                    )
+            )
+    }
+
+    private func sheetTrackingItem(_ text: String) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(OmiColors.textTertiary.opacity(0.5))
+                .frame(width: 3, height: 3)
+            Text(text)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textTertiary)
+        }
+    }
+
+    private func sheetBullet(_ text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .scaledFont(size: 8, weight: .bold)
+                .foregroundColor(.green)
+            Text(text)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textSecondary)
+        }
     }
 }
