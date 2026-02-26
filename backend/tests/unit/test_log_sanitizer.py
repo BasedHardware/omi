@@ -133,3 +133,50 @@ class TestSanitizeNonStringInput:
     def test_list_input(self):
         result = sanitize([True, False, True])
         assert "True" in result
+
+
+class TestSanitizeEmails:
+    """Email addresses get local part masked, domain preserved."""
+
+    def test_simple_email(self):
+        result = sanitize("john@example.com")
+        assert "example.com" in result
+        assert "john" not in result
+        assert "***" in result
+
+    def test_email_in_log_message(self):
+        result = sanitize("Found contact: John Doe -> john.doe@gmail.com")
+        assert "gmail.com" in result
+        assert "john.doe" not in result
+
+    def test_short_local_part(self):
+        result = sanitize("ab@example.com")
+        assert "***@example.com" == result
+
+    def test_email_with_digits(self):
+        result = sanitize("user123@company.org")
+        assert "company.org" in result
+        assert "***" in result
+
+    def test_multiple_emails(self):
+        result = sanitize("from alice@a.com to bob@b.com")
+        assert "a.com" in result
+        assert "b.com" in result
+        assert "alice" not in result
+        assert "bob" not in result
+
+
+class TestSanitizeKeyValuePreserved:
+    """key=value style text should not be falsely masked."""
+
+    def test_simple_key_value(self):
+        """key=value where value is a regular word should be preserved."""
+        result = sanitize("attendee=charlie")
+        assert "attendee" in result
+        assert "charlie" in result
+
+    def test_key_value_with_token(self):
+        """key=value where value looks like a token should be masked."""
+        result = sanitize("token=abc123def456ghij")
+        assert "token=" in result
+        assert "***" in result
