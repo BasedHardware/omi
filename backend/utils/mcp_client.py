@@ -20,7 +20,6 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
-from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -80,7 +79,7 @@ async def register_oauth_client(registration_endpoint: str, redirect_uri: str, s
         resp = await client.post(registration_endpoint, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        logger.info(f"[MCP OAuth] Registration response: {sanitize(data)}")
+        logger.info(f"[MCP OAuth] Registration response: {data}")
         return {
             "client_id": data["client_id"],
             "client_secret": data.get("client_secret"),
@@ -363,7 +362,7 @@ async def _sse_send_and_receive_inner(
                                 post_endpoint = data_str
                             else:
                                 post_endpoint = origin + data_str
-                            logger.info(f"[MCP SSE] Got endpoint: {sanitize(post_endpoint)}")
+                            logger.info(f"[MCP SSE] Got endpoint: {post_endpoint}")
 
                             # Now send all payloads
                             post_headers = {"Content-Type": "application/json"}

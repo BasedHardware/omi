@@ -14,7 +14,6 @@ import httpx
 import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
-from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -488,7 +487,7 @@ async def handle_oauth_callback(
         else:
             error_body = token_response.text[:500] if token_response.text else "No error body"
             logger.error(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
-            logger.error(f'{app_key}: Error response: {sanitize(error_body)}')
+            logger.error(f'{app_key}: Error response: {error_body}')
             return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
     except Exception as e:

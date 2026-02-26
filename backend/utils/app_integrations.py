@@ -34,7 +34,6 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
 from database.vector_db import query_vectors_by_metadata
 import database.conversations as conversations_db
-from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -140,7 +139,7 @@ def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
             )  # TODO: failing?
             if response.status_code != 200:
                 logger.info(
-                    f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
+                    f'App integration failed {app.id} status: {response.status_code} result: {response.text[:100]}'
                 )
                 return
 
@@ -496,7 +495,7 @@ def _trigger_realtime_integrations(uid: str, segments: List[dict], conversation_
             response = requests.post(url, json={"session_id": uid, "segments": segments}, timeout=10)
             if response.status_code != 200:
                 logger.info(
-                    f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {sanitize(response.text[:100])}'
+                    f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {response.text[:100]}'
                 )
                 return
 

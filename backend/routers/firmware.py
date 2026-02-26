@@ -8,7 +8,6 @@ from enum import Enum
 import ast
 
 from database.redis_db import get_generic_cache, set_generic_cache
-from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -86,9 +85,7 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
             url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
             response = await client.get(url, headers=headers)
             if response.status_code != 200:
-                logger.error(
-                    "Error fetching GitHub releases page %d: %d %s", page, response.status_code, sanitize(response.text)
-                )
+                logger.error("Error fetching GitHub releases page %d: %d %s", page, response.status_code, response.text)
                 raise HTTPException(status_code=500, detail="Failed to fetch release information")
 
             page_releases = response.json()

@@ -31,4 +31,3 @@ pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
-pytest tests/unit/test_log_sanitizer.py -v

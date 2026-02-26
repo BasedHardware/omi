@@ -9,7 +9,6 @@ from scripts.rag._shared import *
 from database.auth import get_user_name
 from database._client import get_users_uid
 from models.memories import Memory, MemoryDB
-from utils.log_sanitizer import sanitize_pii
 
 firebase_admin.initialize_app()
 
@@ -17,7 +16,7 @@ firebase_admin.initialize_app()
 def get_memories_from_conversations(
     conversations: List[dict], uid: str, user_name: str, existing_memories: List[Memory]
 ) -> List[Tuple[str, List[Memory]]]:
-    print('get_memories_from_conversations', len(conversations), sanitize_pii(user_name), len(existing_memories))
+    print('get_memories_from_conversations', len(conversations), user_name, len(existing_memories))
 
     # learning_facts = list(filter(lambda x: x.category == 'learnings', existing_facts))
     all_memories = {}
