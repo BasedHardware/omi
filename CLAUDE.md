@@ -58,23 +58,21 @@ Free large objects immediately after use. E.g., `del` for byte arrays after proc
 
 ### Logging Security
 
-Never log raw sensitive data. Use `sanitize()` from `utils.log_sanitizer` to mask long token-like strings while keeping enough for debugging.
+Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
 
 ```python
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 
-# Good — masks tokens/secrets but keeps first/last chars for searching
+# sanitize() — for response bodies, error text, API responses
 logger.error(f"Token exchange failed: {sanitize(response.text)}")
-logger.info(f"Found contact: {sanitize(name)} -> {sanitize(email)}")
 
-# Bad — leaks full OAuth tokens, API keys, PII
-logger.error(f"Token exchange failed: {response.text}")
-logger.info(f"Found contact: {name} -> {email}")
+# sanitize_pii() — for known personal data (names, emails, user text)
+logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
 ```
 
 Rules:
-- Wrap `response.text`, API responses, and error bodies in `sanitize()` before logging
-- Wrap PII (names, emails, user text) in `sanitize()` before logging
+- `sanitize()` for `response.text`, API responses, error bodies (masks token-like 8+ char strings with digits)
+- `sanitize_pii()` for names, emails, user text (always masks regardless of content)
 - Keep log levels as-is (don't downgrade to hide data)
 - Keep UIDs, IPs, status codes, and structural info visible — they're needed for debugging
 - Never put raw `response.text` in exception messages (exceptions may be logged upstream)
