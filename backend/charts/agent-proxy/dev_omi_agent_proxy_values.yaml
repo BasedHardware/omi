@@ -41,11 +41,6 @@ ingress:
   tls: []
 
 env:
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
 

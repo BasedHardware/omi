@@ -649,6 +649,8 @@ function startServer() {
   // Try to open DB if it exists (may not exist yet for fresh VMs)
   if (openDatabase()) {
     log("Database loaded at startup");
+    // Pre-warm immediately at boot — session ready before user opens chat
+    prewarmSession().catch(() => {});
   } else {
     log(`Database not found at ${DB_PATH} — waiting for upload`);
   }
@@ -861,8 +863,12 @@ function startServer() {
       }
       lastActivityAt = Date.now();
       log("Keepalive ping received");
+      // Keep warm session alive — re-warm if it died
+      if (!warmState?.ready && !prewarmInProgress) {
+        prewarmSession().catch(() => {});
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
+      res.end(JSON.stringify({ status: "ok", warm: !!warmState?.ready }));
       return;
     }
 
