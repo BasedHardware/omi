@@ -448,10 +448,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         color: Colors.orange.shade800,
-                        child: const Text(
-                          'STAGING',
+                        child: Text(
+                          context.l10n.staging.toUpperCase(),
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
