@@ -766,11 +766,11 @@ struct ChatBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         .onHover { isHovering = $0 }
-        .onChange(of: message.contentBlocks.count) { _ in
+        .onChange(of: message.contentBlocks.count) {
             // Refresh grouped blocks when new blocks are added (e.g. tool calls)
             cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
         }
-        .onChange(of: message.text) { _ in
+        .onChange(of: message.text) {
             // Refresh grouped blocks when text content changes within existing blocks
             // (streaming appends to the last text block without changing count)
             cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)

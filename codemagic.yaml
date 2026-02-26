@@ -1818,10 +1818,7 @@ workflows:
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
   #
-  # Required CodeMagic secret group "omi_desktop":
-  #   MACOS_DEVELOPER_ID_P12          — base64 .p12 (Developer ID Application: Matthew Diakonov S6DP5HF77G)
-  #   MACOS_DEVELOPER_ID_P12_PASSWORD — .p12 password
-  #   MACOS_DEVELOPER_ID_PROFILE      — base64 provisioning profile
+  # Required CodeMagic secret group "desktop_secrets":
   #   SPARKLE_PRIVATE_KEY             — EdDSA private key for Sparkle auto-update signing
   #   RELEASE_SECRET                  — shared secret for Firestore release registration API
   #   GCP_SERVICE_ACCOUNT_KEY         — base64 GCP service account JSON
@@ -1832,11 +1829,14 @@ workflows:
   #   RESEND_API_KEY
   #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
+  #   NOTE: MACOS_DEVELOPER_ID_P12/P12_PASSWORD must NOT be in this group — they live in appstore_credentials
   #
   # Re-uses from existing groups:
   #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
   #   appstore_credentials: APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
-  #                         APP_STORE_CONNECT_ISSUER_ID (used for notarization)
+  #                         APP_STORE_CONNECT_ISSUER_ID (notarization),
+  #                         MACOS_DEVELOPER_ID_P12 — base64 .p12 (Developer ID Application: Based Hardware INC 9536L8KLMP)
+  #                         MACOS_DEVELOPER_ID_P12_PASSWORD
   # ============================================
   omi-desktop-swift-release:
     name: Release OMI Desktop (Swift)
@@ -1847,7 +1847,7 @@ workflows:
         - app_env
         - firebase
         - appstore_credentials
-        - omi_desktop
+        - desktop_secrets
       vars:
         BINARY_NAME: "Omi Computer"
         APP_NAME: "Omi Beta"
@@ -1983,18 +1983,27 @@ workflows:
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --arch arm64
+          # On Codemagic mac_mini_m2 (native arm64 host), the arm64 binary lands in
+          # .build/release/ instead of .build/arm64-apple-macosx/release/.
+          # Save it now before the x86_64 build overwrites .build/release/.
+          mkdir -p "Desktop/.build/arm64-apple-macosx/release"
+          cp -R "Desktop/.build/release/." "Desktop/.build/arm64-apple-macosx/release/"
+          echo "Saved arm64 outputs to arm64-apple-macosx/release/"
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --arch x86_64
 
       - name: Create universal app bundle
         script: |
+          # Both binaries are now in their arch-specific directories (matching release.sh)
           ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
             ls "Desktop/.build/" 2>/dev/null
+            ls "Desktop/.build/release/" 2>/dev/null | head -10 || true
+            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | head -10 || true
             exit 1
           fi
 
@@ -2011,7 +2020,7 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Copy Sparkle framework
+          # Copy Sparkle framework (saved from arm64 build before x86_64 overwrote .build/release/)
           SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
             echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"

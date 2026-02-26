@@ -659,7 +659,12 @@ else
         "$DMG_PATH"
 fi
 
-# Clean up staging directory
+# Clean up staging directory and its stale LaunchServices registration
+# (macOS auto-registers apps it discovers; the staging copy creates a stale
+# entry pointing to /tmp/... which can cause the notification icon to show
+# a generic folder instead of the app icon)
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$STAGING_DIR/$DMG_APP_NAME.app" 2>/dev/null || true
 rm -rf "$STAGING_DIR"
 
 echo "  ✓ DMG created"
@@ -856,13 +861,6 @@ echo ""
 echo "Creating local git tag..."
 git tag "v$VERSION" 2>/dev/null && echo "  ✓ Created tag v$VERSION" || echo "  Tag v$VERSION already exists"
 
-# -----------------------------------------------------------------------------
-# Sync to monorepo (omi-desktop -> BasedHardware/omi desktop/)
-# -----------------------------------------------------------------------------
-echo ""
-echo "[Sync] Syncing release to monorepo..."
-python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward
-echo "  ✓ Monorepo sync complete"
 
 # -----------------------------------------------------------------------------
 # Step 12: Trigger Installation Test

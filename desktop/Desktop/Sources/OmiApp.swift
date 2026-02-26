@@ -141,6 +141,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var windowObservers: [NSObjectProtocol] = []
     private var statusBarItem: NSStatusItem?
     private var toggleBarObserver: NSObjectProtocol?
+    private var screenCaptureSwitch: NSSwitch?
+    private var audioRecordingSwitch: NSSwitch?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
@@ -168,6 +170,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             log("AppDelegate: Set application icon from OmiIcon.icns")
         }
+
+        // One-time icon cache reset: forces macOS to pick up the new squircle icon.
+        // Without this, users who had the old square icon see it cached indefinitely
+        // in the Dock, notifications, and Sparkle updater.
+        resetIconCacheIfNeeded()
 
         // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
         // This ensures notifications display properly when app is in foreground
@@ -323,15 +330,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        // Ensure the app always shows in the Dock (LSUIElement=false in Info.plist)
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-        }
+        // Set up dock icon visibility based on window state
+        setupDockIconObservers()
 
         // Set up menu bar icon with NSStatusBar (more reliable than SwiftUI MenuBarExtra)
         // Called synchronously on main thread to ensure status item is created before app finishes launching
         Task { @MainActor in
             self.setupMenuBar()
+        }
+
+        // Periodic health check: verify menu bar icon is still visible every 30 seconds.
+        // Safety net for any edge case (macOS Sequoia bugs, activation policy races) that
+        // causes the status bar item to vanish while the process keeps running.
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                let item = self.statusBarItem
+                let button = item?.button
+                let isPhantom = button != nil && button!.frame.width == 0
+                if item?.isVisible != true || button == nil || isPhantom {
+                    log("AppDelegate: [MENUBAR] Health check: icon missing or phantom (visible=\(item?.isVisible ?? false), button=\(button != nil), frame=\(button?.frame ?? .zero)), recreating")
+                    self.setupMenuBar()
+                }
+            }
         }
 
         // Start Sentry heartbeat timer (every 5 minutes) to capture breadcrumbs periodically
@@ -350,6 +371,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     window.appearance = NSAppearance(named: .darkAqua)
                     // Ensure fullscreen always creates a dedicated Space
                     window.collectionBehavior.insert(.fullScreenPrimary)
+                    // Show dock icon when main window is visible
+                    NSApp.setActivationPolicy(.regular)
+                    log("AppDelegate: Dock icon shown on launch")
                 }
             }
             if !foundOmiWindow {
@@ -390,6 +414,73 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if process.terminationStatus == 0 {
                 log("AppDelegate: Stripped provenance xattrs from bundle")
             }
+        }
+    }
+
+    /// One-time icon cache reset to force macOS to pick up the new squircle icon.
+    /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
+    /// Includes a safety net to restart the Dock if it crashes during the reset.
+    private func resetIconCacheIfNeeded() {
+        let key = "hasResetIconCache_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        log("AppDelegate: Running one-time icon cache reset")
+
+        let appPath = Bundle.main.bundlePath
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+        DispatchQueue.global(qos: .utility).async {
+            // Unregister to clear stale icon entries
+            let unregister = Process()
+            unregister.executableURL = URL(fileURLWithPath: lsregister)
+            unregister.arguments = ["-u", appPath]
+            unregister.standardOutput = FileHandle.nullDevice
+            unregister.standardError = FileHandle.nullDevice
+            try? unregister.run()
+            unregister.waitUntilExit()
+
+            // Force re-register with updated icon
+            let register = Process()
+            register.executableURL = URL(fileURLWithPath: lsregister)
+            register.arguments = ["-f", appPath]
+            register.standardOutput = FileHandle.nullDevice
+            register.standardError = FileHandle.nullDevice
+            try? register.run()
+            register.waitUntilExit()
+
+            // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
+            let killIcons = Process()
+            killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            killIcons.arguments = ["iconservicesagent"]
+            killIcons.standardOutput = FileHandle.nullDevice
+            killIcons.standardError = FileHandle.nullDevice
+            try? killIcons.run()
+            killIcons.waitUntilExit()
+
+            // Safety net: verify the Dock is still running after 2 seconds.
+            // iconservicesagent restart can occasionally crash the Dock.
+            Thread.sleep(forTimeInterval: 2.0)
+            let dockCheck = Process()
+            dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            dockCheck.arguments = ["-x", "Dock"]
+            dockCheck.standardOutput = FileHandle.nullDevice
+            dockCheck.standardError = FileHandle.nullDevice
+            try? dockCheck.run()
+            dockCheck.waitUntilExit()
+
+            if dockCheck.terminationStatus != 0 {
+                // Dock is not running — restart it
+                log("AppDelegate: Dock not running after icon cache reset, restarting")
+                let restartDock = Process()
+                restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                restartDock.arguments = ["-a", "Dock"]
+                restartDock.standardOutput = FileHandle.nullDevice
+                restartDock.standardError = FileHandle.nullDevice
+                try? restartDock.run()
+                restartDock.waitUntilExit()
+            }
+
+            log("AppDelegate: Icon cache reset complete")
         }
     }
 
@@ -447,20 +538,130 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
     }
 
-    /// Show the main Omi window (used by menu bar "Open Omi" and Dock icon click)
-    private func showMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        var foundWindow = false
-        for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-                foundWindow = true
-                window.makeKeyAndOrderFront(nil)
-                window.appearance = NSAppearance(named: .darkAqua)
+    /// Set up observers to show/hide dock icon when main window appears/disappears
+    private func setupDockIconObservers() {
+        // Show dock icon when a window becomes visible
+        let showObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title.hasPrefix("Omi") else { return }
+            self?.showDockIcon()
+        }
+        windowObservers.append(showObserver)
+
+        // Hide dock icon when window closes (check if any Omi windows remain)
+        let closeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title.hasPrefix("Omi") else { return }
+            // Delay check to allow window to fully close
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self?.checkAndHideDockIconIfNeeded()
             }
         }
-        if !foundWindow {
-            log("AppDelegate: WARNING - No Omi window found when trying to show main window")
+        windowObservers.append(closeObserver)
+
+        // Also hide dock icon when window is minimized
+        let minimizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMiniaturizeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title.hasPrefix("Omi") else { return }
+            Task { @MainActor in
+                self?.checkAndHideDockIconIfNeeded()
+            }
         }
+        windowObservers.append(minimizeObserver)
+
+        // Show dock icon when window is restored from minimize
+        let deminiaturizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didDeminiaturizeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow,
+                  window.title.hasPrefix("Omi") else { return }
+            self?.showDockIcon()
+        }
+        windowObservers.append(deminiaturizeObserver)
+
+        log("AppDelegate: Dock icon observers set up")
+    }
+
+    /// Show the app icon in the Dock
+    private func showDockIcon() {
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+            // Re-apply the custom icon — macOS can lose it when toggling activation policy
+            if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
+               let icon = NSImage(contentsOf: iconURL) {
+                NSApp.applicationIconImage = icon
+            }
+            log("AppDelegate: Dock icon shown")
+        }
+    }
+
+    /// Hide the app icon from the Dock (if no Omi windows are visible)
+    @MainActor private func checkAndHideDockIconIfNeeded() {
+        // Check if any Omi windows are still visible (not minimized, not closed)
+        let hasVisibleOmiWindow = NSApp.windows.contains { window in
+            window.title.hasPrefix("Omi") && window.isVisible && !window.isMiniaturized
+        }
+
+        if !hasVisibleOmiWindow && NSApp.activationPolicy() != .accessory {
+            NSApp.setActivationPolicy(.accessory)
+            log("AppDelegate: Dock icon hidden (no visible Omi windows)")
+            // Workaround for macOS Sequoia bug: switching to .accessory can cause
+            // NSStatusBar items to disappear. Force-refresh the status bar item.
+            refreshMenuBarIcon()
+        }
+    }
+
+    /// Force-refresh the menu bar icon after activation policy changes.
+    /// Works around a macOS Sequoia bug where NSStatusBar items vanish
+    /// when switching to .accessory activation policy.
+    @MainActor private func refreshMenuBarIcon() {
+        guard let item = statusBarItem else {
+            // Status bar item was lost — recreate it
+            log("AppDelegate: [MENUBAR] refreshMenuBarIcon: statusBarItem is nil, recreating")
+            setupMenuBar()
+            return
+        }
+        // Re-assert visibility synchronously
+        item.isVisible = true
+        // Re-apply the icon to force the system to redraw
+        if let button = item.button {
+            if OMIApp.launchMode == .rewind {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                    icon.isTemplate = true
+                    button.image = icon
+                }
+            } else if let iconURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
+                      let icon = NSImage(contentsOf: iconURL) {
+                icon.isTemplate = true
+                let aspect = icon.size.width / icon.size.height
+                icon.size = NSSize(width: 16 * aspect, height: 16)
+                button.image = icon
+            }
+        }
+        // Safety net: verify again after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            let button = self?.statusBarItem?.button
+            let isPhantom = button != nil && button!.frame.width == 0
+            if self?.statusBarItem?.isVisible != true || isPhantom {
+                log("AppDelegate: [MENUBAR] Icon still not visible/phantom after refresh (frame=\(button?.frame ?? .zero)), recreating")
+                self?.setupMenuBar()
+            }
+        }
+        log("AppDelegate: [MENUBAR] Refreshed status bar item after policy change")
     }
 
     /// Set up menu bar icon using NSStatusBar (more reliable than SwiftUI MenuBarExtra)
@@ -468,7 +669,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: [MENUBAR] Setting up NSStatusBar menu (macOS \(ProcessInfo.processInfo.operatingSystemVersionString))")
         log("AppDelegate: [MENUBAR] Thread: \(Thread.isMainThread ? "main" : "background"), statusBar items: \(NSStatusBar.system.thickness)")
 
-        statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // Explicitly remove old status item before creating a new one.
+        // Relying on ARC deallocation alone can leave "phantom" items that exist
+        // in memory but never render on screen.
+        if let old = statusBarItem {
+            NSStatusBar.system.removeStatusItem(old)
+            statusBarItem = nil
+            log("AppDelegate: [MENUBAR] Removed old status bar item before recreating")
+        }
+
+        statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         guard let statusBarItem = statusBarItem else {
             log("AppDelegate: [MENUBAR] ERROR - Failed to create status bar item")
@@ -483,7 +693,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
 
-        // Set up the button with icon
+        // Set up the button with icon — use "omi" text logo (not a circle)
         if let button = statusBarItem.button {
             if OMIApp.launchMode == .rewind {
                 // Rewind mode uses SF Symbol
@@ -492,19 +702,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     button.image = icon
                     log("AppDelegate: [MENUBAR] Rewind icon set successfully")
                 }
-            } else if let iconURL = Bundle.resourceBundle.url(forResource: "app_launcher_icon", withExtension: "png"),
+            } else if let iconURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
                       let icon = NSImage(contentsOf: iconURL) {
                 icon.isTemplate = true
-                icon.size = NSSize(width: 18, height: 18)
+                // Scale to menu bar height (16pt) with proportional width
+                let aspect = icon.size.width / icon.size.height
+                icon.size = NSSize(width: 16 * aspect, height: 16)
                 button.image = icon
-                log("AppDelegate: [MENUBAR] Custom app_launcher_icon set successfully")
+                button.imagePosition = .imageOnly
+                log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
             } else {
                 // Fallback to SF Symbol
-                if let icon = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Omi") {
+                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Omi") {
                     icon.isTemplate = true
                     button.image = icon
                 }
-                log("AppDelegate: [MENUBAR] WARNING - Failed to load app_launcher_icon, using fallback")
+                log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
             }
             button.toolTip = OMIApp.launchMode == .rewind ? "Omi Rewind" : displayName
         } else {
@@ -513,6 +726,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Create menu
         let menu = NSMenu()
+
+        // Quick toggles for screen capture and audio recording
+        let screenCaptureItem = NSMenuItem()
+        let screenCaptureView = makeToggleItemView(
+            title: "Screen Capture",
+            iconName: "rectangle.dashed.badge.record",
+            isOn: AssistantSettings.shared.screenAnalysisEnabled && ProactiveAssistantsPlugin.shared.isMonitoring,
+            action: #selector(screenCaptureToggled(_:))
+        )
+        screenCaptureItem.view = screenCaptureView
+        menu.addItem(screenCaptureItem)
+
+        let audioRecordingItem = NSMenuItem()
+        let audioRecordingView = makeToggleItemView(
+            title: "Audio Recording",
+            iconName: "mic.fill",
+            isOn: AssistantSettings.shared.transcriptionEnabled,
+            action: #selector(audioRecordingToggled(_:))
+        )
+        audioRecordingItem.view = audioRecordingView
+        menu.addItem(audioRecordingItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         // Open app item
         let openItem = NSMenuItem(title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "o")
@@ -579,7 +815,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @MainActor @objc private func openOmiFromMenu() {
         AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
-        showMainWindow()
+        NSApp.activate(ignoringOtherApps: true)
+        var foundWindow = false
+        for window in NSApp.windows {
+            if window.title.hasPrefix("Omi") {
+                foundWindow = true
+                window.makeKeyAndOrderFront(nil)
+                window.appearance = NSAppearance(named: .darkAqua)
+            }
+        }
+        // Restore dock icon when opening from menu bar
+        showDockIcon()
+        if !foundWindow {
+            log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
+        }
     }
 
     @MainActor @objc private func checkForUpdates() {
@@ -608,10 +857,105 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    // MARK: - Menu Bar Toggle Items
+
+    /// Create a custom NSView for a menu item with an icon, label, and toggle switch
+    private func makeToggleItemView(title: String, iconName: String, isOn: Bool, action: Selector) -> NSView {
+        let height: CGFloat = 36
+        let width: CGFloat = 260
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+
+        // Icon — use a fixed-size image with symbol configuration for consistent rendering
+        let iconView = NSImageView(frame: NSRect(x: 16, y: 10, width: 16, height: 16))
+        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        if let img = NSImage(systemSymbolName: iconName, accessibilityDescription: title)?.withSymbolConfiguration(config) {
+            iconView.image = img
+            iconView.contentTintColor = .secondaryLabelColor
+        }
+        view.addSubview(iconView)
+
+        // Label
+        let label = NSTextField(labelWithString: title)
+        label.frame = NSRect(x: 40, y: 10, width: 150, height: 16)
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .labelColor
+        view.addSubview(label)
+
+        // Toggle switch — use .small for consistent rendering across items
+        let toggle = NSSwitch()
+        toggle.controlSize = .small
+        toggle.state = isOn ? .on : .off
+        toggle.target = self
+        toggle.action = action
+        toggle.sizeToFit()
+        // Right-aligned position, pinned to right edge even when menu resizes the view
+        let toggleX = width - toggle.frame.width - 16
+        let toggleY = (height - toggle.frame.height) / 2
+        toggle.frame = NSRect(x: toggleX, y: toggleY, width: toggle.frame.width, height: toggle.frame.height)
+        toggle.autoresizingMask = [.minXMargin]
+        view.addSubview(toggle)
+
+        // Store reference for later updates
+        if action == #selector(screenCaptureToggled(_:)) {
+            screenCaptureSwitch = toggle
+        } else if action == #selector(audioRecordingToggled(_:)) {
+            audioRecordingSwitch = toggle
+        }
+
+        return view
+    }
+
+    @MainActor @objc private func screenCaptureToggled(_ sender: NSSwitch) {
+        let enabled = sender.state == .on
+        log("AppDelegate: [MENUBAR] Screen capture toggled: \(enabled)")
+        AnalyticsManager.shared.menuBarActionClicked(action: enabled ? "screen_capture_on" : "screen_capture_off")
+        AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
+
+        if enabled {
+            if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
+                // No permission — revert toggle and open preferences
+                sender.state = .off
+                ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+                return
+            }
+            AssistantSettings.shared.screenAnalysisEnabled = true
+            ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
+                DispatchQueue.main.async {
+                    if !success {
+                        log("AppDelegate: [MENUBAR] Screen capture failed to start: \(error ?? "unknown")")
+                        sender.state = .off
+                        AssistantSettings.shared.screenAnalysisEnabled = false
+                    }
+                }
+            }
+        } else {
+            AssistantSettings.shared.screenAnalysisEnabled = false
+            ProactiveAssistantsPlugin.shared.stopMonitoring()
+        }
+    }
+
+    @MainActor @objc private func audioRecordingToggled(_ sender: NSSwitch) {
+        let enabled = sender.state == .on
+        log("AppDelegate: [MENUBAR] Audio recording toggled: \(enabled)")
+        AnalyticsManager.shared.menuBarActionClicked(action: enabled ? "audio_recording_on" : "audio_recording_off")
+        AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
+
+        AssistantSettings.shared.transcriptionEnabled = enabled
+        // Request the main view to start/stop transcription (needs AppState)
+        NotificationCenter.default.post(
+            name: .toggleTranscriptionRequested,
+            object: nil,
+            userInfo: ["enabled": enabled]
+        )
+    }
+
     // MARK: - NSMenuDelegate
     func menuWillOpen(_ menu: NSMenu) {
         log("AppDelegate: [MENUBAR] Menu opened by user")
         AnalyticsManager.shared.menuBarOpened()
+        // Refresh toggle states to match current runtime state
+        screenCaptureSwitch?.state = ProactiveAssistantsPlugin.shared.isMonitoring ? .on : .off
+        audioRecordingSwitch?.state = AssistantSettings.shared.transcriptionEnabled ? .on : .off
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -800,15 +1144,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
-    }
-
-    /// Called when user clicks the Dock icon while the app is already running.
-    /// Re-shows the main window if it was closed.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            showMainWindow()
-        }
-        return true
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

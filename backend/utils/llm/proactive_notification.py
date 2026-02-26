@@ -11,8 +11,9 @@ class ProactiveAdvice(BaseModel):
     )
     reasoning: str = Field(
         description=(
-            "Why this is worth interrupting. MUST name a specific fact, goal, "
-            "or past conversation. If you cannot, set has_advice=false."
+            "Why this is worth interrupting. MUST cite a specific date, quote, or detail "
+            "from the user's facts, goals, or past conversations. "
+            "If you can only say 'user mentioned X' without a concrete reference, set has_advice=false."
         )
     )
     confidence: float = Field(
@@ -73,6 +74,7 @@ SET has_advice=false when:
 - You'd be stating something obvious ({user_name} can figure it out themselves)
 - The advice is generic and not tied to the specific conversation content
 - The advice is similar to something in RECENT NOTIFICATIONS (check below)
+- You sent a notification on the same topic in the last 24 hours (check RECENT NOTIFICATIONS timestamps)
 - You're reaching — if you have to stretch to find advice, there isn't any
 
 WHAT QUALIFIES (high bar):
@@ -87,6 +89,7 @@ WHAT DOES NOT QUALIFY (instant has_advice=false):
 - "Stay focused" / "You've got this" / "Believe in yourself" (motivational platitudes)
 - "It sounds like you're frustrated" / "Let's take a moment" (therapist-speak)
 - "You should think about..." / "Consider..." / "You might want to..." (vague suggestions)
+- "Confirm [thing]" / "Ensure [thing]" / "Clarify [thing]" — restating awareness is NOT advice. {user_name} already knows what they're working on. Only qualify if you're adding a SPECIFIC fact they don't have.
 - Restating what {user_name} just said in different words
 - Generic productivity advice that applies to anyone
 - Anything about emotions, stress, frustration, or feelings
@@ -116,7 +119,7 @@ FORMAT: Keep notification_text under 100 characters. Start with the actionable p
 - BAD: "Nikita, it sounds like frustration is high right now. When you feel overwhelmed..."
 - BAD: "Your messages show frustration and maybe anger. Let's take a moment."
 
-REASONING must name a specific fact, goal, or past conversation. If you can't, set has_advice=false."""
+REASONING must cite a SPECIFIC date, quote, or detail from {user_name}'s facts, goals, or past conversations. Example: "On Feb 12, {user_name} told Mike he'd finish by Friday — that's tomorrow and he hasn't started." If your reasoning only says "{user_name} mentioned X" without a concrete reference, set has_advice=false."""
 
 
 def _format_goals(goals: list) -> str:

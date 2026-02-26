@@ -162,6 +162,30 @@ clang-format -i <files>
   gh workflow run gcp_backend.yml -f environment=prod -f branch=main
   ```
 
+## Logs
+
+### Flutter (iOS Simulator)
+App logs go to `/tmp/flutter-run.log`. Use `print()` (not `Logger.debug`) for logs that must appear there. Grep with `[TagName]` prefixes:
+```bash
+grep -E "\[AgentChat\]|\[HomePage\]" /tmp/flutter-run.log | tail -20
+```
+
+### Backend (Cloud Run)
+```bash
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="backend-listen"' --project=based-hardware --limit=30 --freshness=5m --format=json
+```
+
+### Agent-proxy (GKE, namespace `prod-omi-backend`)
+```bash
+kubectl logs -n prod-omi-backend -l app=agent-proxy --tail=50 | grep -v health
+```
+
+### Agent VM
+```bash
+gcloud compute instances describe <vm-name> --zone=us-central1-a --project=based-hardware --format="table(status,networkInterfaces[0].accessConfigs[0].natIP)"
+curl -s http://<vm-ip>:8080/health
+```
+
 ## Testing
 
 ### Always Run Tests Before Committing

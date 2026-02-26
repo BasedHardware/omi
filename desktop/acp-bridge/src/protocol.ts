@@ -8,10 +8,12 @@ export interface QueryMessage {
   id: string;
   prompt: string;
   systemPrompt: string;
+  sessionKey?: string;
   cwd?: string;
   mode?: "ask" | "act";
   model?: string;
   resume?: string;
+  imageBase64?: string;
 }
 
 export interface ToolResultMessage {
@@ -34,12 +36,19 @@ export interface AuthenticateMessage {
   methodId: string;
 }
 
+export interface WarmupSessionConfig {
+  key: string;
+  model: string;
+  systemPrompt?: string;
+}
+
 /** Swift tells the bridge to pre-create an ACP session in the background */
 export interface WarmupMessage {
   type: "warmup";
   cwd?: string;
-  model?: string;
-  models?: string[];
+  model?: string;       // backward compat
+  models?: string[];    // backward compat
+  sessions?: WarmupSessionConfig[];  // new: per-session config with system prompts
 }
 
 export type InboundMessage =

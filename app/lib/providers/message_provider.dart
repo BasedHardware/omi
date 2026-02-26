@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -43,6 +44,8 @@ class MessageProvider extends ChangeNotifier {
   bool _isNextMessageFromVoice = false;
 
   final AgentChatService _agentChatService = AgentChatService();
+  Timer? _vmKeepaliveTimer;
+  static const _keepaliveInterval = Duration(minutes: 5);
 
   bool isLoadingMessages = false;
   bool hasCachedMessages = false;
@@ -65,6 +68,19 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void startVmKeepalive() {
+    if (!SharedPreferencesUtil().claudeAgentEnabled) return;
+    stopVmKeepalive();
+    _vmKeepaliveTimer = Timer.periodic(_keepaliveInterval, (_) {
+      sendAgentKeepalive();
+    });
+  }
+
+  void stopVmKeepalive() {
+    _vmKeepaliveTimer?.cancel();
+    _vmKeepaliveTimer = null;
   }
 
   void setChatApps(List<App> apps) {
@@ -573,6 +589,7 @@ class MessageProvider extends ChangeNotifier {
 
     // Route through agent VM if Claude Agent is enabled
     if (SharedPreferencesUtil().claudeAgentEnabled) {
+      print('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
@@ -663,6 +680,10 @@ class MessageProvider extends ChangeNotifier {
       }
     }
 
+    Timer? silenceTimer;
+    Timer? rotateTimer;
+    int rotateIndex = 0;
+
     try {
       // Connect to agent proxy (authenticates via Firebase token)
       final connected = await _agentChatService.connect();
@@ -679,15 +700,43 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
-      // Build prompt with recent conversation history so the agent has context
-      final history = messages.where((m) => m.text.isNotEmpty).toList().reversed.take(10).toList().reversed.toList();
-      final historyLines =
-          history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
-      final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
+      // History is injected server-side by the agent-proxy from Firestore
+      final prompt = text;
+
+      const rotateMessages = [
+        'Querying your data',
+        'Analyzing activity',
+        'Processing results',
+        'Pulling context',
+        'Searching records',
+      ];
+
+      void startSilenceTimer() {
+        silenceTimer?.cancel();
+        rotateTimer?.cancel();
+        if (message.text.isNotEmpty || textBuffer.isNotEmpty) {
+          silenceTimer = Timer(const Duration(seconds: 2), () {
+            flushBuffer();
+            agentThinkingAfterText = true;
+            rotateIndex = 0;
+            message.thinkings.add(rotateMessages[rotateIndex]);
+            notifyListeners();
+            rotateTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+              rotateIndex = (rotateIndex + 1) % rotateMessages.length;
+              if (message.thinkings.isNotEmpty) {
+                message.thinkings[message.thinkings.length - 1] = rotateMessages[rotateIndex];
+              }
+              notifyListeners();
+            });
+          });
+        }
+      }
 
       await for (var event in _agentChatService.sendQuery(prompt)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
             if (agentThinkingAfterText) {
               textBuffer += '\n\n';
               agentThinkingAfterText = false;
@@ -697,17 +746,24 @@ class MessageProvider extends ChangeNotifier {
             timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
               flushBuffer();
             });
+            startSilenceTimer();
             break;
           case AgentChatEventType.toolActivity:
             // Show tool activity as thinking
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
             flushBuffer();
             if (message.text.isNotEmpty) {
               agentThinkingAfterText = true;
             }
-            message.thinkings.add(event.text);
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
+            }
             notifyListeners();
             break;
           case AgentChatEventType.result:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -716,7 +772,19 @@ class MessageProvider extends ChangeNotifier {
             }
             notifyListeners();
             break;
+          case AgentChatEventType.status:
+            // Show VM startup status as thinking indicator
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
+            flushBuffer();
+            if (event.text.isNotEmpty) {
+              message.thinkings.add(event.text);
+            }
+            notifyListeners();
+            break;
           case AgentChatEventType.error:
+            silenceTimer?.cancel();
+            rotateTimer?.cancel();
             timer?.cancel();
             timer = null;
             flushBuffer();
@@ -730,6 +798,8 @@ class MessageProvider extends ChangeNotifier {
       message.text = message.text.isEmpty ? 'Failed to get response from agent.' : message.text;
       notifyListeners();
     } finally {
+      silenceTimer?.cancel();
+      rotateTimer?.cancel();
       timer?.cancel();
       flushBuffer();
       agentThinkingAfterText = false;

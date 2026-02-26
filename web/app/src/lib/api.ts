@@ -1741,10 +1741,20 @@ export async function deleteMcpApiKey(keyId: string): Promise<void> {
 // ============================================================================
 
 /**
- * Export all conversations as JSON
+ * Export all user data as a downloadable JSON blob (streamed from backend).
  */
-export async function exportAllData(): Promise<Record<string, unknown>> {
-  return fetchWithAuth<Record<string, unknown>>('/v1/users/export');
+export async function exportAllData(): Promise<Blob> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+  const response = await fetch(`${API_BASE_URL}/v1/users/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.status} ${response.statusText}`);
+  }
+  return response.blob();
 }
 
 /**

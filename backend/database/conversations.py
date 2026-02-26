@@ -259,6 +259,26 @@ def get_conversations_without_photos(
     return conversations
 
 
+def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
+    """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    offset = 0
+    while True:
+        batch_ref = conversations_ref.limit(batch_size).offset(offset)
+        batch = []
+        for doc in batch_ref.stream():
+            conv = doc.to_dict()
+            conv = _prepare_conversation_for_read(conv, uid) or conv
+            batch.append(conv)
+        yield from batch
+        if len(batch) < batch_size:
+            break
+        offset += batch_size
+
+
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()

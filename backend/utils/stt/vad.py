@@ -1,7 +1,5 @@
 import os
-from enum import Enum
 
-import numpy as np
 import requests
 import torch
 from fastapi import HTTPException
@@ -16,49 +14,6 @@ torch.set_num_threads(1)
 torch.hub.set_dir('pretrained_models')
 model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
 get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks = utils
-
-
-class SpeechState(str, Enum):
-    speech_found = 'speech_found'
-    no_speech = 'no_speech'
-
-
-def is_speech_present(data, vad_iterator, window_size_samples=256):
-    data_int16 = np.frombuffer(data, dtype=np.int16)
-    data_float32 = data_int16.astype(np.float32) / 32768.0
-    has_start, has_end = False, False
-
-    for i in range(0, len(data_float32), window_size_samples):
-        chunk = data_float32[i : i + window_size_samples]
-        if len(chunk) < window_size_samples:
-            break
-        speech_dict = vad_iterator(chunk, return_seconds=False)
-        if speech_dict:
-            # print(speech_dict)
-            vad_iterator.reset_states()
-            return SpeechState.speech_found
-
-            # if not has_start and 'start' in speech_dict:
-            #     has_start = True
-            #
-            # if not has_end and 'end' in speech_dict:
-            #     has_end = True
-
-    # if has_start:
-    #     return SpeechState.speech_found
-    # elif has_end:
-    #     return SpeechState.no_speech
-    vad_iterator.reset_states()
-    return SpeechState.no_speech
-
-
-def is_audio_empty(file_path, sample_rate=8000):
-    wav = read_audio(file_path)
-    timestamps = get_speech_timestamps(wav, model, sampling_rate=sample_rate)
-    if len(timestamps) == 1:
-        prob_not_speech = ((timestamps[0]['end'] / 1000) - (timestamps[0]['start'] / 1000)) < 1
-        return prob_not_speech
-    return len(timestamps) == 0
 
 
 def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,10 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
@@ -991,14 +989,21 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 duration: const Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
-                            String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
-                            final file = File('${directory.path}/conversations.json');
-                            await file.writeAsString(json);
+                            final filePath = '${directory.path}/omi-export.json';
+                            final exportedPath = await exportUserDataToFile(filePath);
+                            if (exportedPath == null) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Export failed. Please try again.')),
+                                );
+                              }
+                              setState(() => provider.loadingExportMemories = false);
+                              return;
+                            }
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
+                                await Share.shareXFiles([XFile(exportedPath)], text: 'Exported Data from Omi');
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }

@@ -92,13 +92,16 @@ struct DesktopHomeView: View {
                             }
 
                             // Migration: one-time reset for users whose screenAnalysisEnabled
-                            // was incorrectly set to false by a bug in stopMonitoring() that
-                            // persisted false on every automatic stop (failures, sign-out, etc.).
-                            let migrationKey = "screenAnalysisAutoStartFixed_v1"
+                            // was incorrectly set to false by a bug in syncMonitoringState() that
+                            // persisted false whenever monitoring stopped for any reason.
+                            // v2: re-run because the root cause (syncMonitoringState disabling the
+                            // setting) was only fixed in this release, so v1 users got re-broken.
+                            let migrationKey = "screenAnalysisAutoStartFixed_v2"
                             if !UserDefaults.standard.bool(forKey: migrationKey) {
                                 UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
+                                AssistantSettings.shared.screenAnalysisEnabled = true
                                 UserDefaults.standard.set(true, forKey: migrationKey)
-                                log("DesktopHomeView: Applied screenAnalysisAutoStart migration — reset to enabled")
+                                log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
                                 // Push true to server so syncFromServer() doesn't revert it
                                 Task { await SettingsSyncManager.shared.syncToServer() }
                             }
@@ -144,6 +147,17 @@ struct DesktopHomeView: View {
                         // Refresh conversations when app becomes active (e.g. switching back from another app)
                         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                             Task { await appState.refreshConversations() }
+                            // Auto-start monitoring when returning to app if screen analysis is enabled
+                            // but monitoring is not running. Handles the case where the user granted
+                            // screen recording permission in System Settings and switched back.
+                            let plugin = ProactiveAssistantsPlugin.shared
+                            if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
+                                plugin.refreshScreenRecordingPermission()
+                                if plugin.hasScreenRecordingPermission {
+                                    log("DesktopHomeView: Permission available on app active — starting monitoring")
+                                    plugin.startMonitoring { _, _ in }
+                                }
+                            }
                         }
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
@@ -158,6 +172,17 @@ struct DesktopHomeView: View {
                             log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
                             appState.hasCompletedOnboarding = false
                             appState.stopTranscription()
+                        }
+                        // Handle transcription toggle from menu bar
+                        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) { notification in
+                            if let enabled = notification.userInfo?["enabled"] as? Bool {
+                                log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+                                if enabled {
+                                    appState.startTranscription()
+                                } else {
+                                    appState.stopTranscription()
+                                }
+                            }
                         }
                         // Periodic file re-scan (every 3 hours)
                         .task {
@@ -223,7 +248,7 @@ struct DesktopHomeView: View {
             // Force dark appearance on the window
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title == "Omi" {
+                    if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                     }
                 }
