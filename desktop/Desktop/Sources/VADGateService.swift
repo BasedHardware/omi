@@ -14,7 +14,10 @@ final class SileroVADModel {
     private let stateSize = 2 * 1 * 128  // 256
 
     init?() {
-        guard let modelPath = Bundle.main.path(forResource: "silero_vad", ofType: "onnx") else {
+        // SPM places processed resources in a module sub-bundle, not Bundle.main
+        let resourceBundle = Bundle.main.url(forResource: "Omi Computer_Omi Computer", withExtension: "bundle")
+            .flatMap { Bundle(url: $0) } ?? Bundle.main
+        guard let modelPath = resourceBundle.path(forResource: "silero_vad", ofType: "onnx") else {
             log("VADGateService: silero_vad.onnx not found in bundle")
             return nil
         }
