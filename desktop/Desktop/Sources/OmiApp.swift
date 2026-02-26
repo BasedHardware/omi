@@ -171,6 +171,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log("AppDelegate: Set application icon from OmiIcon.icns")
         }
 
+        // One-time icon cache reset: forces macOS to pick up the new squircle icon.
+        // Without this, users who had the old square icon see it cached indefinitely
+        // in the Dock, notifications, and Sparkle updater.
+        resetIconCacheIfNeeded()
+
         // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
         // This ensures notifications display properly when app is in foreground
         _ = NotificationService.shared
@@ -409,6 +414,73 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if process.terminationStatus == 0 {
                 log("AppDelegate: Stripped provenance xattrs from bundle")
             }
+        }
+    }
+
+    /// One-time icon cache reset to force macOS to pick up the new squircle icon.
+    /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
+    /// Includes a safety net to restart the Dock if it crashes during the reset.
+    private func resetIconCacheIfNeeded() {
+        let key = "hasResetIconCache_v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        log("AppDelegate: Running one-time icon cache reset")
+
+        let appPath = Bundle.main.bundlePath
+        let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+        DispatchQueue.global(qos: .utility).async {
+            // Unregister to clear stale icon entries
+            let unregister = Process()
+            unregister.executableURL = URL(fileURLWithPath: lsregister)
+            unregister.arguments = ["-u", appPath]
+            unregister.standardOutput = FileHandle.nullDevice
+            unregister.standardError = FileHandle.nullDevice
+            try? unregister.run()
+            unregister.waitUntilExit()
+
+            // Force re-register with updated icon
+            let register = Process()
+            register.executableURL = URL(fileURLWithPath: lsregister)
+            register.arguments = ["-f", appPath]
+            register.standardOutput = FileHandle.nullDevice
+            register.standardError = FileHandle.nullDevice
+            try? register.run()
+            register.waitUntilExit()
+
+            // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
+            let killIcons = Process()
+            killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            killIcons.arguments = ["iconservicesagent"]
+            killIcons.standardOutput = FileHandle.nullDevice
+            killIcons.standardError = FileHandle.nullDevice
+            try? killIcons.run()
+            killIcons.waitUntilExit()
+
+            // Safety net: verify the Dock is still running after 2 seconds.
+            // iconservicesagent restart can occasionally crash the Dock.
+            Thread.sleep(forTimeInterval: 2.0)
+            let dockCheck = Process()
+            dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            dockCheck.arguments = ["-x", "Dock"]
+            dockCheck.standardOutput = FileHandle.nullDevice
+            dockCheck.standardError = FileHandle.nullDevice
+            try? dockCheck.run()
+            dockCheck.waitUntilExit()
+
+            if dockCheck.terminationStatus != 0 {
+                // Dock is not running — restart it
+                log("AppDelegate: Dock not running after icon cache reset, restarting")
+                let restartDock = Process()
+                restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                restartDock.arguments = ["-a", "Dock"]
+                restartDock.standardOutput = FileHandle.nullDevice
+                restartDock.standardError = FileHandle.nullDevice
+                try? restartDock.run()
+                restartDock.waitUntilExit()
+            }
+
+            log("AppDelegate: Icon cache reset complete")
         }
     }
 

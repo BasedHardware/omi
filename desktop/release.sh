@@ -861,13 +861,6 @@ echo ""
 echo "Creating local git tag..."
 git tag "v$VERSION" 2>/dev/null && echo "  ✓ Created tag v$VERSION" || echo "  Tag v$VERSION already exists"
 
-# -----------------------------------------------------------------------------
-# Sync to monorepo (omi-desktop -> BasedHardware/omi desktop/)
-# -----------------------------------------------------------------------------
-echo ""
-echo "[Sync] Syncing release to monorepo..."
-python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward
-echo "  ✓ Monorepo sync complete"
 
 # -----------------------------------------------------------------------------
 # Step 12: Trigger Installation Test
