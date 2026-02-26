@@ -6,6 +6,7 @@ import os
 
 import requests
 from langchain_core.tools import tool
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,9 @@ def perplexity_web_search_tool(
         response = requests.post(url, json=payload, headers=headers, timeout=30)
 
         if response.status_code != 200:
-            logger.error(f"❌ perplexity_web_search_tool - API error: {response.status_code} - {response.text[:200]}")
+            logger.error(
+                f"❌ perplexity_web_search_tool - API error: {response.status_code} - {sanitize(response.text[:200])}"
+            )
             return f"Error: Perplexity API returned status {response.status_code}. Please try again later."
 
         result = response.json()
