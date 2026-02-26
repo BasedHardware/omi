@@ -272,6 +272,8 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
+  - name: VAD_GATE_MODE
+    value: "active"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

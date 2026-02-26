@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import struct
 import time
@@ -83,6 +84,7 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
+from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
@@ -97,7 +99,6 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -687,8 +688,11 @@ async def _stream_handler(
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
+    vad_gate = None
+
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
+        # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
 
     async def _process_stt():
@@ -719,6 +723,40 @@ async def _stream_handler(
             if not has_speech_profile:
                 speech_profile_complete.set()
 
+            # Initialize VAD gate for all eligible DG sessions.
+            # Guard: gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
+            # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
+            # (the "8"/"16" refers to sample rate kHz, not bit depth).
+            # DG always receives mono (channels=1), so clamp gate channels to 1.
+            # When speech profile is active (preseconds > 0), start in shadow mode
+            # so preseconds filtering uses uncompressed DG timestamps. After profile
+            # completes, switch to active mode to start saving cost.
+            nonlocal vad_gate
+            if is_gate_enabled() and stt_service == STTService.deepgram:
+                gate_mode = VAD_GATE_MODE
+                if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
+                    gate_mode = 'shadow'  # Shadow during profile, activate later
+                try:
+                    vad_gate = VADStreamingGate(
+                        sample_rate=sample_rate,
+                        channels=1,  # DG always receives mono (encoding=linear16, channels=1)
+                        mode=gate_mode,
+                        uid=uid,
+                        session_id=session_id,
+                    )
+                    logger.info(
+                        'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
+                        gate_mode,
+                        speech_profile_preseconds,
+                        codec,
+                        sample_rate,
+                        uid,
+                        session_id,
+                    )
+                except Exception:
+                    logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
+                    vad_gate = None
+
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
@@ -729,6 +767,7 @@ async def _stream_handler(
                     preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
+                    vad_gate=vad_gate,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
@@ -1725,7 +1764,6 @@ async def _stream_handler(
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
-
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -1755,6 +1793,11 @@ async def _stream_handler(
                         logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
                         socket_to_close = deepgram_profile_socket
                         deepgram_profile_socket = None  # Stop sending immediately
+
+                        # Activate VAD gate now that speech profile phase is done
+                        if vad_gate is not None and VAD_GATE_MODE == 'active' and vad_gate.mode == 'shadow':
+                            vad_gate.activate()
+                            logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
 
                         async def close_dg_profile():
                             await asyncio.sleep(5)
@@ -1847,11 +1890,12 @@ async def _stream_handler(
                             )
                             continue
 
-                    # Feed ring buffer for speaker identification
+                    # Feed ring buffer for speaker identification (always, with wall-clock time)
                     if audio_ring_buffer is not None:
                         audio_ring_buffer.write(data, last_audio_received_time)
 
                     if not use_custom_stt:
+                        # VAD gating is handled inside GatedDeepgramSocket.send()
                         stt_audio_buffer.extend(data)
                         await flush_stt_buffer()
 
@@ -1935,6 +1979,9 @@ async def _stream_handler(
             logger.error(f'Could not process data: error {e} {uid} {session_id}')
             websocket_close_code = 1011
         finally:
+            # Log VAD gate metrics before cleanup
+            if vad_gate is not None:
+                logger.info(json.dumps(vad_gate.to_json_log()))
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
@@ -2021,6 +2068,7 @@ async def _stream_handler(
         # STT sockets
         try:
             if deepgram_socket:
+                # GatedDeepgramSocket.finish() handles finalize automatically
                 deepgram_socket.finish()
             if deepgram_profile_socket:
                 deepgram_profile_socket.finish()
