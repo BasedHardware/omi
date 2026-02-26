@@ -31,8 +31,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Inline log sanitizer (agent-proxy is a standalone service, can't import from utils/)
-_TOKEN_RE = re.compile(r'[A-Za-z0-9+/=_\-]{8,}')
-_HAS_DIGIT_OR_B64 = set('0123456789+/=')
+_TOKEN_RE = re.compile(r'[A-Za-z0-9+/_\-]{8,}')
+_HAS_DIGIT_OR_B64 = set('0123456789+/')
 
 
 def _sanitize(value) -> str:
