@@ -94,6 +94,9 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and return the new IP."""
+    import time
+
+    t0 = time.monotonic()
     token = _get_gce_access_token()
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
@@ -103,13 +106,15 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
             raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+        t_start = time.monotonic() - t0
+        logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
 
         op_name = resp.json().get("name")
         if not op_name:
             raise Exception("Missing operation name in GCE start response")
 
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-        for _ in range(24):
+        for i in range(24):
             await asyncio.sleep(5)
             token = _get_gce_access_token()
             status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
@@ -117,18 +122,38 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
             if status.get("status") == "DONE":
                 if "error" in status:
                     raise Exception(f"GCE start operation failed: {status['error']}")
+                t_op = time.monotonic() - t0
+                logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
                 break
 
+        # Poll for a valid external IP (may take a few seconds after operation completes)
         instance_url = (
             f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
         )
-        token = _get_gce_access_token()
-        inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-        instance = inst_resp.json()
-        try:
-            return instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        except (KeyError, IndexError):
-            return "unknown"
+        ip = None
+        for attempt in range(6):
+            token = _get_gce_access_token()
+            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+            instance = inst_resp.json()
+            try:
+                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                if candidate and candidate != "unknown":
+                    ip = candidate
+                    t_ip = time.monotonic() - t0
+                    logger.info(f"[vm-start] {vm_name} got IP {ip} on attempt {attempt + 1}: {t_ip:.1f}s total")
+                    break
+            except (KeyError, IndexError):
+                pass
+            if attempt < 5:
+                logger.info(f"[vm-start] {vm_name} no IP yet, retrying ({attempt + 1}/6)...")
+                await asyncio.sleep(3)
+
+        if not ip:
+            t_fail = time.monotonic() - t0
+            logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
+            ip = "unknown"
+
+        return ip
 
 
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
@@ -341,43 +366,51 @@ async def agent_ws(websocket: WebSocket):
     # Accept WebSocket first so we can send status messages during VM startup
     await websocket.accept()
 
-    # If VM is not ready, try to restart it
-    vm_status = vm.get("status", "")
-    if vm_status != "ready" or not vm.get("ip"):
+    vm_ip = vm.get("ip")
+    vm_token = vm.get("authToken")
+
+    # Fast path: if Firestore says ready with an IP, try connecting directly (skip GCE check).
+    # Only fall back to GCE check + restart if the VM isn't reachable.
+    if vm.get("status") == "ready" and vm_ip:
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"http://{vm_ip}:8080/health")
+                if resp.status_code != 200:
+                    raise Exception(f"health returned {resp.status_code}")
+        except Exception:
+            # VM not reachable — check GCE and restart if needed
+            logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
+            await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+            vm = await _ensure_vm_running(uid, vm)
+            if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+                await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+                await websocket.close(code=4002, reason="VM startup failed")
+                return
+            vm_ip = vm["ip"]
+            vm_token = vm["authToken"]
+            # Wait for VM to be healthy after restart
+            healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
+            if not healthy:
+                await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
+                await websocket.close(code=4003, reason="VM not healthy")
+                return
+    else:
+        # No IP or not ready — must restart
         await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
         vm = await _ensure_vm_running(uid, vm)
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
             await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
             await websocket.close(code=4002, reason="VM startup failed")
             return
-    else:
-        # VM says ready — verify GCE status in case it auto-stopped
-        vm_name = vm.get("vmName")
-        zone = vm.get("zone", "us-central1-a")
-        try:
-            gce_status = await _check_gce_status(vm_name, zone)
-            if gce_status in ("TERMINATED", "STOPPED"):
-                await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
-                vm = await _ensure_vm_running(uid, vm)
-                if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
-                    await websocket.close(code=4002, reason="VM startup failed")
-                    return
-        except Exception as e:
-            logger.warning(f"[agent-proxy] uid={uid} GCE status check failed, proceeding: {e}")
+        vm_ip = vm["ip"]
+        vm_token = vm["authToken"]
+        healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
+        if not healthy:
+            await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
+            await websocket.close(code=4003, reason="VM not healthy")
+            return
 
-    vm_ip = vm["ip"]
-    vm_token = vm["authToken"]
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
-
-    # Wait for VM to be healthy before connecting WebSocket
-    await websocket.send_text(json.dumps({"type": "status", "message": "Connecting to your agent..."}))
-    healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
-    if not healthy:
-        logger.error(f"[agent-proxy] uid={uid} VM {vm_ip} never became healthy")
-        await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
-        await websocket.close(code=4003, reason="VM not healthy")
-        return
 
     # Get or create the default chat session so messages are linked properly
     chat_session = await asyncio.to_thread(_get_or_create_chat_session, uid)
@@ -388,6 +421,17 @@ async def agent_ws(websocket: WebSocket):
     try:
         async with websockets.connect(vm_uri, ping_interval=600, ping_timeout=600) as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
+
+            # Send Firebase token to VM so it can fetch backend tools (calendar, gmail, etc.)
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"http://{vm_ip}:8080/auth?token={vm_token}",
+                        json={"firebaseToken": token},
+                    )
+                    logger.info(f"[agent-proxy] uid={uid} sent Firebase token to VM")
+            except Exception as e:
+                logger.warning(f"[agent-proxy] uid={uid} failed to send Firebase token: {e}")
 
             async def phone_to_vm():
                 try:

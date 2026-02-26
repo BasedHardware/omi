@@ -213,6 +213,22 @@ class TranscriptionService {
         }
     }
 
+    /// Send Deepgram Finalize message to flush pending transcripts
+    func sendFinalize() {
+        guard isConnected, let webSocketTask = webSocketTask else { return }
+        let msg = "{\"type\": \"Finalize\"}"
+        webSocketTask.send(.string(msg)) { error in
+            if let error = error {
+                logError("TranscriptionService: Finalize error", error: error)
+            }
+        }
+    }
+
+    /// Public keepalive for VAD gate to call during extended silence
+    func sendKeepalivePublic() {
+        sendKeepalive()
+    }
+
     /// Check if connected
     var connected: Bool {
         return isConnected

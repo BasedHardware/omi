@@ -49,6 +49,10 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
 const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 let lastActivityAt = Date.now();
 
+// --- Session pre-warm ---
+let warmSessionId = null;
+let warmSessionReady = false;
+
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
   "screenshots", "action_items", "transcription_sessions",
@@ -83,8 +87,13 @@ function openDatabase() {
 
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0];
+  const timeStr = now.toISOString().split('T')[1].split('.')[0];
   defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
 This database contains their screen history (screenshots with OCR text), tasks, transcriptions, memories, and focus sessions.
+
+CURRENT DATE AND TIME: ${dateStr} ${timeStr} UTC
 
 DATABASE SCHEMA:
 ${schema}
@@ -369,6 +378,9 @@ async function fetchAndRegisterBackendTools() {
     // Rebuild MCP server with all tools
     rebuildMcpServer();
     console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
+
+    // Pre-warm a session now that all tools + MCP are ready
+    prewarmSession().catch(() => {});
   } catch (err) {
     console.log(`[backend-tools] Error fetching tools: ${err.message}`);
   }
@@ -381,6 +393,70 @@ function rebuildMcpServer() {
     tools: allTools,
   });
   console.log(`[mcp] Rebuilt MCP server with ${allTools.length} tools`);
+}
+
+// --- Session Pre-warm ---
+// Fires a lightweight query to create a warm Claude session with subprocess + MCP servers connected.
+// Subsequent queries reuse the sessionId, skipping subprocess spawn + MCP setup (~2-3s savings).
+// Must use the same model and MCP config as real queries so the warm subprocess is reusable.
+
+let prewarmInProgress = false;
+
+async function prewarmSession() {
+  if (!isDatabaseReady() || !omiServer || !defaultSystemPrompt) return;
+  if (prewarmInProgress) return;
+  prewarmInProgress = true;
+
+  const t0 = Date.now();
+  console.log("[prewarm] Starting session pre-warm...");
+
+  try {
+    const abortController = new AbortController();
+    const options = {
+      model: "claude-opus-4-6",
+      abortController,
+      systemPrompt: defaultSystemPrompt,
+      allowedTools: [
+        "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
+      ],
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      maxTurns: 1,
+      cwd: process.env.HOME || "/",
+      mcpServers: {
+        "omi-tools": omiServer,
+        "playwright": {
+          command: process.execPath,
+          args: [
+            playwrightCli,
+            "--user-data-dir", join(__dirname, "chrome-profile"),
+            "--headless",
+            "--no-sandbox",
+          ],
+        },
+      },
+    };
+
+    const q = query({ prompt: "ready", options });
+
+    for await (const message of q) {
+      if (message.type === "system" && "session_id" in message) {
+        warmSessionId = message.session_id;
+      }
+      if (message.type === "result") {
+        break;
+      }
+    }
+
+    warmSessionReady = !!warmSessionId;
+    console.log(`[prewarm] Session ready in ${Date.now() - t0}ms (sessionId: ${warmSessionId?.slice(0, 8)}...)`);
+  } catch (err) {
+    console.log(`[prewarm] Failed: ${err.message}`);
+    warmSessionId = null;
+    warmSessionReady = false;
+  } finally {
+    prewarmInProgress = false;
+  }
 }
 
 // --- Shared Agent Query Handler ---
@@ -396,9 +472,17 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   let costUsd = 0;
   const pendingTools = [];
 
+  // Reuse warm session if available (saves ~2-3s on subprocess + MCP setup)
+  const useWarmSession = warmSessionReady && warmSessionId;
+  if (useWarmSession) {
+    console.log(`[query] Reusing warm session ${warmSessionId.slice(0, 8)}...`);
+    warmSessionReady = false; // Consume the warm session
+  }
+
   const options = {
     model: "claude-opus-4-6",
     abortController,
+    ...(useWarmSession ? { sessionId: warmSessionId } : {}),
     systemPrompt: systemPrompt || defaultSystemPrompt,
     allowedTools: [
       "Read",
@@ -428,82 +512,101 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     },
   };
 
-  const q = query({ prompt, options });
+  async function runQuery(opts) {
+    const q = query({ prompt, options: opts });
 
-  for await (const message of q) {
-    if (abortController.signal.aborted) break;
+    for await (const message of q) {
+      if (abortController.signal.aborted) break;
 
-    switch (message.type) {
-      case "system":
-        if ("session_id" in message) {
-          sessionId = message.session_id;
-          send({ type: "init", sessionId });
-        }
-        break;
-
-      case "stream_event": {
-        const event = message.event;
-
-        if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
-          const name = event.content_block.name;
-          pendingTools.push(name);
-          send({ type: "tool_activity", name, status: "started" });
-        }
-
-        if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
-          if (pendingTools.length > 0) {
-            for (const name of pendingTools) {
-              send({ type: "tool_activity", name, status: "completed" });
-            }
-            pendingTools.length = 0;
+      switch (message.type) {
+        case "system":
+          if ("session_id" in message) {
+            sessionId = message.session_id;
+            send({ type: "init", sessionId });
           }
-          const text = event.delta.text;
-          fullText += text;
-          send({ type: "text_delta", text });
-        }
-        break;
-      }
+          break;
 
-      case "assistant": {
-        // Fallback: if streaming didn't capture text (e.g. after tool calls),
-        // extract it from the complete assistant message
-        const content = message.message?.content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block.type === "text" && typeof block.text === "string") {
-              // Check if this text was already sent via stream_event deltas
-              if (!fullText.includes(block.text)) {
-                fullText += block.text;
-                send({ type: "text_delta", text: block.text });
+        case "stream_event": {
+          const event = message.event;
+
+          if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+            const name = event.content_block.name;
+            pendingTools.push(name);
+            send({ type: "tool_activity", name, status: "started" });
+          }
+
+          if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+            if (pendingTools.length > 0) {
+              for (const name of pendingTools) {
+                send({ type: "tool_activity", name, status: "completed" });
+              }
+              pendingTools.length = 0;
+            }
+            const text = event.delta.text;
+            fullText += text;
+            send({ type: "text_delta", text });
+          }
+          break;
+        }
+
+        case "assistant": {
+          // Fallback: if streaming didn't capture text (e.g. after tool calls),
+          // extract it from the complete assistant message
+          const content = message.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text" && typeof block.text === "string") {
+                // Check if this text was already sent via stream_event deltas
+                if (!fullText.includes(block.text)) {
+                  fullText += block.text;
+                  send({ type: "text_delta", text: block.text });
+                }
               }
             }
           }
+          break;
         }
-        break;
-      }
 
-      case "result": {
-        for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
-        }
-        pendingTools.length = 0;
-
-        if (message.subtype === "success") {
-          costUsd = message.total_cost_usd || 0;
-          // Send any final text that wasn't captured during streaming
-          if (message.result) {
-            const remaining = message.result.replace(fullText, "").trim();
-            if (remaining) {
-              send({ type: "text_delta", text: remaining });
-              fullText += remaining;
-            }
+        case "result": {
+          for (const name of pendingTools) {
+            send({ type: "tool_activity", name, status: "completed" });
           }
-        } else {
-          const errors = message.errors || [];
-          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          pendingTools.length = 0;
+
+          if (message.subtype === "success") {
+            costUsd = message.total_cost_usd || 0;
+            // Send any final text that wasn't captured during streaming
+            if (message.result) {
+              const remaining = message.result.replace(fullText, "").trim();
+              if (remaining) {
+                send({ type: "text_delta", text: remaining });
+                fullText += remaining;
+              }
+            }
+          } else {
+            const errors = message.errors || [];
+            send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          }
+          break;
         }
-        break;
       }
+    }
+  }
+
+  try {
+    await runQuery(options);
+  } catch (err) {
+    // If the warm session's process died, retry with a fresh session
+    if (useWarmSession && (err.message?.includes('exited with code') || err.message?.includes('not ready'))) {
+      console.log(`[query] Warm session crashed: ${err.message}, retrying fresh...`);
+      warmSessionId = null;
+      warmSessionReady = false;
+      fullText = "";
+      pendingTools.length = 0;
+      delete options.sessionId;
+      await runQuery(options);
+    } else {
+      throw err;
     }
   }
 
@@ -764,6 +867,10 @@ function startServer() {
         // Re-open the database
         if (openDatabase()) {
           log("Database loaded after upload");
+          // Pre-warm if backend tools are already loaded (MCP server is ready)
+          if (backendTools.length > 0) {
+            prewarmSession().catch(() => {});
+          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
             status: "ok",
@@ -1018,6 +1125,8 @@ function startServer() {
             if (activeAbort === abortController) {
               activeAbort = null;
             }
+            // Re-warm a session for the next query (fire-and-forget)
+            prewarmSession().catch(() => {});
           }
           break;
         }
@@ -1028,6 +1137,11 @@ function startServer() {
             activeAbort.abort();
             activeAbort = null;
           }
+          break;
+
+        case "prewarm":
+          log("Prewarm requested by client");
+          prewarmSession().catch(() => {});
           break;
 
         default:
@@ -1047,8 +1161,9 @@ function startServer() {
       log(`WebSocket error: ${err.message}`);
     });
 
-    // Signal readiness
+    // Signal readiness and trigger pre-warm so session is ready when user sends first message
     send({ type: "init", sessionId: "" });
+    prewarmSession().catch(() => {});
   });
 
   httpServer.listen(PORT, () => {

@@ -65,7 +65,6 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     )
 
     async with httpx.AsyncClient(timeout=180) as client:
-        # Start the VM
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
             raise Exception(f"GCE start failed: {resp.status_code} {sanitize(resp.text)}")
@@ -76,7 +75,6 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         if not op_name:
             raise Exception("Missing operation name in GCE start response")
 
-        # Poll operation until done (max ~2 minutes)
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
         for i in range(24):
             await asyncio.sleep(5)

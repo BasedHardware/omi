@@ -1698,7 +1698,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   Row(
                                     children: [
                                       const Text(
-                                        'Claude Agent',
+                                        'Omi Agent',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,

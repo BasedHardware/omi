@@ -136,6 +136,7 @@ class AppState: ObservableObject {
     private var transcriptionService: TranscriptionService?
     private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
     private var audioMixer: AudioMixer?
+    private var vadGateService: VADGateService?
 
     // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
     private var speakerSegments: [SpeakerSegment] = []
@@ -1101,6 +1102,14 @@ class AppState: ObservableObject {
                 // Initialize audio mixer for combining mic and system audio
                 audioMixer = AudioMixer()
 
+                // Initialize VAD gate if enabled (skips silence to reduce Deepgram usage)
+                if AssistantSettings.shared.vadGateEnabled {
+                    vadGateService = VADGateService()
+                    log("Transcription: VAD gate enabled")
+                } else {
+                    vadGateService = nil
+                }
+
                 // Initialize system audio capture if supported (macOS 14.4+)
                 if #available(macOS 14.4, *) {
                     systemAudioCaptureService = SystemAudioCaptureService()
@@ -1215,8 +1224,22 @@ class AppState: ObservableObject {
               let audioMixer = audioMixer else { return }
 
         // Start the audio mixer - it will send stereo audio to transcription service
+        // If VAD gate is enabled, filter through it first
         audioMixer.start { [weak self] stereoData in
-            self?.transcriptionService?.sendAudio(stereoData)
+            guard let self = self else { return }
+            if let gate = self.vadGateService {
+                let output = gate.processAudio(stereoData)
+                if !output.audioToSend.isEmpty {
+                    self.transcriptionService?.sendAudio(output.audioToSend)
+                } else if gate.needsKeepalive() {
+                    self.transcriptionService?.sendKeepalivePublic()
+                }
+                if output.shouldFinalize {
+                    self.transcriptionService?.sendFinalize()
+                }
+            } else {
+                self.transcriptionService?.sendAudio(stereoData)
+            }
         }
 
         do {
@@ -1455,6 +1478,9 @@ class AppState: ObservableObject {
         // Stop audio mixer
         audioMixer?.stop()
         audioMixer = nil
+
+        // Clear VAD gate
+        vadGateService = nil
 
         // Stop transcription service
         transcriptionService?.stop()
@@ -2033,7 +2059,23 @@ class AppState: ObservableObject {
         let channelBasedSpeaker = segment.channelIndex == 0 ? 0 : 1
 
         // Process words and merge by speaker
-        let words = segment.words
+        // If VAD gate is active, remap Deepgram timestamps to wall-clock time
+        let words: [TranscriptionService.TranscriptSegment.Word]
+        if let gate = vadGateService {
+            words = segment.words.map { word in
+                let (remappedStart, remappedEnd) = gate.remapTimestamp(start: word.start, end: word.end)
+                return TranscriptionService.TranscriptSegment.Word(
+                    word: word.word,
+                    start: remappedStart,
+                    end: remappedEnd,
+                    confidence: word.confidence,
+                    speaker: word.speaker,
+                    punctuatedWord: word.punctuatedWord
+                )
+            }
+        } else {
+            words = segment.words
+        }
         guard !words.isEmpty else {
             // Fallback: no words, just append text with channel-based speaker
             if segment.speechFinal && !segment.text.isEmpty {
