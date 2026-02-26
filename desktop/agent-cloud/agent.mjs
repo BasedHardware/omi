@@ -617,7 +617,16 @@ function processMessage(message, state, send) {
       const content = message.message?.content;
       if (Array.isArray(content)) {
         for (const block of content) {
-          if (block.type === "text" && typeof block.text === "string") {
+          if (block.type === "tool_use") {
+            send({ type: "tool_activity", name: block.name, status: "started" });
+            state.pendingTools.push(block.name);
+          } else if (block.type === "text" && typeof block.text === "string") {
+            if (state.pendingTools.length > 0) {
+              for (const name of state.pendingTools) {
+                send({ type: "tool_activity", name, status: "completed" });
+              }
+              state.pendingTools.length = 0;
+            }
             if (!state.fullText.includes(block.text)) {
               state.fullText += block.text;
               send({ type: "text_delta", text: block.text });
