@@ -207,7 +207,7 @@ class _FCMNotificationService implements NotificationInterface {
   void clearNotification(int id) => _awesomeNotifications.cancel(id);
 
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
-    return Platform.isAndroid || Platform.isIOS;
+    return Platform.isAndroid;
   }
 
   @override
