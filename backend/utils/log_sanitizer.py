@@ -7,10 +7,10 @@ for debugging.
 - Email addresses: local part masked, domain preserved (j***n@example.com)
 
 Usage:
-    from utils.log_sanitizer import sanitize
+    from utils.log_sanitizer import sanitize, sanitize_pii
 
     logger.error(f"Token exchange failed: {sanitize(response.text)}")
-    logger.info(f"Found contact: {sanitize(name)} -> {sanitize(email)}")
+    logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
 """
 
 import re
@@ -58,6 +58,40 @@ def _mask_email(match: re.Match) -> str:
     if len(local) <= 2:
         return f'***@{domain}'
     return f'{local[0]}***{local[-1]}@{domain}'
+
+
+def sanitize_pii(value) -> str:
+    """Mask a known PII value (name, email, user text).
+
+    Use this instead of sanitize() when the value is KNOWN to be personal data.
+    Always masks regardless of content (unlike sanitize() which skips pure-alpha words).
+
+    - Emails: local part masked, domain preserved.
+    - Short values (<=4 chars): replaced with ***
+    - Medium values (5-8 chars): first 1 + *** + last 1
+    - Long values (9+ chars): first 2 + *** + last 2
+    """
+    if value is None:
+        return 'None'
+    text = str(value)
+    if len(text) > 200:
+        text = text[:200] + '...'
+    # Handle emails first
+    if '@' in text:
+        text = _EMAIL_PATTERN.sub(_mask_email, text)
+        return text
+    # Mask each word in the text
+    words = text.split()
+    masked = []
+    for word in words:
+        n = len(word)
+        if n <= 4:
+            masked.append('***')
+        elif n <= 8:
+            masked.append(f'{word[0]}***{word[-1]}')
+        else:
+            masked.append(f'{word[:2]}***{word[-2:]}')
+    return ' '.join(masked)
 
 
 def _mask_token(match: re.Match) -> str:
