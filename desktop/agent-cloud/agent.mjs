@@ -637,7 +637,9 @@ let currentVersion = null;
 
 async function checkAndApplyUpdate(log) {
   try {
-    const resp = await fetch(`${GCS_BASE}/version.txt`);
+    // Cache-bust: GCS sets max-age=3600, so append a unique query param
+    const cacheBust = `_t=${Date.now()}`;
+    const resp = await fetch(`${GCS_BASE}/version.txt?${cacheBust}`);
     if (!resp.ok) return;
     const version = (await resp.text()).trim();
     if (currentVersion === null) {
@@ -647,7 +649,7 @@ async function checkAndApplyUpdate(log) {
     }
     if (version === currentVersion) return;
     log(`Update available: ${version} (current: ${currentVersion}), downloading...`);
-    const agentResp = await fetch(`${GCS_BASE}/agent.mjs`);
+    const agentResp = await fetch(`${GCS_BASE}/agent.mjs?${cacheBust}`);
     if (!agentResp.ok) {
       log(`Update download failed: HTTP ${agentResp.status}`);
       return;

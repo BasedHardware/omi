@@ -321,7 +321,7 @@ def _save_message(uid: str, text: str, sender: str, chat_session_id: str, data_p
     user_ref.collection('messages').add(msg_data)
     # Link message to chat session
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({'message_ids': firestore.ArrayUnion([msg_id])})
+    session_ref.set({'message_ids': firestore.ArrayUnion([msg_id])}, merge=True)
 
 
 def _build_prompt_with_history(prompt: str, history: list) -> str:
