@@ -512,82 +512,101 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     },
   };
 
-  const q = query({ prompt, options });
+  async function runQuery(opts) {
+    const q = query({ prompt, options: opts });
 
-  for await (const message of q) {
-    if (abortController.signal.aborted) break;
+    for await (const message of q) {
+      if (abortController.signal.aborted) break;
 
-    switch (message.type) {
-      case "system":
-        if ("session_id" in message) {
-          sessionId = message.session_id;
-          send({ type: "init", sessionId });
-        }
-        break;
-
-      case "stream_event": {
-        const event = message.event;
-
-        if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
-          const name = event.content_block.name;
-          pendingTools.push(name);
-          send({ type: "tool_activity", name, status: "started" });
-        }
-
-        if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
-          if (pendingTools.length > 0) {
-            for (const name of pendingTools) {
-              send({ type: "tool_activity", name, status: "completed" });
-            }
-            pendingTools.length = 0;
+      switch (message.type) {
+        case "system":
+          if ("session_id" in message) {
+            sessionId = message.session_id;
+            send({ type: "init", sessionId });
           }
-          const text = event.delta.text;
-          fullText += text;
-          send({ type: "text_delta", text });
-        }
-        break;
-      }
+          break;
 
-      case "assistant": {
-        // Fallback: if streaming didn't capture text (e.g. after tool calls),
-        // extract it from the complete assistant message
-        const content = message.message?.content;
-        if (Array.isArray(content)) {
-          for (const block of content) {
-            if (block.type === "text" && typeof block.text === "string") {
-              // Check if this text was already sent via stream_event deltas
-              if (!fullText.includes(block.text)) {
-                fullText += block.text;
-                send({ type: "text_delta", text: block.text });
+        case "stream_event": {
+          const event = message.event;
+
+          if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+            const name = event.content_block.name;
+            pendingTools.push(name);
+            send({ type: "tool_activity", name, status: "started" });
+          }
+
+          if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+            if (pendingTools.length > 0) {
+              for (const name of pendingTools) {
+                send({ type: "tool_activity", name, status: "completed" });
+              }
+              pendingTools.length = 0;
+            }
+            const text = event.delta.text;
+            fullText += text;
+            send({ type: "text_delta", text });
+          }
+          break;
+        }
+
+        case "assistant": {
+          // Fallback: if streaming didn't capture text (e.g. after tool calls),
+          // extract it from the complete assistant message
+          const content = message.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === "text" && typeof block.text === "string") {
+                // Check if this text was already sent via stream_event deltas
+                if (!fullText.includes(block.text)) {
+                  fullText += block.text;
+                  send({ type: "text_delta", text: block.text });
+                }
               }
             }
           }
+          break;
         }
-        break;
-      }
 
-      case "result": {
-        for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
-        }
-        pendingTools.length = 0;
-
-        if (message.subtype === "success") {
-          costUsd = message.total_cost_usd || 0;
-          // Send any final text that wasn't captured during streaming
-          if (message.result) {
-            const remaining = message.result.replace(fullText, "").trim();
-            if (remaining) {
-              send({ type: "text_delta", text: remaining });
-              fullText += remaining;
-            }
+        case "result": {
+          for (const name of pendingTools) {
+            send({ type: "tool_activity", name, status: "completed" });
           }
-        } else {
-          const errors = message.errors || [];
-          send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          pendingTools.length = 0;
+
+          if (message.subtype === "success") {
+            costUsd = message.total_cost_usd || 0;
+            // Send any final text that wasn't captured during streaming
+            if (message.result) {
+              const remaining = message.result.replace(fullText, "").trim();
+              if (remaining) {
+                send({ type: "text_delta", text: remaining });
+                fullText += remaining;
+              }
+            }
+          } else {
+            const errors = message.errors || [];
+            send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+          }
+          break;
         }
-        break;
       }
+    }
+  }
+
+  try {
+    await runQuery(options);
+  } catch (err) {
+    // If the warm session's process died, retry with a fresh session
+    if (useWarmSession && (err.message?.includes('exited with code') || err.message?.includes('not ready'))) {
+      console.log(`[query] Warm session crashed: ${err.message}, retrying fresh...`);
+      warmSessionId = null;
+      warmSessionReady = false;
+      fullText = "";
+      pendingTools.length = 0;
+      delete options.sessionId;
+      await runQuery(options);
+    } else {
+      throw err;
     }
   }
 
