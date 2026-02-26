@@ -96,6 +96,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var backgroundPollCount = 0
     private let maxBackgroundPollAttempts = 5  // 5 attempts × 60s = 5 minutes
     private static var hasAutoResetThisSession = false
+    private static var hasSoftRecoveryThisSession = false
 
     // MARK: - Initialization
 
@@ -1239,11 +1240,44 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
     }
 
-    /// Attempt automatic tccutil reset + app restart (once per launch)
+    /// Attempt automatic recovery (soft first, then hard reset as last resort)
     private func attemptAutoReset() {
+        // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
+        if !Self.hasSoftRecoveryThisSession {
+            Self.hasSoftRecoveryThisSession = true
+            log("ProactiveAssistantsPlugin: Attempting soft recovery (no TCC reset)")
+
+            Task {
+                let recovered = await ScreenCaptureService.attemptSoftRecovery()
+                await MainActor.run {
+                    if recovered {
+                        log("ProactiveAssistantsPlugin: Soft recovery succeeded, resuming capture")
+                        self.consecutiveFailures = 0
+                        self.lastCaptureSucceeded = true
+
+                        // Restart normal capture timer
+                        self.captureTimer?.invalidate()
+                        self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
+                            Task { @MainActor in
+                                await self?.captureFrame()
+                            }
+                        }
+                    } else {
+                        // Soft recovery failed in-process, restart app to refresh permission state
+                        // This still avoids wiping TCC — the restart itself often fixes stale caches
+                        log("ProactiveAssistantsPlugin: Soft recovery failed in-process, restarting to refresh state")
+                        AnalyticsManager.shared.screenCaptureBrokenDetected()
+                        ScreenCaptureService.softRecoveryAndRestart()
+                    }
+                }
+            }
+            return
+        }
+
+        // Step 2: Soft recovery already tried — fall back to showing notification
+        // Do NOT auto-reset TCC; let the user decide via the sidebar button
         if Self.hasAutoResetThisSession {
-            // Already tried auto-reset this session - fall back to manual notification
-            log("ProactiveAssistantsPlugin: Auto-reset already attempted this session, showing notification")
+            log("ProactiveAssistantsPlugin: All recovery attempts exhausted this session, showing notification")
 
             AnalyticsManager.shared.screenCaptureBrokenDetected()
             NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
@@ -1251,15 +1285,21 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             NotificationService.shared.sendNotification(
                 title: NotificationService.screenCaptureResetTitle,
-                message: "Permission appears granted but capture is failing. Click to reset and fix this issue."
+                message: "Screen recording permission needs to be re-enabled. Click to open Settings."
             )
             return
         }
 
         Self.hasAutoResetThisSession = true
-        log("ProactiveAssistantsPlugin: Performing auto-reset + restart")
+        log("ProactiveAssistantsPlugin: Soft recovery + restart already tried, notifying user")
         AnalyticsManager.shared.screenCaptureBrokenDetected()
-        ScreenCaptureService.resetScreenCapturePermissionAndRestart()
+        NotificationCenter.default.post(name: .screenCaptureKitBroken, object: nil)
+        stopMonitoring()
+
+        NotificationService.shared.sendNotification(
+            title: NotificationService.screenCaptureResetTitle,
+            message: "Screen recording permission needs to be re-enabled. Click to open Settings."
+        )
     }
 }
 
