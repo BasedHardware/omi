@@ -42,11 +42,14 @@ class AgentChatService {
   StreamSubscription? _streamSubscription;
   StreamController<AgentChatEvent>? _eventController;
   bool _connected = false;
+  Stopwatch? _queryStopwatch;
+  bool _firstTextReceived = false;
 
   bool get isConnected => _connected;
 
   Future<bool> connect() async {
     await initAgentLog();
+    final connectSw = Stopwatch()..start();
     agentLog('connect() called');
 
     // Clean up any existing connection
@@ -61,12 +64,13 @@ class AgentChatService {
     _connected = false;
 
     final user = FirebaseAuth.instance.currentUser;
-    agentLog('Firebase user: ${user?.uid}, email: ${user?.email}');
+    agentLog('[TIMING] cleanup done +${connectSw.elapsedMilliseconds}ms');
     final token = await user?.getIdToken();
     if (token == null) {
       agentLog('ERROR: no Firebase user/token');
       return false;
     }
+    agentLog('[TIMING] token fetched +${connectSw.elapsedMilliseconds}ms');
 
     try {
       final uri = Uri.parse(Env.agentProxyWsUrl);
@@ -78,7 +82,7 @@ class AgentChatService {
       );
       await _channel!.ready;
       _connected = true;
-      agentLog('Connected successfully');
+      agentLog('[TIMING] ws connected +${connectSw.elapsedMilliseconds}ms');
 
       // Set up a persistent stream listener that forwards events to the current _eventController.
       // This listener survives across multiple sendQuery() calls on the same connection.
@@ -88,7 +92,9 @@ class AgentChatService {
             final msg = jsonDecode(data as String) as Map<String, dynamic>;
             final type = msg['type'] as String?;
             final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
-            agentLog('Event: type=$type text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
+            final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
+            agentLog(
+                '[TIMING] Event: type=$type +${elapsed}ms | text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
 
             // Skip init/prewarm messages that arrive before or between queries
             if (type == 'init' || type == 'prewarm') return;
@@ -97,11 +103,16 @@ class AgentChatService {
 
             switch (type) {
               case 'text_delta':
+                if (!_firstTextReceived) {
+                  _firstTextReceived = true;
+                  agentLog('[TIMING] *** FIRST TEXT DELTA *** +${elapsed}ms');
+                }
                 _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
                 break;
               case 'tool_activity':
                 final toolName = msg['name'] as String? ?? '';
                 final status = msg['status'] as String? ?? 'started';
+                agentLog('[TIMING] tool=$toolName status=$status +${elapsed}ms');
                 final displayText = status == 'started' ? _toolDisplayName(toolName) : '';
                 _eventController?.add(AgentChatEvent(AgentChatEventType.toolActivity, displayText));
                 break;
@@ -110,10 +121,14 @@ class AgentChatService {
                 _eventController?.add(AgentChatEvent(AgentChatEventType.status, message));
                 break;
               case 'result':
+                agentLog('[TIMING] *** RESULT *** +${elapsed}ms (total query time)');
+                _queryStopwatch?.stop();
                 _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
                 _eventController?.close();
                 break;
               case 'error':
+                agentLog('[TIMING] *** ERROR *** +${elapsed}ms');
+                _queryStopwatch?.stop();
                 _eventController?.add(AgentChatEvent(AgentChatEventType.error, text));
                 _eventController?.close();
                 break;
@@ -129,13 +144,17 @@ class AgentChatService {
           }
         },
         onError: (error) {
-          agentLog('Stream error: $error');
+          final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
+          agentLog('[TIMING] Stream error +${elapsed}ms: $error');
+          _queryStopwatch?.stop();
           _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Connection error: $error'));
           _eventController?.close();
           _connected = false;
         },
         onDone: () {
-          agentLog('Stream done (connection closed)');
+          final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
+          agentLog('[TIMING] Stream done +${elapsed}ms');
+          _queryStopwatch?.stop();
           _connected = false;
           if (!(_eventController?.isClosed ?? true)) {
             _eventController?.close();
@@ -145,11 +164,11 @@ class AgentChatService {
 
       // Trigger pre-warm on the VM so a Claude session is ready before the user types
       _channel!.sink.add(jsonEncode({'type': 'prewarm'}));
-      agentLog('Sent prewarm signal');
+      agentLog('[TIMING] prewarm sent +${connectSw.elapsedMilliseconds}ms (total connect)');
 
       return true;
     } catch (e) {
-      agentLog('Connection failed: $e');
+      agentLog('Connection failed after ${connectSw.elapsedMilliseconds}ms: $e');
       _connected = false;
       return false;
     }
@@ -165,8 +184,11 @@ class AgentChatService {
       return _eventController!.stream;
     }
 
-    agentLog('Sending query (${prompt.length} chars)');
+    _queryStopwatch = Stopwatch()..start();
+    _firstTextReceived = false;
+    agentLog('[TIMING] === QUERY START === (${prompt.length} chars)');
     _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
+    agentLog('[TIMING] query sent +${_queryStopwatch!.elapsedMilliseconds}ms');
 
     return _eventController!.stream;
   }
