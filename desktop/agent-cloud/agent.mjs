@@ -19,12 +19,6 @@ process.on('unhandledRejection', (err) => {
     console.log(`[server] Suppressed abort error: ${msg}`);
     return;
   }
-  // ProcessTransport errors mean the Claude SDK subprocess died — invalidate cached session
-  if (msg.includes('ProcessTransport')) {
-    console.log(`[server] ProcessTransport error, clearing warm session: ${msg}`);
-    warmSessionId = null;
-    return;
-  }
   console.error(`[server] Unhandled rejection:`, err);
 });
 
@@ -38,6 +32,38 @@ process.on('uncaughtException', (err) => {
   // For non-abort errors, exit so systemd can restart us
   process.exit(1);
 });
+
+// --- Async message queue for persistent session streaming input ---
+class AsyncMessageQueue {
+  constructor() {
+    this._queue = [];
+    this._resolve = null;
+    this._done = false;
+  }
+  push(msg) {
+    if (this._resolve) {
+      this._resolve({ value: msg, done: false });
+      this._resolve = null;
+    } else {
+      this._queue.push(msg);
+    }
+  }
+  end() {
+    this._done = true;
+    if (this._resolve) {
+      this._resolve({ value: undefined, done: true });
+      this._resolve = null;
+    }
+  }
+  [Symbol.asyncIterator]() { return this; }
+  next() {
+    if (this._queue.length > 0)
+      return Promise.resolve({ value: this._queue.shift(), done: false });
+    if (this._done)
+      return Promise.resolve({ value: undefined, done: true });
+    return new Promise(r => { this._resolve = r; });
+  }
+}
 
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
@@ -70,11 +96,6 @@ const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli
 // --- Firebase token (passed from desktop app for backend API calls) ---
 let userFirebaseToken = null;
 let backendTools = [];
-
-// --- Session pre-warming: reuse Claude SDK sessions across queries ---
-let warmSessionId = null;
-let prewarmAbort = null;
-let prewarmInProgress = false;
 
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
@@ -396,7 +417,7 @@ function rebuildMcpServer() {
 
 // --- Shared Agent Query Handler ---
 
-async function handleQuery({ prompt, systemPrompt, cwd, send, abortController, resumeSessionId }) {
+async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
   if (!isDatabaseReady()) {
     send({ type: "error", message: "Database not available. Upload omi.db first." });
     return { text: "", sessionId: "", costUsd: 0 };
@@ -424,7 +445,6 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController, r
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
-    ...(resumeSessionId ? { resume: resumeSessionId } : {}),
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -530,59 +550,142 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController, r
   return { text: fullText, sessionId, costUsd };
 }
 
-// --- Session Pre-warming ---
+// --- Persistent Session (streaming input mode) ---
 
-async function handlePrewarm(abortController) {
+function startPersistentSession(send, log) {
   if (!isDatabaseReady()) {
-    console.log("[prewarm] Database not ready, skipping");
+    log("Cannot start persistent session: database not ready");
     return null;
   }
 
-  console.log("[prewarm] Starting session pre-warm...");
-  const startTime = Date.now();
+  const messageQueue = new AsyncMessageQueue();
+  const sessionAbort = new AbortController();
 
   const options = {
     model: "claude-opus-4-6",
-    abortController,
+    abortController: sessionAbort,
     systemPrompt: defaultSystemPrompt,
-    allowedTools: [
-      "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
-    ],
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    maxTurns: 1,
+    maxTurns: undefined,
     cwd: process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
       "playwright": {
         command: process.execPath,
-        args: [
-          playwrightCli,
-          "--user-data-dir", join(__dirname, "chrome-profile"),
-          "--headless",
-          "--no-sandbox",
-        ],
+        args: [playwrightCli, "--user-data-dir", join(__dirname, "chrome-profile"), "--headless", "--no-sandbox"],
       },
     },
   };
 
+  const q = query({ prompt: messageQueue, options });
+
+  // Session state
   let sessionId = null;
-  const q = query({ prompt: "ready", options });
+  let sessionIdResolve = null;
+  const sessionIdReady = new Promise(r => { sessionIdResolve = r; });
 
-  for await (const message of q) {
-    if (abortController.signal.aborted) break;
-    if (message.type === "system" && "session_id" in message) {
-      sessionId = message.session_id;
+  // Per-turn state
+  let fullText = "";
+  let pendingTools = [];
+  let turnActive = false;
+
+  // Background message processing loop — runs for entire WS lifetime
+  const loopPromise = (async () => {
+    try {
+      for await (const message of q) {
+        switch (message.type) {
+          case "system":
+            if ("session_id" in message) {
+              sessionId = message.session_id;
+              sessionIdResolve?.();
+              sessionIdResolve = null;
+              log(`Persistent session started: ${sessionId}`);
+            }
+            break;
+
+          case "stream_event": {
+            const event = message.event;
+            if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+              const name = event.content_block.name;
+              pendingTools.push(name);
+              send({ type: "tool_activity", name, status: "started" });
+            }
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              if (pendingTools.length > 0) {
+                for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+                pendingTools.length = 0;
+              }
+              fullText += event.delta.text;
+              send({ type: "text_delta", text: event.delta.text });
+            }
+            break;
+          }
+
+          case "assistant": {
+            const content = message.message?.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === "tool_use") {
+                  send({ type: "tool_activity", name: block.name, status: "started" });
+                  pendingTools.push(block.name);
+                } else if (block.type === "text" && typeof block.text === "string") {
+                  if (pendingTools.length > 0) {
+                    for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+                    pendingTools.length = 0;
+                  }
+                  if (!fullText.includes(block.text)) {
+                    fullText += block.text;
+                    send({ type: "text_delta", text: block.text });
+                  }
+                }
+              }
+            }
+            break;
+          }
+
+          case "result": {
+            for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+            pendingTools.length = 0;
+
+            if (message.subtype === "success") {
+              const costUsd = message.total_cost_usd || 0;
+              if (message.result) {
+                const remaining = message.result.replace(fullText, "").trim();
+                if (remaining) {
+                  send({ type: "text_delta", text: remaining });
+                  fullText += remaining;
+                }
+              }
+              send({ type: "result", text: fullText, sessionId, costUsd });
+            } else {
+              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+            }
+            // Reset per-turn state
+            fullText = "";
+            pendingTools = [];
+            turnActive = false;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      log(`Persistent session loop error: ${err.message}`);
     }
-  }
+    log("Persistent session ended");
+  })();
 
-  const elapsed = Date.now() - startTime;
-  if (sessionId) {
-    console.log(`[prewarm] Session ready: ${sessionId} (${elapsed}ms)`);
-  } else {
-    console.log(`[prewarm] No session ID returned (${elapsed}ms)`);
-  }
-  return sessionId;
+  return {
+    query: q,
+    messageQueue,
+    sessionAbort,
+    sessionIdReady,
+    loopPromise,
+    getSessionId: () => sessionId,
+    isTurnActive: () => turnActive,
+    setTurnActive: (v) => { turnActive = v; },
+  };
 }
 
 // --- Mode: CLI ---
@@ -1041,7 +1144,7 @@ function startServer() {
 
   wss.on("connection", (ws) => {
     log("Client connected");
-    let activeAbort = null;
+    let session = null; // persistent session for this WS connection
 
     const send = (msg) => {
       if (ws.readyState === ws.OPEN) {
@@ -1059,125 +1162,77 @@ function startServer() {
       }
 
       switch (msg.type) {
-        case "query": {
-          lastActivityAt = Date.now();
-          // Cancel any prior query
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
-          }
-
-          // If prewarm is still running, abort it
-          if (prewarmInProgress && prewarmAbort) {
-            log("Aborting in-progress prewarm for incoming query");
-            prewarmAbort.abort();
-            prewarmAbort = null;
-            prewarmInProgress = false;
-          }
-
-          const abortController = new AbortController();
-          activeAbort = abortController;
-
-          const resumeId = warmSessionId;
-          if (resumeId) {
-            log(`Query (resuming ${resumeId}): ${msg.prompt?.slice(0, 100)}`);
-          } else {
-            log(`Query: ${msg.prompt?.slice(0, 100)}`);
-          }
-
-          try {
-            const result = await handleQuery({
-              prompt: msg.prompt,
-              systemPrompt: msg.systemPrompt,
-              cwd: msg.cwd,
-              send,
-              abortController,
-              resumeSessionId: resumeId,
-            });
-
-            if (!abortController.signal.aborted) {
-              // Update warm session for next query
-              if (result.sessionId) {
-                warmSessionId = result.sessionId;
-              }
-              send({ type: "result", text: result.text, sessionId: result.sessionId, costUsd: result.costUsd });
-            }
-          } catch (err) {
-            if (!abortController.signal.aborted) {
-              // If resume failed, retry once without resume
-              if (resumeId) {
-                log(`Query with resume failed: ${err.message}, retrying fresh...`);
-                warmSessionId = null;
-                try {
-                  const retry = await handleQuery({
-                    prompt: msg.prompt,
-                    systemPrompt: msg.systemPrompt,
-                    cwd: msg.cwd,
-                    send,
-                    abortController,
-                  });
-                  if (!abortController.signal.aborted) {
-                    if (retry.sessionId) {
-                      warmSessionId = retry.sessionId;
-                    }
-                    send({ type: "result", text: retry.text, sessionId: retry.sessionId, costUsd: retry.costUsd });
-                  }
-                } catch (retryErr) {
-                  if (!abortController.signal.aborted) {
-                    log(`Query retry also failed: ${retryErr.message}`);
-                    send({ type: "error", message: retryErr.message });
-                  }
-                }
-              } else {
-                log(`Query error: ${err.message}`);
-                send({ type: "error", message: err.message });
-              }
-            }
-          } finally {
-            if (activeAbort === abortController) {
-              activeAbort = null;
-            }
-          }
-          break;
-        }
-
         case "prewarm": {
-          // Pre-warm a Claude session so the first query is faster
-          if (warmSessionId || prewarmInProgress) {
-            log(`Prewarm: ${warmSessionId ? 'session already warm' : 'already in progress'}`);
+          if (session) {
+            log("Prewarm: session already active");
             send({ type: "prewarm_ack", success: true });
             break;
           }
-
-          prewarmAbort = new AbortController();
-          prewarmInProgress = true;
-          log("Prewarm: starting...");
-
-          handlePrewarm(prewarmAbort).then((sessionId) => {
-            prewarmInProgress = false;
-            prewarmAbort = null;
-            if (sessionId) {
-              warmSessionId = sessionId;
-              send({ type: "prewarm_ack", success: true });
-            } else {
-              send({ type: "prewarm_ack", success: false });
-            }
-          }).catch((err) => {
-            prewarmInProgress = false;
-            prewarmAbort = null;
-            log(`Prewarm error: ${err.message}`);
+          log("Prewarm: starting persistent session...");
+          session = startPersistentSession(send, log);
+          if (!session) {
+            send({ type: "prewarm_ack", success: false });
+            break;
+          }
+          session.sessionIdReady.then(() => {
+            send({ type: "prewarm_ack", success: true });
+            log("Prewarm: session ready");
+          }).catch(() => {
             send({ type: "prewarm_ack", success: false });
           });
           break;
         }
 
-        case "stop":
+        case "query": {
+          lastActivityAt = Date.now();
+          const prompt = msg.prompt;
+          log(`Query: ${prompt?.slice(0, 100)}`);
+
+          // Start session if not started yet
+          if (!session) {
+            log("No active session, starting on first query...");
+            session = startPersistentSession(send, log);
+            if (!session) {
+              send({ type: "error", message: "Database not available" });
+              break;
+            }
+          }
+
+          // Wait for session_id
+          await session.sessionIdReady;
+          const sid = session.getSessionId();
+          if (!sid) {
+            send({ type: "error", message: "Session failed to initialize" });
+            session = null;
+            break;
+          }
+
+          // If a turn is still active, interrupt first
+          if (session.isTurnActive()) {
+            log("Interrupting active turn for new query");
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          }
+
+          session.setTurnActive(true);
+          send({ type: "status", message: "Processing..." });
+
+          // Push user message into the persistent session
+          session.messageQueue.push({
+            type: "user",
+            message: { role: "user", content: prompt },
+            parent_tool_use_id: null,
+            session_id: sid,
+          });
+          break;
+        }
+
+        case "stop": {
           log("Stop requested");
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
+          if (session?.isTurnActive()) {
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
+        }
 
         default:
           send({ type: "error", message: `Unknown message type: ${msg.type}` });
@@ -1186,9 +1241,10 @@ function startServer() {
 
     ws.on("close", () => {
       log("Client disconnected");
-      if (activeAbort) {
-        activeAbort.abort();
-        activeAbort = null;
+      if (session) {
+        session.messageQueue.end();
+        session.sessionAbort.abort();
+        session = null;
       }
     });
 
