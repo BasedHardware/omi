@@ -4,6 +4,7 @@ abstract class Env {
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
   static String? _agentProxyWsUrlOverride;
+  static bool isTestFlight = false;
 
   static void init([EnvFields? instance]) {
     _instance = instance ?? DevEnv() as EnvFields;
@@ -23,6 +24,14 @@ abstract class Env {
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
+
+  static String get stagingApiUrl {
+    final url = _instance.stagingApiUrl;
+    if (url != null && url.isNotEmpty) return url;
+    return 'https://api.omiapi.com/';
+  }
+
+  static bool get isUsingStagingApi => _apiBaseUrlOverride != null && _apiBaseUrlOverride == stagingApiUrl;
 
   /// WebSocket URL for the agent proxy service.
   /// Always prod — agent VMs and Firestore are in the prod project only.
@@ -75,4 +84,6 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
+
+  String? get stagingApiUrl;
 }
