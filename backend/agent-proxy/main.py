@@ -11,6 +11,7 @@ import base64
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -28,6 +29,29 @@ from google.cloud.firestore_v1 import Query
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Inline log sanitizer (agent-proxy is a standalone service, can't import from utils/)
+_TOKEN_RE = re.compile(r'[A-Za-z0-9+/=_\-]{8,}')
+_HAS_DIGIT_OR_B64 = set('0123456789+/=')
+
+
+def _sanitize(value) -> str:
+    """Mask token-like strings (8+ chars with digits/base64) while preserving words."""
+    text = str(value) if value is not None else 'None'
+    if len(text) > 2000:
+        text = text[:2000] + '...[truncated]'
+
+    def _mask(m):
+        t = m.group()
+        if not any(c in _HAS_DIGIT_OR_B64 for c in t):
+            return t
+        n = len(t)
+        if n <= 12:
+            return t[:3] + '***' + t[-3:]
+        return t[:4] + '***' + t[-4:]
+
+    return _TOKEN_RE.sub(_mask, text)
+
 
 # Firebase init — uses GOOGLE_APPLICATION_CREDENTIALS or ADC
 cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
@@ -102,7 +126,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     async with httpx.AsyncClient(timeout=180) as client:
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
-            raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+            raise Exception(f"GCE start failed: {resp.status_code} {_sanitize(resp.text)}")
 
         op_name = resp.json().get("name")
         if not op_name:
@@ -327,7 +351,7 @@ async def agent_ws(websocket: WebSocket):
     try:
         uid = auth.verify_id_token(token)["uid"]
     except Exception as e:
-        logger.warning(f"[agent-proxy] WS rejected: invalid token: {e}")
+        logger.warning(f"[agent-proxy] WS rejected: invalid token: {_sanitize(e)}")
         await websocket.close(code=4001, reason="Invalid token")
         return
 
