@@ -1982,28 +1982,37 @@ workflows:
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
-          # Use --triple (not --arch) so SPM creates arch-specific output dirs:
-          #   .build/arm64-apple-macosx/release/  (arm64 binary)
-          #   .build/x86_64-apple-macosx/release/ (x86_64 binary)
-          # --arch on M2 doesn't reliably create x86_64-apple-macosx/ subdirectory.
+
+          # Build arm64 first (native on M2). SPM puts binary in .build/release/.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --arch arm64
+
+          # Save arm64 binary immediately to /tmp before x86_64 build overwrites .build/release/.
+          cp "Desktop/.build/release/$BINARY_NAME" "/tmp/OmiComputer-arm64"
+          echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
+
+          # Build x86_64 (cross-compile). SPM overwrites .build/release/ with x86_64 binary.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --arch x86_64
+          echo "x86_64 binary: $(file "Desktop/.build/release/$BINARY_NAME" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
         script: |
-          # --triple creates explicit arch-specific output dirs (matches release.sh behavior)
-          ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
-          X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          # arm64 binary was saved to /tmp before x86_64 build overwrote .build/release/
+          ARM64_BINARY="/tmp/OmiComputer-arm64"
+          # x86_64 binary is in .build/release/ (x86_64 build ran last)
+          X86_64_BINARY="Desktop/.build/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
-            ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
-            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            echo "  arm64 ($ARM64_BINARY): $([ -f "$ARM64_BINARY" ] && echo EXISTS || echo MISSING)"
+            echo "  x86_64 ($X86_64_BINARY): $([ -f "$X86_64_BINARY" ] && echo EXISTS || echo MISSING)"
+            echo ".build/ contents:" && ls "Desktop/.build/" 2>/dev/null
+            find Desktop/.build -name "Omi*" 2>/dev/null | head -10 || true
             exit 1
           fi
+          echo "arm64 arch: $(file "$ARM64_BINARY" | grep -oE 'arm64|x86_64')"
+          echo "x86_64 arch: $(file "$X86_64_BINARY" | grep -oE 'arm64|x86_64' | head -1)"
 
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
           mkdir -p "$APP_BUNDLE/Contents/Resources"
@@ -2018,8 +2027,8 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Sparkle is in arm64 build dir (matches release.sh)
-          SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
+          # Sparkle is in .build/release/ (x86_64 build ran last, release/ points to x86_64 dir)
+          SPARKLE_FW="Desktop/.build/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
             echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
             exit 1
@@ -2037,7 +2046,7 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
+          SWIFT_BUILD_DIR="Desktop/.build/release"
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
