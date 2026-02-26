@@ -30,7 +30,7 @@ actor TaskPrioritizationService {
         self.lastFullRunTime = UserDefaults.standard.object(forKey: Self.fullRunKey) as? Date
 
         do {
-            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
+            self.geminiClient = try GeminiClient(model: "gemini-3-pro-preview")
         } catch {
             log("TaskPrioritize: Failed to initialize GeminiClient: \(error)")
             self.geminiClient = nil
