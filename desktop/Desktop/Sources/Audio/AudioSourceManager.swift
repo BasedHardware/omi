@@ -59,6 +59,25 @@ final class AudioSourceManager: ObservableObject {
     /// Currently selected audio source
     @Published var selectedSource: AudioSource = .microphone
 
+    /// Preferred microphone device UID (CoreAudio stable device UID). If nil, uses system default.
+    @Published var preferredMicrophoneUID: String? {
+        didSet {
+            UserDefaults.standard.set(preferredMicrophoneUID, forKey: "preferredMicrophoneUID")
+            // If currently streaming from microphone, restart to apply new device
+            if isStreaming, selectedSource == .microphone {
+                Task {
+                    do {
+                        if let onAudio = onStereoAudio {
+                            try await restartMicrophoneStreaming(onAudio: onAudio)
+                        }
+                    } catch {
+                        self.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+    }
+
     /// Whether audio is currently streaming
     @Published private(set) var isStreaming = false
 
@@ -97,6 +116,7 @@ final class AudioSourceManager: ObservableObject {
     // MARK: - Initialization
 
     private init() {
+        self.preferredMicrophoneUID = UserDefaults.standard.string(forKey: "preferredMicrophoneUID")
         setupBindings()
     }
 
@@ -198,13 +218,20 @@ final class AudioSourceManager: ObservableObject {
     var currentSourceName: String {
         switch selectedSource {
         case .microphone:
-            return AudioCaptureService.getCurrentMicrophoneName() ?? "Microphone"
+            return AudioCaptureService.getCurrentMicrophoneName(preferredDeviceUID: preferredMicrophoneUID) ?? "Microphone"
         case .bleDevice:
             return deviceProvider.connectedDevice?.displayName ?? "Wearable Device"
         }
     }
 
     // MARK: - Microphone Streaming
+
+    private func restartMicrophoneStreaming(onAudio: @escaping (Data) -> Void) async throws {
+        // Preserve callbacks
+        self.onStereoAudio = onAudio
+        stopMicrophoneStreaming()
+        try await startMicrophoneStreaming()
+    }
 
     private func startMicrophoneStreaming() async throws {
         // Check permission
@@ -213,7 +240,7 @@ final class AudioSourceManager: ObservableObject {
         }
 
         // Initialize services
-        audioCaptureService = AudioCaptureService()
+        audioCaptureService = AudioCaptureService(preferredDeviceUID: preferredMicrophoneUID)
         audioMixer = AudioMixer()
 
         // Initialize system audio if supported (macOS 14.4+)

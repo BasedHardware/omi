@@ -656,8 +656,10 @@ struct SettingsContentView: View {
 
     @ObservedObject private var fontScaleSettings = FontScaleSettings.shared
     @ObservedObject private var rewindSettings = RewindSettings.shared
+    @ObservedObject private var audioSourceManager = AudioSourceManager.shared
 
     @State private var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
+    @State private var availableMicrophones: [AudioCaptureService.AudioInputDevice] = []
 
     private var rewindSection: some View {
         VStack(spacing: 20) {
@@ -741,6 +743,49 @@ struct SettingsContentView: View {
                         .labelsHidden()
                     }
                 }
+            }
+
+            // Microphone source selection
+            settingsCard(settingId: "rewind.microphone") {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "mic")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Microphone Source")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Choose which microphone Omi uses for desktop transcription")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+                    }
+
+                    Picker(
+                        "Microphone",
+                        selection: Binding(
+                            get: { audioSourceManager.preferredMicrophoneUID ?? "" },
+                            set: { newValue in
+                                audioSourceManager.preferredMicrophoneUID = newValue.isEmpty ? nil : newValue
+                            }
+                        )
+                    ) {
+                        Text("System Default").tag("")
+                        ForEach(availableMicrophones) { device in
+                            Text(device.name).tag(device.uid)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+            .task {
+                // Refresh list once when settings are opened
+                availableMicrophones = AudioCaptureService.listInputDevices()
             }
 
             // Storage Stats
