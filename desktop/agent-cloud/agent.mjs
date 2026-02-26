@@ -58,7 +58,10 @@ function loadLastActivity() {
       if (!isNaN(ts) && ts > 0) return ts;
     }
   } catch {}
-  return Date.now(); // First boot — give 30 min grace period
+  // First boot — write timestamp so hot-reload restarts don't reset the 30-min window
+  const now = Date.now();
+  try { writeFileSync(ACTIVITY_FILE, String(now)); } catch {}
+  return now;
 }
 
 function saveLastActivity(ts) {
