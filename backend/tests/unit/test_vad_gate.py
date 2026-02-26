@@ -1149,6 +1149,171 @@ class TestModelPoolAndState:
             assert elapsed < sleep_sec * 1.75
 
 
+class TestPoolExhaustionUnderContention:
+    """Tests for pool behavior when more callers than pool size."""
+
+    def test_callers_exceed_pool_size_no_deadlock(self):
+        """4 concurrent callers with pool_size=2 should all complete (no deadlock)."""
+        sleep_sec = 0.05
+        model = _SlowMockModel(sleep_sec=sleep_sec)
+        pool_size = 2
+        num_callers = 4
+        with (
+            patch('utils.stt.vad_gate._vad_model', model),
+            patch('utils.stt.vad_gate._vad_torch', None),
+            patch('utils.stt.vad_gate._vad_model_pool', None),
+            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
+        ):
+            gates = [
+                VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
+                for i in range(num_callers)
+            ]
+            barrier = threading.Barrier(num_callers + 1)
+            results = [None] * num_callers
+            errors = [None] * num_callers
+            chunk = _make_pcm(40)
+
+            def _run(idx):
+                try:
+                    barrier.wait(timeout=5)
+                    results[idx] = gates[idx].process_audio(chunk, 1000.0)
+                except Exception as e:
+                    errors[idx] = e
+
+            threads = [threading.Thread(target=_run, args=(i,)) for i in range(num_callers)]
+            for t in threads:
+                t.start()
+            start = time.perf_counter()
+            barrier.wait(timeout=5)
+            for t in threads:
+                t.join(timeout=10)
+            elapsed = time.perf_counter() - start
+
+            # All callers should complete (no deadlock)
+            for i in range(num_callers):
+                assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
+                assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
+
+            # With pool_size=2, 4 callers should take ~2x the single-call time (2 batches)
+            # Allow generous margin for CI jitter
+            assert elapsed < sleep_sec * 6, f'Took {elapsed:.3f}s — possible starvation'
+
+    def test_pool_recovery_after_contention(self):
+        """After contention burst, pool models should be returned and reusable."""
+        model = _SlowMockModel(sleep_sec=0.01)
+        pool_size = 2
+        with (
+            patch('utils.stt.vad_gate._vad_model', model),
+            patch('utils.stt.vad_gate._vad_torch', None),
+            patch('utils.stt.vad_gate._vad_model_pool', None),
+            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
+        ):
+            # First: burst of contention
+            gates = [
+                VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
+                for i in range(4)
+            ]
+            chunk = _make_pcm(40)
+            threads = []
+            for g in gates:
+                t = threading.Thread(target=lambda gate: gate.process_audio(chunk, 1000.0), args=(g,))
+                threads.append(t)
+                t.start()
+            for t in threads:
+                t.join(timeout=10)
+
+            # After contention: pool should be fully returned (pool_size items available)
+            from utils.stt.vad_gate import _vad_model_pool
+
+            assert _vad_model_pool is not None
+            assert (
+                _vad_model_pool.qsize() == pool_size
+            ), f'Pool has {_vad_model_pool.qsize()} models, expected {pool_size}'
+
+            # New caller should work immediately
+            new_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='new', session_id='new')
+            out = new_gate.process_audio(chunk, 2000.0)
+            assert out is not None
+
+
+class TestLongSessionStress:
+    """Tests for long-session invariants (large counters, checkpoint churn)."""
+
+    def test_metrics_consistent_after_many_chunks(self):
+        """After 5000 chunks, metrics counters should be internally consistent."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='stress', session_id='stress')
+        chunk = _make_pcm(30)
+        t = 1000.0
+        n_chunks = 5000
+
+        # Alternate speech/silence in blocks to exercise all state transitions
+        for i in range(n_chunks):
+            block = (i // 50) % 2
+            _set_vad_speech(block == 0)  # 50 speech, 50 silence, repeat
+            gate.process_audio(chunk, t + i * 0.03)
+
+        metrics = gate.get_metrics()
+        assert metrics['chunks_total'] == n_chunks
+        assert metrics['chunks_speech'] + metrics['chunks_silence'] == n_chunks
+        assert metrics['bytes_received'] == len(chunk) * n_chunks
+        assert metrics['bytes_sent'] <= metrics['bytes_received']
+        assert metrics['bytes_skipped'] >= 0
+        assert abs(metrics['bytes_saved_ratio'] - metrics['bytes_skipped'] / metrics['bytes_received']) < 1e-9
+
+    def test_mapper_checkpoint_cap_with_many_transitions(self):
+        """DgWallMapper should cap checkpoints at _MAX_CHECKPOINTS even with 1000+ transitions."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='stress', session_id='stress')
+        chunk = _make_pcm(30)
+        t = 1000.0
+        n_transitions = 1200  # Well above _MAX_CHECKPOINTS (500)
+
+        for cycle in range(n_transitions):
+            # Speech burst (2 chunks) → silence past hangover
+            _set_vad_speech(True)
+            for j in range(2):
+                gate.process_audio(chunk, t)
+                t += 0.03
+            _set_vad_speech(False)
+            # 140 silence chunks at 30ms each = 4200ms > 4000ms hangover
+            for j in range(140):
+                gate.process_audio(chunk, t)
+                t += 0.03
+
+        # Mapper checkpoints should be capped
+        cps = gate.dg_wall_mapper._checkpoints
+        assert (
+            len(cps) <= DgWallMapper._MAX_CHECKPOINTS
+        ), f'Checkpoints {len(cps)} exceeds cap {DgWallMapper._MAX_CHECKPOINTS}'
+        assert len(cps) > 0, 'Should have at least some checkpoints'
+
+        # Remap should still work (no crash) and produce monotonic results
+        if len(cps) >= 2:
+            dg_times = [0.5, 1.0, 5.0, 10.0]
+            wall_times = [gate.dg_wall_mapper.dg_to_wall_rel(t) for t in dg_times]
+            for i in range(1, len(wall_times)):
+                assert (
+                    wall_times[i] >= wall_times[i - 1]
+                ), f'Non-monotonic remap: dg={dg_times[i]} -> wall={wall_times[i]} < {wall_times[i-1]}'
+
+    def test_json_log_after_long_session(self):
+        """to_json_log should produce valid output after extended session."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='stress', session_id='stress')
+        chunk = _make_pcm(30)
+        t = 1000.0
+
+        # Run 2000 chunks of alternating speech/silence
+        for i in range(2000):
+            _set_vad_speech((i // 100) % 2 == 0)
+            gate.process_audio(chunk, t + i * 0.03)
+
+        log = gate.to_json_log()
+        assert log['event'] == 'vad_gate_metrics'
+        assert log['chunks_total'] == 2000
+        assert 0.0 <= log['speech_ratio'] <= 1.0
+        assert 0.0 <= log['estimated_savings_pct'] <= 100.0
+        assert log['session_duration_sec'] > 0
+
+
 class TestSpeechThreshold:
     """Tests for configurable speech threshold."""
 
