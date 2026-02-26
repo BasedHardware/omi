@@ -444,14 +444,16 @@ async def agent_ws(websocket: WebSocket):
                                 history = await asyncio.to_thread(_fetch_chat_history, uid, chat_session_id)
                                 data['prompt'] = _build_prompt_with_history(prompt, history)
                                 msg = json.dumps(data)
-                                # Save user message
-                                await asyncio.to_thread(
-                                    _save_message,
-                                    uid,
-                                    prompt,
-                                    'human',
-                                    chat_session_id,
-                                    data_protection_level,
+                                # Save user message in background — no need to block VM forwarding
+                                asyncio.create_task(
+                                    asyncio.to_thread(
+                                        _save_message,
+                                        uid,
+                                        prompt,
+                                        'human',
+                                        chat_session_id,
+                                        data_protection_level,
+                                    )
                                 )
                                 logger.info(f"[agent-proxy] uid={uid} query with {len(history)} history messages")
                         except (json.JSONDecodeError, Exception) as e:
