@@ -252,6 +252,8 @@ env:
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: VAD_GATE_MODE
+    value: "active"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
