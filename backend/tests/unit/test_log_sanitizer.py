@@ -216,3 +216,63 @@ class TestSanitizePii:
         result = sanitize_pii("Hello this is a private message")
         assert "Hello" not in result
         assert "private" not in result
+
+    def test_4_char_name(self):
+        """4 chars -> ***"""
+        assert sanitize_pii("Jane") == "***"
+
+    def test_8_char_name(self):
+        """8 chars -> first 1 + *** + last 1"""
+        result = sanitize_pii("Jonathan")
+        assert result == "J***n"
+
+    def test_mixed_name_and_email(self):
+        """String with name and email — both get masked."""
+        result = sanitize_pii("John Doe john@example.com")
+        assert "John" not in result
+        assert "Doe" not in result
+        assert "john" not in result
+        assert "example.com" in result  # domain preserved
+
+    def test_single_char_email(self):
+        """Single char local part -> ***@domain."""
+        result = sanitize_pii("a@example.com")
+        assert result == "***@example.com"
+
+
+class TestSanitizeBoundaryEdgeCases:
+    """Exact boundary tests for masking thresholds and truncation limits."""
+
+    def test_token_with_plus_no_digits(self):
+        """+ triggers masking even without digits."""
+        result = sanitize("abcdefg+hijklmnop")
+        assert "***" in result
+
+    def test_token_with_slash_no_digits(self):
+        """/ triggers masking even without digits."""
+        result = sanitize("abcdefg/hijklmnop")
+        assert "***" in result
+
+    def test_truncation_at_exact_2000(self):
+        """Exactly 2000 chars — should NOT be truncated."""
+        text = "x" * 2000
+        result = sanitize(text)
+        assert "...[truncated]" not in result
+
+    def test_truncation_at_2001(self):
+        """2001 chars — should be truncated."""
+        text = "x" * 2001
+        result = sanitize(text)
+        assert "...[truncated]" in result
+
+    def test_pii_truncation_at_200(self):
+        """sanitize_pii truncates at 200 chars."""
+        text = "a" * 201
+        result = sanitize_pii(text)
+        assert "..." in result
+
+    def test_pii_no_truncation_at_200(self):
+        """Exactly 200 chars — should NOT be truncated."""
+        text = "a" * 200
+        result = sanitize_pii(text)
+        assert "..." not in result
