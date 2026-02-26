@@ -85,18 +85,15 @@ import 'package:omi/utils/platform/platform_service.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 
-  await AwesomeNotifications().initialize(
-    null,
-    [
-      NotificationChannel(
-        channelKey: 'channel',
-        channelName: 'Omi Notifications',
-        channelDescription: 'Notification channel for Omi',
-        defaultColor: const Color(0xFF9D50DD),
-        ledColor: Colors.white,
-      )
-    ],
-  );
+  await AwesomeNotifications().initialize(null, [
+    NotificationChannel(
+      channelKey: 'channel',
+      channelName: 'Omi Notifications',
+      channelDescription: 'Notification channel for Omi',
+      defaultColor: const Color(0xFF9D50DD),
+      ledColor: Colors.white,
+    ),
+  ]);
 
   final data = message.data;
   final messageType = data['type'];
@@ -110,11 +107,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } else if (messageType == 'action_item_delete') {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
   } else if (messageType == 'merge_completed') {
-    await MergeNotificationHandler.handleMergeCompleted(
-      data,
-      channelKey,
-      isAppInForeground: false,
-    );
+    await MergeNotificationHandler.handleMergeCompleted(data, channelKey, isAppInForeground: false);
   } else if (messageType == 'important_conversation') {
     await ImportantConversationNotificationHandler.handleImportantConversation(
       data,
@@ -134,14 +127,6 @@ Future _init() async {
       Env.init(ProdEnv());
     } else {
       Env.init(DevEnv());
-    }
-  }
-
-  if (F.env == Environment.prod) {
-    final isTestFlight = await EnvironmentDetector.isTestFlight();
-    if (isTestFlight) {
-      Env.overrideApiBaseUrl('https://api.omiapi.com/');
-      debugPrint('TestFlight detected: using dev backend');
     }
   }
 
@@ -170,6 +155,20 @@ Future _init() async {
   }
 
   await SharedPreferencesUtil.init();
+
+  // TestFlight environment detection — must be after SharedPreferencesUtil.init()
+  if (F.env == Environment.prod) {
+    final isTestFlight = await EnvironmentDetector.isTestFlight();
+    if (isTestFlight) {
+      Env.isTestFlight = true;
+      if (SharedPreferencesUtil().testFlightUseStagingApi) {
+        Env.overrideApiBaseUrl(Env.stagingApiUrl);
+        debugPrint('TestFlight detected: using staging backend (${Env.stagingApiUrl})');
+      } else {
+        debugPrint('TestFlight detected: user chose production backend');
+      }
+    }
+  }
 
   // DEBUG: Log Firebase Auth state before getIdToken
   print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
@@ -220,35 +219,28 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(
-    () async {
-      // Ensure
-      WidgetsFlutterBinding.ensureInitialized();
-      if (PlatformService.isDesktop) {
-        await windowManager.ensureInitialized();
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(1300, 800),
-          minimumSize: Size(1100, 700),
-          center: true,
-          title: "Omi",
-          titleBarStyle: TitleBarStyle.hidden,
-        );
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.setAsFrameless();
-          await windowManager.show();
-          await windowManager.focus();
-        });
-      }
+  runZonedGuarded(() async {
+    // Ensure
+    WidgetsFlutterBinding.ensureInitialized();
+    if (PlatformService.isDesktop) {
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1300, 800),
+        minimumSize: Size(1100, 700),
+        center: true,
+        title: "Omi",
+        titleBarStyle: TitleBarStyle.hidden,
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setAsFrameless();
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    }
 
-      await _init();
-      runApp(const MyApp());
-    },
-    (error, stack) => FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: true,
-    ),
-  );
+    await _init();
+    runApp(const MyApp());
+  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
 }
 
 class MyApp extends StatefulWidget {
@@ -326,139 +318,163 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-        providers: [
-          ListenableProvider(create: (context) => ConnectivityProvider()),
-          ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
-          ChangeNotifierProvider(create: (context) => ConversationProvider()),
-          ListenableProvider(create: (context) => AppProvider()),
-          ChangeNotifierProvider(create: (context) => PeopleProvider()),
-          ChangeNotifierProvider(create: (context) => UsageProvider()),
-          ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
-            create: (context) => MessageProvider(),
-            update: (BuildContext context, value, MessageProvider? previous) =>
-                (previous?..updateAppProvider(value)) ?? MessageProvider(),
-          ),
-          ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-              CaptureProvider>(
-            create: (context) => CaptureProvider(),
-            update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
-                (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
-          ),
-          ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
-            create: (context) => DeviceProvider(),
-            update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
-                (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
-          ),
-          ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
-            create: (context) => OnboardingProvider(),
-            update: (BuildContext context, value, OnboardingProvider? previous) =>
-                (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
-          ),
-          ListenableProvider(create: (context) => HomeProvider()),
-          ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
-            create: (context) => SpeechProfileProvider(),
-            update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-                (previous?..setProviders(device)) ?? SpeechProfileProvider(),
-          ),
-          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-            create: (context) => ConversationDetailProvider(),
-            update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
-                (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
-          ),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
-          ChangeNotifierProvider(create: (context) => McpProvider()),
-          ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
-            create: (context) => AddAppProvider(),
-            update: (BuildContext context, value, AddAppProvider? previous) =>
-                (previous?..setAppProvider(value)) ?? AddAppProvider(),
-          ),
-          ChangeNotifierProxyProvider<AppProvider, AiAppGeneratorProvider>(
-            create: (context) => AiAppGeneratorProvider(),
-            update: (BuildContext context, value, AiAppGeneratorProvider? previous) =>
-                (previous?..setAppProvider(value)) ?? AiAppGeneratorProvider(),
-          ),
-          ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
-          ChangeNotifierProvider(create: (context) => PersonaProvider()),
-          ChangeNotifierProxyProvider<ConnectivityProvider, MemoriesProvider>(
-            create: (context) => MemoriesProvider(),
-            update: (context, connectivity, previous) =>
-                (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
-          ),
-          ChangeNotifierProvider(create: (context) => UserProvider()),
-          ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
-          ChangeNotifierProvider(create: (context) => GoalsProvider()..init()),
-          ChangeNotifierProvider(create: (context) => SyncProvider()),
-          ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
-          ChangeNotifierProvider(create: (context) => IntegrationProvider()),
-          ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
-          ChangeNotifierProvider(create: (context) => FolderProvider()),
-          ChangeNotifierProvider(create: (context) => LocaleProvider()),
-          ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
-          ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
-        ],
-        builder: (context, child) {
-          return WithForegroundTask(
-            child: MaterialApp(
-              debugShowCheckedModeBanner: F.env == Environment.dev,
-              title: F.title,
-              navigatorKey: MyApp.navigatorKey,
-              locale: context.watch<LocaleProvider>().locale,
-              localizationsDelegates: const [
-                AppLocalizations.delegate,
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-              ],
-              supportedLocales: AppLocalizations.supportedLocales,
-              theme: ThemeData(
-                  useMaterial3: false,
-                  colorScheme: const ColorScheme.dark(
-                    primary: Colors.black,
-                    secondary: Colors.deepPurple,
-                    surface: Colors.black38,
-                  ),
-                  snackBarTheme: const SnackBarThemeData(
-                    backgroundColor: Color(0xFF1F1F25),
-                    contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                  textTheme: TextTheme(
-                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-                  ),
-                  textSelectionTheme: const TextSelectionThemeData(
-                    cursorColor: Colors.white,
-                    selectionColor: Colors.deepPurple,
-                    selectionHandleColor: Colors.white,
-                  ),
-                  cupertinoOverrideTheme: const CupertinoThemeData(
-                    primaryColor: Colors.white, // Controls the selection handles on iOS
-                  )),
-              themeMode: ThemeMode.dark,
-              builder: (context, child) {
-                FlutterError.onError = (FlutterErrorDetails details) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    Logger.instance.talker.handle(details.exception, details.stack);
-                    DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
-                  });
-                };
-                ErrorWidget.builder = (errorDetails) {
-                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-                };
-                return child!;
-              },
-              home: TalkerWrapper(
-                talker: Logger.instance.talker,
-                options: const TalkerWrapperOptions(
-                  enableErrorAlerts: false,
-                  enableExceptionAlerts: false,
-                ),
-                child: const AppShell(),
+      providers: [
+        ListenableProvider(create: (context) => ConnectivityProvider()),
+        ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
+        ChangeNotifierProvider(create: (context) => ConversationProvider()),
+        ListenableProvider(create: (context) => AppProvider()),
+        ChangeNotifierProvider(create: (context) => PeopleProvider()),
+        ChangeNotifierProvider(create: (context) => UsageProvider()),
+        ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
+          create: (context) => MessageProvider(),
+          update: (BuildContext context, value, MessageProvider? previous) =>
+              (previous?..updateAppProvider(value)) ?? MessageProvider(),
+        ),
+        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            CaptureProvider>(
+          create: (context) => CaptureProvider(),
+          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
+              (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
+        ),
+        ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+          create: (context) => DeviceProvider(),
+          update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
+              (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+        ),
+        ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
+          create: (context) => OnboardingProvider(),
+          update: (BuildContext context, value, OnboardingProvider? previous) =>
+              (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
+        ),
+        ListenableProvider(create: (context) => HomeProvider()),
+        ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
+          create: (context) => SpeechProfileProvider(),
+          update: (BuildContext context, device, SpeechProfileProvider? previous) =>
+              (previous?..setProviders(device)) ?? SpeechProfileProvider(),
+        ),
+        ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+          create: (context) => ConversationDetailProvider(),
+          update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
+              (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
+        ),
+        ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
+        ChangeNotifierProvider(create: (context) => McpProvider()),
+        ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
+          create: (context) => AddAppProvider(),
+          update: (BuildContext context, value, AddAppProvider? previous) =>
+              (previous?..setAppProvider(value)) ?? AddAppProvider(),
+        ),
+        ChangeNotifierProxyProvider<AppProvider, AiAppGeneratorProvider>(
+          create: (context) => AiAppGeneratorProvider(),
+          update: (BuildContext context, value, AiAppGeneratorProvider? previous) =>
+              (previous?..setAppProvider(value)) ?? AiAppGeneratorProvider(),
+        ),
+        ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
+        ChangeNotifierProvider(create: (context) => PersonaProvider()),
+        ChangeNotifierProxyProvider<ConnectivityProvider, MemoriesProvider>(
+          create: (context) => MemoriesProvider(),
+          update: (context, connectivity, previous) =>
+              (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
+        ),
+        ChangeNotifierProvider(create: (context) => UserProvider()),
+        ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
+        ChangeNotifierProvider(create: (context) => GoalsProvider()..init()),
+        ChangeNotifierProvider(create: (context) => SyncProvider()),
+        ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
+        ChangeNotifierProvider(create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
+        ChangeNotifierProvider(create: (context) => FolderProvider()),
+        ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
+        ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
+      ],
+      builder: (context, child) {
+        return WithForegroundTask(
+          child: MaterialApp(
+            debugShowCheckedModeBanner: F.env == Environment.dev,
+            title: F.title,
+            navigatorKey: MyApp.navigatorKey,
+            locale: context.watch<LocaleProvider>().locale,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: ThemeData(
+              useMaterial3: false,
+              colorScheme: const ColorScheme.dark(
+                primary: Colors.black,
+                secondary: Colors.deepPurple,
+                surface: Colors.black38,
+              ),
+              snackBarTheme: const SnackBarThemeData(
+                backgroundColor: Color(0xFF1F1F25),
+                contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+              ),
+              textTheme: TextTheme(
+                titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
+                titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
+                bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
+                labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+              ),
+              textSelectionTheme: const TextSelectionThemeData(
+                cursorColor: Colors.white,
+                selectionColor: Colors.deepPurple,
+                selectionHandleColor: Colors.white,
+              ),
+              cupertinoOverrideTheme: const CupertinoThemeData(
+                primaryColor: Colors.white, // Controls the selection handles on iOS
               ),
             ),
-          );
-        });
+            themeMode: ThemeMode.dark,
+            builder: (context, child) {
+              FlutterError.onError = (FlutterErrorDetails details) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Logger.instance.talker.handle(details.exception, details.stack);
+                  DebugLogManager.logError(details.exception, details.stack, 'FlutterError');
+                });
+              };
+              ErrorWidget.builder = (errorDetails) {
+                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+              };
+              if (Env.isTestFlight && Env.isUsingStagingApi) {
+                return Column(
+                  children: [
+                    SafeArea(
+                      bottom: false,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        color: Colors.orange.shade800,
+                        child: const Text(
+                          'STAGING',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: child!),
+                  ],
+                );
+              }
+              return child!;
+            },
+            home: TalkerWrapper(
+              talker: Logger.instance.talker,
+              options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
+              child: const AppShell(),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -474,11 +490,7 @@ class CustomErrorWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 50.0,
-            ),
+            const Icon(Icons.error_outline, color: Colors.red, size: 50.0),
             const SizedBox(height: 10.0),
             Text(
               context.l10n.somethingWentWrong,
@@ -494,11 +506,7 @@ class CustomErrorWidget extends StatelessWidget {
                 color: const Color.fromARGB(255, 63, 63, 63),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text(
-                errorMessage,
-                textAlign: TextAlign.start,
-                style: const TextStyle(fontSize: 16.0),
-              ),
+              child: Text(errorMessage, textAlign: TextAlign.start, style: const TextStyle(fontSize: 16.0)),
             ),
             const SizedBox(height: 10.0),
             SizedBox(
@@ -507,11 +515,7 @@ class CustomErrorWidget extends StatelessWidget {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: errorMessage));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.l10n.errorCopied),
-                    ),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.errorCopied)));
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
