@@ -2482,3 +2482,61 @@ workflows:
         notify:
           success: true
           failure: true
+
+  # ============================================
+  # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
+  # Triggered on push to main when desktop/agent-cloud/ changes.
+  # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
+  # ============================================
+  agent-cloud-auto-deploy:
+    name: Auto Deploy Agent Cloud to GCS
+    instance_type: linux_x2
+    max_build_duration: 10
+    environment:
+      groups:
+        - desktop_secrets
+      vars:
+        GCS_BUCKET: "gs://based-hardware-agent"
+        GCP_PROJECT: "based-hardware"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'desktop/agent-cloud/agent.mjs'
+          - 'desktop/agent-cloud/scripts/startup.sh'
+    scripts:
+      - name: Authenticate with GCP
+        script: |
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          rm /tmp/gcp_key.json
+
+      - name: Deploy agent.mjs and startup.sh to GCS
+        script: |
+          VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
+          echo "Deploying version $VERSION to $GCS_BUCKET..."
+
+          gsutil cp desktop/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
+          echo "Uploaded agent.mjs"
+
+          gsutil cp desktop/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
+          echo "Uploaded startup.sh"
+
+          # Update version.txt last — triggers hot-reload on running VMs
+          echo "$VERSION" | gsutil cp - "$GCS_BUCKET/version.txt"
+          echo "Version bumped to $VERSION"
+          echo "Running VMs will hot-reload within 10 minutes."
+    publishing:
+      email:
+        recipients:
+          - i@m13v.com
+        notify:
+          success: false
+          failure: true
