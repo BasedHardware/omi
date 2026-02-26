@@ -1,12 +1,32 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+
+/// File-based logging for agent chat — works in release builds (print/developer.log are stripped).
+/// Pull with: pymobiledevice3 apps pull com.friend-app-with-wearable.ios12 Documents/agent_chat.log /tmp/agent_chat.log
+File? agentLogFile;
+
+Future<void> initAgentLog() async {
+  if (agentLogFile != null) return;
+  final dir = await getApplicationDocumentsDirectory();
+  agentLogFile = File('${dir.path}/agent_chat.log');
+}
+
+void agentLog(String msg) {
+  final line = '${DateTime.now().toIso8601String()} $msg';
+  print('[AgentChat] $msg');
+  try {
+    agentLogFile?.writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
+  } catch (_) {}
+}
 
 enum AgentChatEventType { textDelta, toolActivity, result, error, status }
 
@@ -25,7 +45,9 @@ class AgentChatService {
   bool get isConnected => _connected;
 
   Future<bool> connect() async {
-    // Close any existing channel before opening a new one
+    await initAgentLog();
+    agentLog('connect() called');
+
     if (_channel != null) {
       try {
         await _channel!.sink.close();
@@ -35,16 +57,16 @@ class AgentChatService {
     _connected = false;
 
     final user = FirebaseAuth.instance.currentUser;
+    agentLog('Firebase user: ${user?.uid}, email: ${user?.email}');
     final token = await user?.getIdToken();
     if (token == null) {
-      print('[AgentChat] ERROR: no Firebase user/token');
-      Logger.error('AgentChatService: no Firebase user');
+      agentLog('ERROR: no Firebase user/token');
       return false;
     }
 
     try {
       final uri = Uri.parse(Env.agentProxyWsUrl);
-      print('[AgentChat] Connecting to $uri');
+      agentLog('Connecting to $uri');
       _channel = IOWebSocketChannel.connect(
         uri,
         headers: {'Authorization': 'Bearer $token'},
@@ -52,12 +74,10 @@ class AgentChatService {
       );
       await _channel!.ready;
       _connected = true;
-      print('[AgentChat] Connected successfully');
-      Logger.debug('AgentChatService: connected to agent proxy');
+      agentLog('Connected successfully');
       return true;
     } catch (e) {
-      print('[AgentChat] Connection failed: $e');
-      Logger.error('AgentChatService: connection failed: $e');
+      agentLog('Connection failed: $e');
       _connected = false;
       return false;
     }
