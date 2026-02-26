@@ -2,13 +2,15 @@ import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/agent.dart';
-import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Agent VM endpoints always hit prod — VMs and Firestore are in the prod project only.
+const _agentApiBase = 'https://api.omi.me/';
 
 Future<AgentVmInfo?> getAgentVmStatus() async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/agent/vm-status',
-    headers: {},
+    url: '${_agentApiBase}v1/agent/vm-status',
+    headers: {'Authorization': await getAuthHeader()},
     method: 'GET',
     body: '',
   );
@@ -22,8 +24,8 @@ Future<AgentVmInfo?> getAgentVmStatus() async {
 Future<void> ensureAgentVm() async {
   try {
     await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/agent/vm-ensure',
-      headers: {},
+      url: '${_agentApiBase}v1/agent/vm-ensure',
+      headers: {'Authorization': await getAuthHeader()},
       method: 'POST',
       body: '',
     );
@@ -35,8 +37,8 @@ Future<void> ensureAgentVm() async {
 Future<void> sendAgentKeepalive() async {
   try {
     await makeApiCall(
-      url: '${Env.apiBaseUrl}v1/agent/keepalive',
-      headers: {},
+      url: '${_agentApiBase}v1/agent/keepalive',
+      headers: {'Authorization': await getAuthHeader()},
       method: 'POST',
       body: '',
     );
