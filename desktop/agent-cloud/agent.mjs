@@ -49,6 +49,10 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
 const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 let lastActivityAt = Date.now();
 
+// --- Session pre-warm ---
+let warmSessionId = null;
+let warmSessionReady = false;
+
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
   "screenshots", "action_items", "transcription_sessions",
@@ -383,6 +387,52 @@ function rebuildMcpServer() {
   console.log(`[mcp] Rebuilt MCP server with ${allTools.length} tools`);
 }
 
+// --- Session Pre-warm ---
+// Fires a lightweight query to create a warm Claude session with MCP servers connected.
+// Subsequent queries reuse the sessionId, skipping subprocess spawn + MCP setup (~2-3s savings).
+
+async function prewarmSession() {
+  if (!isDatabaseReady() || !omiServer) return;
+
+  const t0 = Date.now();
+  console.log("[prewarm] Starting session pre-warm...");
+
+  try {
+    const abortController = new AbortController();
+    const options = {
+      model: "claude-sonnet-4-6",  // Use cheaper model for pre-warm
+      abortController,
+      systemPrompt: "You are a helpful assistant. Respond with just 'ready' and nothing else.",
+      allowedTools: [],
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      maxTurns: 1,
+      cwd: process.env.HOME || "/",
+      mcpServers: {
+        "omi-tools": omiServer,
+      },
+    };
+
+    const q = query({ prompt: "ready?", options });
+
+    for await (const message of q) {
+      if (message.type === "system" && "session_id" in message) {
+        warmSessionId = message.session_id;
+      }
+      if (message.type === "result") {
+        break;
+      }
+    }
+
+    warmSessionReady = !!warmSessionId;
+    console.log(`[prewarm] Session ready in ${Date.now() - t0}ms (sessionId: ${warmSessionId?.slice(0, 8)}...)`);
+  } catch (err) {
+    console.log(`[prewarm] Failed: ${err.message}`);
+    warmSessionId = null;
+    warmSessionReady = false;
+  }
+}
+
 // --- Shared Agent Query Handler ---
 
 async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
@@ -396,9 +446,17 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   let costUsd = 0;
   const pendingTools = [];
 
+  // Reuse warm session if available (saves ~2-3s on subprocess + MCP setup)
+  const useWarmSession = warmSessionReady && warmSessionId;
+  if (useWarmSession) {
+    console.log(`[query] Reusing warm session ${warmSessionId.slice(0, 8)}...`);
+    warmSessionReady = false; // Consume the warm session
+  }
+
   const options = {
     model: "claude-opus-4-6",
     abortController,
+    ...(useWarmSession ? { sessionId: warmSessionId } : {}),
     systemPrompt: systemPrompt || defaultSystemPrompt,
     allowedTools: [
       "Read",
