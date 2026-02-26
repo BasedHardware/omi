@@ -99,12 +99,10 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
