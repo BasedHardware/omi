@@ -164,7 +164,32 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
     db.collection('users').document(uid).update(update)
 
 
-async def _ensure_vm_running(uid: str, vm: dict) -> dict | None:
+async def _reset_vm(vm_name: str, zone: str):
+    """Hard-reset a RUNNING VM whose agent process is unresponsive."""
+    token = _get_gce_access_token()
+    reset_url = (
+        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/reset"
+    )
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(reset_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
+        if resp.status_code not in (200, 204):
+            raise Exception(f"GCE reset failed: {resp.status_code} {resp.text}")
+        logger.info(f"[agent-proxy] VM {vm_name} reset initiated")
+        # Wait for the operation to complete
+        op_name = resp.json().get("name")
+        if op_name:
+            op_url = (
+                f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
+            )
+            for i in range(12):
+                await asyncio.sleep(5)
+                t = _get_gce_access_token()
+                status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {t}"})
+                if status_resp.json().get("status") == "DONE":
+                    break
+
+
+async def _ensure_vm_running(uid: str, vm: dict, health_failed: bool = False) -> dict | None:
     """If VM is stopped, restart it and return updated VM info. Returns None on failure."""
     vm_name = vm.get("vmName")
     zone = vm.get("zone", "us-central1-a")
@@ -178,6 +203,18 @@ async def _ensure_vm_running(uid: str, vm: dict) -> dict | None:
             return vm  # Can't check, assume it's fine
 
         if gce_status == "RUNNING":
+            if health_failed:
+                # VM is RUNNING but agent process is dead — hard reset
+                logger.info(f"[agent-proxy] VM {vm_name} is RUNNING but unhealthy, resetting...")
+                _update_firestore_vm(uid, None, "provisioning")
+                try:
+                    await _reset_vm(vm_name, zone)
+                    _update_firestore_vm(uid, vm.get("ip"), "ready")
+                    return _refresh_vm(uid)
+                except Exception as e:
+                    logger.error(f"[agent-proxy] Failed to reset VM {vm_name}: {e}")
+                    _update_firestore_vm(uid, None, "error")
+                    return None
             return vm
         if gce_status not in ("TERMINATED", "STOPPED"):
             return vm  # STAGING, etc. — let it be
@@ -378,10 +415,10 @@ async def agent_ws(websocket: WebSocket):
                 if resp.status_code != 200:
                     raise Exception(f"health returned {resp.status_code}")
         except Exception:
-            # VM not reachable — check GCE and restart if needed
+            # VM not reachable — check GCE and restart/reset if needed
             logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
             await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
-            vm = await _ensure_vm_running(uid, vm)
+            vm = await _ensure_vm_running(uid, vm, health_failed=True)
             if not vm or vm.get("status") != "ready" or not vm.get("ip"):
                 await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
                 await websocket.close(code=4002, reason="VM startup failed")
