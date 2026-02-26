@@ -195,6 +195,7 @@ struct SettingsContentView: View {
     // Language auto-detect state (from local settings)
     @State private var transcriptionAutoDetect: Bool = true
     @State private var transcriptionLanguage: String = "en"
+    @State private var vadGateEnabled: Bool = false
 
     // Multi-chat mode setting
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -1120,6 +1121,37 @@ struct SettingsContentView: View {
                     Text("Press Enter or click + to add • Click × to remove")
                         .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
+            // Local VAD Gate
+            settingsCard(settingId: "transcription.vadgate") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "waveform.badge.minus")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Local VAD Gate")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $vadGateEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: vadGateEnabled) { _, newValue in
+                                AssistantSettings.shared.vadGateEnabled = newValue
+                                restartTranscriptionIfNeeded()
+                            }
+                    }
                 }
             }
         }
@@ -4380,6 +4412,7 @@ struct SettingsContentView: View {
         transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
         transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
         vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+        vadGateEnabled = AssistantSettings.shared.vadGateEnabled
 
         Task {
             do {
