@@ -6,8 +6,8 @@ import onnxruntime
 /// Wraps Silero VAD ONNX model for speech probability inference.
 /// Input: 512 Float32 samples at 16kHz. Output: speech probability [0,1].
 final class SileroVADModel {
-    private let session: OrtSession
-    private let env: OrtEnv
+    private let session: ORTSession
+    private let env: ORTEnv
     private var state: [Float]  // [2, 1, 128] = 256 floats (combined h+c for v5)
 
     private let stateSize = 2 * 1 * 128  // 256
@@ -19,10 +19,10 @@ final class SileroVADModel {
         }
 
         do {
-            env = try OrtEnv(loggingLevel: .warning)
-            let sessionOptions = try OrtSessionOptions()
+            env = try ORTEnv(loggingLevel: .warning)
+            let sessionOptions = try ORTSessionOptions()
             try sessionOptions.setIntraOpNumThreads(1)
-            session = try OrtSession(env: env, modelPath: modelPath, sessionOptions: sessionOptions)
+            session = try ORTSession(env: env, modelPath: modelPath, sessionOptions: sessionOptions)
             state = [Float](repeating: 0.0, count: stateSize)
         } catch {
             logError("VADGateService: Failed to create ONNX session", error: error)
@@ -36,26 +36,26 @@ final class SileroVADModel {
 
         do {
             // Input tensor: [1, 512]
-            let inputData = Data(bytes: samples, count: samples.count * MemoryLayout<Float>.size)
-            let inputTensor = try OrtValue.tensorData(
-                inputData as NSMutableData,
+            let inputData = NSMutableData(bytes: samples, length: samples.count * MemoryLayout<Float>.size)
+            let inputTensor = try ORTValue(
+                tensorData: inputData,
                 elementType: .float,
                 shape: [1, 512] as [NSNumber]
             )
 
             // State tensor: [2, 1, 128] — combined hidden state for Silero v5
-            let stateData = Data(bytes: state, count: state.count * MemoryLayout<Float>.size)
-            let stateTensor = try OrtValue.tensorData(
-                stateData as NSMutableData,
+            let stateData = NSMutableData(bytes: state, length: state.count * MemoryLayout<Float>.size)
+            let stateTensor = try ORTValue(
+                tensorData: stateData,
                 elementType: .float,
                 shape: [2, 1, 128] as [NSNumber]
             )
 
             // Sample rate: scalar Int64
             var sr: Int64 = 16000
-            let srData = Data(bytes: &sr, count: MemoryLayout<Int64>.size)
-            let srTensor = try OrtValue.tensorData(
-                srData as NSMutableData,
+            let srData = NSMutableData(bytes: &sr, length: MemoryLayout<Int64>.size)
+            let srTensor = try ORTValue(
+                tensorData: srData,
                 elementType: .int64,
                 shape: [] as [NSNumber]
             )
@@ -63,7 +63,7 @@ final class SileroVADModel {
             // Run inference
             let outputs = try session.run(
                 withInputs: ["input": inputTensor, "state": stateTensor, "sr": srTensor],
-                outputNames: ["output", "stateN"],
+                outputNames: Set(["output", "stateN"]),
                 runOptions: nil
             )
 
