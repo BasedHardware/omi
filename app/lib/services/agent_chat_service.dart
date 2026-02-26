@@ -75,6 +75,19 @@ class AgentChatService {
       await _channel!.ready;
       _connected = true;
       agentLog('Connected successfully');
+
+      // Detect remote close so isConnected stays accurate during pre-connect idle
+      _channel!.sink.done.then((_) {
+        agentLog('Sink closed (remote or local)');
+        _connected = false;
+      }).catchError((_) {
+        _connected = false;
+      });
+
+      // Trigger pre-warm on the VM so a Claude session is ready before the user types
+      _channel!.sink.add(jsonEncode({'type': 'prewarm'}));
+      agentLog('Sent prewarm signal');
+
       return true;
     } catch (e) {
       agentLog('Connection failed: $e');
