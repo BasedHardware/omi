@@ -39,6 +39,7 @@ class AgentChatEvent {
 
 class AgentChatService {
   WebSocketChannel? _channel;
+  StreamSubscription? _streamSubscription;
   StreamController<AgentChatEvent>? _eventController;
   bool _connected = false;
 
@@ -48,6 +49,9 @@ class AgentChatService {
     await initAgentLog();
     agentLog('connect() called');
 
+    // Clean up any existing connection
+    await _streamSubscription?.cancel();
+    _streamSubscription = null;
     if (_channel != null) {
       try {
         await _channel!.sink.close();
@@ -76,13 +80,68 @@ class AgentChatService {
       _connected = true;
       agentLog('Connected successfully');
 
-      // Detect remote close so isConnected stays accurate during pre-connect idle
-      _channel!.sink.done.then((_) {
-        agentLog('Sink closed (remote or local)');
-        _connected = false;
-      }).catchError((_) {
-        _connected = false;
-      });
+      // Set up a persistent stream listener that forwards events to the current _eventController.
+      // This listener survives across multiple sendQuery() calls on the same connection.
+      _streamSubscription = _channel!.stream.listen(
+        (data) {
+          try {
+            final msg = jsonDecode(data as String) as Map<String, dynamic>;
+            final type = msg['type'] as String?;
+            final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
+            agentLog('Event: type=$type text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
+
+            // Skip init/prewarm messages that arrive before or between queries
+            if (type == 'init' || type == 'prewarm') return;
+
+            if (_eventController == null || _eventController!.isClosed) return;
+
+            switch (type) {
+              case 'text_delta':
+                _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
+                break;
+              case 'tool_activity':
+                final toolName = msg['name'] as String? ?? '';
+                final status = msg['status'] as String? ?? 'started';
+                final displayText = status == 'started' ? _toolDisplayName(toolName) : '';
+                _eventController?.add(AgentChatEvent(AgentChatEventType.toolActivity, displayText));
+                break;
+              case 'status':
+                final message = msg['message'] as String? ?? text;
+                _eventController?.add(AgentChatEvent(AgentChatEventType.status, message));
+                break;
+              case 'result':
+                _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
+                _eventController?.close();
+                break;
+              case 'error':
+                _eventController?.add(AgentChatEvent(AgentChatEventType.error, text));
+                _eventController?.close();
+                break;
+              default:
+                if (text.isNotEmpty) {
+                  _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
+                }
+            }
+          } catch (e) {
+            Logger.error('AgentChatService: parse error: $e');
+            _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Failed to parse agent response'));
+            _eventController?.close();
+          }
+        },
+        onError: (error) {
+          agentLog('Stream error: $error');
+          _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Connection error: $error'));
+          _eventController?.close();
+          _connected = false;
+        },
+        onDone: () {
+          agentLog('Stream done (connection closed)');
+          _connected = false;
+          if (!(_eventController?.isClosed ?? true)) {
+            _eventController?.close();
+          }
+        },
+      );
 
       // Trigger pre-warm on the VM so a Claude session is ready before the user types
       _channel!.sink.add(jsonEncode({'type': 'prewarm'}));
@@ -109,62 +168,6 @@ class AgentChatService {
     agentLog('Sending query (${prompt.length} chars)');
     _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
 
-    _channel!.stream.listen(
-      (data) {
-        try {
-          final msg = jsonDecode(data as String) as Map<String, dynamic>;
-          final type = msg['type'] as String?;
-          final text = msg['text'] as String? ?? msg['content'] as String? ?? '';
-          agentLog('Event: type=$type text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
-
-          switch (type) {
-            case 'text_delta':
-              _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
-              break;
-            case 'tool_activity':
-              final toolName = msg['name'] as String? ?? '';
-              final status = msg['status'] as String? ?? 'started';
-              final displayText = status == 'started' ? _toolDisplayName(toolName) : '';
-              _eventController?.add(AgentChatEvent(AgentChatEventType.toolActivity, displayText));
-              break;
-            case 'status':
-              final message = msg['message'] as String? ?? text;
-              _eventController?.add(AgentChatEvent(AgentChatEventType.status, message));
-              break;
-            case 'result':
-              _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
-              _eventController?.close();
-              break;
-            case 'error':
-              _eventController?.add(AgentChatEvent(AgentChatEventType.error, text));
-              _eventController?.close();
-              break;
-            default:
-              if (text.isNotEmpty) {
-                _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
-              }
-          }
-        } catch (e) {
-          Logger.error('AgentChatService: parse error: $e');
-          _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Failed to parse agent response'));
-          _eventController?.close();
-        }
-      },
-      onError: (error) {
-        agentLog('Stream error: $error');
-        _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Connection error: $error'));
-        _eventController?.close();
-        _connected = false;
-      },
-      onDone: () {
-        agentLog('Stream done (connection closed)');
-        _connected = false;
-        if (!(_eventController?.isClosed ?? true)) {
-          _eventController?.close();
-        }
-      },
-    );
-
     return _eventController!.stream;
   }
 
@@ -172,6 +175,8 @@ class AgentChatService {
     _connected = false;
     _eventController?.close();
     _eventController = null;
+    await _streamSubscription?.cancel();
+    _streamSubscription = null;
     await _channel?.sink.close();
     _channel = null;
   }
