@@ -33,6 +33,38 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+// --- Async message queue for persistent session streaming input ---
+class AsyncMessageQueue {
+  constructor() {
+    this._queue = [];
+    this._resolve = null;
+    this._done = false;
+  }
+  push(msg) {
+    if (this._resolve) {
+      this._resolve({ value: msg, done: false });
+      this._resolve = null;
+    } else {
+      this._queue.push(msg);
+    }
+  }
+  end() {
+    this._done = true;
+    if (this._resolve) {
+      this._resolve({ value: undefined, done: true });
+      this._resolve = null;
+    }
+  }
+  [Symbol.asyncIterator]() { return this; }
+  next() {
+    if (this._queue.length > 0)
+      return Promise.resolve({ value: this._queue.shift(), done: false });
+    if (this._done)
+      return Promise.resolve({ value: undefined, done: true });
+    return new Promise(r => { this._resolve = r; });
+  }
+}
+
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
@@ -541,6 +573,12 @@ function startPersistentSession(send, log) {
   // Start with a prewarm prompt — this boots the Claude process
   const q = query({ prompt: "ready", options });
 
+  // Queue for subsequent messages — connected immediately so generator stays alive
+  const messageQueue = new AsyncMessageQueue();
+  q.streamInput(messageQueue).catch(err => {
+    log(`streamInput error: ${err.message}`);
+  });
+
   // Session state
   let sessionId = null;
   let sessionIdResolve = null;
@@ -650,6 +688,7 @@ function startPersistentSession(send, log) {
 
   return {
     query: q,
+    messageQueue,
     sessionAbort,
     sessionIdReady,
     loopPromise,
@@ -1187,14 +1226,13 @@ function startServer() {
           session.setTurnActive(true);
           send({ type: "status", message: "Processing..." });
 
-          // Send user message into the persistent session
-          try {
-            await session.query.send(prompt);
-          } catch (e) {
-            log(`Send error: ${e.message}`);
-            send({ type: "error", message: `Failed to send query: ${e.message}` });
-            session.setTurnActive(false);
-          }
+          // Push user message into the persistent session via streamInput
+          session.messageQueue.push({
+            type: "user",
+            message: { role: "user", content: prompt },
+            parent_tool_use_id: null,
+            session_id: sid,
+          });
           break;
         }
 
@@ -1214,6 +1252,7 @@ function startServer() {
     ws.on("close", () => {
       log("Client disconnected");
       if (session) {
+        session.messageQueue.end();
         session.query.close();
         session.sessionAbort.abort();
         session = null;
