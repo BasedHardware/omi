@@ -51,7 +51,7 @@ struct AudioSourceSelector: View {
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     } else {
-                        Text(AudioCaptureService.getCurrentMicrophoneName(preferredDeviceUID: AudioSourceManager.shared.preferredMicrophoneUID) ?? "Default")
+                        Text(AudioCaptureService.getCurrentMicrophoneName() ?? "Default")
                             .scaledFont(size: 11)
                             .foregroundColor(OmiColors.textTertiary)
                             .lineLimit(1)
