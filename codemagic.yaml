@@ -1983,32 +1983,41 @@ workflows:
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
 
-          # Build arm64 first (native on M2). SPM puts binary in .build/release/.
+          # Build arm64 first (native on M2).
           echo "Building arm64..."
           xcrun swift build -c release --package-path Desktop --arch arm64
 
-          # Save arm64 binary immediately to /tmp before x86_64 build overwrites .build/release/.
-          cp "Desktop/.build/release/$BINARY_NAME" "/tmp/OmiComputer-arm64"
+          # Use EXPLICIT arch-specific path (not release/ symlink which may not be updated).
+          ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          if [ ! -f "$ARM64_PATH" ]; then
+            echo "ERROR: arm64 binary not found at $ARM64_PATH"
+            ls "Desktop/.build/" 2>/dev/null
+            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"
           echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
 
-          # Build x86_64 (cross-compile). SPM overwrites .build/release/ with x86_64 binary.
+          # Build x86_64 (cross-compile).
           echo "Building x86_64..."
           xcrun swift build -c release --package-path Desktop --arch x86_64
-          echo "x86_64 binary: $(file "Desktop/.build/release/$BINARY_NAME" | grep -oE 'arm64|x86_64' | head -1)"
+          X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
         script: |
-          # arm64 binary was saved to /tmp before x86_64 build overwrote .build/release/
+          # arm64 binary was saved to /tmp in the Build Swift step
           ARM64_BINARY="/tmp/OmiComputer-arm64"
-          # x86_64 binary is in .build/release/ (x86_64 build ran last)
-          X86_64_BINARY="Desktop/.build/release/$BINARY_NAME"
+          # x86_64 binary is in the explicit arch-specific dir
+          X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
             echo "  arm64 ($ARM64_BINARY): $([ -f "$ARM64_BINARY" ] && echo EXISTS || echo MISSING)"
             echo "  x86_64 ($X86_64_BINARY): $([ -f "$X86_64_BINARY" ] && echo EXISTS || echo MISSING)"
             echo ".build/ contents:" && ls "Desktop/.build/" 2>/dev/null
-            find Desktop/.build -name "Omi*" 2>/dev/null | head -10 || true
+            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
+            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
             exit 1
           fi
           echo "arm64 arch: $(file "$ARM64_BINARY" | grep -oE 'arm64|x86_64')"
@@ -2027,10 +2036,13 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Sparkle is in .build/release/ (x86_64 build ran last, release/ points to x86_64 dir)
-          SPARKLE_FW="Desktop/.build/release/Sparkle.framework"
+          # Sparkle: use x86_64 arch path; fallback to arm64
+          SPARKLE_FW="Desktop/.build/x86_64-apple-macosx/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
-            echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
+            SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
+          fi
+          if [ ! -d "$SPARKLE_FW" ]; then
+            echo "ERROR: Sparkle.framework not found in either arch dir"
             exit 1
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
@@ -2046,7 +2058,11 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          SWIFT_BUILD_DIR="Desktop/.build/release"
+          # Use x86_64 arch path; fallback to arm64
+          SWIFT_BUILD_DIR="Desktop/.build/x86_64-apple-macosx/release"
+          if [ ! -d "$SWIFT_BUILD_DIR" ]; then
+            SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
+          fi
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
