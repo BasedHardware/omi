@@ -597,6 +597,16 @@ class SharedPreferencesUtil {
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
 
+  //------------------------ TestFlight API Environment ----------------------//
+
+  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
+  /// Default is 'staging' (preserves current auto-switch behavior).
+  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'staging');
+
+  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
+
+  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
+
   //--------------------------- Announcements ---------------------------------//
 
   // Last known app version - used to detect app upgrades
