@@ -802,6 +802,81 @@ class MessageProvider extends ChangeNotifier {
             break;
         }
       }
+
+      // Auto-reconnect + retry: if the response is empty and connection died (timeout),
+      // reconnect once and retry the query
+      if (message.text.isEmpty && !_agentChatService.isConnected) {
+        agentLog('[RETRY] Response empty + disconnected — attempting reconnect');
+        message.thinkings.add('Reconnecting...');
+        notifyListeners();
+        final reconnected = await _agentChatService.reconnect();
+        if (reconnected) {
+          agentLog('[RETRY] Reconnected — retrying query');
+          await for (var event in _agentChatService.sendQuery(prompt)) {
+            switch (event.type) {
+              case AgentChatEventType.textDelta:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                if (agentThinkingAfterText) {
+                  textBuffer += '\n\n';
+                  agentThinkingAfterText = false;
+                  notifyListeners();
+                }
+                textBuffer += event.text;
+                timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+                  flushBuffer();
+                });
+                startSilenceTimer();
+                break;
+              case AgentChatEventType.toolActivity:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                flushBuffer();
+                if (message.text.isNotEmpty) {
+                  agentThinkingAfterText = true;
+                }
+                if (event.text.isNotEmpty) {
+                  message.thinkings.add(event.text);
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.result:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                timer?.cancel();
+                timer = null;
+                flushBuffer();
+                if (event.text.isNotEmpty && message.text.isEmpty) {
+                  message.text = event.text;
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.status:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                flushBuffer();
+                if (event.text.isNotEmpty) {
+                  message.thinkings.add(event.text);
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.error:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                timer?.cancel();
+                timer = null;
+                flushBuffer();
+                message.text = message.text.isEmpty ? 'Agent error: ${event.text}' : message.text;
+                notifyListeners();
+                break;
+            }
+          }
+        } else {
+          agentLog('[RETRY] Reconnect failed');
+          message.text = 'Failed to reconnect to agent.';
+          notifyListeners();
+        }
+      }
     } catch (e) {
       Logger.error('Agent chat error: $e');
       message.text = message.text.isEmpty ? 'Failed to get response from agent.' : message.text;

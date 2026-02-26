@@ -470,17 +470,28 @@ async def agent_ws(websocket: WebSocket):
             except Exception as e:
                 logger.warning(f"[agent-proxy] uid={uid} failed to send Firebase token: {e}")
 
+            first_query_sent = False
+
             async def phone_to_vm():
+                nonlocal first_query_sent
                 try:
                     async for msg in websocket.iter_text():
                         try:
                             data = json.loads(msg)
                             if data.get('type') == 'query':
                                 prompt = data.get('prompt', '')
-                                # Fetch history before saving new message
-                                history = await asyncio.to_thread(_fetch_chat_history, uid, chat_session_id)
-                                data['prompt'] = _build_prompt_with_history(prompt, history)
-                                msg = json.dumps(data)
+                                if not first_query_sent:
+                                    # First query: fetch history and inject into prompt
+                                    history = await asyncio.to_thread(_fetch_chat_history, uid, chat_session_id)
+                                    data['prompt'] = _build_prompt_with_history(prompt, history)
+                                    msg = json.dumps(data)
+                                    first_query_sent = True
+                                    logger.info(
+                                        f"[agent-proxy] uid={uid} first query with {len(history)} history messages"
+                                    )
+                                else:
+                                    # Subsequent queries: Claude session already has context
+                                    logger.info(f"[agent-proxy] uid={uid} follow-up query (session has context)")
                                 # Save user message in background — no need to block VM forwarding
                                 asyncio.create_task(
                                     asyncio.to_thread(
@@ -492,7 +503,6 @@ async def agent_ws(websocket: WebSocket):
                                         data_protection_level,
                                     )
                                 )
-                                logger.info(f"[agent-proxy] uid={uid} query with {len(history)} history messages")
                         except (json.JSONDecodeError, Exception) as e:
                             logger.warning(f"[agent-proxy] failed to process message: {e}")
                         await vm_ws.send(msg)
@@ -575,9 +585,9 @@ async def agent_ws(websocket: WebSocket):
 
     except Exception as e:
         logger.error(f"[agent-proxy] uid={uid} vm_connect failed: {e}")
+    finally:
         try:
-            await websocket.close(code=4003, reason="VM connection failed")
+            await websocket.close(code=1000, reason="Session ended")
         except Exception:
             pass
-    finally:
         logger.info(f"[agent-proxy] uid={uid} disconnected")

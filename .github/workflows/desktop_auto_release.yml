@@ -1,0 +1,49 @@
+name: Auto Release Desktop on Main
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'desktop/**'
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version and push tag
+        run: |
+          # Get latest desktop release tag
+          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            VERSION="0.0.1"
+          else
+            # Strip v prefix and +build-macos suffix  e.g. v11.5.1+11005001-macos -> 11.5.1
+            VER=$(echo "$LATEST" | sed -E 's/^v([0-9.]+)\+[0-9]+-macos$/\1/')
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+            PATCH=$((${PATCH:-0} + 1))
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+
+          # Build number: 11.5.2 -> 11005002  (each component * 1000)
+          BUILD_NUMBER=$(echo "$VERSION" | tr '.' '\n' | awk '{s=s*1000+$1}END{print s}')
+          RELEASE_TAG="v${VERSION}+${BUILD_NUMBER}-macos"
+
+          echo "Latest tag : ${LATEST:-none}"
+          echo "New version: $VERSION"
+          echo "New tag    : $RELEASE_TAG"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"

@@ -33,6 +33,38 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+// --- Async message queue for persistent session streaming input ---
+class AsyncMessageQueue {
+  constructor() {
+    this._queue = [];
+    this._resolve = null;
+    this._done = false;
+  }
+  push(msg) {
+    if (this._resolve) {
+      this._resolve({ value: msg, done: false });
+      this._resolve = null;
+    } else {
+      this._queue.push(msg);
+    }
+  }
+  end() {
+    this._done = true;
+    if (this._resolve) {
+      this._resolve({ value: undefined, done: true });
+      this._resolve = null;
+    }
+  }
+  [Symbol.asyncIterator]() { return this; }
+  next() {
+    if (this._queue.length > 0)
+      return Promise.resolve({ value: this._queue.shift(), done: false });
+    if (this._done)
+      return Promise.resolve({ value: undefined, done: true });
+    return new Promise(r => { this._resolve = r; });
+  }
+}
+
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
@@ -510,6 +542,144 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   return { text: fullText, sessionId, costUsd };
 }
 
+// --- Persistent Session (streaming input mode) ---
+
+function startPersistentSession(send, log) {
+  if (!isDatabaseReady()) {
+    log("Cannot start persistent session: database not ready");
+    return null;
+  }
+
+  const messageQueue = new AsyncMessageQueue();
+  const sessionAbort = new AbortController();
+
+  const options = {
+    model: "claude-opus-4-6",
+    abortController: sessionAbort,
+    systemPrompt: defaultSystemPrompt,
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: undefined,
+    cwd: process.env.HOME || "/",
+    mcpServers: {
+      "omi-tools": omiServer,
+      "playwright": {
+        command: process.execPath,
+        args: [playwrightCli, "--user-data-dir", join(__dirname, "chrome-profile"), "--headless", "--no-sandbox"],
+      },
+    },
+  };
+
+  const q = query({ prompt: messageQueue, options });
+
+  // Session state
+  let sessionId = null;
+  let sessionIdResolve = null;
+  const sessionIdReady = new Promise(r => { sessionIdResolve = r; });
+
+  // Per-turn state
+  let fullText = "";
+  let pendingTools = [];
+  let turnActive = false;
+
+  // Background message processing loop — runs for entire WS lifetime
+  const loopPromise = (async () => {
+    try {
+      for await (const message of q) {
+        switch (message.type) {
+          case "system":
+            if ("session_id" in message) {
+              sessionId = message.session_id;
+              sessionIdResolve?.();
+              sessionIdResolve = null;
+              log(`Persistent session started: ${sessionId}`);
+            }
+            break;
+
+          case "stream_event": {
+            const event = message.event;
+            if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+              const name = event.content_block.name;
+              pendingTools.push(name);
+              send({ type: "tool_activity", name, status: "started" });
+            }
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              if (pendingTools.length > 0) {
+                for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+                pendingTools.length = 0;
+              }
+              fullText += event.delta.text;
+              send({ type: "text_delta", text: event.delta.text });
+            }
+            break;
+          }
+
+          case "assistant": {
+            const content = message.message?.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === "tool_use") {
+                  send({ type: "tool_activity", name: block.name, status: "started" });
+                  pendingTools.push(block.name);
+                } else if (block.type === "text" && typeof block.text === "string") {
+                  if (pendingTools.length > 0) {
+                    for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+                    pendingTools.length = 0;
+                  }
+                  if (!fullText.includes(block.text)) {
+                    fullText += block.text;
+                    send({ type: "text_delta", text: block.text });
+                  }
+                }
+              }
+            }
+            break;
+          }
+
+          case "result": {
+            for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+            pendingTools.length = 0;
+
+            if (message.subtype === "success") {
+              const costUsd = message.total_cost_usd || 0;
+              if (message.result) {
+                const remaining = message.result.replace(fullText, "").trim();
+                if (remaining) {
+                  send({ type: "text_delta", text: remaining });
+                  fullText += remaining;
+                }
+              }
+              send({ type: "result", text: fullText, sessionId, costUsd });
+            } else {
+              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+            }
+            // Reset per-turn state
+            fullText = "";
+            pendingTools = [];
+            turnActive = false;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      log(`Persistent session loop error: ${err.message}`);
+    }
+    log("Persistent session ended");
+  })();
+
+  return {
+    query: q,
+    messageQueue,
+    sessionAbort,
+    sessionIdReady,
+    loopPromise,
+    getSessionId: () => sessionId,
+    isTurnActive: () => turnActive,
+    setTurnActive: (v) => { turnActive = v; },
+  };
+}
+
 // --- Mode: CLI ---
 
 async function runCli(userMessage) {
@@ -966,7 +1136,7 @@ function startServer() {
 
   wss.on("connection", (ws) => {
     log("Client connected");
-    let activeAbort = null;
+    let session = null; // persistent session for this WS connection
 
     const send = (msg) => {
       if (ws.readyState === ws.OPEN) {
@@ -984,51 +1154,77 @@ function startServer() {
       }
 
       switch (msg.type) {
-        case "query": {
-          lastActivityAt = Date.now();
-          // Cancel any prior query
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
+        case "prewarm": {
+          if (session) {
+            log("Prewarm: session already active");
+            send({ type: "prewarm_ack", success: true });
+            break;
           }
-
-          const abortController = new AbortController();
-          activeAbort = abortController;
-
-          log(`Query: ${msg.prompt?.slice(0, 100)}`);
-
-          try {
-            const result = await handleQuery({
-              prompt: msg.prompt,
-              systemPrompt: msg.systemPrompt,
-              cwd: msg.cwd,
-              send,
-              abortController,
-            });
-
-            if (!abortController.signal.aborted) {
-              send({ type: "result", text: result.text, sessionId: result.sessionId, costUsd: result.costUsd });
-            }
-          } catch (err) {
-            if (!abortController.signal.aborted) {
-              log(`Query error: ${err.message}`);
-              send({ type: "error", message: err.message });
-            }
-          } finally {
-            if (activeAbort === abortController) {
-              activeAbort = null;
-            }
+          log("Prewarm: starting persistent session...");
+          session = startPersistentSession(send, log);
+          if (!session) {
+            send({ type: "prewarm_ack", success: false });
+            break;
           }
+          session.sessionIdReady.then(() => {
+            send({ type: "prewarm_ack", success: true });
+            log("Prewarm: session ready");
+          }).catch(() => {
+            send({ type: "prewarm_ack", success: false });
+          });
           break;
         }
 
-        case "stop":
+        case "query": {
+          lastActivityAt = Date.now();
+          const prompt = msg.prompt;
+          log(`Query: ${prompt?.slice(0, 100)}`);
+
+          // Start session if not started yet
+          if (!session) {
+            log("No active session, starting on first query...");
+            session = startPersistentSession(send, log);
+            if (!session) {
+              send({ type: "error", message: "Database not available" });
+              break;
+            }
+          }
+
+          // Wait for session_id
+          await session.sessionIdReady;
+          const sid = session.getSessionId();
+          if (!sid) {
+            send({ type: "error", message: "Session failed to initialize" });
+            session = null;
+            break;
+          }
+
+          // If a turn is still active, interrupt first
+          if (session.isTurnActive()) {
+            log("Interrupting active turn for new query");
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          }
+
+          session.setTurnActive(true);
+          send({ type: "status", message: "Processing..." });
+
+          // Push user message into the persistent session
+          session.messageQueue.push({
+            type: "user",
+            message: { role: "user", content: prompt },
+            parent_tool_use_id: null,
+            session_id: sid,
+          });
+          break;
+        }
+
+        case "stop": {
           log("Stop requested");
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
+          if (session?.isTurnActive()) {
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
+        }
 
         default:
           send({ type: "error", message: `Unknown message type: ${msg.type}` });
@@ -1037,9 +1233,10 @@ function startServer() {
 
     ws.on("close", () => {
       log("Client disconnected");
-      if (activeAbort) {
-        activeAbort.abort();
-        activeAbort = null;
+      if (session) {
+        session.messageQueue.end();
+        session.sessionAbort.abort();
+        session = null;
       }
     });
 
