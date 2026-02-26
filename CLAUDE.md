@@ -56,6 +56,29 @@ from database.redis_db import r
 
 Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
+### Logging Security
+
+Never log raw sensitive data. Use `sanitize()` from `utils.log_sanitizer` to mask long token-like strings while keeping enough for debugging.
+
+```python
+from utils.log_sanitizer import sanitize
+
+# Good — masks tokens/secrets but keeps first/last chars for searching
+logger.error(f"Token exchange failed: {sanitize(response.text)}")
+logger.info(f"Found contact: {sanitize(name)} -> {sanitize(email)}")
+
+# Bad — leaks full OAuth tokens, API keys, PII
+logger.error(f"Token exchange failed: {response.text}")
+logger.info(f"Found contact: {name} -> {email}")
+```
+
+Rules:
+- Wrap `response.text`, API responses, and error bodies in `sanitize()` before logging
+- Wrap PII (names, emails, user text) in `sanitize()` before logging
+- Keep log levels as-is (don't downgrade to hide data)
+- Keep UIDs, IPs, status codes, and structural info visible — they're needed for debugging
+- Never put raw `response.text` in exception messages (exceptions may be logged upstream)
+
 ### Backend Service Map
 
 ```
