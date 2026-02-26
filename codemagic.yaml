@@ -1984,14 +1984,19 @@ workflows:
           unset TOOLCHAINS
           echo "Building arm64..."
           xcrun swift build -c release --package-path Desktop --arch arm64
+          # On Codemagic mac_mini_m2 (native arm64 host), the arm64 binary lands in
+          # .build/release/ instead of .build/arm64-apple-macosx/release/.
+          # Save it now before the x86_64 build overwrites .build/release/.
+          mkdir -p "Desktop/.build/arm64-apple-macosx/release"
+          cp -R "Desktop/.build/release/." "Desktop/.build/arm64-apple-macosx/release/"
+          echo "Saved arm64 outputs to arm64-apple-macosx/release/"
           echo "Building x86_64..."
           xcrun swift build -c release --package-path Desktop --arch x86_64
 
       - name: Create universal app bundle
         script: |
-          # On Codemagic mac_mini_m2 (native arm64), --arch arm64 outputs to .build/release/
-          # On x86_64 cross-compilation, --arch x86_64 outputs to .build/x86_64-apple-macosx/release/
-          ARM64_BINARY="Desktop/.build/release/$BINARY_NAME"
+          # Both binaries are now in their arch-specific directories (matching release.sh)
+          ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
@@ -2015,8 +2020,8 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Copy Sparkle framework (arm64 native build outputs to .build/release/ on M2)
-          SPARKLE_FW="Desktop/.build/release/Sparkle.framework"
+          # Copy Sparkle framework (saved from arm64 build before x86_64 overwrote .build/release/)
+          SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
             echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
             exit 1
@@ -2034,7 +2039,7 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          SWIFT_BUILD_DIR="Desktop/.build/release"
+          SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
