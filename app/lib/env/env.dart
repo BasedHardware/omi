@@ -24,17 +24,12 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
-  /// WebSocket URL for the agent proxy service (agent.omi.me / agent.omiapi.com).
-  /// Derived from apiBaseUrl: https://api.* → wss://agent.*
+  /// WebSocket URL for the agent proxy service.
+  /// Always prod — agent VMs and Firestore are in the prod project only.
   /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
   static String get agentProxyWsUrl {
     if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
-    final base = apiBaseUrl ?? 'https://api.omi.me/';
-    return base
-            .replaceFirst('https://api.', 'wss://agent.')
-            .replaceFirst('http://api.', 'ws://agent.')
-            .replaceAll(RegExp(r'/$'), '') +
-        '/v1/agent/ws';
+    return 'wss://agent.omi.me/v1/agent/ws';
   }
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
