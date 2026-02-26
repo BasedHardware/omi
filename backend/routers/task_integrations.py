@@ -12,6 +12,7 @@ import httpx
 import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -390,7 +391,9 @@ async def refresh_oauth_token(uid: str, app_key: str, integration: dict) -> dict
             return updated_integration
         else:
             error_text = token_response.text
-            logger.error(f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {error_text}')
+            logger.error(
+                f'{app_key}: Token refresh failed with HTTP {token_response.status_code}: {sanitize(error_text)}'
+            )
             if token_response.status_code == 400:
                 should_disconnect = False
                 try:
