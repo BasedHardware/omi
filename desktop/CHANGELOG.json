@@ -1,6 +1,13 @@
 {
   "releases": [
     {
+      "version": "0.11.9",
+      "date": "2026-02-26",
+      "changes": [
+        "Fixed AI chat not working (missing module after update)"
+      ]
+    },
+    {
       "version": "11.5",
       "date": "2026-02-25",
       "changes": [

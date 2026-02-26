@@ -6,7 +6,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
@@ -47,29 +47,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 // --- Idle auto-stop ---
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
 const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
-const ACTIVITY_FILE = join(dirname(DB_PATH), ".last_activity");
-
-// Persist lastActivityAt across process restarts (hot-reload, systemd restart).
-// Only user-initiated actions (queries, keepalive pings) update this.
-function loadLastActivity() {
-  try {
-    if (existsSync(ACTIVITY_FILE)) {
-      const ts = parseInt(readFileSync(ACTIVITY_FILE, "utf8").trim(), 10);
-      if (!isNaN(ts) && ts > 0) return ts;
-    }
-  } catch {}
-  // First boot — write timestamp so hot-reload restarts don't reset the 30-min window
-  const now = Date.now();
-  try { writeFileSync(ACTIVITY_FILE, String(now)); } catch {}
-  return now;
-}
-
-function saveLastActivity(ts) {
-  lastActivityAt = ts;
-  try { writeFileSync(ACTIVITY_FILE, String(ts)); } catch {}
-}
-
-let lastActivityAt = loadLastActivity();
+let lastActivityAt = Date.now();
 
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
@@ -487,20 +465,12 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
       }
 
       case "assistant": {
-        // Extract tool_use and text blocks from the complete assistant message
+        // Fallback: if streaming didn't capture text (e.g. after tool calls),
+        // extract it from the complete assistant message
         const content = message.message?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
-            if (block.type === "tool_use") {
-              send({ type: "tool_activity", name: block.name, status: "started" });
-              pendingTools.push(block.name);
-            } else if (block.type === "text" && typeof block.text === "string") {
-              if (pendingTools.length > 0) {
-                for (const name of pendingTools) {
-                  send({ type: "tool_activity", name, status: "completed" });
-                }
-                pendingTools.length = 0;
-              }
+            if (block.type === "text" && typeof block.text === "string") {
               // Check if this text was already sent via stream_event deltas
               if (!fullText.includes(block.text)) {
                 fullText += block.text;
@@ -591,7 +561,6 @@ function verifyAuth(req) {
 
 async function checkIdleAndStop() {
   const idleMs = Date.now() - lastActivityAt;
-  console.log(`[server] Idle check: ${Math.round(idleMs / 60000)}m since last user activity (threshold: ${IDLE_TIMEOUT_MS / 60000}m)`);
   if (idleMs < IDLE_TIMEOUT_MS) return;
 
   console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
@@ -645,9 +614,7 @@ let currentVersion = null;
 
 async function checkAndApplyUpdate(log) {
   try {
-    // Cache-bust: GCS sets max-age=3600, so append a unique query param
-    const cacheBust = `_t=${Date.now()}`;
-    const resp = await fetch(`${GCS_BASE}/version.txt?${cacheBust}`);
+    const resp = await fetch(`${GCS_BASE}/version.txt`);
     if (!resp.ok) return;
     const version = (await resp.text()).trim();
     if (currentVersion === null) {
@@ -657,7 +624,7 @@ async function checkAndApplyUpdate(log) {
     }
     if (version === currentVersion) return;
     log(`Update available: ${version} (current: ${currentVersion}), downloading...`);
-    const agentResp = await fetch(`${GCS_BASE}/agent.mjs?${cacheBust}`);
+    const agentResp = await fetch(`${GCS_BASE}/agent.mjs`);
     if (!agentResp.ok) {
       log(`Update download failed: HTTP ${agentResp.status}`);
       return;
@@ -682,8 +649,6 @@ function startServer() {
   // Try to open DB if it exists (may not exist yet for fresh VMs)
   if (openDatabase()) {
     log("Database loaded at startup");
-    // Pre-warm immediately at boot — session ready before user opens chat
-    prewarmSession().catch(() => {});
   } else {
     log(`Database not found at ${DB_PATH} — waiting for upload`);
   }
@@ -793,6 +758,7 @@ function startServer() {
         renameSync(tmpPath, DB_PATH);
 
         const finalSize = statSync(DB_PATH).size;
+        lastActivityAt = Date.now();
         log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
 
         // Re-open the database
@@ -867,6 +833,7 @@ function startServer() {
 
           const isFirst = userFirebaseToken === null;
           userFirebaseToken = firebaseToken;
+          lastActivityAt = Date.now();
           log(`Firebase token ${isFirst ? "received" : "refreshed"}`);
 
           // On first token, fetch backend tools
@@ -892,14 +859,10 @@ function startServer() {
         res.end(JSON.stringify({ error: "Unauthorized" }));
         return;
       }
-      saveLastActivity(Date.now());
+      lastActivityAt = Date.now();
       log("Keepalive ping received");
-      // Keep warm session alive — re-warm if it died
-      if (!warmState?.ready && !prewarmInProgress) {
-        prewarmSession().catch(() => {});
-      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", warm: !!warmState?.ready }));
+      res.end(JSON.stringify({ status: "ok" }));
       return;
     }
 
@@ -971,6 +934,7 @@ function startServer() {
           // FTS is kept in sync by triggers on the content tables.
           // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
+          lastActivityAt = Date.now();
           log(`Sync: ${rows.length} rows → ${table}`);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: rows.length, table }));
@@ -1021,7 +985,7 @@ function startServer() {
 
       switch (msg.type) {
         case "query": {
-          saveLastActivity(Date.now());
+          lastActivityAt = Date.now();
           // Cancel any prior query
           if (activeAbort) {
             activeAbort.abort();
