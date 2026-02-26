@@ -344,7 +344,7 @@ struct RewindPage: View {
                 toggleMonitoring(enabled: !isMonitoring)
             }
         }
-        .help(isMonitoring ? "Rewind is capturing - click to stop" : "Rewind is off - click to start capturing")
+        .help(isMonitoring ? "Rewind is capturing your screen locally for your personal memory — click to stop" : "Rewind is off — click to start local screen capture for your memory")
     }
 
     private func toggleMonitoring(enabled: Bool) {

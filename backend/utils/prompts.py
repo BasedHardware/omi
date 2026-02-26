@@ -9,7 +9,9 @@ from langchain_core.prompts import ChatPromptTemplate
 
 # - **world**:  Clever world facts that {user_name} can share to others so it makes him look smarter.
 # - "{user_name} learned that second Notion cofounder joined 5 years after." (**world**)
-extract_memories_prompt = ChatPromptTemplate.from_messages(['''
+extract_memories_prompt = ChatPromptTemplate.from_messages(
+    [
+        '''
 You are an expert memory curator. Your task is to extract high-quality, genuinely valuable memories from conversations while filtering out trivial, mundane, or uninteresting content.
 
 CRITICAL CONTEXT:
@@ -359,9 +361,15 @@ LANGUAGE INSTRUCTION:
 {conversation}
 ```
 {format_instructions}
-'''.replace('    ', '').strip()])
+'''.replace(
+            '    ', ''
+        ).strip()
+    ]
+)
 
-extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(['''
+extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(
+    [
+        '''
     You are an expert at extracting both (1) new facts about {user_name} and (2) new learnings or insights relevant to {user_name}.
 
     You will be provided with:
@@ -453,10 +461,16 @@ extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(['''
     {language_instruction}
 
     {format_instructions}
-    '''.replace('    ', '').strip()])
+    '''.replace(
+            '    ', ''
+        ).strip()
+    ]
+)
 
 
-extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages(['''
+extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages(
+    [
+        '''
     You are an expert fact extractor. Your task is to analyze the {text_source} content and extract important facts about {user_name}.
 
     You will be provided with a text content from the {text_source} content, along with a list of existing facts about {user_name}. \
@@ -514,10 +528,16 @@ extract_memories_text_content_prompt_v1 = ChatPromptTemplate.from_messages(['''
     {text_content}
     ```
     {format_instructions}
-    '''.replace('    ', '').strip()])
+    '''.replace(
+            '    ', ''
+        ).strip()
+    ]
+)
 
 
-extract_learnings_prompt = ChatPromptTemplate.from_messages(['''
+extract_learnings_prompt = ChatPromptTemplate.from_messages(
+    [
+        '''
 You are an insightful assistant tasked with extracting key learnings and valuable facts from conversations.
 
 You will be provided with a conversation transcript or content that {user_name} has listened to.
@@ -570,4 +590,8 @@ LANGUAGE INSTRUCTION:
 {conversation}
 ```
 {format_instructions}
-    '''.replace('    ', '').strip()])
+    '''.replace(
+            '    ', ''
+        ).strip()
+    ]
+)
