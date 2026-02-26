@@ -99,7 +99,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
 
@@ -1461,7 +1461,7 @@ async def _stream_handler(
             )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
-                logger.info(f"  - {sanitize(data['name'])}: {distance:.4f} {uid} {session_id}")
+                logger.info(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
                 if distance < best_distance:
                     best_distance = distance
                     best_match = (person_id, data['name'])
@@ -1469,7 +1469,7 @@ async def _stream_handler(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 logger.info(
-                    f"Speaker ID: speaker {speaker_id} -> {sanitize(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
+                    f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
                 )
 
                 # Store for session consistency
