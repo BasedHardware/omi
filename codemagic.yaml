@@ -1982,27 +1982,26 @@ workflows:
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
-          # Build x86_64 FIRST: outputs to both .build/release/ and .build/x86_64-apple-macosx/release/
-          # Build arm64 SECOND: overwrites .build/release/ with arm64 binary
-          # Result: .build/release/ = arm64, .build/x86_64-apple-macosx/release/ = x86_64
-          # (x86_64-apple-macosx/release/ is not touched by the arm64 build)
-          echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --arch x86_64
+          # Use --triple (not --arch) so SPM creates arch-specific output dirs:
+          #   .build/arm64-apple-macosx/release/  (arm64 binary)
+          #   .build/x86_64-apple-macosx/release/ (x86_64 binary)
+          # --arch on M2 doesn't reliably create x86_64-apple-macosx/ subdirectory.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --arch arm64
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          echo "Building x86_64..."
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
 
       - name: Create universal app bundle
         script: |
-          # arm64 built last → binary in .build/release/ (native arch, no arch-prefix subdir)
-          # x86_64 built first → binary in .build/x86_64-apple-macosx/release/ (persists, not overwritten)
-          ARM64_BINARY="Desktop/.build/release/$BINARY_NAME"
+          # --triple creates explicit arch-specific output dirs (matches release.sh behavior)
+          ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
             ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/release/" 2>/dev/null | head -10 || true
-            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | head -10 || true
+            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | head -20 || true
             exit 1
           fi
 
@@ -2019,8 +2018,8 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Sparkle is in .build/release/ (from the arm64 build, which ran last)
-          SPARKLE_FW="Desktop/.build/release/Sparkle.framework"
+          # Sparkle is in arm64 build dir (matches release.sh)
+          SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
             echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
             exit 1
@@ -2038,7 +2037,7 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          SWIFT_BUILD_DIR="Desktop/.build/release"
+          SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
