@@ -29,7 +29,12 @@ abstract class Env {
   /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
   static String get agentProxyWsUrl {
     if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
-    return 'wss://agent.omi.me/v1/agent/ws';
+    final base = apiBaseUrl ?? 'https://api.omi.me/';
+    return base
+            .replaceFirst('https://api.', 'wss://agent.')
+            .replaceFirst('http://api.', 'ws://agent.')
+            .replaceAll(RegExp(r'/$'), '') +
+        '/v1/agent/ws';
   }
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
