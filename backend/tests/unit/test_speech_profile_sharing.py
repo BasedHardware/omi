@@ -585,7 +585,7 @@ def test_remove_shared_profile_from_me_not_exists():
         assert result is False
 
 
-def test_e2e_shared_profile_speaker_identification(monkeypatch):
+def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     """
     End-to-end test: User A shares speech profile → User B starts conversation →
     User A speaks → identified by name automatically.
@@ -748,7 +748,7 @@ def test_e2e_shared_profile_speaker_identification(monkeypatch):
     assert len(cache_after_revoke) == 0
 
 
-def test_e2e_shared_profile_no_match_different_speaker(monkeypatch):
+def test_full_pipeline_no_match_different_speaker(monkeypatch):
     """
     End-to-end: User A shares profile → User C speaks in User B's conversation →
     User C is NOT identified as Alice (different voice, above threshold).
@@ -782,7 +782,7 @@ def test_e2e_shared_profile_no_match_different_speaker(monkeypatch):
     assert person_name is None
 
 
-def test_e2e_shared_profile_picks_correct_person_from_multiple(monkeypatch):
+def test_full_pipeline_picks_correct_person_from_multiple(monkeypatch):
     """
     End-to-end: Multiple shared profiles + regular people in cache.
     Query matches the correct person among all candidates.
@@ -828,3 +828,64 @@ def test_e2e_shared_profile_picks_correct_person_from_multiple(monkeypatch):
     pid, name, dist = _find_best_match(query_charlie, cache, threshold=SPEAKER_MATCH_THRESHOLD)
     assert pid == 'shared:charlie_uid'
     assert name == 'Charlie'
+
+def test_spoofed_shared_pid_rejected_by_ownership_check():
+    """Spoofed shared:{attacker_uid} is rejected because attacker hasn't shared with current user."""
+    from utils.shared_profiles import resolve_shared_people
+
+    with patch('utils.shared_profiles.users_db') as mock_users:
+        mock_users.get_profiles_shared_with_user.return_value = ['alice_uid']
+        mock_users.get_user_profile.return_value = {'display_name': 'Alice'}
+
+        people = resolve_shared_people(['shared:alice_uid', 'shared:attacker_uid'], 'bob_uid')
+
+    resolved_ids = [p.id for p in people]
+    assert 'shared:alice_uid' in resolved_ids
+    assert 'shared:attacker_uid' not in resolved_ids
+    assert len(people) == 1
+    assert people[0].name == 'Alice'
+
+
+def test_all_valid_shared_pids_resolved():
+    """All legitimate shared profiles are resolved with correct names."""
+    from utils.shared_profiles import resolve_shared_people
+
+    def mock_profile(uid):
+        return {
+            'alice_uid': {'display_name': 'Alice Smith'},
+            'charlie_uid': {'display_name': 'Charlie Brown'},
+        }.get(uid, {})
+
+    with patch('utils.shared_profiles.users_db') as mock_users:
+        mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
+        mock_users.get_user_profile.side_effect = mock_profile
+
+        people = resolve_shared_people(['shared:alice_uid', 'shared:charlie_uid'], 'bob_uid')
+
+    assert len(people) == 2
+    names = {p.name for p in people}
+    assert names == {'Alice Smith', 'Charlie Brown'}
+
+
+def test_shared_pid_with_missing_profile_skipped():
+    """Shared ID where get_user_profile returns empty is silently skipped."""
+    from utils.shared_profiles import resolve_shared_people
+
+    with patch('utils.shared_profiles.users_db') as mock_users:
+        mock_users.get_profiles_shared_with_user.return_value = ['ghost_uid']
+        mock_users.get_user_profile.return_value = {}
+
+        people = resolve_shared_people(['shared:ghost_uid'], 'bob_uid')
+
+    assert len(people) == 0
+
+
+def test_non_shared_person_ids_ignored():
+    """Regular person IDs and 'user' are not processed by resolve_shared_people."""
+    from utils.shared_profiles import resolve_shared_people
+
+    with patch('utils.shared_profiles.users_db') as mock_users:
+        people = resolve_shared_people(['person-bob', 'user', 'regular-id'], 'bob_uid')
+
+    assert len(people) == 0
+    mock_users.get_profiles_shared_with_user.assert_not_called()

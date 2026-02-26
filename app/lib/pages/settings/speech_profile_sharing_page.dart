@@ -26,18 +26,23 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
   }
 
   Future<void> _loadData() async {
-    final results = await Future.wait([
-      getUsersIHaveSharedWith(),
-      getProfilesSharedWithMe(),
-      userHasSpeakerProfile(),
-    ]);
-    if (!mounted) return;
-    setState(() {
-      _sharedWith = results[0] as List<SharedProfileInfo>;
-      _sharedWithMe = results[1] as List<SharedProfileInfo>;
-      _hasProfile = results[2] as bool;
-      _loading = false;
-    });
+    try {
+      final results = await Future.wait([
+        getUsersIHaveSharedWith(),
+        getProfilesSharedWithMe(),
+        userHasSpeakerProfile(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _sharedWith = results[0] as List<SharedProfileInfo>;
+        _sharedWithMe = results[1] as List<SharedProfileInfo>;
+        _hasProfile = results[2] as bool;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   Future<void> _revokeShare(SharedProfileInfo info) async {
