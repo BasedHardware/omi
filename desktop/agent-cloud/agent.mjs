@@ -453,7 +453,7 @@ async function prewarmSession() {
   prewarmInProgress = true;
 
   const t0 = Date.now();
-  console.log("[prewarm] Starting (subprocess + MCP only, no API call)...");
+  console.log("[prewarm] Starting (subprocess + MCP + warmup call)...");
 
   try {
     const inputStream = createControllableStream();
@@ -463,6 +463,7 @@ async function prewarmSession() {
       inputStream,
       abortController,
       ready: false,
+      warmingUp: true, // True during warmup phase, false after
       onMessage: null,
       sessionId: "",
     };
@@ -496,17 +497,31 @@ async function prewarmSession() {
       },
     });
 
+    // Push warmup message immediately — subprocess needs input to initialize
+    inputStream.push({
+      type: "user",
+      session_id: "",
+      message: { role: "user", content: [{ type: "text", text: "warmup" }] },
+      parent_tool_use_id: null,
+    });
+
     // Background consumer — runs until session ends, forwards messages to handler
     (async () => {
       try {
         for await (const msg of q) {
           if (msg.type === "system" && msg.subtype === "init") {
             state.sessionId = msg.session_id;
-            if (!state.ready) {
-              state.ready = true;
-              console.log(`[prewarm] Ready in ${Date.now() - t0}ms (sessionId: ${state.sessionId.slice(0, 8)}...) — no API call made`);
-            }
           }
+          // During warmup, swallow all messages silently until we get the first result
+          if (state.warmingUp) {
+            if (msg.type === "result") {
+              state.warmingUp = false;
+              state.ready = true;
+              console.log(`[prewarm] Ready in ${Date.now() - t0}ms (sessionId: ${state.sessionId.slice(0, 8)}...) — subprocess + MCP warm`);
+            }
+            continue;
+          }
+          // After warmup, forward messages to the active query handler
           if (state.onMessage) {
             state.onMessage(msg);
           }
@@ -524,15 +539,15 @@ async function prewarmSession() {
       }
     })();
 
-    // Wait for subprocess ready (init message)
+    // Wait for warmup to complete (subprocess spawned + MCP connected + first result back)
     await new Promise((resolve, reject) => {
       const check = setInterval(() => {
         if (state.ready) { clearInterval(check); resolve(); }
       }, 50);
       setTimeout(() => {
         clearInterval(check);
-        if (!state.ready) reject(new Error("Pre-warm timeout (30s)"));
-      }, 30000);
+        if (!state.ready) reject(new Error("Pre-warm timeout (60s)"));
+      }, 60000);
     });
   } catch (err) {
     console.log(`[prewarm] Failed: ${err.message}`);
