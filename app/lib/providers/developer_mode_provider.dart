@@ -272,14 +272,19 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   Future<void> onClaudeAgentChanged(bool value) async {
+    await initAgentLog();
+    agentLog('onClaudeAgentChanged($value)');
+
     if (value) {
-      // Enabling — check if VM exists first
       claudeAgentLoading = true;
       notifyListeners();
 
       try {
+        agentLog('Calling getAgentVmStatus()...');
         final vmInfo = await getAgentVmStatus();
+        agentLog('getAgentVmStatus() returned: hasVm=${vmInfo?.hasVm}, status=${vmInfo?.status}');
         if (vmInfo == null || !vmInfo.hasVm) {
+          agentLog('No VM found, aborting enable');
           AppSnackbar.showSnackbarError('Requires OMI Desktop with agent enabled');
           claudeAgentLoading = false;
           notifyListeners();
@@ -288,17 +293,19 @@ class DeveloperModeProvider extends BaseProvider {
 
         claudeAgentEnabled = true;
         SharedPreferencesUtil().claudeAgentEnabled = true;
+        agentLog('Claude agent ENABLED successfully');
       } catch (e) {
+        agentLog('ERROR in onClaudeAgentChanged: $e');
         Logger.error('Failed to check agent VM status: $e');
         AppSnackbar.showSnackbarError('Failed to check agent VM status');
       }
 
       claudeAgentLoading = false;
     } else {
-      // Disabling — disconnect and revert
       claudeAgentEnabled = false;
       SharedPreferencesUtil().claudeAgentEnabled = false;
       await agentChatService.disconnect();
+      agentLog('Claude agent DISABLED');
     }
 
     notifyListeners();
