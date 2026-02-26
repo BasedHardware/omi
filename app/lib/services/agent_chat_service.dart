@@ -44,6 +44,7 @@ class AgentChatService {
   bool _connected = false;
   Stopwatch? _queryStopwatch;
   bool _firstTextReceived = false;
+  Timer? _responseTimer;
 
   bool get isConnected => _connected;
 
@@ -101,6 +102,9 @@ class AgentChatService {
 
             if (_eventController == null || _eventController!.isClosed) return;
 
+            // Reset response timeout on every incoming event
+            _resetResponseTimer();
+
             switch (type) {
               case 'text_delta':
                 if (!_firstTextReceived) {
@@ -123,12 +127,14 @@ class AgentChatService {
               case 'result':
                 agentLog('[TIMING] *** RESULT *** +${elapsed}ms (total query time)');
                 _queryStopwatch?.stop();
+                _responseTimer?.cancel();
                 _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
                 _eventController?.close();
                 break;
               case 'error':
                 agentLog('[TIMING] *** ERROR *** +${elapsed}ms');
                 _queryStopwatch?.stop();
+                _responseTimer?.cancel();
                 _eventController?.add(AgentChatEvent(AgentChatEventType.error, text));
                 _eventController?.close();
                 break;
@@ -190,11 +196,15 @@ class AgentChatService {
     _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
     agentLog('[TIMING] query sent +${_queryStopwatch!.elapsedMilliseconds}ms');
 
+    // Start response timeout — if no event arrives within 45s, connection is dead
+    _resetResponseTimer();
+
     return _eventController!.stream;
   }
 
   Future<void> disconnect() async {
     _connected = false;
+    _responseTimer?.cancel();
     _eventController?.close();
     _eventController = null;
     await _streamSubscription?.cancel();
@@ -206,6 +216,19 @@ class AgentChatService {
   Future<bool> reconnect() async {
     await disconnect();
     return connect();
+  }
+
+  void _resetResponseTimer() {
+    _responseTimer?.cancel();
+    _responseTimer = Timer(const Duration(seconds: 45), () {
+      agentLog('[TIMING] *** RESPONSE TIMEOUT *** — no event received in 45s');
+      _queryStopwatch?.stop();
+      _connected = false;
+      if (_eventController != null && !_eventController!.isClosed) {
+        _eventController!.add(AgentChatEvent(AgentChatEventType.error, 'Connection timed out'));
+        _eventController!.close();
+      }
+    });
   }
 
   static String _toolDisplayName(String toolName) {
