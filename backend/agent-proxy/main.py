@@ -470,6 +470,7 @@ async def agent_ws(websocket: WebSocket):
                         try:
                             event = json.loads(text)
                             evt_type = event.get('type')
+                            logger.info(f"[agent-proxy] uid={uid} vm->phone event: {evt_type}")
                             evt_text = event.get('text', '') or event.get('content', '') or ''
                             if evt_type == 'text_delta':
                                 response_text += evt_text
