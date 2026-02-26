@@ -1984,16 +1984,6 @@ workflows:
           unset TOOLCHAINS
           echo "Building arm64..."
           xcrun swift build -c release --package-path Desktop --arch arm64
-          # On native arm64 host (M2), --arch arm64 outputs to .build/release/ not .build/arm64-apple-macosx/release/
-          # Normalize to arch-specific path so downstream steps find the binary consistently
-          if [ -f "Desktop/.build/release/$BINARY_NAME" ] && [ ! -f "Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME" ]; then
-            echo "Normalizing arm64 output to arch-specific path..."
-            mkdir -p "Desktop/.build/arm64-apple-macosx/release"
-            cp "Desktop/.build/release/$BINARY_NAME" "Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
-            # Also copy Sparkle.framework and resource bundle if present
-            [ -d "Desktop/.build/release/Sparkle.framework" ] && cp -R "Desktop/.build/release/Sparkle.framework" "Desktop/.build/arm64-apple-macosx/release/" || true
-            [ -d "Desktop/.build/release/Omi Computer_Omi Computer.bundle" ] && cp -R "Desktop/.build/release/Omi Computer_Omi Computer.bundle" "Desktop/.build/arm64-apple-macosx/release/" || true
-          fi
           echo "Building x86_64..."
           xcrun swift build -c release --package-path Desktop --arch x86_64
 
