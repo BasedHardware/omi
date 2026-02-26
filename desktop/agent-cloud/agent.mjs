@@ -33,38 +33,6 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-// --- Async message queue for persistent session streaming input ---
-class AsyncMessageQueue {
-  constructor() {
-    this._queue = [];
-    this._resolve = null;
-    this._done = false;
-  }
-  push(msg) {
-    if (this._resolve) {
-      this._resolve({ value: msg, done: false });
-      this._resolve = null;
-    } else {
-      this._queue.push(msg);
-    }
-  }
-  end() {
-    this._done = true;
-    if (this._resolve) {
-      this._resolve({ value: undefined, done: true });
-      this._resolve = null;
-    }
-  }
-  [Symbol.asyncIterator]() { return this; }
-  next() {
-    if (this._queue.length > 0)
-      return Promise.resolve({ value: this._queue.shift(), done: false });
-    if (this._done)
-      return Promise.resolve({ value: undefined, done: true });
-    return new Promise(r => { this._resolve = r; });
-  }
-}
-
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
@@ -550,7 +518,6 @@ function startPersistentSession(send, log) {
     return null;
   }
 
-  const messageQueue = new AsyncMessageQueue();
   const sessionAbort = new AbortController();
 
   const options = {
@@ -571,7 +538,8 @@ function startPersistentSession(send, log) {
     },
   };
 
-  const q = query({ prompt: messageQueue, options });
+  // Start with a prewarm prompt — this boots the Claude process
+  const q = query({ prompt: "ready", options });
 
   // Session state
   let sessionId = null;
@@ -582,6 +550,7 @@ function startPersistentSession(send, log) {
   let fullText = "";
   let pendingTools = [];
   let turnActive = false;
+  let isPrewarmTurn = true; // First turn is prewarm, suppress output
 
   // Background message processing loop — runs for entire WS lifetime
   const loopPromise = (async () => {
@@ -598,6 +567,7 @@ function startPersistentSession(send, log) {
             break;
 
           case "stream_event": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
             const event = message.event;
             if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
               const name = event.content_block.name;
@@ -616,6 +586,7 @@ function startPersistentSession(send, log) {
           }
 
           case "assistant": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
             const content = message.message?.content;
             if (Array.isArray(content)) {
               for (const block of content) {
@@ -640,6 +611,15 @@ function startPersistentSession(send, log) {
           case "result": {
             for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
             pendingTools.length = 0;
+
+            if (isPrewarmTurn) {
+              isPrewarmTurn = false;
+              fullText = "";
+              pendingTools = [];
+              turnActive = false;
+              log("Prewarm turn completed, session ready for queries");
+              break;
+            }
 
             if (message.subtype === "success") {
               const costUsd = message.total_cost_usd || 0;
@@ -670,7 +650,6 @@ function startPersistentSession(send, log) {
 
   return {
     query: q,
-    messageQueue,
     sessionAbort,
     sessionIdReady,
     loopPromise,
@@ -1208,13 +1187,14 @@ function startServer() {
           session.setTurnActive(true);
           send({ type: "status", message: "Processing..." });
 
-          // Push user message into the persistent session
-          session.messageQueue.push({
-            type: "user",
-            message: { role: "user", content: prompt },
-            parent_tool_use_id: null,
-            session_id: sid,
-          });
+          // Send user message into the persistent session
+          try {
+            await session.query.send(prompt);
+          } catch (e) {
+            log(`Send error: ${e.message}`);
+            send({ type: "error", message: `Failed to send query: ${e.message}` });
+            session.setTurnActive(false);
+          }
           break;
         }
 
@@ -1234,7 +1214,7 @@ function startServer() {
     ws.on("close", () => {
       log("Client disconnected");
       if (session) {
-        session.messageQueue.end();
+        session.query.close();
         session.sessionAbort.abort();
         session = null;
       }
