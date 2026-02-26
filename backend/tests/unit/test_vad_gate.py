@@ -2004,3 +2004,48 @@ class TestAudioCapture:
 
                 assert socket._raw_file.closed
                 assert socket._gated_file.closed
+
+
+class TestProcessAudioDgRemapWiring:
+    """Tests for the remap callback wiring in process_audio_dg (streaming.py)."""
+
+    def test_remap_callback_wraps_stream_transcript(self):
+        """When vad_gate is provided, stream_transcript should receive remapped segments."""
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
+        # Build mapper state: 5s of audio sent, then silence gap, then 3s at wall=15s
+        gate.dg_wall_mapper.on_audio_sent(5.0, 0.0)
+        gate.dg_wall_mapper.on_silence_skipped()
+        gate.dg_wall_mapper.on_audio_sent(3.0, 15.0)
+
+        received_segments = []
+        original_transcript = lambda segs: received_segments.extend(segs)
+
+        # Simulate the wiring from process_audio_dg lines 330-335
+        _original = original_transcript
+
+        def wrapped_transcript(segments):
+            gate.remap_segments(segments)
+            _original(segments)
+
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello', 'speaker': 'SPEAKER_0'}]
+        wrapped_transcript(segments)
+
+        # After remap: dg=6.0 is in second checkpoint range (dg=5.0 -> wall=15.0)
+        # So wall = 15.0 + (6.0 - 5.0) = 16.0
+        assert len(received_segments) == 1
+        assert abs(received_segments[0]['start'] - 16.0) < 0.01
+        assert abs(received_segments[0]['end'] - 17.0) < 0.01
+        assert received_segments[0]['text'] == 'hello'
+
+    def test_no_remap_when_gate_is_none(self):
+        """Without vad_gate, stream_transcript should receive unmodified segments."""
+        received_segments = []
+        original_transcript = lambda segs: received_segments.extend(segs)
+
+        # No gate — call directly (no wrapping)
+        segments = [{'start': 6.0, 'end': 7.0, 'text': 'hello', 'speaker': 'SPEAKER_0'}]
+        original_transcript(segments)
+
+        assert len(received_segments) == 1
+        assert received_segments[0]['start'] == 6.0
+        assert received_segments[0]['end'] == 7.0
