@@ -94,6 +94,9 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and return the new IP."""
+    import time
+
+    t0 = time.monotonic()
     token = _get_gce_access_token()
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
@@ -103,13 +106,15 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
             raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+        t_start = time.monotonic() - t0
+        logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
 
         op_name = resp.json().get("name")
         if not op_name:
             raise Exception("Missing operation name in GCE start response")
 
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-        for _ in range(24):
+        for i in range(24):
             await asyncio.sleep(5)
             token = _get_gce_access_token()
             status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
@@ -117,18 +122,38 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
             if status.get("status") == "DONE":
                 if "error" in status:
                     raise Exception(f"GCE start operation failed: {status['error']}")
+                t_op = time.monotonic() - t0
+                logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
                 break
 
+        # Poll for a valid external IP (may take a few seconds after operation completes)
         instance_url = (
             f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
         )
-        token = _get_gce_access_token()
-        inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-        instance = inst_resp.json()
-        try:
-            return instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        except (KeyError, IndexError):
-            return "unknown"
+        ip = None
+        for attempt in range(6):
+            token = _get_gce_access_token()
+            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+            instance = inst_resp.json()
+            try:
+                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                if candidate and candidate != "unknown":
+                    ip = candidate
+                    t_ip = time.monotonic() - t0
+                    logger.info(f"[vm-start] {vm_name} got IP {ip} on attempt {attempt + 1}: {t_ip:.1f}s total")
+                    break
+            except (KeyError, IndexError):
+                pass
+            if attempt < 5:
+                logger.info(f"[vm-start] {vm_name} no IP yet, retrying ({attempt + 1}/6)...")
+                await asyncio.sleep(3)
+
+        if not ip:
+            t_fail = time.monotonic() - t0
+            logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
+            ip = "unknown"
+
+        return ip
 
 
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
