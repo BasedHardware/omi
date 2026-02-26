@@ -48,7 +48,6 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Transcription Settings", subtitle: "Configure speech-to-text options", keywords: ["language", "vocabulary", "speech"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.settings"),
         SettingsSearchItem(name: "Language Mode", subtitle: "Choose single or multi-language transcription", keywords: ["language", "multilingual", "single language"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.languagemode"),
         SettingsSearchItem(name: "Custom Vocabulary", subtitle: "Improve recognition of names, brands, and technical terms", keywords: ["vocabulary", "words", "custom words", "dictionary"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.vocabulary"),
-        SettingsSearchItem(name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost", keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.vadgate"),
 
         // Notifications
         SettingsSearchItem(name: "Notification Settings", subtitle: "Control how often you receive notifications", keywords: ["daily summary", "frequency", "alerts"], section: .notifications, advancedSubsection: nil, icon: "bell", settingId: "notifications.settings"),
