@@ -97,7 +97,7 @@ class AgentChatService {
                 '[TIMING] Event: type=$type +${elapsed}ms | text=${text.length > 80 ? '${text.substring(0, 80)}...' : text}');
 
             // Skip init/prewarm messages that arrive before or between queries
-            if (type == 'init' || type == 'prewarm') return;
+            if (type == 'init' || type == 'prewarm' || type == 'prewarm_ack') return;
 
             if (_eventController == null || _eventController!.isClosed) return;
 
