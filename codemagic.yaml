@@ -2002,9 +2002,20 @@ workflows:
           ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
+          echo "=== Binary location diagnostics ==="
+          echo "BINARY_NAME: '$BINARY_NAME'"
+          echo "Desktop/.build/ contents:"
+          ls "Desktop/.build/" 2>/dev/null
+          echo "Desktop/.build/release/ contents:"
+          ls "Desktop/.build/release/" 2>/dev/null | grep -v "\.build\|\.o$\|\.d$" | head -30 || echo "  (not found)"
+          echo "Desktop/.build/arm64-apple-macosx/release/ contents:"
+          ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | grep -v "\.build\|\.o$\|\.d$" | head -30 || echo "  (not found)"
+          echo "Desktop/.build/x86_64-apple-macosx/release/ contents:"
+          ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | grep -v "\.build\|\.o$\|\.d$" | head -30 || echo "  (not found)"
+          echo "=== End diagnostics ==="
+
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
-            ls "Desktop/.build/" 2>/dev/null
             exit 1
           fi
 
