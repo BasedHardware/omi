@@ -366,43 +366,51 @@ async def agent_ws(websocket: WebSocket):
     # Accept WebSocket first so we can send status messages during VM startup
     await websocket.accept()
 
-    # If VM is not ready, try to restart it
-    vm_status = vm.get("status", "")
-    if vm_status != "ready" or not vm.get("ip"):
+    vm_ip = vm.get("ip")
+    vm_token = vm.get("authToken")
+
+    # Fast path: if Firestore says ready with an IP, try connecting directly (skip GCE check).
+    # Only fall back to GCE check + restart if the VM isn't reachable.
+    if vm.get("status") == "ready" and vm_ip:
+        try:
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"http://{vm_ip}:8080/health")
+                if resp.status_code != 200:
+                    raise Exception(f"health returned {resp.status_code}")
+        except Exception:
+            # VM not reachable — check GCE and restart if needed
+            logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
+            await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
+            vm = await _ensure_vm_running(uid, vm)
+            if not vm or vm.get("status") != "ready" or not vm.get("ip"):
+                await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
+                await websocket.close(code=4002, reason="VM startup failed")
+                return
+            vm_ip = vm["ip"]
+            vm_token = vm["authToken"]
+            # Wait for VM to be healthy after restart
+            healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
+            if not healthy:
+                await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
+                await websocket.close(code=4003, reason="VM not healthy")
+                return
+    else:
+        # No IP or not ready — must restart
         await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
         vm = await _ensure_vm_running(uid, vm)
         if not vm or vm.get("status") != "ready" or not vm.get("ip"):
             await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
             await websocket.close(code=4002, reason="VM startup failed")
             return
-    else:
-        # VM says ready — verify GCE status in case it auto-stopped
-        vm_name = vm.get("vmName")
-        zone = vm.get("zone", "us-central1-a")
-        try:
-            gce_status = await _check_gce_status(vm_name, zone)
-            if gce_status in ("TERMINATED", "STOPPED"):
-                await websocket.send_text(json.dumps({"type": "status", "message": "Starting your agent VM..."}))
-                vm = await _ensure_vm_running(uid, vm)
-                if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                    await websocket.send_text(json.dumps({"type": "error", "message": "Failed to start agent VM"}))
-                    await websocket.close(code=4002, reason="VM startup failed")
-                    return
-        except Exception as e:
-            logger.warning(f"[agent-proxy] uid={uid} GCE status check failed, proceeding: {e}")
+        vm_ip = vm["ip"]
+        vm_token = vm["authToken"]
+        healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
+        if not healthy:
+            await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
+            await websocket.close(code=4003, reason="VM not healthy")
+            return
 
-    vm_ip = vm["ip"]
-    vm_token = vm["authToken"]
     vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
-
-    # Wait for VM to be healthy before connecting WebSocket
-    await websocket.send_text(json.dumps({"type": "status", "message": "Connecting to your agent..."}))
-    healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
-    if not healthy:
-        logger.error(f"[agent-proxy] uid={uid} VM {vm_ip} never became healthy")
-        await websocket.send_text(json.dumps({"type": "error", "message": "Agent VM is not responding"}))
-        await websocket.close(code=4003, reason="VM not healthy")
-        return
 
     # Get or create the default chat session so messages are linked properly
     chat_session = await asyncio.to_thread(_get_or_create_chat_session, uid)
