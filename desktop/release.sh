@@ -350,7 +350,7 @@ ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR" ]; then
     cd "$ACP_BRIDGE_DIR"
     npm install --no-fund --no-audit
-    npx tsc
+    npm run build --silent
     cd - > /dev/null
     echo "  ✓ acp-bridge built"
 else
