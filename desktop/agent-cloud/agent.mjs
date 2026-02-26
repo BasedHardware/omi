@@ -50,8 +50,12 @@ const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 let lastActivityAt = Date.now();
 
 // --- Session pre-warm ---
-let warmSessionId = null;
-let warmSessionReady = false;
+// Uses query() with a controllable AsyncIterable as the prompt.
+// This spawns the subprocess + connects MCP servers (~2-3s) but does NOT make
+// any Claude API call until a real user message is pushed into the stream.
+// The subprocess stays alive between queries, eliminating spawn + MCP overhead.
+let warmState = null; // { inputStream, abortController, ready, onMessage, sessionId }
+let prewarmInProgress = false;
 
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
@@ -396,64 +400,143 @@ function rebuildMcpServer() {
 }
 
 // --- Session Pre-warm ---
-// Fires a lightweight query to create a warm Claude session with subprocess + MCP servers connected.
-// Subsequent queries reuse the sessionId, skipping subprocess spawn + MCP setup (~2-3s savings).
-// Must use the same model and MCP config as real queries so the warm subprocess is reusable.
+// Uses query() with a controllable AsyncIterable prompt. This spawns the Claude Code
+// subprocess and connects all MCP servers (~2-3s) but makes NO Claude API call.
+// The subprocess stays alive, so subsequent queries skip the ~2-3s spawn + MCP overhead.
 
-let prewarmInProgress = false;
+function createControllableStream() {
+  const queue = [];
+  let resolve = null;
+  let done = false;
+
+  return {
+    [Symbol.asyncIterator]() { return this; },
+    next() {
+      if (queue.length > 0) return Promise.resolve({ done: false, value: queue.shift() });
+      if (done) return Promise.resolve({ done: true, value: undefined });
+      return new Promise((r) => { resolve = r; });
+    },
+    push(msg) {
+      if (resolve) {
+        const r = resolve;
+        resolve = null;
+        r({ done: false, value: msg });
+      } else {
+        queue.push(msg);
+      }
+    },
+    end() {
+      done = true;
+      if (resolve) {
+        const r = resolve;
+        resolve = null;
+        r({ done: true, value: undefined });
+      }
+    },
+  };
+}
+
+function destroyWarmSession() {
+  if (warmState) {
+    console.log("[prewarm] Destroying warm session");
+    try { warmState.abortController.abort(); } catch {}
+    try { warmState.inputStream.end(); } catch {}
+    warmState = null;
+  }
+}
 
 async function prewarmSession() {
   if (!isDatabaseReady() || !omiServer || !defaultSystemPrompt) return;
-  if (prewarmInProgress) return;
+  if (prewarmInProgress || warmState?.ready) return;
+
+  destroyWarmSession();
   prewarmInProgress = true;
 
   const t0 = Date.now();
-  console.log("[prewarm] Starting session pre-warm...");
+  console.log("[prewarm] Starting (subprocess + MCP only, no API call)...");
 
   try {
+    const inputStream = createControllableStream();
     const abortController = new AbortController();
-    const options = {
-      model: "claude-opus-4-6",
+
+    const state = {
+      inputStream,
       abortController,
-      systemPrompt: defaultSystemPrompt,
-      allowedTools: [
-        "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
-      ],
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
-      maxTurns: 1,
-      cwd: process.env.HOME || "/",
-      mcpServers: {
-        "omi-tools": omiServer,
-        "playwright": {
-          command: process.execPath,
-          args: [
-            playwrightCli,
-            "--user-data-dir", join(__dirname, "chrome-profile"),
-            "--headless",
-            "--no-sandbox",
-          ],
+      ready: false,
+      onMessage: null,
+      sessionId: "",
+    };
+    warmState = state;
+
+    const q = query({
+      prompt: inputStream,
+      options: {
+        model: "claude-opus-4-6",
+        abortController,
+        systemPrompt: defaultSystemPrompt,
+        allowedTools: [
+          "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
+        ],
+        permissionMode: "bypassPermissions",
+        allowDangerouslySkipPermissions: true,
+        maxTurns: undefined,
+        cwd: process.env.HOME || "/",
+        mcpServers: {
+          "omi-tools": omiServer,
+          "playwright": {
+            command: process.execPath,
+            args: [
+              playwrightCli,
+              "--user-data-dir", join(__dirname, "chrome-profile"),
+              "--headless",
+              "--no-sandbox",
+            ],
+          },
         },
       },
-    };
+    });
 
-    const q = query({ prompt: "ready", options });
-
-    for await (const message of q) {
-      if (message.type === "system" && "session_id" in message) {
-        warmSessionId = message.session_id;
+    // Background consumer — runs until session ends, forwards messages to handler
+    (async () => {
+      try {
+        for await (const msg of q) {
+          if (msg.type === "system" && msg.subtype === "init") {
+            state.sessionId = msg.session_id;
+            if (!state.ready) {
+              state.ready = true;
+              console.log(`[prewarm] Ready in ${Date.now() - t0}ms (sessionId: ${state.sessionId.slice(0, 8)}...) — no API call made`);
+            }
+          }
+          if (state.onMessage) {
+            state.onMessage(msg);
+          }
+        }
+      } catch (err) {
+        if (!err.message?.includes('aborted')) {
+          console.log(`[prewarm] Consumer error: ${err.message}`);
+        }
+      } finally {
+        console.log("[prewarm] Session ended, will re-warm");
+        if (warmState === state) warmState = null;
+        prewarmInProgress = false;
+        // Auto re-warm after session ends
+        setTimeout(() => prewarmSession().catch(() => {}), 1000);
       }
-      if (message.type === "result") {
-        break;
-      }
-    }
+    })();
 
-    warmSessionReady = !!warmSessionId;
-    console.log(`[prewarm] Session ready in ${Date.now() - t0}ms (sessionId: ${warmSessionId?.slice(0, 8)}...)`);
+    // Wait for subprocess ready (init message)
+    await new Promise((resolve, reject) => {
+      const check = setInterval(() => {
+        if (state.ready) { clearInterval(check); resolve(); }
+      }, 50);
+      setTimeout(() => {
+        clearInterval(check);
+        if (!state.ready) reject(new Error("Pre-warm timeout (30s)"));
+      }, 30000);
+    });
   } catch (err) {
     console.log(`[prewarm] Failed: ${err.message}`);
-    warmSessionId = null;
-    warmSessionReady = false;
+    destroyWarmSession();
   } finally {
     prewarmInProgress = false;
   }
@@ -461,38 +544,151 @@ async function prewarmSession() {
 
 // --- Shared Agent Query Handler ---
 
+function processMessage(message, state, send) {
+  switch (message.type) {
+    case "system":
+      if (message.subtype === "init" && message.session_id) {
+        state.sessionId = message.session_id;
+        send({ type: "init", sessionId: state.sessionId });
+      }
+      break;
+
+    case "stream_event": {
+      const event = message.event;
+
+      if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+        const name = event.content_block.name;
+        state.pendingTools.push(name);
+        send({ type: "tool_activity", name, status: "started" });
+      }
+
+      if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+        if (state.pendingTools.length > 0) {
+          for (const name of state.pendingTools) {
+            send({ type: "tool_activity", name, status: "completed" });
+          }
+          state.pendingTools.length = 0;
+        }
+        const text = event.delta.text;
+        state.fullText += text;
+        send({ type: "text_delta", text });
+      }
+      break;
+    }
+
+    case "assistant": {
+      const content = message.message?.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "text" && typeof block.text === "string") {
+            if (!state.fullText.includes(block.text)) {
+              state.fullText += block.text;
+              send({ type: "text_delta", text: block.text });
+            }
+          }
+        }
+      }
+      break;
+    }
+
+    case "result": {
+      for (const name of state.pendingTools) {
+        send({ type: "tool_activity", name, status: "completed" });
+      }
+      state.pendingTools.length = 0;
+
+      if (message.subtype === "success") {
+        state.costUsd = message.total_cost_usd || 0;
+        if (message.result) {
+          const remaining = message.result.replace(state.fullText, "").trim();
+          if (remaining) {
+            send({ type: "text_delta", text: remaining });
+            state.fullText += remaining;
+          }
+        }
+      } else {
+        const errors = message.errors || [];
+        send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
+      }
+      break;
+    }
+  }
+}
+
 async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
   if (!isDatabaseReady()) {
     send({ type: "error", message: "Database not available. Upload omi.db first." });
     return { text: "", sessionId: "", costUsd: 0 };
   }
 
-  let sessionId = "";
-  let fullText = "";
-  let costUsd = 0;
-  const pendingTools = [];
-
-  // Reuse warm session if available (saves ~2-3s on subprocess + MCP setup)
-  const useWarmSession = warmSessionReady && warmSessionId;
-  if (useWarmSession) {
-    console.log(`[query] Reusing warm session ${warmSessionId.slice(0, 8)}...`);
-    warmSessionReady = false; // Consume the warm session
+  // Try warm session (subprocess already running, MCP connected — no spawn overhead)
+  if (warmState?.ready && !systemPrompt && !cwd) {
+    try {
+      return await handleWarmQuery({ prompt, send, abortController });
+    } catch (err) {
+      console.log(`[query] Warm query failed: ${err.message}, falling back to cold start`);
+      destroyWarmSession();
+    }
   }
+
+  // Cold start — spawns new subprocess + connects MCP
+  console.log("[query] Cold start (no warm session available)");
+  return handleColdQuery({ prompt, systemPrompt, cwd, send, abortController });
+}
+
+// Use the pre-warmed subprocess — pushes user message into the warm session's input stream
+async function handleWarmQuery({ prompt, send, abortController }) {
+  const state = warmState;
+  console.log(`[query] Using warm session ${state.sessionId.slice(0, 8)}...`);
+
+  const qState = { sessionId: state.sessionId, fullText: "", costUsd: 0, pendingTools: [] };
+  send({ type: "init", sessionId: qState.sessionId });
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => { state.onMessage = null; };
+
+    // Handle abort
+    const onAbort = () => {
+      cleanup();
+      destroyWarmSession(); // Kill subprocess on abort, re-warm will happen automatically
+      resolve({ text: qState.fullText, sessionId: qState.sessionId, costUsd: qState.costUsd });
+    };
+    if (abortController.signal.aborted) { onAbort(); return; }
+    abortController.signal.addEventListener("abort", onAbort, { once: true });
+
+    // Forward messages from warm session consumer to WebSocket
+    state.onMessage = (message) => {
+      if (abortController.signal.aborted) return;
+
+      processMessage(message, qState, send);
+
+      if (message.type === "result") {
+        cleanup();
+        abortController.signal.removeEventListener("abort", onAbort);
+        resolve({ text: qState.fullText, sessionId: qState.sessionId, costUsd: qState.costUsd });
+      }
+    };
+
+    // Push user message into the warm subprocess's stdin
+    state.inputStream.push({
+      type: "user",
+      session_id: "",
+      message: { role: "user", content: [{ type: "text", text: prompt }] },
+      parent_tool_use_id: null,
+    });
+  });
+}
+
+// Cold start — spawns a new subprocess (fallback when no warm session available)
+async function handleColdQuery({ prompt, systemPrompt, cwd, send, abortController }) {
+  const qState = { sessionId: "", fullText: "", costUsd: 0, pendingTools: [] };
 
   const options = {
     model: "claude-opus-4-6",
     abortController,
-    ...(useWarmSession ? { sessionId: warmSessionId } : {}),
     systemPrompt: systemPrompt || defaultSystemPrompt,
     allowedTools: [
-      "Read",
-      "Write",
-      "Edit",
-      "Bash",
-      "Glob",
-      "Grep",
-      "WebSearch",
-      "WebFetch",
+      "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
     ],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
@@ -512,105 +708,14 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     },
   };
 
-  async function runQuery(opts) {
-    const q = query({ prompt, options: opts });
+  const q = query({ prompt, options });
 
-    for await (const message of q) {
-      if (abortController.signal.aborted) break;
-
-      switch (message.type) {
-        case "system":
-          if ("session_id" in message) {
-            sessionId = message.session_id;
-            send({ type: "init", sessionId });
-          }
-          break;
-
-        case "stream_event": {
-          const event = message.event;
-
-          if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
-            const name = event.content_block.name;
-            pendingTools.push(name);
-            send({ type: "tool_activity", name, status: "started" });
-          }
-
-          if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
-            if (pendingTools.length > 0) {
-              for (const name of pendingTools) {
-                send({ type: "tool_activity", name, status: "completed" });
-              }
-              pendingTools.length = 0;
-            }
-            const text = event.delta.text;
-            fullText += text;
-            send({ type: "text_delta", text });
-          }
-          break;
-        }
-
-        case "assistant": {
-          // Fallback: if streaming didn't capture text (e.g. after tool calls),
-          // extract it from the complete assistant message
-          const content = message.message?.content;
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === "text" && typeof block.text === "string") {
-                // Check if this text was already sent via stream_event deltas
-                if (!fullText.includes(block.text)) {
-                  fullText += block.text;
-                  send({ type: "text_delta", text: block.text });
-                }
-              }
-            }
-          }
-          break;
-        }
-
-        case "result": {
-          for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
-          }
-          pendingTools.length = 0;
-
-          if (message.subtype === "success") {
-            costUsd = message.total_cost_usd || 0;
-            // Send any final text that wasn't captured during streaming
-            if (message.result) {
-              const remaining = message.result.replace(fullText, "").trim();
-              if (remaining) {
-                send({ type: "text_delta", text: remaining });
-                fullText += remaining;
-              }
-            }
-          } else {
-            const errors = message.errors || [];
-            send({ type: "error", message: `Agent error (${message.subtype}): ${errors.join(", ")}` });
-          }
-          break;
-        }
-      }
-    }
+  for await (const message of q) {
+    if (abortController.signal.aborted) break;
+    processMessage(message, qState, send);
   }
 
-  try {
-    await runQuery(options);
-  } catch (err) {
-    // If the warm session's process died, retry with a fresh session
-    if (useWarmSession && (err.message?.includes('exited with code') || err.message?.includes('not ready'))) {
-      console.log(`[query] Warm session crashed: ${err.message}, retrying fresh...`);
-      warmSessionId = null;
-      warmSessionReady = false;
-      fullText = "";
-      pendingTools.length = 0;
-      delete options.sessionId;
-      await runQuery(options);
-    } else {
-      throw err;
-    }
-  }
-
-  return { text: fullText, sessionId, costUsd };
+  return { text: qState.fullText, sessionId: qState.sessionId, costUsd: qState.costUsd };
 }
 
 // --- Mode: CLI ---
@@ -1125,8 +1230,6 @@ function startServer() {
             if (activeAbort === abortController) {
               activeAbort = null;
             }
-            // Re-warm a session for the next query (fire-and-forget)
-            prewarmSession().catch(() => {});
           }
           break;
         }
