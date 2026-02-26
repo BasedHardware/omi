@@ -422,6 +422,17 @@ async def agent_ws(websocket: WebSocket):
         async with websockets.connect(vm_uri, ping_interval=600, ping_timeout=600) as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
 
+            # Send Firebase token to VM so it can fetch backend tools (calendar, gmail, etc.)
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.post(
+                        f"http://{vm_ip}:8080/auth?token={vm_token}",
+                        json={"firebaseToken": token},
+                    )
+                    logger.info(f"[agent-proxy] uid={uid} sent Firebase token to VM")
+            except Exception as e:
+                logger.warning(f"[agent-proxy] uid={uid} failed to send Firebase token: {e}")
+
             async def phone_to_vm():
                 try:
                     async for msg in websocket.iter_text():
