@@ -33,6 +33,11 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
 
       - name: Google Auth
         id: auth
@@ -71,4 +76,4 @@ jobs:
       - name: Show pod status
         if: always()
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app=${{ vars.ENV }}-omi-backend-listen --no-headers
+          kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-backend-listen --no-headers
