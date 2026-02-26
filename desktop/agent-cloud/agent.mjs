@@ -6,7 +6,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, createWriteStream, statSync, renameSync, unlinkSync, writeFileSync, readFileSync } from "fs";
 import { createInflateRaw, createGunzip } from "zlib";
 import { homedir } from "os";
 
@@ -47,7 +47,29 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
 // --- Idle auto-stop ---
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;   // 30 minutes
 const IDLE_CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
-let lastActivityAt = Date.now();
+const ACTIVITY_FILE = join(dirname(DB_PATH), ".last_activity");
+
+// Persist lastActivityAt across process restarts (hot-reload, systemd restart).
+// Only user-initiated actions (queries, keepalive pings) update this.
+function loadLastActivity() {
+  try {
+    if (existsSync(ACTIVITY_FILE)) {
+      const ts = parseInt(readFileSync(ACTIVITY_FILE, "utf8").trim(), 10);
+      if (!isNaN(ts) && ts > 0) return ts;
+    }
+  } catch {}
+  // First boot — write timestamp so hot-reload restarts don't reset the 30-min window
+  const now = Date.now();
+  try { writeFileSync(ACTIVITY_FILE, String(now)); } catch {}
+  return now;
+}
+
+function saveLastActivity(ts) {
+  lastActivityAt = ts;
+  try { writeFileSync(ACTIVITY_FILE, String(ts)); } catch {}
+}
+
+let lastActivityAt = loadLastActivity();
 
 // Tables allowed for incremental sync from desktop
 const SYNC_TABLES = new Set([
@@ -561,6 +583,7 @@ function verifyAuth(req) {
 
 async function checkIdleAndStop() {
   const idleMs = Date.now() - lastActivityAt;
+  console.log(`[server] Idle check: ${Math.round(idleMs / 60000)}m since last user activity (threshold: ${IDLE_TIMEOUT_MS / 60000}m)`);
   if (idleMs < IDLE_TIMEOUT_MS) return;
 
   console.log(`[server] Idle for ${Math.round(idleMs / 60000)} minutes — shutting down VM...`);
@@ -760,7 +783,6 @@ function startServer() {
         renameSync(tmpPath, DB_PATH);
 
         const finalSize = statSync(DB_PATH).size;
-        lastActivityAt = Date.now();
         log(`Upload complete: ${(bytesReceived / 1024 / 1024).toFixed(1)} MB received → ${(finalSize / 1024 / 1024).toFixed(1)} MB on disk`);
 
         // Re-open the database
@@ -835,7 +857,6 @@ function startServer() {
 
           const isFirst = userFirebaseToken === null;
           userFirebaseToken = firebaseToken;
-          lastActivityAt = Date.now();
           log(`Firebase token ${isFirst ? "received" : "refreshed"}`);
 
           // On first token, fetch backend tools
@@ -861,7 +882,7 @@ function startServer() {
         res.end(JSON.stringify({ error: "Unauthorized" }));
         return;
       }
-      lastActivityAt = Date.now();
+      saveLastActivity(Date.now());
       log("Keepalive ping received");
       // Keep warm session alive — re-warm if it died
       if (!warmState?.ready && !prewarmInProgress) {
@@ -940,7 +961,6 @@ function startServer() {
           // FTS is kept in sync by triggers on the content tables.
           // INSERT OR REPLACE fires DELETE then INSERT triggers, which update FTS automatically.
 
-          lastActivityAt = Date.now();
           log(`Sync: ${rows.length} rows → ${table}`);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ applied: rows.length, table }));
@@ -991,7 +1011,7 @@ function startServer() {
 
       switch (msg.type) {
         case "query": {
-          lastActivityAt = Date.now();
+          saveLastActivity(Date.now());
           // Cancel any prior query
           if (activeAbort) {
             activeAbort.abort();

@@ -41,8 +41,20 @@ ingress:
   tls: []
 
 env:
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/secrets/google-credentials.json"
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+
+volumes:
+  - name: gcp-credentials
+    secret:
+      secretName: dev-agent-proxy-gcp-credentials
+
+volumeMounts:
+  - name: gcp-credentials
+    mountPath: /secrets
+    readOnly: true
 
 resources:
   requests:
