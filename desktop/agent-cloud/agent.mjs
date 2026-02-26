@@ -497,20 +497,12 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
       }
 
       case "assistant": {
-        // Extract tool_use and text blocks from the complete assistant message
+        // Fallback: if streaming didn't capture text (e.g. after tool calls),
+        // extract it from the complete assistant message
         const content = message.message?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
-            if (block.type === "tool_use") {
-              send({ type: "tool_activity", name: block.name, status: "started" });
-              pendingTools.push(block.name);
-            } else if (block.type === "text" && typeof block.text === "string") {
-              if (pendingTools.length > 0) {
-                for (const name of pendingTools) {
-                  send({ type: "tool_activity", name, status: "completed" });
-                }
-                pendingTools.length = 0;
-              }
+            if (block.type === "text" && typeof block.text === "string") {
               // Check if this text was already sent via stream_event deltas
               if (!fullText.includes(block.text)) {
                 fullText += block.text;

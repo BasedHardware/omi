@@ -492,14 +492,16 @@ async def agent_ws(websocket: WebSocket):
                                 else:
                                     # Subsequent queries: Claude session already has context
                                     logger.info(f"[agent-proxy] uid={uid} follow-up query (session has context)")
-                                # Always save user message
-                                await asyncio.to_thread(
-                                    _save_message,
-                                    uid,
-                                    prompt,
-                                    'human',
-                                    chat_session_id,
-                                    data_protection_level,
+                                # Save user message in background — no need to block VM forwarding
+                                asyncio.create_task(
+                                    asyncio.to_thread(
+                                        _save_message,
+                                        uid,
+                                        prompt,
+                                        'human',
+                                        chat_session_id,
+                                        data_protection_level,
+                                    )
                                 )
                         except (json.JSONDecodeError, Exception) as e:
                             logger.warning(f"[agent-proxy] failed to process message: {e}")

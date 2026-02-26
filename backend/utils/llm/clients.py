@@ -35,9 +35,9 @@ llm_high_stream = ChatOpenAI(
     temperature=1,
     callbacks=[_usage_callback],
 )
-llm_medium = ChatOpenAI(model='gpt-4.1', callbacks=[_usage_callback])
+llm_medium = ChatOpenAI(model='gpt-5.2', callbacks=[_usage_callback])
 llm_medium_stream = ChatOpenAI(
-    model='gpt-4.1',
+    model='gpt-5.2',
     streaming=True,
     stream_options={"include_usage": True},
     callbacks=[_usage_callback],
