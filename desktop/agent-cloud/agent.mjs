@@ -65,6 +65,11 @@ const playwrightCli = join(__dirname, "node_modules", "@playwright", "mcp", "cli
 let userFirebaseToken = null;
 let backendTools = [];
 
+// --- Session pre-warming: reuse Claude SDK sessions across queries ---
+let warmSessionId = null;
+let prewarmAbort = null;
+let prewarmInProgress = false;
+
 // --- Database Setup (lazy — opened on first use or after upload) ---
 let db = null;
 let defaultSystemPrompt = null;
@@ -385,7 +390,7 @@ function rebuildMcpServer() {
 
 // --- Shared Agent Query Handler ---
 
-async function handleQuery({ prompt, systemPrompt, cwd, send, abortController }) {
+async function handleQuery({ prompt, systemPrompt, cwd, send, abortController, resumeSessionId }) {
   if (!isDatabaseReady()) {
     send({ type: "error", message: "Database not available. Upload omi.db first." });
     return { text: "", sessionId: "", costUsd: 0 };
@@ -413,6 +418,7 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     maxTurns: undefined,
+    ...(resumeSessionId ? { resume: resumeSessionId } : {}),
     cwd: cwd || process.env.HOME || "/",
     mcpServers: {
       "omi-tools": omiServer,
@@ -516,6 +522,61 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   }
 
   return { text: fullText, sessionId, costUsd };
+}
+
+// --- Session Pre-warming ---
+
+async function handlePrewarm(abortController) {
+  if (!isDatabaseReady()) {
+    console.log("[prewarm] Database not ready, skipping");
+    return null;
+  }
+
+  console.log("[prewarm] Starting session pre-warm...");
+  const startTime = Date.now();
+
+  const options = {
+    model: "claude-opus-4-6",
+    abortController,
+    systemPrompt: defaultSystemPrompt,
+    allowedTools: [
+      "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
+    ],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: 1,
+    cwd: process.env.HOME || "/",
+    mcpServers: {
+      "omi-tools": omiServer,
+      "playwright": {
+        command: process.execPath,
+        args: [
+          playwrightCli,
+          "--user-data-dir", join(__dirname, "chrome-profile"),
+          "--headless",
+          "--no-sandbox",
+        ],
+      },
+    },
+  };
+
+  let sessionId = null;
+  const q = query({ prompt: "ready", options });
+
+  for await (const message of q) {
+    if (abortController.signal.aborted) break;
+    if (message.type === "system" && "session_id" in message) {
+      sessionId = message.session_id;
+    }
+  }
+
+  const elapsed = Date.now() - startTime;
+  if (sessionId) {
+    console.log(`[prewarm] Session ready: ${sessionId} (${elapsed}ms)`);
+  } else {
+    console.log(`[prewarm] No session ID returned (${elapsed}ms)`);
+  }
+  return sessionId;
 }
 
 // --- Mode: CLI ---
@@ -1000,10 +1061,23 @@ function startServer() {
             activeAbort = null;
           }
 
+          // If prewarm is still running, abort it
+          if (prewarmInProgress && prewarmAbort) {
+            log("Aborting in-progress prewarm for incoming query");
+            prewarmAbort.abort();
+            prewarmAbort = null;
+            prewarmInProgress = false;
+          }
+
           const abortController = new AbortController();
           activeAbort = abortController;
 
-          log(`Query: ${msg.prompt?.slice(0, 100)}`);
+          const resumeId = warmSessionId;
+          if (resumeId) {
+            log(`Query (resuming ${resumeId}): ${msg.prompt?.slice(0, 100)}`);
+          } else {
+            log(`Query: ${msg.prompt?.slice(0, 100)}`);
+          }
 
           try {
             const result = await handleQuery({
@@ -1012,21 +1086,82 @@ function startServer() {
               cwd: msg.cwd,
               send,
               abortController,
+              resumeSessionId: resumeId,
             });
 
             if (!abortController.signal.aborted) {
+              // Update warm session for next query
+              if (result.sessionId) {
+                warmSessionId = result.sessionId;
+              }
               send({ type: "result", text: result.text, sessionId: result.sessionId, costUsd: result.costUsd });
             }
           } catch (err) {
             if (!abortController.signal.aborted) {
-              log(`Query error: ${err.message}`);
-              send({ type: "error", message: err.message });
+              // If resume failed, retry once without resume
+              if (resumeId) {
+                log(`Query with resume failed: ${err.message}, retrying fresh...`);
+                warmSessionId = null;
+                try {
+                  const retry = await handleQuery({
+                    prompt: msg.prompt,
+                    systemPrompt: msg.systemPrompt,
+                    cwd: msg.cwd,
+                    send,
+                    abortController,
+                  });
+                  if (!abortController.signal.aborted) {
+                    if (retry.sessionId) {
+                      warmSessionId = retry.sessionId;
+                    }
+                    send({ type: "result", text: retry.text, sessionId: retry.sessionId, costUsd: retry.costUsd });
+                  }
+                } catch (retryErr) {
+                  if (!abortController.signal.aborted) {
+                    log(`Query retry also failed: ${retryErr.message}`);
+                    send({ type: "error", message: retryErr.message });
+                  }
+                }
+              } else {
+                log(`Query error: ${err.message}`);
+                send({ type: "error", message: err.message });
+              }
             }
           } finally {
             if (activeAbort === abortController) {
               activeAbort = null;
             }
           }
+          break;
+        }
+
+        case "prewarm": {
+          // Pre-warm a Claude session so the first query is faster
+          if (warmSessionId || prewarmInProgress) {
+            log(`Prewarm: ${warmSessionId ? 'session already warm' : 'already in progress'}`);
+            send({ type: "prewarm_ack", success: true });
+            break;
+          }
+
+          prewarmAbort = new AbortController();
+          prewarmInProgress = true;
+          log("Prewarm: starting...");
+
+          handlePrewarm(prewarmAbort).then((sessionId) => {
+            prewarmInProgress = false;
+            prewarmAbort = null;
+            if (sessionId) {
+              warmSessionId = sessionId;
+              send({ type: "prewarm_ack", success: true });
+            } else {
+              send({ type: "prewarm_ack", success: false });
+            }
+          }).catch((err) => {
+            prewarmInProgress = false;
+            prewarmAbort = null;
+            log(`Prewarm error: ${err.message}`);
+            send({ type: "prewarm_ack", success: false });
+          });
           break;
         }
 
