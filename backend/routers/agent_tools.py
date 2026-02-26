@@ -23,6 +23,7 @@ from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tools.app_tools import load_app_tools
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         if resp.status_code != 200:
-            logger.error(f"[gce] Failed to get instance status: {resp.status_code} {resp.text}")
+            logger.error(f"[gce] Failed to get instance status: {resp.status_code} {sanitize(resp.text)}")
             return "UNKNOWN"
         return resp.json().get("status", "UNKNOWN")
 
@@ -64,7 +65,7 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
         # Start the VM
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
-            raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+            raise Exception(f"GCE start failed: {resp.status_code} {sanitize(resp.text)}")
 
         op_name = resp.json().get("name")
         if not op_name:
@@ -126,7 +127,7 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
-    logger.info(f"[vm-status] uid={uid} vm={vm}")
+    logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
     if not vm or vm.get("status") != "ready":
         return {"has_vm": False}
     return {
