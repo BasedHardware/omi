@@ -373,6 +373,9 @@ async function fetchAndRegisterBackendTools() {
     // Rebuild MCP server with all tools
     rebuildMcpServer();
     console.log(`[backend-tools] Registered ${backendTools.length} backend tools`);
+
+    // Pre-warm a session now that all tools + MCP are ready
+    prewarmSession().catch(() => {});
   } catch (err) {
     console.log(`[backend-tools] Error fetching tools: ${err.message}`);
   }
@@ -388,11 +391,16 @@ function rebuildMcpServer() {
 }
 
 // --- Session Pre-warm ---
-// Fires a lightweight query to create a warm Claude session with MCP servers connected.
+// Fires a lightweight query to create a warm Claude session with subprocess + MCP servers connected.
 // Subsequent queries reuse the sessionId, skipping subprocess spawn + MCP setup (~2-3s savings).
+// Must use the same model and MCP config as real queries so the warm subprocess is reusable.
+
+let prewarmInProgress = false;
 
 async function prewarmSession() {
-  if (!isDatabaseReady() || !omiServer) return;
+  if (!isDatabaseReady() || !omiServer || !defaultSystemPrompt) return;
+  if (prewarmInProgress) return;
+  prewarmInProgress = true;
 
   const t0 = Date.now();
   console.log("[prewarm] Starting session pre-warm...");
@@ -400,20 +408,31 @@ async function prewarmSession() {
   try {
     const abortController = new AbortController();
     const options = {
-      model: "claude-sonnet-4-6",  // Use cheaper model for pre-warm
+      model: "claude-opus-4-6",
       abortController,
-      systemPrompt: "You are a helpful assistant. Respond with just 'ready' and nothing else.",
-      allowedTools: [],
+      systemPrompt: defaultSystemPrompt,
+      allowedTools: [
+        "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
+      ],
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       maxTurns: 1,
       cwd: process.env.HOME || "/",
       mcpServers: {
         "omi-tools": omiServer,
+        "playwright": {
+          command: process.execPath,
+          args: [
+            playwrightCli,
+            "--user-data-dir", join(__dirname, "chrome-profile"),
+            "--headless",
+            "--no-sandbox",
+          ],
+        },
       },
     };
 
-    const q = query({ prompt: "ready?", options });
+    const q = query({ prompt: "ready", options });
 
     for await (const message of q) {
       if (message.type === "system" && "session_id" in message) {
@@ -430,6 +449,8 @@ async function prewarmSession() {
     console.log(`[prewarm] Failed: ${err.message}`);
     warmSessionId = null;
     warmSessionReady = false;
+  } finally {
+    prewarmInProgress = false;
   }
 }
 
@@ -822,6 +843,10 @@ function startServer() {
         // Re-open the database
         if (openDatabase()) {
           log("Database loaded after upload");
+          // Pre-warm if backend tools are already loaded (MCP server is ready)
+          if (backendTools.length > 0) {
+            prewarmSession().catch(() => {});
+          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
             status: "ok",
@@ -1076,6 +1101,8 @@ function startServer() {
             if (activeAbort === abortController) {
               activeAbort = null;
             }
+            // Re-warm a session for the next query (fire-and-forget)
+            prewarmSession().catch(() => {});
           }
           break;
         }
@@ -1086,6 +1113,11 @@ function startServer() {
             activeAbort.abort();
             activeAbort = null;
           }
+          break;
+
+        case "prewarm":
+          log("Prewarm requested by client");
+          prewarmSession().catch(() => {});
           break;
 
         default:
@@ -1105,8 +1137,9 @@ function startServer() {
       log(`WebSocket error: ${err.message}`);
     });
 
-    // Signal readiness
+    // Signal readiness and trigger pre-warm so session is ready when user sends first message
     send({ type: "init", sessionId: "" });
+    prewarmSession().catch(() => {});
   });
 
   httpServer.listen(PORT, () => {
