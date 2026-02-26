@@ -1867,6 +1867,9 @@ workflows:
         - pattern: "v*-macos"
           include: true
     working_directory: desktop
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
     scripts:
       - name: Extract version and build number from tag
         script: |
@@ -1977,17 +1980,38 @@ workflows:
           fi
           echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
+      - name: Resolve SPM packages
+        script: |
+          # Unset TOOLCHAINS to use Xcode's default toolchain
+          unset TOOLCHAINS
+          echo "Resolving SPM packages (downloads ~673MB of binary artifacts on first run)..."
+          for attempt in 1 2 3; do
+            if xcrun swift package resolve --package-path Desktop; then
+              echo "  Packages resolved on attempt $attempt"
+              echo "  Artifacts: $(ls Desktop/.build/artifacts/ 2>/dev/null | wc -l | tr -d ' ') cached items"
+              break
+            fi
+            echo "  Resolution failed on attempt $attempt"
+            if [ $attempt -lt 3 ]; then
+              echo "  Retrying in 15 seconds..."
+              sleep 15
+            else
+              echo "ERROR: Package resolution failed after 3 attempts"
+              exit 1
+            fi
+          done
+
       - name: Build Swift app (arm64 + x86_64)
         script: |
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
 
-          # Build arm64 first (native on M2).
+          # Build arm64. Use --triple (not --arch) so binary always lands in
+          # arm64-apple-macosx/release/ regardless of the machine's native arch.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --arch arm64
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
 
-          # Use EXPLICIT arch-specific path (not release/ symlink which may not be updated).
           ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           if [ ! -f "$ARM64_PATH" ]; then
             echo "ERROR: arm64 binary not found at $ARM64_PATH"
@@ -1998,9 +2022,9 @@ workflows:
           cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"
           echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
 
-          # Build x86_64 (cross-compile).
+          # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --arch x86_64
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
           X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
           echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
