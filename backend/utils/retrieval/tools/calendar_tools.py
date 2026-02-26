@@ -144,9 +144,7 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             return None
         else:
             error_body = response.text[:200] if response.text else "No error body"
-            logger.error(
-                f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}"
-            )
+            logger.error(f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}")
     except requests.exceptions.RequestException as e:
         logger.error(f"⚠️ Network error searching Other Contacts: {e}")
     except Exception as e:

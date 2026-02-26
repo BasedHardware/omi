@@ -276,7 +276,6 @@ class DeveloperModeProvider extends BaseProvider {
     agentLog('onClaudeAgentChanged($value)');
 
     if (value) {
-      // Enabling — check if VM exists first
       claudeAgentLoading = true;
       notifyListeners();
 
@@ -303,7 +302,6 @@ class DeveloperModeProvider extends BaseProvider {
 
       claudeAgentLoading = false;
     } else {
-      // Disabling — disconnect and revert
       claudeAgentEnabled = false;
       SharedPreferencesUtil().claudeAgentEnabled = false;
       await agentChatService.disconnect();
