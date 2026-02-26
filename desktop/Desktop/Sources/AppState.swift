@@ -1090,13 +1090,13 @@ class AppState: ObservableObject {
                 recordingInputDeviceName = device.displayName
             } else {
                 currentConversationSource = .desktop
-                recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName(preferredDeviceUID: AudioSourceManager.shared.preferredMicrophoneUID)
+                recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName()
             }
 
             // Initialize audio services based on source
             if effectiveSource == .microphone {
                 // Initialize audio capture service
-                audioCaptureService = AudioCaptureService(preferredDeviceUID: AudioSourceManager.shared.preferredMicrophoneUID)
+                audioCaptureService = AudioCaptureService()
 
                 // Initialize audio mixer for combining mic and system audio
                 audioMixer = AudioMixer()

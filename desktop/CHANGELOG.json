@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "11.5",
+      "date": "2026-02-25",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Screen capture soft recovery: fixes broken permissions without wiping your grant",
+        "Fixed phantom menu bar icon that could appear invisible after policy changes",
+        "Rewind timeline auto-refresh no longer destroys expanded transcript or typed notes",
+        "Richer auto-update failure diagnostics for faster debugging"
+      ]
+    },
+    {
       "version": "11.4",
       "date": "2026-02-25",
       "changes": [
