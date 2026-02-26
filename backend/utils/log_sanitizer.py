@@ -74,16 +74,19 @@ def sanitize_pii(value) -> str:
     if value is None:
         return 'None'
     text = str(value)
-    if len(text) > 200:
-        text = text[:200] + '...'
-    # Handle emails first
-    if '@' in text:
-        text = _EMAIL_PATTERN.sub(_mask_email, text)
-        return text
-    # Mask each word in the text
+    truncated = len(text) > 200
+    if truncated:
+        text = text[:200]
+    # Handle emails first, then mask remaining words
+    text = _EMAIL_PATTERN.sub(_mask_email, text)
+    # Mask each word in the text (skip already-masked email domains)
     words = text.split()
     masked = []
     for word in words:
+        # Skip already-masked email addresses (contain @)
+        if '@' in word:
+            masked.append(word)
+            continue
         n = len(word)
         if n <= 4:
             masked.append('***')
@@ -91,7 +94,10 @@ def sanitize_pii(value) -> str:
             masked.append(f'{word[0]}***{word[-1]}')
         else:
             masked.append(f'{word[:2]}***{word[-2:]}')
-    return ' '.join(masked)
+    result = ' '.join(masked)
+    if truncated:
+        result += '...'
+    return result
 
 
 def _mask_token(match: re.Match) -> str:
