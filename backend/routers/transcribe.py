@@ -99,6 +99,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -1460,7 +1461,7 @@ async def _stream_handler(
             )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
-                logger.info(f"  - {data['name']}: {distance:.4f} {uid} {session_id}")
+                logger.info(f"  - {sanitize(data['name'])}: {distance:.4f} {uid} {session_id}")
                 if distance < best_distance:
                     best_distance = distance
                     best_match = (person_id, data['name'])
@@ -1468,7 +1469,7 @@ async def _stream_handler(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 logger.info(
-                    f"Speaker ID: speaker {speaker_id} -> {person_name} (distance={best_distance:.3f}) {uid} {session_id}"
+                    f"Speaker ID: speaker {speaker_id} -> {sanitize(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
                 )
 
                 # Store for session consistency
@@ -1723,7 +1724,7 @@ async def _stream_handler(
         data = chunk_data.get('data')
 
         if not temp_id or not isinstance(index, int) or not isinstance(total, int) or not data:
-            logger.error(f"Invalid image chunk received: {chunk_data} {uid} {session_id}")
+            logger.error(f"Invalid image chunk received: {sanitize(chunk_data)} {uid} {session_id}")
             return
 
         # Cleanup expired chunks periodically
@@ -1971,7 +1972,9 @@ async def _stream_handler(
                                     f"Speaker assignment ignored: missing speaker_id/person_id/person_name. {uid} {session_id}"
                                 )
                     except json.JSONDecodeError:
-                        logger.info(f"Received non-json text message: {message.get('text')} {uid} {session_id}")
+                        logger.info(
+                            f"Received non-json text message: {sanitize(message.get('text'))} {uid} {session_id}"
+                        )
 
         except WebSocketDisconnect:
             logger.error(f"WebSocket disconnected (exception) {uid} {session_id}")
