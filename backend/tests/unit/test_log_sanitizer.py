@@ -2,7 +2,7 @@
 
 import pytest
 
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 
 
 class TestSanitizeShortStrings:
@@ -180,3 +180,39 @@ class TestSanitizeKeyValuePreserved:
         result = sanitize("token=abc123def456ghij")
         assert "token=" in result
         assert "***" in result
+
+
+class TestSanitizePii:
+    """sanitize_pii() always masks PII values, including pure-alpha names."""
+
+    def test_short_name(self):
+        assert sanitize_pii("Bob") == "***"
+
+    def test_medium_name(self):
+        result = sanitize_pii("Alice")
+        assert result == "A***e"
+
+    def test_long_name(self):
+        result = sanitize_pii("Alexander")
+        assert result == "Al***er"
+
+    def test_full_name(self):
+        """Each word is masked independently."""
+        result = sanitize_pii("John Doe")
+        assert "John" not in result
+        assert "Doe" not in result
+        assert "***" in result
+
+    def test_email_via_pii(self):
+        result = sanitize_pii("john.doe@gmail.com")
+        assert "gmail.com" in result
+        assert "john.doe" not in result
+
+    def test_none(self):
+        assert sanitize_pii(None) == "None"
+
+    def test_user_text(self):
+        """User-generated text should be masked."""
+        result = sanitize_pii("Hello this is a private message")
+        assert "Hello" not in result
+        assert "private" not in result
