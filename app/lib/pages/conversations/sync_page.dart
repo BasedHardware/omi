@@ -47,12 +47,10 @@ class WalListItem extends StatelessWidget {
     required this.walIdx,
   });
 
-  double calculateProgress(DateTime? startedAt, int eta) {
-    if (startedAt == null) return 0.0;
-    if (eta == 0) return 0.01;
-
-    final elapsed = DateTime.now().difference(startedAt).inSeconds;
-    final progress = elapsed / eta;
+  double calculateProgress(Wal wal) {
+    if (!wal.isSyncing || wal.syncStartedAt == null) return 0.0;
+    if (wal.storageTotalBytes <= 0) return 0.0;
+    final progress = wal.storageOffset / wal.storageTotalBytes;
     return progress.clamp(0.0, 1.0);
   }
 
@@ -278,7 +276,7 @@ class WalListItem extends StatelessWidget {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(2),
                                 child: LinearProgressIndicator(
-                                  value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
+                                  value: calculateProgress(wal),
                                   backgroundColor: const Color(0xFF3C3C43),
                                   color: wal.syncMethod == SyncMethod.wifi ? Colors.blue : Colors.orange,
                                   minHeight: 3,
