@@ -583,9 +583,9 @@ async def agent_ws(websocket: WebSocket):
 
     except Exception as e:
         logger.error(f"[agent-proxy] uid={uid} vm_connect failed: {e}")
+    finally:
         try:
-            await websocket.close(code=4003, reason="VM connection failed")
+            await websocket.close(code=1000, reason="Session ended")
         except Exception:
             pass
-    finally:
         logger.info(f"[agent-proxy] uid={uid} disconnected")
