@@ -341,9 +341,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              SharedPreferencesUtil().testFlightApiEnvironment = targetEnvironment;
+              await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
               // Force close app so it restarts with new API
               SystemNavigator.pop();
             },
