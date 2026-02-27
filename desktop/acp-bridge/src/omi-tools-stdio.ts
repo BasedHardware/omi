@@ -112,8 +112,7 @@ const isOnboarding = process.env.OMI_ONBOARDING === "true";
 const ONBOARDING_TOOL_NAMES = new Set([
   "check_permission_status",
   "request_permission",
-  "start_file_scan",
-  "get_file_scan_results",
+  "scan_files",
   "set_user_preferences",
   "complete_onboarding",
 ]);
@@ -243,17 +242,8 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     },
   },
   {
-    name: "start_file_scan",
-    description: `Start scanning the user's files in the background. Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications. Returns immediately. Call get_file_scan_results after a few seconds.`,
-    inputSchema: {
-      type: "object" as const,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    name: "get_file_scan_results",
-    description: `Get results of the background file scan. Returns file type breakdown, project indicators (package.json, Cargo.toml, etc.), recently modified files, and installed applications.`,
+    name: "scan_files",
+    description: `Scan the user's files. BLOCKING — waits for the scan to complete before returning. Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications. Returns file type breakdown, project indicators, recent files, installed apps. Also reports which folders were DENIED access by macOS. If folders were denied, call again after the user grants access.`,
     inputSchema: {
       type: "object" as const,
       properties: {},
@@ -461,8 +451,7 @@ async function handleJsonRpc(
       } else if (
         toolName === "check_permission_status" ||
         toolName === "request_permission" ||
-        toolName === "start_file_scan" ||
-        toolName === "get_file_scan_results" ||
+        toolName === "scan_files" ||
         toolName === "set_user_preferences" ||
         toolName === "complete_onboarding"
       ) {
