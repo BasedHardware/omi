@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - NSHostingView sizingOptions access
+
+/// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
+/// NSHostingView is generic so we can't cast to it without knowing Content.
+/// This protocol + extension lets us access sizingOptions through existential dispatch.
+@MainActor
+private protocol HostingSizingConfigurable: AnyObject {
+    var sizingOptions: NSHostingSizingOptions { get set }
+}
+extension NSHostingView: HostingSizingConfigurable {}
+
 struct DesktopHomeView: View {
     @StateObject private var appState = AppState()
     @StateObject private var viewModelContainer = ViewModelContainer()
@@ -240,19 +251,30 @@ struct DesktopHomeView: View {
             }
         }
         .background(OmiColors.backgroundPrimary)
+        .frame(minWidth: 900, minHeight: 600)
         .preferredColorScheme(.dark)
         .tint(OmiColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
-            // Set min size at the AppKit level instead of SwiftUI .frame(minWidth:minHeight:).
-            // The SwiftUI modifier creates a _FlexFrameLayout that forces a full view-tree
-            // sizeThatFits() traversal on every constraint update — ~150 samples per window.
-            // Setting NSWindow.minSize directly enforces the same constraint without any traversal.
+            // Force dark appearance and disable minSize computation on NSHostingView.
+            // By default, every @Published change triggers
+            // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
+            // which traverses the ENTIRE view tree (~200 samples per window per trigger).
+            // Removing .minSize from sizingOptions prevents this full-tree traversal.
+            // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
                     if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
+                        // Remove .minSize from hosting view's sizingOptions
+                        if let contentView = window.contentView {
+                            for subview in contentView.subviews {
+                                if let hosting = subview as? any HostingSizingConfigurable {
+                                    hosting.sizingOptions = [.maxSize]
+                                }
+                            }
+                        }
                     }
                 }
             }
