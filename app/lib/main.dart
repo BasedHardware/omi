@@ -75,6 +75,7 @@ import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
+import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -444,18 +445,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   children: [
                     SafeArea(
                       bottom: false,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
+                      child: GestureDetector(
+                        onTap: () {
+                          MyApp.navigatorKey.currentState?.push(
+                            MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          color: Colors.orange.shade800,
+                          child: Text(
+                            context.l10n.staging.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
                       ),
