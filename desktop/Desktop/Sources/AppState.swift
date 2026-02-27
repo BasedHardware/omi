@@ -88,6 +88,7 @@ class AppState: ObservableObject {
     private var lastNotificationSoundEnabled: Bool?
     private var lastNotificationBadgeEnabled: Bool?
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
+    @Published var isScreenRecordingStale = false  // TCC says yes but capture fails (developer signing changed)
     @Published var hasAutomationPermission = false
     @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
     private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
@@ -104,7 +105,7 @@ class AppState: ObservableObject {
     var missingPermissions: [String] {
         var missing: [String] = []
         if !hasMicrophonePermission { missing.append("Microphone") }
-        if !hasScreenRecordingPermission || isScreenCaptureKitBroken { missing.append("Screen Recording") }
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale { missing.append("Screen Recording") }
         if !hasNotificationPermission { missing.append("Notifications") }
         else if isNotificationBannerDisabled { missing.append("Notification Banners") }
         if !hasAccessibilityPermission || isAccessibilityBroken { missing.append("Accessibility") }
@@ -751,25 +752,32 @@ class AppState: ObservableObject {
         if !tccGranted {
             hasScreenRecordingPermission = false
             isScreenCaptureKitBroken = false
+            isScreenRecordingStale = false
             return
         }
 
         // TCC says granted. If the permission alert is currently showing (permission was
-        // previously false or broken), do a real capture test to verify the stale TCC case
-        // (e.g. after Sparkle update changes code signature). This avoids spawning a
-        // screencapture process on every didBecomeActive when everything is fine.
-        if !hasScreenRecordingPermission || isScreenCaptureKitBroken {
+        // previously false or broken or stale), do a real capture test to verify the stale TCC case
+        // (e.g. after developer account change). This avoids spawning a screencapture process
+        // on every didBecomeActive when everything is fine.
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale {
             let realPermission = ScreenCaptureService.checkPermission()
             hasScreenRecordingPermission = realPermission
 
             // Stale TCC entry from old developer signing: CGPreflight says granted but
-            // actual capture fails. Auto-reset so the user gets prompted to re-grant.
-            if !realPermission {
+            // actual capture fails. The user must toggle OFF then ON in System Settings
+            // to update the code signing requirement (csreq) stored in the TCC database.
+            if !realPermission && !isScreenRecordingStale {
+                log("Screen capture: stale TCC entry detected (developer signing changed)")
+                isScreenRecordingStale = true
+                // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
                 Task.detached {
-                    log("Screen capture: stale TCC entry detected (developer signing changed), auto-resetting...")
                     ScreenCaptureService.ensureLaunchServicesRegistrationSync()
                     _ = ScreenCaptureService.resetScreenCapturePermission()
                 }
+            } else if realPermission {
+                // Permission recovered (user toggled off/on in System Settings)
+                isScreenRecordingStale = false
             }
 
             if isScreenCaptureKitBroken {
