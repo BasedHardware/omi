@@ -747,6 +747,24 @@ class AppState: ObservableObject {
     /// Check screen recording permission status
     func checkScreenRecordingPermission() {
         let tccGranted = CGPreflightScreenCaptureAccess()
+
+        // Detect stale TCC entry from old developer signing (e.g. after developer account change).
+        // CGPreflight returns true from the old entry, but actual capture fails with new signing.
+        // Auto-reset the stale entry so the user gets prompted to re-grant.
+        if tccGranted {
+            Task.detached {
+                let actuallyWorks = ScreenCaptureService.testCapturePermission()
+                if !actuallyWorks {
+                    log("Screen capture: stale TCC entry detected at launch (developer signing changed), auto-resetting...")
+                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
+                    _ = ScreenCaptureService.resetScreenCapturePermission()
+                    await MainActor.run {
+                        self.hasScreenRecordingPermission = false
+                    }
+                }
+            }
+        }
+
         hasScreenRecordingPermission = tccGranted
 
         // If TCC is not granted, clear the "broken" flag
