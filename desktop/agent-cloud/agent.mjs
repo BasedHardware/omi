@@ -690,6 +690,8 @@ function startPersistentSession(send, log) {
   let pendingTools = [];
   let turnActive = false;
   let isPrewarmTurn = true; // First turn is prewarm, suppress output
+  let turnStartedAt = null; // timestamp when query was pushed
+  let firstEventSent = false; // tracks if we've sent the first stream event for this turn
 
   // Background message processing loop — runs for entire WS lifetime
   const loopPromise = (async () => {
@@ -708,14 +710,27 @@ function startPersistentSession(send, log) {
           case "stream_event": {
             if (isPrewarmTurn) break; // Suppress prewarm output
             const event = message.event;
+            // Emit thinking_done on first content block (text or tool_use)
+            if (!firstEventSent && event?.type === "content_block_start") {
+              firstEventSent = true;
+              const thinkingMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] thinking done in ${thinkingMs}ms, first block: ${event.content_block?.type}`);
+              send({ type: "thinking_done", thinkingMs });
+            }
             if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
               const name = event.content_block.name;
+              const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] tool_use ${name} started at +${elapsed}ms`);
               pendingTools.push(name);
               send({ type: "tool_activity", name, status: "started" });
             }
             if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
               if (pendingTools.length > 0) {
-                for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+                for (const name of pendingTools) {
+                  const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+                  log(`[TIMING] tool ${name} completed at +${elapsed}ms`);
+                  send({ type: "tool_activity", name, status: "completed" });
+                }
                 pendingTools.length = 0;
               }
               fullText += event.delta.text;
@@ -745,7 +760,8 @@ function startPersistentSession(send, log) {
             if (isPrewarmTurn) break;
             const toolName = message.tool_name || "unknown";
             const resultStr = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
-            log(`[TOOL_RESULT] ${toolName} (${resultStr.length} chars) ${resultStr.length > 300 ? resultStr.slice(0, 300) + '...' : resultStr}`);
+            const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+            log(`[TOOL_RESULT] +${elapsed}ms ${toolName} (${resultStr.length} chars) ${resultStr.length > 300 ? resultStr.slice(0, 300) + '...' : resultStr}`);
             break;
           }
 
@@ -764,6 +780,8 @@ function startPersistentSession(send, log) {
 
             if (message.subtype === "success") {
               const costUsd = message.total_cost_usd || 0;
+              const totalMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] result at +${totalMs}ms, cost=$${costUsd.toFixed(4)}`);
               if (message.result) {
                 const remaining = message.result.replace(fullText, "").trim();
                 if (remaining) {
@@ -779,6 +797,8 @@ function startPersistentSession(send, log) {
             fullText = "";
             pendingTools = [];
             turnActive = false;
+            turnStartedAt = null;
+            firstEventSent = false;
             break;
           }
         }
@@ -798,6 +818,7 @@ function startPersistentSession(send, log) {
     getSessionId: () => sessionId,
     isTurnActive: () => turnActive,
     setTurnActive: (v) => { turnActive = v; },
+    startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
   };
 }
 
@@ -1327,6 +1348,7 @@ function startServer() {
           }
 
           session.setTurnActive(true);
+          session.startTurnTimer();
           send({ type: "status", message: "Processing..." });
 
           // Push user message into the persistent session via streamInput
