@@ -39,6 +39,7 @@ else:
 db = firestore.client()
 
 app = FastAPI()
+logger.info("[agent-proxy] starting up")
 
 HISTORY_LIMIT = 10
 GCE_PROJECT = "based-hardware"

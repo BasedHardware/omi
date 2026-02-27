@@ -113,6 +113,13 @@ function openDatabase() {
   db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
+  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
+  } catch (e) {
+    console.log(`[db] Index creation skipped: ${e.message}`);
+  }
+
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
   defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
@@ -128,11 +135,11 @@ TOOLS:
 - **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
 GUIDELINES:
-- Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
-- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding
+- For time-filtered queries on screenshots, prefer range comparisons: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime') AND timestamp < datetime('now', 'start of day', 'localtime'). Avoid wrapping the column in date() or strftime() in WHERE clauses — it's slower on large tables.
+- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding (600K+ rows — always filter by timestamp range)
 - Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
 - Transcription sessions have: title, overview, startedAt, finishedAt, source
-- For "what did I do today/yesterday" queries, use screenshots table grouped by appName
+- For "what did I do today/yesterday" queries, query screenshots (grouped by appName), transcription_sessions, and action_items in a SINGLE round of tool calls — don't do an exploratory query first.
 - For task queries, use action_items table
 - For conversation queries, use transcription_sessions + transcription_segments
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
@@ -870,7 +877,7 @@ function startServer() {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         status: "ok",
-        uptime: process.uptime(),
+        uptime: Math.round(process.uptime()),
         databaseReady: isDatabaseReady(),
       }));
       return;
