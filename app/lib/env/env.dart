@@ -37,7 +37,13 @@ abstract class Env {
     return _normalizeUrl(effective) == _normalizeUrl(stagingApiUrl);
   }
 
-  static String _normalizeUrl(String url) => url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+  static String _normalizeUrl(String url) {
+    var s = url.trim().toLowerCase();
+    while (s.endsWith('/')) {
+      s = s.substring(0, s.length - 1);
+    }
+    return s;
+  }
 
   /// WebSocket URL for the agent proxy service.
   /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
