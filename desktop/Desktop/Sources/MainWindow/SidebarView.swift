@@ -1571,7 +1571,6 @@ private struct SidebarAudioBar: View {
         RoundedRectangle(cornerRadius: 1)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            .animation(.easeOut(duration: 0.08), value: level)
     }
 }
 
