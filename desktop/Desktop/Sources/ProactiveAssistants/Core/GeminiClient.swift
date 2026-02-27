@@ -179,7 +179,7 @@ actor GeminiClient {
     }
 
     init(apiKey: String? = nil, model: String = "gemini-3-flash-preview") throws {
-        guard let key = apiKey ?? ProcessInfo.processInfo.environment["GEMINI_API_KEY"] else {
+        guard let key = apiKey ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingUTF8: $0) }) else {
             throw GeminiClientError.missingAPIKey
         }
         self.apiKey = key
