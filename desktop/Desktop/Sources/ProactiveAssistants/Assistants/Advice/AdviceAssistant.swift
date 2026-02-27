@@ -101,6 +101,7 @@ actor AdviceAssistant: ProactiveAssistant {
             for memory in memories {
                 let advice = ExtractedAdvice(
                     advice: memory.content,
+                    headline: nil,
                     reasoning: nil,
                     category: .other,
                     sourceApp: memory.sourceApp ?? "",
@@ -281,7 +282,8 @@ actor AdviceAssistant: ProactiveAssistant {
             sourceApp: advice.sourceApp,
             windowTitle: windowTitle,
             contextSummary: contextSummary,
-            currentActivity: currentActivity
+            currentActivity: currentActivity,
+            headline: advice.headline
         )
 
         do {
@@ -312,7 +314,8 @@ actor AdviceAssistant: ProactiveAssistant {
                 reasoning: advice.reasoning,
                 currentActivity: adviceResult.currentActivity,
                 source: "screenshot",
-                windowTitle: windowTitle
+                windowTitle: windowTitle,
+                headline: advice.headline
             )
 
             log("Advice: Synced to backend (id: \(response.id))")
@@ -323,9 +326,9 @@ actor AdviceAssistant: ProactiveAssistant {
         }
     }
 
-    /// Send a notification for the advice
+    /// Send a notification for the advice (uses short headline for notification body)
     private func sendAdviceNotification(advice: ExtractedAdvice) async {
-        let message = advice.advice
+        let message = advice.headline ?? advice.advice
 
         await MainActor.run {
             NotificationService.shared.sendNotification(
@@ -475,6 +478,7 @@ actor AdviceAssistant: ProactiveAssistant {
         // Build response schema for single advice extraction with conditional logic
         let adviceProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
             "advice": .init(type: "string", description: "The advice text (1-2 sentences, max 30 words)"),
+            "headline": .init(type: "string", description: "Ultra-short summary (max 5 words) for notification preview. E.g. 'Wrong year in calendar', 'Credentials visible in terminal', 'Stale git stash detected'"),
             "reasoning": .init(type: "string", description: "Brief explanation of why this advice is relevant"),
             "category": .init(type: "string", enum: ["productivity", "communication", "learning", "other"], description: "Category of advice"),
             "source_app": .init(type: "string", description: "App where context was observed"),
@@ -489,7 +493,7 @@ actor AdviceAssistant: ProactiveAssistant {
                     type: "object",
                     description: "The specific insight (only if has_advice is true)",
                     properties: adviceProperties,
-                    required: ["advice", "category", "source_app", "confidence"]
+                    required: ["advice", "headline", "category", "source_app", "confidence"]
                 ),
                 "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
                 "current_activity": .init(type: "string", description: "High-level description of user's activity")
