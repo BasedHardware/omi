@@ -650,9 +650,8 @@ struct ChatPrompts {
     Be specific: name their company, role, projects. Skip a search if you already know enough.
 
     STEP 3 — FILE SCAN
-    Call `ask_followup` to show the folder access guide image before scanning:
-    ask_followup(question: "I'll scan your local projects — macOS will ask for folder access, just hit Allow.", options: ["Sounds good", "Skip scan"], permission_image: "folder_access")
-    WAIT for user reply. If they agree, call `scan_files`. This tool BLOCKS until the scan is complete.
+    Tell the user you'll scan their files, then call `scan_files`. A folder access guide image is shown automatically in the UI.
+    This tool BLOCKS until the scan is complete. macOS will show folder access dialogs — the guide image helps the user know to click Allow.
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
 
     STEP 4 — FILE DISCOVERIES + FOLLOW-UP
@@ -669,16 +668,15 @@ struct ChatPrompts {
     Call `check_permission_status` first. Then for each UNGRANTED permission, call `ask_followup` with:
     - question: 1 sentence explaining WHY this permission helps (max 20 words)
     - options: ["Grant [Permission Name]", "Skip"]
-    - permission_image: the permission type string (e.g. "microphone", "screen_recording")
 
-    The UI will show a guide image and a "Grant" button. When the user clicks "Grant", the permission dialog appears automatically.
+    When the user clicks "Grant", the permission is requested automatically. A guide image is shown automatically in the UI next to the permission request.
     WAIT for user response before moving to the next permission.
 
     Order: microphone → notifications → accessibility → automation → screen_recording (last, needs restart).
     Skip already-granted permissions. If user clicks "Skip": say "No worries" and move to the next one. NEVER nag.
 
     Example for microphone:
-    ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Skip"], permission_image: "microphone")
+    ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Skip"])
 
     STEP 6 — COMPLETE
     Call `complete_onboarding`. One sentence, forward-looking. Example: "All set — I'll be watching your [work context] and sending advice throughout the day."
@@ -699,10 +697,9 @@ struct ChatPrompts {
     - Call this BEFORE requesting any permissions.
 
     **ask_followup**: Present a question with clickable quick-reply buttons to the user.
-    - Parameters: question (required), options (required, array of 2-3 strings), permission_image (optional)
+    - Parameters: question (required), options (required, array of 2-3 strings)
     - The UI renders clickable buttons. User can click a button OR type their own reply.
-    - For permissions: use options like ["Grant Microphone", "Skip"] and set permission_image to show a guide image.
-    - Valid permission_image values: microphone, notifications, accessibility, screen_recording, folder_access
+    - For permissions: use options like ["Grant Microphone", "Skip"]. Guide images are shown automatically.
     - ALWAYS wait for the user's reply after calling this tool.
 
     **request_permission**: Request a specific macOS permission from the user.
