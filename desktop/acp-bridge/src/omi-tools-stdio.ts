@@ -147,6 +147,22 @@ e.g. "reading about machine learning", "working on design mockups"`,
     },
   },
   {
+    name: "get_daily_recap",
+    description: `Get a pre-formatted daily activity recap from the local database.
+Use for: "what did I do today/yesterday/this week", activity summaries, daily reviews.
+Runs app usage, conversations, and action items queries in one call — much faster than multiple execute_sql calls.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        days_ago: {
+          type: "number" as const,
+          description: "0=today, 1=yesterday, 7=past week (default: 1)",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "load_skill",
     description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
     inputSchema: {
@@ -252,6 +268,16 @@ async function handleJsonRpc(
         };
         if (args.app_filter) input.app_filter = args.app_filter;
         const result = await requestSwiftTool("semantic_search", input);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "get_daily_recap") {
+        const daysAgo = (args.days_ago as number) ?? 1;
+        const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
