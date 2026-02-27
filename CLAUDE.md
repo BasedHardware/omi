@@ -125,27 +125,23 @@ cd app && flutter gen-l10n
 
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
-cd app && flutter run -d <device-id> --flavor prod
+cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.com)
+cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
 ```
 
-**Always use `--flavor prod`** for simulator testing. The dev flavor appends `.development` to the bundle ID (`com.friend-app-with-wearable.ios12.development`), but Firebase only knows about `com.friend-app-with-wearable.ios12` — so Firebase Auth fails silently with the dev flavor.
+Use `--flavor dev` for development — it hits the dev backend (`api.omiapi.com`) with native Google Sign In. Use `--flavor prod` for testing against production.
 
-**To hit the dev backend** while using prod flavor, edit `app/.env`:
-```
-API_BASE_URL=https://api.omiapi.com/
-USE_WEB_AUTH=false
-```
-Then regenerate env files:
+**Env files:** `--flavor prod` reads from `app/.env`, `--flavor dev` reads from `app/.dev.env`. After changing either file, regenerate:
 ```bash
 cd app && rm -rf .dart_tool/build lib/env/prod_env.g.dart lib/env/dev_env.g.dart && dart run build_runner build --delete-conflicting-outputs
 ```
 
 **Simulator auth notes:**
-- Use **Google Sign In** — Apple Sign In doesn't work in the iOS simulator (error 1000)
-- `USE_WEB_AUTH` must be `false` — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
+- Sign in with **Google** — Apple Sign In doesn't work in the iOS simulator (error 1000)
+- Dev flavor has `USE_WEB_AUTH=false` (native Google Sign In) — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
 - iOS Keychain persists across app uninstalls in the simulator, so Firebase Auth sessions survive reinstalls
 - The `claudeAgentEnabled` flag defaults to `false` on fresh install — toggle it on in Settings → Developer Mode
-- The Flutter debug connection frequently dies ("Lost connection to device") when the app goes to background or on heavy startup — the app itself keeps running, just relaunch `flutter run`
+- The Flutter debug connection frequently dies ("Lost connection to device") when the app goes to background — the app itself keeps running, just relaunch `flutter run`
 
 ### Firebase Prod Config
 
