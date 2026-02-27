@@ -813,7 +813,8 @@ struct SidebarView: View {
         VStack(spacing: 6) {
             // Screen Recording permission (primary for Rewind)
             // Also show if ScreenCaptureKit is broken (TCC says yes but SCK says no)
-            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken {
+            // or if permission is stale (developer signing changed)
+            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken || appState.isScreenRecordingStale {
                 screenRecordingPermissionRow
             }
 
@@ -855,18 +856,19 @@ struct SidebarView: View {
     private var screenRecordingPermissionRow: some View {
         let isDenied = appState.isScreenRecordingPermissionDenied()
         let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
-        let needsReset = isBroken  // Show reset when broken
-        let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
+        let isStale = appState.isScreenRecordingStale  // Developer signing changed
+        let needsReset = isBroken  // Show reset when broken (not stale — stale needs toggle off/on)
+        let color: Color = (isDenied || isBroken || isStale) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
-            Image(systemName: (isDenied || isBroken) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+            Image(systemName: (isDenied || isBroken || isStale) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
                 .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
-                .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
+                .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
+                Text(isStale ? "Screen Recording (Re-enable)" : (isBroken ? "Screen Recording (Reset Required)" : "Screen Recording"))
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -874,7 +876,10 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    if needsReset {
+                    if isStale {
+                        // Stale developer signing — just open Settings, user must toggle off/on
+                        ScreenCaptureService.openScreenRecordingPreferences()
+                    } else if needsReset {
                         // Track reset button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
                         // Reset and restart to fix broken ScreenCaptureKit state
@@ -886,7 +891,7 @@ struct SidebarView: View {
                         ScreenCaptureService.openScreenRecordingPreferences()
                     }
                 }) {
-                    Text(needsReset ? "Reset" : "Grant")
+                    Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -903,13 +908,13 @@ struct SidebarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
+                .fill(color.opacity(permissionPulse && (isDenied || isBroken || isStale) ? 0.25 : 0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
+                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken || isStale) ? 2 : 1)
                 )
         )
-        .help(isCollapsed ? (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required") : "")
+        .help(isCollapsed ? (isStale ? "Screen Recording needs re-enabling" : (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required")) : "")
     }
 
     private var microphonePermissionRow: some View {

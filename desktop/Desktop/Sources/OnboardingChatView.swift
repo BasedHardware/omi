@@ -115,13 +115,24 @@ struct OnboardingChatView: View {
                     .background(OmiColors.backgroundSecondary)
                     .cornerRadius(20)
 
-                Button(action: sendMessage) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                if chatProvider.isSending && inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Stop button when AI is responding and input is empty
+                    Button(action: stopAgent) {
+                        Image(systemName: chatProvider.isStopping ? "ellipsis.circle" : "stop.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(chatProvider.isStopping)
+                } else {
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSend)
                 }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -213,6 +224,10 @@ struct OnboardingChatView: View {
                 sessionKey: "onboarding"
             )
         }
+    }
+
+    private func stopAgent() {
+        chatProvider.stopAgent()
     }
 
     private func sendMessage() {
@@ -311,23 +326,36 @@ struct OnboardingChatBubble: View {
             }
 
             VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
-                // Tool activity indicators
                 if message.sender == .ai {
+                    // Render content blocks in order — interleaving tool indicators with text
                     ForEach(message.contentBlocks) { block in
-                        if case .toolCall(_, let name, let status, _, _, _) = block {
+                        switch block {
+                        case .toolCall(_, let name, let status, _, _, _):
                             OnboardingToolIndicator(toolName: name, status: status)
+                        case .text(_, let text):
+                            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Markdown(text)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+                        case .thinking:
+                            EmptyView()
                         }
                     }
-                }
-
-                if !message.text.isEmpty {
-                    Markdown(message.text)
-                        .markdownTheme(message.sender == .user ? .userMessage() : .aiMessage())
-                        .textSelection(.enabled)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(message.sender == .user ? OmiColors.purplePrimary : OmiColors.backgroundSecondary)
-                        .cornerRadius(18)
+                } else {
+                    if !message.text.isEmpty {
+                        Markdown(message.text)
+                            .markdownTheme(.userMessage())
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(OmiColors.purplePrimary)
+                            .cornerRadius(18)
+                    }
                 }
             }
 

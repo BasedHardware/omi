@@ -498,7 +498,17 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 guard let self else { return }
                 self.groupedSessions = self.computeGroupedSessions()
             }
+
+        // Kill ACP bridge subprocess on app quit to prevent orphaned Node.js processes
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.acpBridge.stop()
+        }
     }
+
+    private var terminationObserver: NSObjectProtocol?
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
@@ -1719,6 +1729,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             await acpBridge.interrupt()
         }
         // Result flows back normally through the bridge with partial text
+    }
+
+    /// Terminate the ACP bridge subprocess. Call on app quit to prevent orphaned Node.js processes.
+    func stopBridge() {
+        acpBridge.stop()
     }
 
     /// Send a follow-up message while the agent is still running.

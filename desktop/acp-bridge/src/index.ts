@@ -532,7 +532,7 @@ type McpServerConfig = {
   env: Array<{ name: string; value: string }>;
 };
 
-function buildMcpServers(mode: string, cwd?: string): McpServerConfig[] {
+function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
   // omi-tools (stdio, connects back via Unix socket)
@@ -542,6 +542,9 @@ function buildMcpServers(mode: string, cwd?: string): McpServerConfig[] {
   ];
   if (cwd) {
     omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
+  }
+  if (sessionKey === "onboarding") {
+    omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
   }
   servers.push({
     name: "omi-tools",
@@ -606,7 +609,7 @@ async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig
         try {
           const sessionParams: Record<string, unknown> = {
             cwd: warmCwd,
-            mcpServers: buildMcpServers("act", warmCwd),
+            mcpServers: buildMcpServers("act", warmCwd, cfg.key),
             ...(cfg.systemPrompt ? { _meta: { systemPrompt: cfg.systemPrompt } } : {}),
           };
 
@@ -696,7 +699,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         await acpRequest("session/resume", {
           sessionId: msg.resume,
           cwd: requestedCwd,
-          mcpServers: buildMcpServers(mode, requestedCwd),
+          mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
         });
         sessionId = msg.resume;
         sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
@@ -710,7 +713,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     if (!sessionId) {
       const sessionParams: Record<string, unknown> = {
         cwd: requestedCwd,
-        mcpServers: buildMcpServers(mode, requestedCwd),
+        mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
         ...(msg.systemPrompt ? { _meta: { systemPrompt: msg.systemPrompt } } : {}),
       };
       const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
