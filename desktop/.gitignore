@@ -78,8 +78,9 @@ linkedin-*.md
 # Runtime log files
 *.log
 
-# Skills (user-local)
-skills/
+# Skills with sensitive connection details (user-local)
+# .claude/skills/firebase/SKILL.md — already ignored above
+# .claude/skills/local-backend-test/ — already ignored above
 
 # Agent configs (user-local)
 .agents/
