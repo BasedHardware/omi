@@ -6,11 +6,13 @@ import Sparkle
 enum UpdateChannel: String, CaseIterable {
     case stable = "stable"
     case beta = "beta"
+    case staging = "staging"
 
     var displayName: String {
         switch self {
         case .stable: return "Stable"
         case .beta: return "Beta"
+        case .staging: return "Staging"
         }
     }
 
@@ -18,6 +20,7 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Recommended for most users"
         case .beta: return "Early access to new features"
+        case .staging: return "Internal testing builds"
         }
     }
 }
