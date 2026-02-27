@@ -78,12 +78,15 @@ enum ChatContentBlock: Identifiable {
                   input: ToolCallInput? = nil,
                   output: String? = nil)
     case thinking(id: String, text: String)
+    /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
+    case discoveryCard(id: String, title: String, summary: String, fullText: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
         case .toolCall(let id, _, _, _, _, _): return id
         case .thinking(let id, _): return id
+        case .discoveryCard(let id, _, _, _): return id
         }
     }
 
@@ -2272,6 +2275,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
     /// Add a tool call indicator to a streaming message
+    /// Append a discovery card block to the last AI message in the chat
+    func appendDiscoveryCard(title: String, summary: String, fullText: String) {
+        guard let index = messages.lastIndex(where: { $0.sender == .ai }) else { return }
+        messages[index].contentBlocks.append(
+            .discoveryCard(id: UUID().uuidString, title: title, summary: summary, fullText: fullText)
+        )
+    }
+
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
