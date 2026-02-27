@@ -48,17 +48,18 @@ void main() {
   });
 
   group('Env.isUsingStagingApi', () {
-    test('false when no override is set', () {
-      // Reset state: set override to something then clear is not possible,
-      // but we can test with known state. Initially no override.
-      // We need to use overrideApiBaseUrl to test different states.
-      // First ensure a known state by overriding to a non-staging URL.
+    test('false when override points to non-staging URL', () {
       Env.overrideApiBaseUrl('https://api.prod.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
 
     test('true when override equals stagingApiUrl', () {
       Env.overrideApiBaseUrl('https://api.omiapi.com/');
+      expect(Env.isUsingStagingApi, isTrue);
+    });
+
+    test('true when override equals stagingApiUrl with trailing slash', () {
+      Env.overrideApiBaseUrl('https://api.omiapi.com');
       expect(Env.isUsingStagingApi, isTrue);
     });
 
