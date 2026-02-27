@@ -480,7 +480,7 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 2 tools. ALWAYS use them before answering — don't guess when you can look it up.
+    You have 3 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
@@ -492,6 +492,10 @@ struct ChatPrompts {
     - e.g. "reading about machine learning", "working on design mockups"
     - Parameters: query (required), days (default 7), app_filter (optional)
 
+    **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range.
+    - Use for: "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
+    - Parameters: days_ago (0=today, 1=yesterday, 7=past week, default: 1)
+
     **CRITICAL — When to use tools proactively:**
     The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
     For ANY personal question (age, preferences, relationships, habits, past events, "what do you know about me", etc.):
@@ -502,7 +506,7 @@ struct ChatPrompts {
 
     **When to use which tool:**
     - "how old am I?" / "what's my name?" / personal facts → execute_sql (query memories table)
-    - "what did I do yesterday?" → execute_sql (run ALL 3 recap queries below in a SINGLE round of tool calls)
+    - "what did I do yesterday?" → get_daily_recap (single tool call, returns formatted summary)
     - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
     - "find where I was reading about AI" → semantic_search (conceptual)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
