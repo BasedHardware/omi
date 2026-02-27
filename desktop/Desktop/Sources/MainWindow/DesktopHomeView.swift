@@ -284,9 +284,20 @@ struct DesktopHomeView: View {
     /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
     /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
     /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
+    /// NOTE: ClickThroughHostingView is excluded because it wraps the sidebar and needs
+    /// intrinsicContentSize for SwiftUI's .fixedSize() layout to compute the correct width.
     private static func disableMinSizeComputation(in window: NSWindow) {
         func visit(_ view: NSView) {
             if let hosting = view as? any HostingSizingConfigurable {
+                // Skip ClickThroughHostingView — it's an NSViewRepresentable boundary
+                // that needs intrinsicContentSize for the sidebar's .fixedSize() to work.
+                let typeName = String(describing: type(of: view))
+                guard !typeName.contains("ClickThroughHostingView") else {
+                    log("DesktopHomeView: Skipping sizingOptions on \(typeName) (needs intrinsic size)")
+                    // Still visit children
+                    for subview in view.subviews { visit(subview) }
+                    return
+                }
                 let before = hosting.sizingOptions
                 hosting.sizingOptions = []
                 log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
@@ -382,6 +393,7 @@ struct DesktopHomeView: View {
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
+            .clipped()
 
             // Main content area with rounded container
             ZStack {
