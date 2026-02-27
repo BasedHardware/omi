@@ -14,7 +14,6 @@ struct OnboardingChatView: View {
     @State private var showCompleteButton: Bool = false
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
-    @State private var quickReplyPermissionImage: String? = nil
     @State private var isGrantingPermission: Bool = false
     @FocusState private var isInputFocused: Bool
 
@@ -63,44 +62,35 @@ struct OnboardingChatView: View {
                                 .id("typing")
                         }
 
-                        // Quick reply buttons + optional permission image
+                        // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
-                            VStack(spacing: 12) {
-                                // Permission guide image (if applicable)
-                                if let permImage = quickReplyPermissionImage {
-                                    OnboardingPermissionImage(permissionType: permImage)
-                                        .id("permission-image")
-                                }
-
-                                // Quick reply chips
-                                HStack(spacing: 8) {
-                                    ForEach(quickReplyOptions, id: \.self) { option in
-                                        Button(action: {
-                                            handleQuickReply(option)
-                                        }) {
-                                            Text(option)
-                                                .font(.system(size: 13, weight: .medium))
-                                                .foregroundColor(isGrantButton(option) ? .white : OmiColors.purplePrimary)
-                                                .padding(.horizontal, 16)
-                                                .padding(.vertical, 8)
-                                                .background(
-                                                    isGrantButton(option)
-                                                        ? OmiColors.purplePrimary
-                                                        : OmiColors.purplePrimary.opacity(0.1)
-                                                )
-                                                .cornerRadius(20)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 20)
-                                                        .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                        .disabled(isGrantingPermission)
+                            HStack(spacing: 8) {
+                                ForEach(quickReplyOptions, id: \.self) { option in
+                                    Button(action: {
+                                        handleQuickReply(option)
+                                    }) {
+                                        Text(option)
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundColor(isGrantButton(option) ? .white : OmiColors.purplePrimary)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                isGrantButton(option)
+                                                    ? OmiColors.purplePrimary
+                                                    : OmiColors.purplePrimary.opacity(0.1)
+                                            )
+                                            .cornerRadius(20)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 20)
+                                                    .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                                            )
                                     }
+                                    .buttonStyle(.plain)
+                                    .disabled(isGrantingPermission)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.leading, 44) // align with message text
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 44) // align with message text
                             .id("quick-replies")
                         }
 
@@ -276,9 +266,8 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onCompleteOnboarding = {
             onboardingCompleted = true
         }
-        ChatToolExecutor.onQuickReplyOptions = { options, permissionImage in
+        ChatToolExecutor.onQuickReplyOptions = { options in
             quickReplyOptions = options
-            quickReplyPermissionImage = permissionImage
         }
 
         // Build onboarding system prompt
@@ -317,7 +306,6 @@ struct OnboardingChatView: View {
 
         // Clear quick replies when user types their own message
         quickReplyOptions = []
-        quickReplyPermissionImage = nil
 
         Task {
             await chatProvider.sendMessage(text, sessionKey: "onboarding")
@@ -348,7 +336,6 @@ struct OnboardingChatView: View {
     private func handleQuickReply(_ option: String) {
         let options = quickReplyOptions
         quickReplyOptions = []
-        quickReplyPermissionImage = nil
 
         if let permType = permissionType(from: option) {
             // Grant button — trigger the permission directly
@@ -475,8 +462,8 @@ struct OnboardingChatBubble: View {
                         // Render content blocks in order — interleaving tool indicators with text
                         ForEach(message.contentBlocks) { block in
                             switch block {
-                            case .toolCall(_, let name, let status, _, _, _):
-                                let indicator = OnboardingToolIndicator(toolName: name, status: status)
+                            case .toolCall(_, let name, let status, _, let input, _):
+                                let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
                                 if !indicator.isHidden {
                                     indicator
                                 }
@@ -529,21 +516,29 @@ struct OnboardingChatBubble: View {
 struct OnboardingToolIndicator: View {
     let toolName: String
     let status: ToolCallStatus
+    var input: ToolCallInput? = nil
 
     var body: some View {
-        HStack(spacing: 6) {
-            if status == .running {
-                ProgressView()
-                    .controlSize(.mini)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(.green)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                if status == .running {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.green)
+                }
+
+                Text(displayText)
+                    .font(.system(size: 12))
+                    .foregroundColor(OmiColors.textTertiary)
             }
 
-            Text(displayText)
-                .font(.system(size: 12))
-                .foregroundColor(OmiColors.textTertiary)
+            // Show permission guide image automatically for scan_files and request_permission
+            if let permImage = permissionImageType {
+                OnboardingPermissionImage(permissionType: permImage)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -551,6 +546,18 @@ struct OnboardingToolIndicator: View {
     /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
     var isHidden: Bool {
         toolName == "ask_followup"
+    }
+
+    /// Determines which permission image to show based on the tool name and input
+    private var permissionImageType: String? {
+        switch toolName {
+        case "scan_files", "start_file_scan":
+            return "folder_access"
+        case "request_permission":
+            return input?.summary // summary contains the permission type (e.g., "microphone")
+        default:
+            return nil
+        }
     }
 
     private var displayText: String {
