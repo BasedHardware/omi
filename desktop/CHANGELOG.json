@@ -1,6 +1,14 @@
 {
   "releases": [
     {
+      "version": "0.11.21",
+      "date": "2026-02-27",
+      "changes": [
+        "Rotated Gemini API key (previous key was flagged as leaked)",
+        "Reduced CPU usage by 99% — fixed excessive SwiftUI layout traversals from audio level updates"
+      ]
+    },
+    {
       "version": "0.11.9",
       "date": "2026-02-26",
       "changes": [
