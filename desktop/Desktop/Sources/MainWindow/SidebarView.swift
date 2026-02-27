@@ -1545,9 +1545,11 @@ private struct SidebarAudioBar: View {
         let variation = 1.0 - (centerOffset * 0.3)
 
         let scaledLevel = clampedLevel * variation
-        let randomVariation = CGFloat.random(in: 0.9...1.1)
+        // Deterministic per-bar variation (avoid CGFloat.random which causes layout churn)
+        let hash = sin(CGFloat(index) * 1.618 + 0.5)
+        let deterministicVariation = 0.9 + 0.2 * (hash * 0.5 + 0.5)
 
-        let height = minHeight + (maxHeight - minHeight) * scaledLevel * randomVariation
+        let height = minHeight + (maxHeight - minHeight) * scaledLevel * deterministicVariation
         return max(minHeight, min(maxHeight, height))
     }
 
