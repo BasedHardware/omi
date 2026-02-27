@@ -893,7 +893,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get useMcpApiKey => 'Gunakan kunci API MCP anda';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => 'Acara Perbualan';
@@ -1015,7 +1015,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Sambung';
 
   @override
   String get comingSoon => 'Akan Datang';
@@ -2275,7 +2275,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get folderName => 'Nama folder';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Penerangan (pilihan)';
 
   @override
   String get failedToDeleteFolder => 'Gagal memadam folder';
@@ -8022,27 +8022,27 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addTask => 'Tambah tugas';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Tambah pelayan MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Sambungkan alat AI luaran';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count alat berjaya disambungkan';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Gagal menyambung ke pelayan MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Memberi kebenaran...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bagaimana anda tahu tentang kami?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8060,19 +8060,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Rakan';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Lain-lain';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Sila nyatakan';
 
   @override
-  String get event => 'Event';
+  String get event => 'Acara';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Rakan sekerja';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8245,41 +8245,42 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Inilah yang saya tahu tentang anda';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Peta ini dikemas kini apabila Omi belajar daripada perbualan anda.';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'Persekitaran API';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => 'Pilih pelayan yang hendak disambungkan';
 
   @override
-  String get production => 'Production';
+  String get production => 'Pengeluaran';
 
   @override
-  String get staging => 'Staging';
+  String get staging => 'Ujian';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => 'Penukaran memerlukan permulaan semula aplikasi';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'Tukar Persekitaran API';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return 'Tukar ke $environment? Anda perlu menutup dan membuka semula aplikasi untuk perubahan berkuat kuasa.';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => 'Tukar';
 
   @override
   String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+      'Persekitaran ujian mungkin tidak stabil, mempunyai prestasi tidak konsisten dan data mungkin hilang. Untuk ujian sahaja.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => 'Disimpan. Tutup dan buka semula aplikasi untuk menggunakan perubahan.';
 }

@@ -419,7 +419,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get planAndUsage => 'Plan i wykorzystanie';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Synchronizacja offline';
 
   @override
   String get deviceSettings => 'Ustawienia urządzenia';
@@ -1015,7 +1015,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Połącz';
 
   @override
   String get comingSoon => 'Wkrótce';
@@ -2270,7 +2270,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get folderName => 'Nazwa folderu';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Opis (opcjonalny)';
 
   @override
   String get failedToDeleteFolder => 'Nie udało się usunąć folderu';
@@ -2397,7 +2397,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get unpairAndForgetDevice => 'Rozłącz i zapomnij urządzenie';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Nieznane';
 
   @override
   String get unknown => 'Nieznane';
@@ -3271,7 +3271,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get upgradeToPro => 'Przejdź na Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Kup urządzenie Omi';
 
   @override
   String get wearableAiCompanion => 'Noszony towarzysz AI';
@@ -5887,7 +5887,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get cancelSyncMessage => 'Już pobrane dane zostaną zachowane. Możesz wznowić później.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Synchronizacja anulowana';
 
   @override
   String get deleteProcessedFiles => 'Delete Processed Files';
@@ -5953,7 +5953,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get processAudio => 'Przetwórz dźwięk';
 
   @override
-  String get start => 'Start';
+  String get start => 'Rozpocznij';
 
   @override
   String get noRecordings => 'Brak nagrań';
@@ -8017,27 +8017,27 @@ class AppLocalizationsPl extends AppLocalizations {
   String get addTask => 'Dodaj zadanie';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Dodaj serwer MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Połącz zewnętrzne narzędzia AI';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Pomyślnie połączono $count narzędzi';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nie udało się połączyć z serwerem MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoryzacja...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Jak nas znalazłeś?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8055,19 +8055,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Znajomy';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Inne';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Proszę określić';
 
   @override
-  String get event => 'Event';
+  String get event => 'Wydarzenie';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Współpracownik';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8240,41 +8240,41 @@ class AppLocalizationsPl extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Oto co o Tobie wiem';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Ta mapa aktualizuje się, gdy Omi uczy się z Twoich rozmów.';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'Środowisko API';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => 'Wybierz serwer do połączenia';
 
   @override
-  String get production => 'Production';
+  String get production => 'Produkcja';
 
   @override
-  String get staging => 'Staging';
+  String get staging => 'Środowisko testowe';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => 'Przełączenie wymaga ponownego uruchomienia aplikacji';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'Przełącz środowisko API';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return 'Przełączyć na $environment? Aby zmiany zaczęły obowiązywać, musisz zamknąć i ponownie otworzyć aplikację.';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => 'Przełącz';
 
   @override
   String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+      'Środowisko testowe może być niestabilne, mieć niespójną wydajność, a dane mogą zostać utracone. Tylko do testów.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => 'Zapisano. Zamknij i ponownie otwórz aplikację, aby zastosować zmiany.';
 }

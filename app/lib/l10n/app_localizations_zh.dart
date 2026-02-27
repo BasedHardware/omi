@@ -878,7 +878,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get useMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => '对话事件';
@@ -999,7 +999,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '连接';
 
   @override
   String get comingSoon => '即将推出';
@@ -2221,7 +2221,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get folderName => '文件夹名称';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '描述（可选）';
 
   @override
   String get failedToDeleteFolder => '删除文件夹失败';
@@ -5815,7 +5815,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '已创建 $count 个对话';
   }
 
   @override
@@ -7855,27 +7855,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addTask => '添加任务';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => '添加 MCP 服务器';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '连接外部 AI 工具';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '已成功连接 $count 个工具';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => '连接 MCP 服务器失败';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '正在授权...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => '你是怎么知道我们的？';
 
   @override
   String get tiktok => 'TikTok';
@@ -7893,19 +7893,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '朋友';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => '其他';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '请说明';
 
   @override
-  String get event => 'Event';
+  String get event => '活动';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '同事';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8072,41 +8072,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => '这是我了解到的关于你的信息';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => '这张地图会随着 Omi 从你的对话中学习而更新。';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'API 环境';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => '选择要连接的服务器';
 
   @override
-  String get production => 'Production';
+  String get production => '生产环境';
 
   @override
-  String get staging => 'Staging';
+  String get staging => '测试环境';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => '切换需要重启应用';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => '切换 API 环境';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return '切换到$environment？您需要关闭并重新打开应用，更改才能生效。';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => '切换';
 
   @override
-  String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+  String get stagingDisclaimer => '测试环境可能不稳定，性能不一致，数据可能丢失。仅供测试使用。';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => '已保存。请关闭并重新打开应用以应用更改。';
 }
