@@ -204,8 +204,8 @@ final class VADGateService {
     // Constants matching backend vad_gate.py
     private let preRollMs: Double = 500
     private let hangoverMs: Double = 4000       // Streaming mode: controls finalize timing
-    private let batchHangoverMs: Double = 1000  // Batch mode: controls chunk boundary (user-visible latency)
-    private let speechThreshold: Float = 0.65
+    private let batchHangoverMs: Double = 2000  // Batch mode: controls chunk boundary (user-visible latency)
+    private let speechThreshold: Float = 0.45
     private let keepaliveSec: Double = 20
     private let vadWindowSamples = 512
     private let sampleRate = 16000

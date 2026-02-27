@@ -77,7 +77,10 @@ ingress:
 
 env:
   - name: GEMINI_API_KEY
-    value: "AIzaSyATTd67fscQ1f68l3Ww1bLVGToE30k5EVs"
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GEMINI_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN
@@ -275,7 +278,7 @@ env:
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
   - name: VAD_GATE_MODE
-    value: "active"
+    value: "off"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
