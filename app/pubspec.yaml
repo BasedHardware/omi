@@ -137,6 +137,7 @@ dependencies:
   disk_space_2: ^1.0.11
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
+  marionette_flutter: ^0.3.0
 
 dependency_overrides:
   js: ^0.7.1

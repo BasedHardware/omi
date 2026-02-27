@@ -1421,6 +1421,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.5.0"
+  marionette_flutter:
+    dependency: "direct main"
+    description:
+      name: marionette_flutter
+      sha256: "0077073f62a8031879a91be41aa91629f741a7f1348b18feacd53443dae3819f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   markdown:
     dependency: transitive
     description:
