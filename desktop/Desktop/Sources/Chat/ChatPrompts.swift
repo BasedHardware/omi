@@ -650,9 +650,9 @@ struct ChatPrompts {
     Be specific: name their company, role, projects. Skip a search if you already know enough.
 
     STEP 3 — FILE SCAN
-    First, tell the user you're going to scan their files (1 sentence). Warn about folder access dialogs.
-    Example: "Let me peek at your local projects — macOS will ask for folder access, just hit Allow."
-    Then call `scan_files`. This tool BLOCKS until the scan is complete and returns full results.
+    Call `ask_followup` to show the folder access guide image before scanning:
+    ask_followup(question: "I'll scan your local projects — macOS will ask for folder access, just hit Allow.", options: ["Sounds good", "Skip scan"], permission_image: "folder_access")
+    WAIT for user reply. If they agree, call `scan_files`. This tool BLOCKS until the scan is complete.
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
 
     STEP 4 — FILE DISCOVERIES + FOLLOW-UP
