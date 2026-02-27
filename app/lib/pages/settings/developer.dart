@@ -344,9 +344,10 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
             onPressed: () async {
               Navigator.of(ctx).pop();
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              // Force close app so it restarts with new API
-              // SystemNavigator.pop() doesn't work on iOS; exit(0) does
-              exit(0);
+              AppSnackbar.showSnackbar(
+                context.l10n.apiEnvSavedRestartRequired,
+                duration: const Duration(seconds: 5),
+              );
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
