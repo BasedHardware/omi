@@ -240,16 +240,19 @@ struct DesktopHomeView: View {
             }
         }
         .background(OmiColors.backgroundPrimary)
-        .frame(minWidth: 900, minHeight: 600)
         .preferredColorScheme(.dark)
         .tint(OmiColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
-            // Force dark appearance on the window
+            // Set min size at the AppKit level instead of SwiftUI .frame(minWidth:minHeight:).
+            // The SwiftUI modifier creates a _FlexFrameLayout that forces a full view-tree
+            // sizeThatFits() traversal on every constraint update — ~150 samples per window.
+            // Setting NSWindow.minSize directly enforces the same constraint without any traversal.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
                     if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
+                        window.minSize = NSSize(width: 900, height: 600)
                     }
                 }
             }
