@@ -441,34 +441,38 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
               if (Env.isUsingStagingApi) {
+                final topPadding = MediaQuery.of(context).padding.top;
                 return Column(
                   children: [
-                    SafeArea(
-                      bottom: false,
-                      child: GestureDetector(
-                        onTap: () {
-                          MyApp.navigatorKey.currentState?.push(
-                            MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          color: Colors.orange.shade800,
-                          child: Text(
-                            context.l10n.staging.toUpperCase(),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.none,
-                            ),
+                    GestureDetector(
+                      onTap: () {
+                        MyApp.navigatorKey.currentState?.push(
+                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
+                        color: Colors.orange.shade800,
+                        child: Text(
+                          context.l10n.staging.toUpperCase(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       ),
                     ),
-                    Expanded(child: child!),
+                    Expanded(
+                      child: MediaQuery.removePadding(
+                        context: context,
+                        removeTop: true,
+                        child: child!,
+                      ),
+                    ),
                   ],
                 );
               }
