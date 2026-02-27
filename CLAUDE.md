@@ -136,9 +136,8 @@ Use `--flavor dev` for development — it hits the dev backend (`api.omiapi.com`
 cd app && rm -rf .dart_tool/build lib/env/prod_env.g.dart lib/env/dev_env.g.dart && dart run build_runner build --delete-conflicting-outputs
 ```
 
-**Simulator auth notes:**
-- Sign in with **Google** — Apple Sign In doesn't work in the iOS simulator (error 1000)
-- Dev flavor has `USE_WEB_AUTH=false` (native Google Sign In) — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
+**Simulator notes:**
+- Dev flavor has `USE_WEB_AUTH=false` (native sign in) — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
 - iOS Keychain persists across app uninstalls in the simulator, so Firebase Auth sessions survive reinstalls
 - The `claudeAgentEnabled` flag defaults to `false` on fresh install — toggle it on in Settings → Developer Mode
 - The Flutter debug connection frequently dies ("Lost connection to device") when the app goes to background — the app itself keeps running, just relaunch `flutter run`
