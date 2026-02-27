@@ -420,7 +420,7 @@ struct OnboardingChatView: View {
                 )
             }
         } else {
-            // Fresh start — clear messages and begin onboarding
+            // Fresh start — clear stale messages and begin onboarding
             chatProvider.messages.removeAll()
 
             Task {
@@ -496,6 +496,9 @@ struct OnboardingChatView: View {
 
     private func handleOnboardingComplete() {
         log("OnboardingChatView: Completing onboarding")
+
+        // Set flag so DesktopHomeView navigates to Chat page after transition
+        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
 
         // Mark onboarding as done
         appState.hasCompletedOnboarding = true
@@ -712,6 +715,8 @@ struct OnboardingToolIndicator: View {
             return status == .running ? "Saving preferences..." : "Preferences saved"
         case "complete_onboarding":
             return status == .running ? "Finishing setup..." : "Setup complete"
+        case "save_knowledge_graph":
+            return status == .running ? "Building knowledge graph..." : "Knowledge graph saved"
         default:
             if toolName.hasPrefix("WebSearch:") {
                 let query = String(toolName.dropFirst("WebSearch: ".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
