@@ -14,12 +14,6 @@ from database.notifications import get_mentor_notification_frequency
 
 logger = logging.getLogger(__name__)
 
-# Maximum messages to keep in buffer (prevents unbounded growth in long conversations)
-MAX_BUFFER_MESSAGES = 50
-
-# Minimum NEW segments needed since last evaluation before triggering another
-MIN_NEW_SEGMENTS_FOR_ANALYSIS = 10
-
 
 class MessageBuffer:
     """Manages conversation buffers for mentor notification analysis."""
@@ -48,7 +42,6 @@ class MessageBuffer:
                     'last_activity': current_time,
                     'words_after_silence': 0,
                     'silence_detected': False,
-                    'messages_at_last_analysis': 0,
                 }
             else:
                 # Check for silence period
@@ -57,7 +50,6 @@ class MessageBuffer:
                     self.buffers[session_id]['silence_detected'] = True
                     self.buffers[session_id]['words_after_silence'] = 0
                     self.buffers[session_id]['messages'] = []  # Clear old messages after silence
-                    self.buffers[session_id]['messages_at_last_analysis'] = 0
 
                 self.buffers[session_id]['last_activity'] = current_time
 
@@ -82,15 +74,16 @@ class MessageBuffer:
 # Global message buffer
 message_buffer = MessageBuffer()
 
+# Minimum segments needed before analysis (real-time processing)
+MIN_SEGMENTS_FOR_ANALYSIS = 3
+
 
 def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]] | None:
     """
     Process segments for mentor notification.
 
-    Buffers incoming segments and returns the full accumulated conversation
-    when enough new context has been gathered since last evaluation.
-    Buffer accumulates across evaluations (not cleared) so the LLM sees
-    the full conversation. Only clears on silence (2 min gap).
+    Buffers incoming segments and returns the accumulated conversation messages
+    when enough context has been gathered for evaluation.
 
     Args:
         uid: User ID
@@ -140,26 +133,15 @@ def process_mentor_notification(uid: str, segments: List[Dict[str, Any]]) -> Lis
             else:
                 buffer_data['messages'].append({'text': text, 'timestamp': timestamp, 'is_user': is_user})
 
-    # Trim buffer if it exceeds max size (keep most recent messages)
-    if len(buffer_data['messages']) > MAX_BUFFER_MESSAGES:
-        excess = len(buffer_data['messages']) - MAX_BUFFER_MESSAGES
-        buffer_data['messages'] = buffer_data['messages'][excess:]
-        buffer_data['messages_at_last_analysis'] = max(0, buffer_data['messages_at_last_analysis'] - excess)
-
-    # Check if enough NEW messages since last evaluation
-    new_message_count = len(buffer_data['messages']) - buffer_data.get('messages_at_last_analysis', 0)
-
-    if new_message_count >= MIN_NEW_SEGMENTS_FOR_ANALYSIS and not buffer_data['silence_detected']:
-        # Return ALL accumulated messages (not just new ones) for full context
+    # Real-time analysis: Process immediately when we have enough segments
+    if len(buffer_data['messages']) >= MIN_SEGMENTS_FOR_ANALYSIS and not buffer_data['silence_detected']:
+        # Sort messages by timestamp
         sorted_messages = sorted(buffer_data['messages'], key=lambda x: x['timestamp'])
 
         buffer_data['last_analysis_time'] = current_time
-        buffer_data['messages_at_last_analysis'] = len(buffer_data['messages'])
+        buffer_data['messages'] = []  # Clear buffer after analysis
 
-        logger.info(
-            f"Mentor notification ready for user {uid} "
-            f"(total_messages={len(sorted_messages)}, new={new_message_count})"
-        )
+        logger.info(f"Mentor notification ready for user {uid}")
         return sorted_messages
 
     return None

@@ -26,9 +26,7 @@ from utils.apps import get_available_apps
 from utils.notifications import send_notification
 from utils.llm.clients import generate_embedding
 from utils.llm.proactive_notification import (
-    evaluate_relevance,
-    generate_notification,
-    validate_notification,
+    evaluate_proactive_notification,
     FREQUENCY_TO_BASE_THRESHOLD,
     MAX_DAILY_NOTIFICATIONS,
 )
@@ -238,10 +236,10 @@ MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 
 def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
     """
-    Three-step proactive notification pipeline:
-      1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
-      2. Generate — produce the actual notification (only if gate passes)
-      3. Critic — would a human actually want this on their phone? (final check)
+    Evaluate and send a mentor proactive notification using rich context.
+
+    Gathers user facts, goals, relevant past conversations, and notification history,
+    then makes a single structured LLM call to decide whether to notify.
 
     Returns:
         The notification text if sent, None otherwise.
@@ -272,83 +270,46 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.info(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
         return None
 
-    # 4. Gather lightweight context (no vector search yet — save for step 2)
+    # 4. Gather rich context
     try:
         user_name, user_facts = get_prompt_memories(uid)
     except Exception as e:
         logger.error(f"mentor_proactive memories_failed uid={uid} error={e}")
         user_name, user_facts = 'User', ''
 
+    # Goals
     try:
         goals = get_user_goals(uid, limit=3)
     except Exception as e:
         logger.error(f"mentor_proactive goals_failed uid={uid} error={e}")
         goals = []
 
-    try:
-        recent_notifications = get_app_messages(uid, 'mentor', limit=20)
-    except Exception as e:
-        logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
-        recent_notifications = []
-
-    # ── Step 1: Gate ─────────────────────────────────────────────────────
-    try:
-        relevance = evaluate_relevance(
-            user_name=user_name,
-            user_facts=user_facts,
-            goals=goals,
-            current_messages=conversation_messages,
-            recent_notifications=recent_notifications,
-        )
-    except Exception as e:
-        logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
-        return None
-
-    if not relevance.is_relevant or relevance.relevance_score < base_threshold:
-        logger.info(
-            f"mentor_proactive gate_rejected uid={uid} score={relevance.relevance_score:.2f} "
-            f"context={relevance.context_summary[:100]}"
-        )
-        return None
-
-    logger.info(
-        f"mentor_proactive gate_passed uid={uid} score={relevance.relevance_score:.2f} "
-        f"reason={relevance.reasoning[:100]}"
-    )
-
-    # ── Gather full context (expensive: vector search + recent convos) ───
+    # Vector search for relevant past conversations
     past_conversations_str = ''
     try:
         conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        all_past = []
-
-        # Vector search for semantically relevant conversations
         if conversation_text.strip():
             vector = generate_embedding(conversation_text[:2000])
             memory_ids = query_vectors_by_metadata(
                 uid, vector, dates_filter=[None, None], people=[], topics=[], entities=[], dates=[], limit=3
             )
             if memory_ids:
-                vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
-                if vector_convos:
-                    all_past.extend(vector_convos)
-
-        # Also fetch recent conversations by time for additional context
-        recent_convos = conversations_db.get_conversations(uid, limit=5, offset=0)
-        if recent_convos:
-            existing_ids = {c.get('id') for c in all_past}
-            for rc in recent_convos:
-                if rc.get('id') not in existing_ids:
-                    all_past.append(rc)
-
-        if all_past:
-            past_conversations_str = Conversation.conversations_to_string(all_past[:5])
+                memories = conversations_db.get_conversations_by_id(uid, memory_ids)
+                if memories:
+                    past_conversations_str = Conversation.conversations_to_string(memories)
     except Exception as e:
-        logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive vector_search_failed uid={uid} error={e}")
 
-    # ── Step 2: Generate ─────────────────────────────────────────────────
+    # Recent notifications for LLM self-regulation
     try:
-        draft = generate_notification(
+        recent_notifications = get_app_messages(uid, 'mentor', limit=20)
+    except Exception as e:
+        logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
+        recent_notifications = []
+
+    # 5. Single LLM call with structured output
+    try:
+        result = evaluate_proactive_notification(
             user_name=user_name,
             user_facts=user_facts,
             goals=goals,
@@ -356,51 +317,35 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
             current_messages=conversation_messages,
             recent_notifications=recent_notifications,
             frequency=frequency,
-            gate_reasoning=relevance.reasoning,
         )
     except Exception as e:
-        logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
+        logger.error(f"mentor_proactive llm_failed uid={uid} error={e}")
         return None
 
-    notification_text = draft.notification_text
+    # 6. Confidence gate
+    if not result.has_advice or not result.advice:
+        logger.info(f"mentor_proactive no_advice uid={uid} context={result.context_summary[:100]}")
+        return None
+
+    confidence = result.advice.confidence
+    if confidence < base_threshold:
+        logger.info(
+            f"mentor_proactive below_threshold uid={uid} confidence={confidence:.2f} threshold={base_threshold}"
+        )
+        return None
+
+    notification_text = result.advice.notification_text
     if not notification_text or len(notification_text) < 5:
-        logger.info(f"mentor_proactive empty_draft uid={uid}")
+        logger.info(f"mentor_proactive empty_text uid={uid}")
         return None
 
-    if draft.confidence < base_threshold:
-        logger.info(
-            f"mentor_proactive draft_below_threshold uid={uid} "
-            f"confidence={draft.confidence:.2f} threshold={base_threshold}"
-        )
-        return None
-
-    # ── Step 3: Critic ───────────────────────────────────────────────────
-    try:
-        validation = validate_notification(
-            user_name=user_name,
-            notification_text=notification_text,
-            draft_reasoning=draft.reasoning,
-            current_messages=conversation_messages,
-            goals=goals,
-        )
-    except Exception as e:
-        logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
-        return None
-
-    if not validation.approved:
-        logger.info(
-            f"mentor_proactive critic_rejected uid={uid} "
-            f"notification={notification_text[:80]} reason={validation.reasoning[:100]}"
-        )
-        return None
-
-    # ── Send ─────────────────────────────────────────────────────────────
     if len(notification_text) > 150:
         notification_text = notification_text[:150]
 
+    # 7. Send notification
     logger.info(
-        f"mentor_proactive sending uid={uid} confidence={draft.confidence:.2f} "
-        f"category={draft.category} reasoning={draft.reasoning[:100]}"
+        f"mentor_proactive sending uid={uid} confidence={confidence:.2f} "
+        f"category={result.advice.category} reasoning={result.advice.reasoning[:100]}"
     )
     send_app_notification(uid, 'Omi', 'mentor', notification_text)
 

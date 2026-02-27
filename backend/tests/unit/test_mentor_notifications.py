@@ -4,10 +4,9 @@ Tests for the proactive mentor notification system.
 Tests cover:
 - MessageBuffer buffering behavior
 - process_mentor_notification() return type (list of messages)
-- 3-step pipeline: evaluate_relevance, generate_notification, validate_notification
+- evaluate_proactive_notification() with mocked structured LLM output
 - _process_mentor_proactive_notification() end-to-end with mocks
 - Source-level checks (no raw OpenAI client)
-- Legacy evaluate_proactive_notification (kept for eval backward compatibility)
 """
 
 import os
@@ -66,9 +65,6 @@ for submodule in [
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
 
-# Stub _client.db for auth.py top-level import
-sys.modules["database._client"].db = MagicMock()
-
 # Stub goals
 mock_get_user_goals = MagicMock(
     return_value=[
@@ -87,8 +83,6 @@ redis_mod.set_proactive_noti_sent_at = MagicMock()
 redis_mod.get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
 redis_mod.incr_daily_notification_count = MagicMock(return_value=1)
 redis_mod.get_daily_notification_count = MagicMock(return_value=0)
-redis_mod.cache_user_name = MagicMock()
-redis_mod.get_cached_user_name = MagicMock(return_value=None)
 
 # Stub mem_db
 mem_mod = sys.modules.get("database.mem_db") or _stub_module("database.mem_db")
@@ -136,7 +130,6 @@ def _setup_app_integrations_stubs():
     vec_mod.query_vectors_by_metadata = MagicMock(return_value=[])
     conv_db_mod = sys.modules.get("database.conversations") or _stub_module("database.conversations")
     conv_db_mod.get_conversations_by_id = MagicMock(return_value=[])
-    conv_db_mod.get_conversations = MagicMock(return_value=[])
 
     noti_msg_mod = _stub_module("models.notification_message")
     mock_noti_msg = MagicMock()
@@ -174,16 +167,6 @@ def _setup_app_integrations_stubs():
     return mock_send
 
 
-def _make_segments(count: int) -> list:
-    """Helper to generate enough segments to trigger analysis (MIN_NEW_SEGMENTS=10)."""
-    segments = []
-    for i in range(count):
-        is_user = i % 2 == 0
-        text = f"Segment number {i} with some conversation content about topic {i}"
-        segments.append({"text": text, "start": 1000 + i, "is_user": is_user})
-    return segments
-
-
 # ── Source-level tests ──
 
 
@@ -218,17 +201,6 @@ def test_proactive_notification_uses_structured_output():
     assert "ProactiveAdvice" in source
 
 
-def test_proactive_notification_has_3step_pipeline():
-    """proactive_notification.py should have Gate, Generate, and Critic steps."""
-    source = _read_proactive_source()
-    assert "def evaluate_relevance" in source
-    assert "def generate_notification" in source
-    assert "def validate_notification" in source
-    assert "RelevanceResult" in source
-    assert "NotificationDraft" in source
-    assert "ValidationResult" in source
-
-
 def test_no_trigger_tools_in_mentor():
     """mentor_notifications.py should no longer have PROACTIVE_TRIGGERS."""
     source = _read_mentor_source()
@@ -251,14 +223,6 @@ def test_integrations_has_mentor_function():
     assert "def _process_mentor_proactive_notification" in source
 
 
-def test_integrations_uses_3step_imports():
-    """app_integrations.py should import the 3-step pipeline functions."""
-    source = _read_integrations_source()
-    assert "evaluate_relevance" in source
-    assert "generate_notification" in source
-    assert "validate_notification" in source
-
-
 def test_no_extract_topics_in_mentor():
     """mentor_notifications.py should no longer have extract_topics."""
     source = _read_mentor_source()
@@ -277,7 +241,6 @@ def test_message_buffer_creates_session():
     assert data['messages'] == []
     assert data['silence_detected'] is False
     assert data['words_after_silence'] == 0
-    assert data['messages_at_last_analysis'] == 0
 
 
 def test_message_buffer_silence_detection():
@@ -317,19 +280,22 @@ def test_message_buffer_cleanup():
 
 
 def test_process_mentor_notification_returns_list():
-    """process_mentor_notification should return a list of message dicts when enough segments accumulate."""
+    """process_mentor_notification should return a list of message dicts."""
     from utils.mentor_notifications import process_mentor_notification, message_buffer
 
     message_buffer.buffers.clear()
 
-    # Need 10+ segments to trigger (MIN_NEW_SEGMENTS_FOR_ANALYSIS = 10)
-    segments = _make_segments(12)
+    segments = [
+        {"text": "I need to save more money", "start": 1000, "is_user": True},
+        {"text": "Have you tried budgeting?", "start": 1001, "is_user": False},
+        {"text": "Not really", "start": 1002, "is_user": True},
+    ]
 
     result = process_mentor_notification("test_uid_list", segments)
 
     assert result is not None
     assert isinstance(result, list)
-    assert len(result) >= 10
+    assert len(result) >= 3
     for msg in result:
         assert 'text' in msg
         assert 'timestamp' in msg
@@ -344,7 +310,11 @@ def test_process_mentor_notification_disabled():
 
     message_buffer.buffers.clear()
 
-    segments = _make_segments(12)
+    segments = [
+        {"text": "hello", "start": 1000, "is_user": True},
+        {"text": "hi", "start": 1001, "is_user": False},
+        {"text": "how are you", "start": 1002, "is_user": True},
+    ]
 
     result = process_mentor_notification("test_uid_disabled", segments)
     assert result is None
@@ -367,36 +337,17 @@ def test_process_mentor_notification_not_enough_segments():
     assert result is None
 
 
-def test_process_mentor_notification_accumulates():
-    """process_mentor_notification should accumulate across calls and not clear on evaluation."""
-    from utils.mentor_notifications import process_mentor_notification, message_buffer
-
-    message_buffer.buffers.clear()
-
-    # First batch: 5 segments (not enough)
-    segments1 = _make_segments(5)
-    result1 = process_mentor_notification("test_uid_accum", segments1)
-    assert result1 is None
-
-    # Second batch: 6 more segments (total 11, enough)
-    segments2 = [{"text": f"More conversation {i}", "start": 2000 + i, "is_user": i % 2 == 0} for i in range(6)]
-    result2 = process_mentor_notification("test_uid_accum", segments2)
-    assert result2 is not None
-    assert len(result2) >= 10  # Should contain all accumulated messages
-
-    # Third batch: only 3 new segments (not enough new since last analysis)
-    segments3 = [{"text": f"Third batch {i}", "start": 3000 + i, "is_user": True} for i in range(3)]
-    result3 = process_mentor_notification("test_uid_accum", segments3)
-    assert result3 is None  # Not enough NEW segments since last analysis
-
-
 def test_process_mentor_notification_no_prompt_or_triggers():
     """process_mentor_notification result should NOT have prompt/triggers/params keys."""
     from utils.mentor_notifications import process_mentor_notification, message_buffer
 
     message_buffer.buffers.clear()
 
-    segments = _make_segments(12)
+    segments = [
+        {"text": "I should plant tomatoes", "start": 1000, "is_user": True},
+        {"text": "Great idea", "start": 1001, "is_user": False},
+        {"text": "And maybe herbs too", "start": 1002, "is_user": True},
+    ]
 
     result = process_mentor_notification("test_uid_no_prompt", segments)
     assert result is not None
@@ -405,143 +356,7 @@ def test_process_mentor_notification_no_prompt_or_triggers():
     assert not isinstance(result, dict)
 
 
-# ── 3-step pipeline tests ──
-
-
-def test_evaluate_relevance():
-    """evaluate_relevance should return RelevanceResult."""
-    from utils.llm.proactive_notification import RelevanceResult, evaluate_relevance
-
-    mock_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.85,
-        reasoning="User is about to agree to a bad deal.",
-        context_summary="User discussing business negotiation.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=mock_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    result = evaluate_relevance(
-        user_name="TestUser",
-        user_facts="TestUser runs a startup.",
-        goals=[{"title": "Close Series A"}],
-        current_messages=[{"text": "I think we should accept their terms", "is_user": True}],
-        recent_notifications=[],
-    )
-
-    assert result.is_relevant is True
-    assert result.relevance_score == 0.85
-    assert "bad deal" in result.reasoning
-
-
-def test_evaluate_relevance_rejects():
-    """evaluate_relevance should return is_relevant=False for generic conversation."""
-    from utils.llm.proactive_notification import RelevanceResult, evaluate_relevance
-
-    mock_result = RelevanceResult(
-        is_relevant=False,
-        relevance_score=0.20,
-        reasoning="Generic lunch conversation, no actionable insight.",
-        context_summary="User discussing lunch plans.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=mock_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    result = evaluate_relevance(
-        user_name="TestUser",
-        user_facts="TestUser likes hiking.",
-        goals=[],
-        current_messages=[{"text": "Had a great lunch today", "is_user": True}],
-        recent_notifications=[],
-    )
-
-    assert result.is_relevant is False
-    assert result.relevance_score < 0.5
-
-
-def test_generate_notification():
-    """generate_notification should return NotificationDraft."""
-    from utils.llm.proactive_notification import NotificationDraft, generate_notification
-
-    mock_result = NotificationDraft(
-        notification_text="Their offer is 30% below market — push back on valuation",
-        reasoning="User's Series A target is $10M but the offer discussed is $7M.",
-        confidence=0.90,
-        category="mistake_prevention",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=mock_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    result = generate_notification(
-        user_name="TestUser",
-        user_facts="TestUser targeting $10M Series A.",
-        goals=[{"title": "Close Series A at $10M+"}],
-        past_conversations_str="Past: discussed valuation targets.",
-        current_messages=[{"text": "They offered $7M", "is_user": True}],
-        recent_notifications=[],
-        frequency=3,
-        gate_reasoning="User about to accept below-target valuation.",
-    )
-
-    assert result.confidence == 0.90
-    assert "30%" in result.notification_text or "valuation" in result.notification_text
-
-
-def test_validate_notification_approves():
-    """validate_notification should approve high-quality notifications."""
-    from utils.llm.proactive_notification import ValidationResult, validate_notification
-
-    mock_result = ValidationResult(
-        approved=True,
-        reasoning="This is genuinely useful — user would miss this valuation gap.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=mock_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    result = validate_notification(
-        user_name="TestUser",
-        notification_text="Their offer is 30% below market",
-        draft_reasoning="User's target is $10M, offer is $7M.",
-        current_messages=[{"text": "They offered $7M", "is_user": True}],
-        goals=[{"title": "Close Series A at $10M+"}],
-    )
-
-    assert result.approved is True
-
-
-def test_validate_notification_rejects():
-    """validate_notification should reject low-quality notifications."""
-    from utils.llm.proactive_notification import ValidationResult, validate_notification
-
-    mock_result = ValidationResult(
-        approved=False,
-        reasoning="This is just restating what the user already knows.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=mock_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    result = validate_notification(
-        user_name="TestUser",
-        notification_text="You're discussing gym plans",
-        draft_reasoning="User mentioned gym.",
-        current_messages=[{"text": "Going to the gym later", "is_user": True}],
-        goals=[{"title": "Exercise 3x per week"}],
-    )
-
-    assert result.approved is False
-
-
-# ── Legacy evaluate_proactive_notification tests (kept for eval backward compat) ──
+# ── evaluate_proactive_notification tests ──
 
 
 def test_evaluate_proactive_notification_with_advice():
@@ -611,53 +426,35 @@ def test_evaluate_proactive_notification_no_advice():
     assert result.advice is None
 
 
-# ── _process_mentor_proactive_notification tests (3-step pipeline) ──
+# ── _process_mentor_proactive_notification tests ──
 
 
 def test_process_mentor_proactive_notification_sends():
-    """_process_mentor_proactive_notification should send notification when all 3 steps pass."""
+    """_process_mentor_proactive_notification should send notification on high confidence."""
     mock_send = _setup_app_integrations_stubs()
 
-    from utils.llm.proactive_notification import RelevanceResult, NotificationDraft, ValidationResult
+    from utils.llm.proactive_notification import ProactiveAdvice, ProactiveNotificationResult
 
-    # Mock the 3 sequential LLM calls
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.85,
-        reasoning="User is skipping gym despite their 3x/week goal.",
+    mock_result = ProactiveNotificationResult(
+        has_advice=True,
+        advice=ProactiveAdvice(
+            notification_text="You've been skipping gym — remember your 3x/week goal!",
+            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
+            confidence=0.82,
+            category="goal_connection",
+        ),
         context_summary="User discussing skipping exercise.",
     )
-    draft_result = NotificationDraft(
-        notification_text="You've been skipping gym — remember your 3x/week goal!",
-        reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
-        confidence=0.82,
-        category="goal_connection",
-    )
-    critic_result = ValidationResult(
-        approved=True,
-        reasoning="This is a concrete reminder tied to a specific goal and current action.",
-    )
 
-    # with_structured_output is called 3 times; return different parsers each time
-    call_count = [0]
-    results = [gate_result, draft_result, critic_result]
-
-    def side_effect_structured_output(model_class):
-        parser = MagicMock()
-        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
-        call_count[0] += 1
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
+    mock_parser = MagicMock()
+    mock_parser.invoke = MagicMock(return_value=mock_result)
+    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
 
     # Reset rate limit mocks
     mem_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    # Force reimport to pick up stubs
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
     messages = [
@@ -673,85 +470,6 @@ def test_process_mentor_proactive_notification_sends():
     mock_send.assert_called()
 
 
-def test_process_mentor_proactive_notification_gate_rejects():
-    """_process_mentor_proactive_notification should return None when gate rejects."""
-    _setup_app_integrations_stubs()
-
-    from utils.llm.proactive_notification import RelevanceResult
-
-    gate_result = RelevanceResult(
-        is_relevant=False,
-        relevance_score=0.20,
-        reasoning="Generic conversation, nothing actionable.",
-        context_summary="Casual chat.",
-    )
-
-    mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=gate_result)
-    mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
-    messages = [{"text": "Just chatting about the weather", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_gate", messages)
-
-    assert result is None
-
-
-def test_process_mentor_proactive_notification_critic_rejects():
-    """_process_mentor_proactive_notification should return None when critic rejects."""
-    _setup_app_integrations_stubs()
-
-    from utils.llm.proactive_notification import RelevanceResult, NotificationDraft, ValidationResult
-
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.80,
-        reasoning="Some connection found.",
-        context_summary="User discussing work.",
-    )
-    draft_result = NotificationDraft(
-        notification_text="Ensure you prioritize your tasks",
-        reasoning="User has goals.",
-        confidence=0.75,
-        category="productivity",
-    )
-    critic_result = ValidationResult(
-        approved=False,
-        reasoning="This is generic advice that applies to anyone. Rejected.",
-    )
-
-    call_count = [0]
-    results = [gate_result, draft_result, critic_result]
-
-    def side_effect(model_class):
-        parser = MagicMock()
-        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
-        call_count[0] += 1
-        return parser
-
-    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect)
-
-    mem_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_proactive_noti_sent_at.return_value = None
-    redis_mod.get_daily_notification_count.return_value = 0
-
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
-    import utils.app_integrations as app_int
-
-    messages = [{"text": "Working on stuff", "is_user": True}]
-    result = app_int._process_mentor_proactive_notification("test_uid_critic", messages)
-
-    assert result is None
-
-
 def test_process_mentor_proactive_notification_rate_limited():
     """_process_mentor_proactive_notification should return None when rate-limited."""
     _setup_app_integrations_stubs()
@@ -760,8 +478,6 @@ def test_process_mentor_proactive_notification_rate_limited():
     mem_mod.get_proactive_noti_sent_at.return_value = int(time.time())  # Just sent
     redis_mod.get_proactive_noti_sent_at.return_value = None
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
     messages = [{"text": "test", "is_user": True}]
@@ -781,8 +497,6 @@ def test_process_mentor_proactive_notification_daily_cap():
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 12  # At cap
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
     messages = [{"text": "test", "is_user": True}]
@@ -795,29 +509,30 @@ def test_process_mentor_proactive_notification_daily_cap():
 
 
 def test_process_mentor_proactive_notification_below_threshold():
-    """_process_mentor_proactive_notification should reject when gate score below threshold."""
+    """_process_mentor_proactive_notification should reject low confidence notifications."""
     _setup_app_integrations_stubs()
 
-    from utils.llm.proactive_notification import RelevanceResult
+    from utils.llm.proactive_notification import ProactiveAdvice, ProactiveNotificationResult
 
-    # Gate passes is_relevant=True but score is below threshold for frequency 3 (0.78)
-    gate_result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.50,  # Below threshold for frequency 3
-        reasoning="Marginal connection.",
+    mock_result = ProactiveNotificationResult(
+        has_advice=True,
+        advice=ProactiveAdvice(
+            notification_text="Maybe take a break?",
+            reasoning="User seems a bit tired.",
+            confidence=0.30,  # Below threshold for frequency 3 (0.60)
+            category="pattern_insight",
+        ),
         context_summary="User chatting casually.",
     )
 
     mock_parser = MagicMock()
-    mock_parser.invoke = MagicMock(return_value=gate_result)
+    mock_parser.invoke = MagicMock(return_value=mock_result)
     mock_llm_mini.with_structured_output = MagicMock(return_value=mock_parser)
 
     mem_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_proactive_noti_sent_at.return_value = None
     redis_mod.get_daily_notification_count.return_value = 0
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
     messages = [
@@ -837,8 +552,6 @@ def test_process_mentor_proactive_notification_disabled():
 
     sys.modules["database.notifications"].get_mentor_notification_frequency.return_value = 0
 
-    if "utils.app_integrations" in sys.modules:
-        del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
     messages = [{"text": "test", "is_user": True}]
@@ -911,43 +624,3 @@ def test_proactive_notification_result_model():
     assert result.has_advice is False
     assert result.advice is None
     assert result.context_summary == "Just a casual chat."
-
-
-def test_relevance_result_model():
-    """RelevanceResult should validate correctly."""
-    from utils.llm.proactive_notification import RelevanceResult
-
-    result = RelevanceResult(
-        is_relevant=True,
-        relevance_score=0.88,
-        reasoning="User about to make a mistake.",
-        context_summary="Business negotiation.",
-    )
-    assert result.is_relevant is True
-    assert result.relevance_score == 0.88
-
-
-def test_notification_draft_model():
-    """NotificationDraft should validate correctly."""
-    from utils.llm.proactive_notification import NotificationDraft
-
-    draft = NotificationDraft(
-        notification_text="Push back on the $7M offer",
-        reasoning="Target was $10M.",
-        confidence=0.90,
-        category="mistake_prevention",
-    )
-    assert draft.notification_text == "Push back on the $7M offer"
-    assert draft.confidence == 0.90
-    assert draft.category == "mistake_prevention"
-
-
-def test_validation_result_model():
-    """ValidationResult should validate correctly."""
-    from utils.llm.proactive_notification import ValidationResult
-
-    result = ValidationResult(
-        approved=True,
-        reasoning="This would genuinely help the user.",
-    )
-    assert result.approved is True
