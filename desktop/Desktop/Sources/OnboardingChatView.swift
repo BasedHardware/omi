@@ -419,10 +419,8 @@ struct OnboardingToolIndicator: View {
 
     private var displayText: String {
         switch toolName {
-        case "start_file_scan":
+        case "scan_files", "start_file_scan":
             return status == .running ? "Scanning your files..." : "Files scanned"
-        case "get_file_scan_results":
-            return status == .running ? "Analyzing your files..." : "Files analyzed"
         case "check_permission_status":
             return status == .running ? "Checking permissions..." : "Permissions checked"
         case "request_permission":
