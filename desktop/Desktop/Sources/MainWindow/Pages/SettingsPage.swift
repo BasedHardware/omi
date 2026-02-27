@@ -319,6 +319,10 @@ struct SettingsContentView: View {
         _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
         _memoryNotificationsEnabled = State(initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
         _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
+        _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
+        _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
+        _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
+        _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
     }
 
     /// Computed status text for notifications

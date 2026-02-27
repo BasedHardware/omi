@@ -28,8 +28,8 @@ class AssistantSettings {
     private let defaultTranscriptionLanguage = "en"
     private let defaultTranscriptionAutoDetect = false
     private let defaultTranscriptionVocabulary: [String] = []
-    private let defaultVadGateEnabled = true
-    private let defaultBatchTranscriptionEnabled = true
+    private let defaultVadGateEnabled = false
+    private let defaultBatchTranscriptionEnabled = false
 
     private init() {
         // Register defaults
