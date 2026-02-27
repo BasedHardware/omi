@@ -43,11 +43,11 @@ class ChatToolExecutor {
         case "check_permission_status":
             return await executeCheckPermissionStatus(toolCall.arguments)
 
-        case "start_file_scan":
-            return await executeStartFileScan(toolCall.arguments)
+        case "scan_files", "start_file_scan":
+            return await executeScanFiles(toolCall.arguments)
 
         case "get_file_scan_results":
-            return await executeGetFileScanResults(toolCall.arguments)
+            return await executeScanFiles(toolCall.arguments)
 
         case "set_user_preferences":
             return await executeSetUserPreferences(toolCall.arguments)
@@ -546,38 +546,67 @@ class ChatToolExecutor {
         return "screen_recording: \(statuses["screen_recording"]!), microphone: \(statuses["microphone"]!), notifications: \(statuses["notifications"]!), accessibility: \(statuses["accessibility"]!), automation: \(statuses["automation"]!)"
     }
 
-    /// Start background file scanning
-    private static func executeStartFileScan(_ args: [String: Any]) async -> String {
-        guard !fileScanStarted else {
-            return "File scan already started"
-        }
-        fileScanStarted = true
-
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+    /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
+    private static func executeScanFiles(_ args: [String: Any]) async -> String {
+        let fm = FileManager.default
+        let homeDir = fm.homeDirectoryForCurrentUser
         let foldersToScan = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
             .map { homeDir.appendingPathComponent($0) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .filter { fm.fileExists(atPath: $0.path) }
 
         let applicationsURL = URL(fileURLWithPath: "/Applications")
         var allFolders = foldersToScan
-        if FileManager.default.fileExists(atPath: applicationsURL.path) {
+        if fm.fileExists(atPath: applicationsURL.path) {
             allFolders.append(applicationsURL)
         }
 
-        // Fire off scan in background
-        Task.detached {
-            let count = await FileIndexerService.shared.scanFolders(allFolders)
-            await MainActor.run {
-                fileScanFileCount = count
+        // Pre-check folder access — this triggers macOS TCC dialogs
+        var deniedFolders: [String] = []
+        var accessibleFolders: [URL] = []
+        for folder in allFolders {
+            do {
+                _ = try fm.contentsOfDirectory(
+                    at: folder,
+                    includingPropertiesForKeys: [.fileSizeKey],
+                    options: [.skipsHiddenFiles]
+                )
+                accessibleFolders.append(folder)
+            } catch {
+                let nsError = error as NSError
+                if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
+                    // Permission denied — TCC dialog was shown or already denied
+                    deniedFolders.append(folder.lastPathComponent)
+                } else {
+                    // Other error (e.g. folder doesn't exist) — skip silently
+                    log("FileIndexer: Pre-check failed for \(folder.lastPathComponent): \(error.localizedDescription)")
+                }
             }
-            log("Onboarding file scan completed: \(count) files indexed")
         }
 
-        return "File scan started for \(allFolders.count) folders: \(foldersToScan.map { $0.lastPathComponent }.joined(separator: ", ")), /Applications. Results will be ready in a few seconds."
+        // Actually scan accessible folders (blocking)
+        let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
+        fileScanFileCount = count
+        log("Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied")
+
+        // Build results from database
+        let resultsStr = await getFileScanResultsFromDB()
+
+        var out = resultsStr
+
+        if !deniedFolders.isEmpty {
+            out += "\n\n## FOLDER ACCESS DENIED\n"
+            out += "The following folders were NOT scanned because the user didn't grant access:\n"
+            for folder in deniedFolders {
+                out += "- ~/\(folder)\n"
+            }
+            out += "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
+        }
+
+        return out
     }
 
-    /// Get file scan results summary
-    private static func executeGetFileScanResults(_ args: [String: Any]) async -> String {
+    /// Get file scan results from the database
+    private static func getFileScanResultsFromDB() async -> String {
         guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
             return "Error: database not available"
         }
