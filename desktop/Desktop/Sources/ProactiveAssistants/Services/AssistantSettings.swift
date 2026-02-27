@@ -26,7 +26,7 @@ class AssistantSettings {
     private let defaultScreenAnalysisEnabled = true
     private let defaultTranscriptionEnabled = true
     private let defaultTranscriptionLanguage = "en"
-    private let defaultTranscriptionAutoDetect = false
+    private let defaultTranscriptionAutoDetect = true
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = false
     private let defaultBatchTranscriptionEnabled = false
