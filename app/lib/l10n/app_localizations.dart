@@ -15402,13 +15402,13 @@ abstract class AppLocalizations {
   /// Body for the API switch confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'Switch to {environment}? The app will close and you need to reopen it.'**
+  /// **'Switch to {environment}? You will need to close and reopen the app for changes to take effect.'**
   String switchApiConfirmBody(String environment);
 
-  /// Button label to confirm API switch and close the app
+  /// Button label to confirm API environment switch
   ///
   /// In en, this message translates to:
-  /// **'Switch & Close'**
+  /// **'Switch'**
   String get switchAndRestart;
 
   /// No description provided for @stagingDisclaimer.
@@ -15416,6 +15416,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.'**
   String get stagingDisclaimer;
+
+  /// Snackbar message after saving API environment preference
+  ///
+  /// In en, this message translates to:
+  /// **'Saved. Close and reopen the app to apply.'**
+  String get apiEnvSavedRestartRequired;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
