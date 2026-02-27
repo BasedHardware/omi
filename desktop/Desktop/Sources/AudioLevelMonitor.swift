@@ -4,7 +4,7 @@ import QuartzCore
 
 /// Dedicated monitor for audio levels that doesn't trigger global AppState re-renders.
 /// Only views that explicitly observe this class will update when audio levels change.
-/// Updates are throttled to ~15 Hz to avoid flooding SwiftUI with layout invalidations.
+/// Updates are throttled to ~5 Hz to avoid flooding SwiftUI with layout invalidations.
 @MainActor
 class AudioLevelMonitor: ObservableObject {
     static let shared = AudioLevelMonitor()
@@ -15,8 +15,8 @@ class AudioLevelMonitor: ObservableObject {
     /// System audio level (0.0 - 1.0)
     @Published private(set) var systemLevel: Float = 0.0
 
-    // Throttle: only publish at ~15 Hz (every ~67ms)
-    private let updateInterval: Double = 1.0 / 15.0
+    // Throttle: only publish at ~5 Hz (every ~200ms)
+    private let updateInterval: Double = 1.0 / 5.0
     private var lastMicUpdate: Double = 0.0
     private var lastSysUpdate: Double = 0.0
     private var pendingMicLevel: Float = 0.0
@@ -25,7 +25,7 @@ class AudioLevelMonitor: ObservableObject {
     private init() {}
 
     /// Update microphone level - called from audio capture callback.
-    /// Throttled to ~15 Hz to prevent excessive SwiftUI re-renders.
+    /// Throttled to ~5 Hz to prevent excessive SwiftUI re-renders.
     func updateMicrophoneLevel(_ level: Float) {
         pendingMicLevel = level
         let now = CACurrentMediaTime()
@@ -36,7 +36,7 @@ class AudioLevelMonitor: ObservableObject {
     }
 
     /// Update system audio level - called from audio capture callback.
-    /// Throttled to ~15 Hz to prevent excessive SwiftUI re-renders.
+    /// Throttled to ~5 Hz to prevent excessive SwiftUI re-renders.
     func updateSystemLevel(_ level: Float) {
         pendingSysLevel = level
         let now = CACurrentMediaTime()
