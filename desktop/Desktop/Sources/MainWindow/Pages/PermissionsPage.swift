@@ -503,7 +503,7 @@ struct ScreenRecordingPermissionSection: View {
         )
     }
 
-    // Content for STALE state - developer signing changed, user must toggle off/on
+    // Content for STALE state - developer signing changed, user must remove and re-add
     private var stalePermissionContent: some View {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
         return VStack(alignment: .leading, spacing: 16) {
@@ -514,8 +514,8 @@ struct ScreenRecordingPermissionSection: View {
             VStack(alignment: .leading, spacing: 12) {
                 instructionStep(number: 1, text: "Click \"Open Settings\" below")
                 instructionStep(number: 2, text: "Find \"\(appName)\" in the Screen Recording list")
-                instructionStep(number: 3, text: "Toggle the switch OFF, then back ON")
-                instructionStep(number: 4, text: "Return to Omi - permission will update automatically")
+                instructionStep(number: 3, text: "Click on \"\(appName)\", then click the minus (−) button to remove it")
+                instructionStep(number: 4, text: "Come back to Omi and click \"Grant\" — it will be re-added with the correct permissions")
             }
 
             Button(action: {
