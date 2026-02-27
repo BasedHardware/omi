@@ -1,6 +1,126 @@
 import SwiftUI
 import MarkdownUI
 
+// MARK: - Onboarding Chat Persistence
+
+/// Persists onboarding chat messages across app restarts (e.g. screen recording permission requires restart).
+/// Stores messages as JSON in UserDefaults alongside the ACP session ID for conversation resumption.
+enum OnboardingChatPersistence {
+    private static let messagesKey = "onboardingChatMessages"
+    private static let sessionIdKey = "onboardingACPSessionId"
+
+    /// Save messages to UserDefaults
+    static func saveMessages(_ messages: [ChatMessage]) {
+        var encoded: [[String: Any]] = []
+        for msg in messages {
+            var dict: [String: Any] = [
+                "id": msg.id,
+                "text": msg.text,
+                "sender": msg.sender == .user ? "user" : "ai",
+                "createdAt": msg.createdAt.timeIntervalSince1970,
+            ]
+            // Serialize content blocks for AI messages
+            if msg.sender == .ai && !msg.contentBlocks.isEmpty {
+                var blocks: [[String: Any]] = []
+                for block in msg.contentBlocks {
+                    switch block {
+                    case .text(let id, let text):
+                        blocks.append(["type": "text", "id": id, "text": text])
+                    case .toolCall(let id, let name, let status, _, let input, _):
+                        var b: [String: Any] = [
+                            "type": "toolCall", "id": id, "name": name,
+                            "status": status == .completed ? "completed" : "running",
+                        ]
+                        if let input { b["inputSummary"] = input.summary }
+                        blocks.append(b)
+                    case .thinking:
+                        break // Skip thinking blocks
+                    case .discoveryCard(let id, let title, let summary, let fullText):
+                        blocks.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
+                    }
+                }
+                dict["contentBlocks"] = blocks
+            }
+            encoded.append(dict)
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: encoded) {
+            UserDefaults.standard.set(data, forKey: messagesKey)
+        }
+    }
+
+    /// Restore messages from UserDefaults
+    static func loadMessages() -> [ChatMessage]? {
+        guard let data = UserDefaults.standard.data(forKey: messagesKey),
+              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              !array.isEmpty else { return nil }
+
+        var messages: [ChatMessage] = []
+        for dict in array {
+            guard let id = dict["id"] as? String,
+                  let text = dict["text"] as? String,
+                  let senderStr = dict["sender"] as? String,
+                  let timestamp = dict["createdAt"] as? TimeInterval else { continue }
+
+            let sender: ChatSender = senderStr == "user" ? .user : .ai
+            var contentBlocks: [ChatContentBlock] = []
+
+            if let blocks = dict["contentBlocks"] as? [[String: Any]] {
+                for block in blocks {
+                    guard let type = block["type"] as? String,
+                          let blockId = block["id"] as? String else { continue }
+                    switch type {
+                    case "text":
+                        contentBlocks.append(.text(id: blockId, text: block["text"] as? String ?? ""))
+                    case "toolCall":
+                        let name = block["name"] as? String ?? ""
+                        let status: ToolCallStatus = (block["status"] as? String) == "running" ? .running : .completed
+                        let input: ToolCallInput? = (block["inputSummary"] as? String).map { ToolCallInput(summary: $0, details: nil) }
+                        contentBlocks.append(.toolCall(id: blockId, name: name, status: status, input: input))
+                    case "discoveryCard":
+                        contentBlocks.append(.discoveryCard(
+                            id: blockId,
+                            title: block["title"] as? String ?? "",
+                            summary: block["summary"] as? String ?? "",
+                            fullText: block["fullText"] as? String ?? ""
+                        ))
+                    default:
+                        break
+                    }
+                }
+            }
+
+            messages.append(ChatMessage(
+                id: id, text: text,
+                createdAt: Date(timeIntervalSince1970: timestamp),
+                sender: sender, isStreaming: false,
+                contentBlocks: contentBlocks
+            ))
+        }
+        return messages.isEmpty ? nil : messages
+    }
+
+    /// Save the ACP session ID for resume after restart
+    static func saveSessionId(_ sessionId: String) {
+        UserDefaults.standard.set(sessionId, forKey: sessionIdKey)
+    }
+
+    /// Load the saved ACP session ID
+    static func loadSessionId() -> String? {
+        UserDefaults.standard.string(forKey: sessionIdKey)
+    }
+
+    /// Clear all persisted onboarding chat data
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: messagesKey)
+        UserDefaults.standard.removeObject(forKey: sessionIdKey)
+    }
+
+    /// Whether there are persisted messages (i.e. app was restarted mid-onboarding)
+    static var hasSavedMessages: Bool {
+        UserDefaults.standard.data(forKey: messagesKey) != nil
+    }
+}
+
 // MARK: - Onboarding Chat View
 
 struct OnboardingChatView: View {
@@ -142,9 +262,14 @@ struct OnboardingChatView: View {
                         withAnimation {
                             proxy.scrollTo("typing", anchor: .bottom)
                         }
-                    } else if !quickReplyOptions.isEmpty {
-                        withAnimation {
-                            proxy.scrollTo("quick-replies", anchor: .bottom)
+                    } else {
+                        // Persist messages when AI response completes (for restart recovery)
+                        OnboardingChatPersistence.saveMessages(chatProvider.messages)
+
+                        if !quickReplyOptions.isEmpty {
+                            withAnimation {
+                                proxy.scrollTo("quick-replies", anchor: .bottom)
+                            }
                         }
                     }
                 }
@@ -258,9 +383,6 @@ struct OnboardingChatView: View {
         hasStarted = true
         isInputFocused = true
 
-        // Clear any existing messages so onboarding starts fresh
-        chatProvider.messages.removeAll()
-
         // Wire up onboarding tools
         ChatToolExecutor.onboardingAppState = appState
         ChatToolExecutor.onCompleteOnboarding = {
@@ -284,13 +406,30 @@ struct OnboardingChatView: View {
         // Set onboarding session key so messages go to a dedicated session
         chatProvider.onboardingSessionKey = "onboarding"
 
-        // Send initial user message — the system prompt tells AI how to respond
-        Task {
-            await chatProvider.sendMessage(
-                "Hi, I just installed Omi!",
-                systemPromptPrefix: systemPrompt,
-                sessionKey: "onboarding"
-            )
+        // Check for persisted messages from a previous session (e.g. app restart after screen recording)
+        if let savedMessages = OnboardingChatPersistence.loadMessages() {
+            log("OnboardingChatView: Restoring \(savedMessages.count) messages from previous session")
+            chatProvider.messages = savedMessages
+
+            // Resume the conversation — tell the AI the app was restarted
+            Task {
+                await chatProvider.sendMessage(
+                    "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
+                    systemPromptPrefix: systemPrompt,
+                    sessionKey: "onboarding"
+                )
+            }
+        } else {
+            // Fresh start — clear messages and begin onboarding
+            chatProvider.messages.removeAll()
+
+            Task {
+                await chatProvider.sendMessage(
+                    "Hi, I just installed Omi!",
+                    systemPromptPrefix: systemPrompt,
+                    sessionKey: "onboarding"
+                )
+            }
         }
     }
 
@@ -395,8 +534,9 @@ struct OnboardingChatView: View {
             )
         }
 
-        // Clean up onboarding session key
+        // Clean up onboarding session key and persisted chat data
         chatProvider.onboardingSessionKey = nil
+        OnboardingChatPersistence.clear()
 
         // Log analytics
         AnalyticsManager.shared.onboardingCompleted()
