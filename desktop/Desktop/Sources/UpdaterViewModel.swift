@@ -298,6 +298,25 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
+    /// Sync update channel from server (called on auth state change).
+    /// If the backend has a `desktop_update_channel` field set on the user doc,
+    /// override the local channel preference.
+    func syncUpdateChannelFromServer() {
+        Task {
+            do {
+                let profile = try await APIClient.shared.getUserProfile()
+                guard let serverChannel = profile.desktopUpdateChannel,
+                      let channel = UpdateChannel(rawValue: serverChannel) else { return }
+                if updateChannel != channel {
+                    log("Sparkle: Server assigned update channel: \(serverChannel)")
+                    updateChannel = channel
+                }
+            } catch {
+                // Non-fatal — channel sync is best-effort
+            }
+        }
+    }
+
     /// Get the current app version string
     var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
