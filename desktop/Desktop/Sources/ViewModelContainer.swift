@@ -109,6 +109,9 @@ class ViewModelContainer: ObservableObject {
             await TaskAgentManager.shared.restoreSessionsFromDatabase()
             // Wire task chat coordinator to view model for delete/purge operations
             tasksViewModel.chatCoordinator = taskChatCoordinator
+
+            // Start screen activity sync to backend (Firestore + Pinecone)
+            await ScreenActivitySyncService.shared.start()
         }
 
         isLoading = false
