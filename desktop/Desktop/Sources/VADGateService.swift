@@ -203,7 +203,8 @@ final class DgWallMapper {
 final class VADGateService {
     // Constants matching backend vad_gate.py
     private let preRollMs: Double = 500
-    private let hangoverMs: Double = 4000
+    private let hangoverMs: Double = 4000       // Streaming mode: controls finalize timing
+    private let batchHangoverMs: Double = 1000  // Batch mode: controls chunk boundary (user-visible latency)
     private let speechThreshold: Float = 0.65
     private let keepaliveSec: Double = 20
     private let vadWindowSamples = 512
@@ -597,7 +598,7 @@ final class VADGateService {
                 return BatchGateOutput(audioBuffer: nil, speechStartWallTime: batchSpeechStartWallTime, isComplete: false)
             }
 
-            if timeSinceSpeechMs > hangoverMs {
+            if timeSinceSpeechMs > batchHangoverMs {
                 // HANGOVER -> SILENCE: emit completed buffer
                 batchState = .silence
                 let completedBuffer = batchAudioBuffer
