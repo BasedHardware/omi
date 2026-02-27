@@ -273,7 +273,6 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     name: "ask_followup",
     description: `Present a question with quick-reply buttons to the user. The UI renders clickable buttons.
 Use in Step 4 (follow-up question after file discoveries) and Step 5 (permission grant buttons).
-For permissions: set permission_image to the permission type to show the permission guide image.
 The user can click a button OR type their own reply. Wait for their response before continuing.`,
     inputSchema: {
       type: "object" as const,
@@ -287,11 +286,6 @@ The user can click a button OR type their own reply. Wait for their response bef
           items: { type: "string" as const },
           description:
             "2-3 quick-reply button labels. For permissions, include 'Grant [Permission]' and 'Skip'.",
-        },
-        permission_image: {
-          type: "string" as const,
-          description:
-            "Optional. Show a permission guide image: microphone, notifications, accessibility, screen_recording, or folder_access",
         },
       },
       required: ["question", "options"],
