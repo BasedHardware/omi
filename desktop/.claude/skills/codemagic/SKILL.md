@@ -22,7 +22,6 @@ for b in builds:
     tag = b.get('tag') or '-'
     start = (b.get('startedAt') or '-')[:19]
     branch = b.get('branch') or '-'
-    wf = b.get('workflowId') or '-'
     print(f'{s:12} tag={tag:35} branch={branch:20} start={start}')
 "
 
@@ -49,6 +48,9 @@ curl -s -X POST -H "x-auth-token: $CODEMAGIC_API_TOKEN" \
 3. Codemagic picks up the tag and runs `omi-desktop-swift-release` workflow
 4. Codemagic builds universal binary (arm64 + x86_64), signs, notarizes, creates DMG + Sparkle ZIP
 5. Publishes GitHub release, uploads to GCS, registers in Firestore
+6. **Deploys Rust backend to Cloud Run** (step "Deploy Rust backend to Cloud Run" in codemagic.yaml)
+
+**IMPORTANT**: The Rust backend (`Backend-Rust/`) is deployed as part of every desktop release build. If you change backend code, you MUST merge to `main` and wait for the Codemagic build to finish for the backend changes to go live. There is no separate backend deploy — it's bundled with the desktop release.
 
 ## Build Statuses
 
@@ -141,6 +143,95 @@ After a build finishes, the release starts on the `staging` channel. Promote thr
 ./scripts/promote_release.sh <tag>
 ```
 
+**IMPORTANT**: The Firestore doc ID format is `v{version} {build}` (with a space), NOT `v{version}`. To find the correct doc ID:
+
+```bash
+cd /path/to/backend && source venv/bin/activate && python3 -c "
+import firebase_admin
+from firebase_admin import credentials, firestore
+cred = credentials.Certificate('google-credentials.json')
+try: firebase_admin.initialize_app(cred)
+except ValueError: pass
+db = firestore.client()
+docs = db.collection('desktop_releases').where('version', '==', '<VERSION>').get()
+for doc in docs:
+    d = doc.to_dict()
+    print(f'doc_id: {doc.id}  channel: {d.get(\"channel\")}  is_live: {d.get(\"is_live\")}')
+"
+```
+
+If `promote_release.sh` fails with 404, use the full doc ID with build number:
+```bash
+./scripts/promote_release.sh "v0.11.26 11026"
+```
+
+## Sparkle Update Channels
+
+Releases are delivered to users via Sparkle auto-update. The appcast serves one item per channel.
+
+### Channel hierarchy
+`staging` → `beta` → `stable` (default)
+
+### How channels work in Sparkle
+- Items with `<sparkle:channel>staging</sparkle:channel>` → only visible to staging users
+- Items with `<sparkle:channel>beta</sparkle:channel>` → visible to beta and staging users
+- Items with **no channel tag** → visible to ALL users (this is the "stable" default)
+- **BUG**: Items tagged `<sparkle:channel>stable</sparkle:channel>` are NOT the same as no-tag. They're treated as a named channel called "stable" that nobody subscribes to. The Rust backend currently emits this tag for stable releases — they should have no tag instead.
+
+### User's channel is stored in TWO places
+1. **Firestore** `users/{uid}.desktop_update_channel` — server-authoritative, set by admin
+2. **UserDefaults** `update_channel` — local on the user's machine, synced from Firestore
+
+The app syncs `desktop_update_channel` from the user profile API (`GET /v1/users/profile`) on:
+- App activate
+- Settings page load
+- Auth state change
+
+### Check a user's channel
+
+```bash
+# Check Firestore value
+cd /path/to/backend && source venv/bin/activate && python3 -c "
+from firebase_admin import auth, firestore
+# (init firebase first)
+user = auth.get_user_by_email('<email>')
+doc = firestore.client().collection('users').document(user.uid).get()
+d = doc.to_dict()
+print(f'desktop_update_channel: {d.get(\"desktop_update_channel\")}')
+print(f'update_channel: {d.get(\"update_channel\")}')
+"
+```
+
+### Change a user's channel
+
+```bash
+# Set the authoritative field (desktop_update_channel)
+db.collection('users').document(uid).update({'desktop_update_channel': 'staging'})
+```
+
+**NOTE**: There is also an `update_channel` field on user docs used by the legacy assistant settings sync path. If changing channels, update BOTH fields to avoid confusion:
+```python
+db.collection('users').document(uid).update({
+    'desktop_update_channel': 'staging',
+    'update_channel': 'staging'
+})
+```
+
+### Check what the appcast is serving
+
+```bash
+curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml | \
+  python3 -c "
+import sys, xml.etree.ElementTree as ET
+ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
+root = ET.parse(sys.stdin).getroot()
+for item in root.findall('.//item'):
+    ver = item.find('sparkle:shortVersionString', ns)
+    ch = item.find('sparkle:channel', ns)
+    print(f'v{ver.text if ver is not None else \"?\"} channel={ch.text if ch is not None else \"(default/stable)\"}')
+"
+```
+
 ## Troubleshooting
 
 ### Build stuck in `queued`
@@ -162,3 +253,11 @@ After a build finishes, the release starts on the `staging` channel. Promote thr
 curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml | grep shortVersionString
 ```
 If the version doesn't match, check Firestore `desktop_releases` collection.
+
+### User not seeing update despite correct channel
+1. Check the appcast serves the version for that channel (see above)
+2. Check the user's local channel: `defaults read com.omi.computer-macos update_channel`
+3. Check Firestore has `desktop_update_channel` set correctly
+4. Check the Rust backend returns `desktop_update_channel` in `GET /v1/users/profile`
+5. Check app logs: `grep "Sparkle:" /private/tmp/omi.log | tail -10`
+6. If the user has both "Omi Dev" and "Omi Beta" running, they may be checking updates in the wrong app
