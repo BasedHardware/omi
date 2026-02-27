@@ -138,6 +138,10 @@ class AppState: ObservableObject {
     private var audioMixer: AudioMixer?
     private var vadGateService: VADGateService?
 
+    // Batch transcription mode
+    private var useBatchTranscription: Bool = false
+    private var recordingStartCATime: Double = 0  // CACurrentMediaTime at recording start
+
     // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
     private var speakerSegments: [SpeakerSegment] = []
     private let maxInMemorySegments = 200
@@ -1082,8 +1086,15 @@ class AppState: ObservableObject {
             log("Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))")
             log("Transcription: Custom vocabulary: \(vocabulary.joined(separator: ", "))")
 
-            // Initialize transcription service with language and vocabulary
-            transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+            // Determine transcription mode
+            useBatchTranscription = AssistantSettings.shared.batchTranscriptionEnabled && effectiveSource == .microphone
+
+            if !useBatchTranscription {
+                // Streaming mode: initialize WebSocket transcription service
+                transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+            } else {
+                log("Transcription: Batch mode enabled — skipping WebSocket")
+            }
 
             // Set conversation source based on audio source
             if effectiveSource == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
@@ -1102,10 +1113,11 @@ class AppState: ObservableObject {
                 // Initialize audio mixer for combining mic and system audio
                 audioMixer = AudioMixer()
 
-                // Initialize VAD gate if enabled (skips silence to reduce Deepgram usage)
-                if AssistantSettings.shared.vadGateEnabled {
+                // VAD gate is always needed for batch mode (chunk boundaries),
+                // and optional for streaming mode (silence gating)
+                if useBatchTranscription || AssistantSettings.shared.vadGateEnabled {
                     vadGateService = VADGateService()
-                    log("Transcription: VAD gate enabled")
+                    log("Transcription: VAD gate enabled\(useBatchTranscription ? " (batch mode)" : "")")
                 } else {
                     vadGateService = nil
                 }
@@ -1120,31 +1132,37 @@ class AppState: ObservableObject {
             }
             // For BLE device, BleAudioService will be used in startAudioCapture
 
-            // Start transcription service first
-            transcriptionService?.start(
-                onTranscript: { [weak self] segment in
-                    Task { @MainActor in
-                        self?.handleTranscriptSegment(segment)
+            if useBatchTranscription {
+                // Batch mode: start audio capture directly (no WebSocket to wait for)
+                recordingStartCATime = CACurrentMediaTime()
+                await startAudioCapture(source: effectiveSource)
+            } else {
+                // Streaming mode: start transcription service first, then audio on connect
+                transcriptionService?.start(
+                    onTranscript: { [weak self] segment in
+                        Task { @MainActor in
+                            self?.handleTranscriptSegment(segment)
+                        }
+                    },
+                    onError: { [weak self] error in
+                        Task { @MainActor in
+                            logError("Transcription error", error: error)
+                            AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+                            self?.stopTranscription()
+                        }
+                    },
+                    onConnected: { [weak self] in
+                        Task { @MainActor in
+                            log("Transcription: Connected to DeepGram")
+                            // Start audio capture once connected
+                            await self?.startAudioCapture(source: effectiveSource)
+                        }
+                    },
+                    onDisconnected: {
+                        log("Transcription: Disconnected from DeepGram")
                     }
-                },
-                onError: { [weak self] error in
-                    Task { @MainActor in
-                        logError("Transcription error", error: error)
-                        AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-                        self?.stopTranscription()
-                    }
-                },
-                onConnected: { [weak self] in
-                    Task { @MainActor in
-                        log("Transcription: Connected to DeepGram")
-                        // Start audio capture once connected
-                        await self?.startAudioCapture(source: effectiveSource)
-                    }
-                },
-                onDisconnected: {
-                    log("Transcription: Disconnected from DeepGram")
-                }
-            )
+                )
+            }
 
             isTranscribing = true
             AssistantSettings.shared.transcriptionEnabled = true
@@ -1224,10 +1242,21 @@ class AppState: ObservableObject {
               let audioMixer = audioMixer else { return }
 
         // Start the audio mixer - it will send stereo audio to transcription service
-        // If VAD gate is enabled, filter through it first
+        // Branch on batch vs streaming mode
         audioMixer.start { [weak self] stereoData in
             guard let self = self else { return }
-            if let gate = self.vadGateService {
+            if self.useBatchTranscription {
+                // Batch mode: accumulate audio in VAD gate, transcribe on silence
+                guard let gate = self.vadGateService else { return }
+                let output = gate.processAudioBatch(stereoData)
+                if output.isComplete, let audioBuffer = output.audioBuffer {
+                    let wallStartTime = output.speechStartWallTime
+                    Task { @MainActor [weak self] in
+                        await self?.batchTranscribeChunk(audioBuffer: audioBuffer, wallStartTime: wallStartTime)
+                    }
+                }
+            } else if let gate = self.vadGateService {
+                // Streaming mode with VAD gate
                 let output = gate.processAudio(stereoData)
                 if !output.audioToSend.isEmpty {
                     self.transcriptionService?.sendAudio(output.audioToSend)
@@ -1238,6 +1267,7 @@ class AppState: ObservableObject {
                     self.transcriptionService?.sendFinalize()
                 }
             } else {
+                // Streaming mode without VAD gate
                 self.transcriptionService?.sendAudio(stereoData)
             }
         }
@@ -1478,6 +1508,16 @@ class AppState: ObservableObject {
         // Stop audio mixer
         audioMixer?.stop()
         audioMixer = nil
+
+        // Flush batch buffer before clearing VAD gate
+        if useBatchTranscription, let gate = vadGateService, let output = gate.flushBatchBuffer() {
+            if let audioBuffer = output.audioBuffer {
+                let wallStartTime = output.speechStartWallTime
+                Task { @MainActor [weak self] in
+                    await self?.batchTranscribeChunk(audioBuffer: audioBuffer, wallStartTime: wallStartTime)
+                }
+            }
+        }
 
         // Clear VAD gate
         vadGateService = nil
@@ -2059,9 +2099,10 @@ class AppState: ObservableObject {
         let channelBasedSpeaker = segment.channelIndex == 0 ? 0 : 1
 
         // Process words and merge by speaker
-        // If VAD gate is active, remap Deepgram timestamps to wall-clock time
+        // If VAD gate is active (streaming mode only), remap Deepgram timestamps to wall-clock time
+        // In batch mode, timestamps are already session-relative after offsetting in batchTranscribeChunk
         let words: [TranscriptionService.TranscriptSegment.Word]
-        if let gate = vadGateService {
+        if !useBatchTranscription, let gate = vadGateService {
             words = segment.words.map { word in
                 let (remappedStart, remappedEnd) = gate.remapTimestamp(start: word.start, end: word.end)
                 return TranscriptionService.TranscriptSegment.Word(
