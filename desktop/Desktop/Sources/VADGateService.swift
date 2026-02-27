@@ -182,10 +182,9 @@ final class DgWallMapper {
 /// Audio is gated when BOTH channels are silent.
 final class VADGateService {
     // Constants matching backend vad_gate.py
-    private let preRollMs: Double = 300
+    private let preRollMs: Double = 500
     private let hangoverMs: Double = 4000
     private let speechThreshold: Float = 0.65
-    private let finalizeSilenceMs: Double = 300
     private let keepaliveSec: Double = 20
     private let vadWindowSamples = 512
     private let sampleRate = 16000
@@ -202,7 +201,6 @@ final class VADGateService {
     private var state: GateState = .silence
     private var audioCursorMs: Double = 0.0
     private var lastSpeechMs: Double = 0.0
-    private var hangoverFinalized = false
 
     // Pre-roll buffer
     private var preRollChunks: [Data] = []
@@ -424,7 +422,6 @@ final class VADGateService {
             if !isSpeech {
                 // SPEECH -> HANGOVER
                 state = .hangover
-                hangoverFinalized = false
             }
 
             return GateOutput(audioToSend: pcmData, shouldFinalize: false)
@@ -435,36 +432,27 @@ final class VADGateService {
             if isSpeech {
                 // HANGOVER -> SPEECH
                 state = .speech
-                hangoverFinalized = false
                 dgWallMapper.onAudioSent(chunkDuration: chunkDurationSec, wallTime: wallRel)
                 lastSendWallTime = wallTime
                 return GateOutput(audioToSend: pcmData, shouldFinalize: false)
             }
 
             if timeSinceSpeechMs > hangoverMs {
-                // HANGOVER -> SILENCE
+                // HANGOVER -> SILENCE: finalize so Deepgram flushes pending transcript
                 state = .silence
-                let needFinalize = !hangoverFinalized
-                hangoverFinalized = false
                 preRollChunks.removeAll()
                 preRollTotalMs = 0.0
                 preRollChunks.append(pcmData)
                 preRollTotalMs = chunkMs
                 dgWallMapper.onSilenceSkipped()
-                return GateOutput(audioToSend: Data(), shouldFinalize: needFinalize)
+                return GateOutput(audioToSend: Data(), shouldFinalize: true)
             }
 
-            // Mid-hangover finalize
-            var shouldFinalizeNow = false
-            if !hangoverFinalized && timeSinceSpeechMs >= finalizeSilenceMs {
-                shouldFinalizeNow = true
-                hangoverFinalized = true
-            }
-
-            // Still in hangover: send audio
+            // Still in hangover: send audio, let Deepgram's own endpointing
+            // (endpointing=300 + utterance_end_ms=1000) handle utterance boundaries
             dgWallMapper.onAudioSent(chunkDuration: chunkDurationSec, wallTime: wallRel)
             lastSendWallTime = wallTime
-            return GateOutput(audioToSend: pcmData, shouldFinalize: shouldFinalizeNow)
+            return GateOutput(audioToSend: pcmData, shouldFinalize: false)
         }
     }
 
