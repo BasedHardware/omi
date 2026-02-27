@@ -440,7 +440,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
-              if (Env.isTestFlight && Env.isUsingStagingApi) {
+              if (Env.isUsingStagingApi) {
                 return Column(
                   children: [
                     SafeArea(
