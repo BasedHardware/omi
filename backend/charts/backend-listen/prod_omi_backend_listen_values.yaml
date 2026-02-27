@@ -76,6 +76,8 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: GEMINI_API_KEY
+    value: "AIzaSyAwkcbfKOgBp_7V6VNs10MIyn1AGx8nsl8"
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles"
   - name: GITHUB_TOKEN

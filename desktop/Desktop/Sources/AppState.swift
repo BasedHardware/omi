@@ -422,7 +422,7 @@ class AppState: ObservableObject {
         }
 
         // Log final state of important keys
-        if ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] != nil {
+        if getenv("DEEPGRAM_API_KEY") != nil {
             log("DEEPGRAM_API_KEY is set")
         } else {
             log("WARNING: DEEPGRAM_API_KEY is NOT set")
