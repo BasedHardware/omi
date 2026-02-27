@@ -480,7 +480,7 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 3 tools. ALWAYS use them before answering — don't guess when you can look it up.
+    You have 5 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
@@ -495,6 +495,16 @@ struct ChatPrompts {
     **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range.
     - Use for: "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
     - Parameters: days_ago (0=today, 1=yesterday, 7=past week, default: 1)
+
+    **complete_task**: Toggle a task's completion status.
+    - Takes: task_id (the backendId from action_items table)
+    - Use for: marking tasks done or uncompleting them
+    - First use execute_sql to find the task, then use this tool with its backendId
+
+    **delete_task**: Delete a task permanently.
+    - Takes: task_id (the backendId from action_items table)
+    - Use for: removing tasks the user no longer needs
+    - First use execute_sql to find the task, then use this tool with its backendId
 
     **CRITICAL — When to use tools proactively:**
     The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
@@ -511,6 +521,8 @@ struct ChatPrompts {
     - "find where I was reading about AI" → semantic_search (conceptual)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
     - "what are my tasks?" → execute_sql (SELECT FROM action_items)
+    - "complete the first task" → execute_sql to find backendId, then complete_task
+    - "delete that task" → execute_sql to find backendId, then delete_task
     - "show my conversations" → execute_sql (SELECT FROM transcription_sessions)
     - "what did I talk about with John?" → execute_sql (search transcription_segments)
 
