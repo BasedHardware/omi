@@ -553,7 +553,7 @@ function startPersistentSession(send, log) {
   const sessionAbort = new AbortController();
 
   const options = {
-    model: "claude-opus-4-6",
+    model: "claude-sonnet-4-6",
     abortController: sessionAbort,
     systemPrompt: defaultSystemPrompt,
     allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
