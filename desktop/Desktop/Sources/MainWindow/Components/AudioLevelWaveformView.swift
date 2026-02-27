@@ -53,10 +53,12 @@ private struct BarView: View {
         // Scale with audio level
         let scaledLevel = clampedLevel * variation
 
-        // Add some randomness for organic feel
-        let randomVariation = CGFloat.random(in: 0.85...1.15)
+        // Deterministic per-bar variation for organic feel (avoid CGFloat.random which
+        // produces different values on every body evaluation, causing unnecessary layout)
+        let hash = sin(CGFloat(index) * 1.618 + 0.5)
+        let deterministicVariation = 0.85 + 0.3 * (hash * 0.5 + 0.5)
 
-        let height = minHeight + (maxHeight - minHeight) * scaledLevel * randomVariation
+        let height = minHeight + (maxHeight - minHeight) * scaledLevel * deterministicVariation
         return max(minHeight, min(maxHeight, height))
     }
 
