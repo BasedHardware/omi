@@ -633,6 +633,8 @@ function startPersistentSession(send, log) {
             if (Array.isArray(content)) {
               for (const block of content) {
                 if (block.type === "tool_use") {
+                  const inputStr = JSON.stringify(block.input);
+                  log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
                   send({ type: "tool_activity", name: block.name, status: "started" });
                   pendingTools.push(block.name);
                 } else if (block.type === "text" && typeof block.text === "string") {
@@ -647,6 +649,14 @@ function startPersistentSession(send, log) {
                 }
               }
             }
+            break;
+          }
+
+          case "tool_result": {
+            if (isPrewarmTurn) break;
+            const toolName = message.tool_name || "unknown";
+            const resultStr = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
+            log(`[TOOL_RESULT] ${toolName} (${resultStr.length} chars) ${resultStr.length > 300 ? resultStr.slice(0, 300) + '...' : resultStr}`);
             break;
           }
 
