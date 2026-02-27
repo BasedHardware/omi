@@ -1,12 +1,17 @@
 import Foundation
-import OnnxRuntimeBindings
 import QuartzCore
+#if canImport(OnnxRuntimeBindings)
+import OnnxRuntimeBindings
+#elseif canImport(onnxruntime)
+import onnxruntime
+#endif
 
 // MARK: - Silero VAD Model (ONNX Runtime)
 
 /// Wraps Silero VAD ONNX model for speech probability inference.
 /// Input: 512 Float32 samples at 16kHz. Output: speech probability [0,1].
 final class SileroVADModel {
+#if canImport(onnxruntime)
     private let session: ORTSession
     private let env: ORTEnv
     private var state: [Float]  // [2, 1, 128] = 256 floats (combined h+c for v5)
@@ -99,6 +104,15 @@ final class SileroVADModel {
     func resetStates() {
         state = [Float](repeating: 0.0, count: stateSize)
     }
+#else
+    init?() {
+        log("VADGateService: onnxruntime not available — model disabled")
+        return nil
+    }
+
+    func predict(_ samples: [Float]) -> Float { return 0.0 }
+    func resetStates() {}
+#endif
 }
 
 // MARK: - Gate State Machine

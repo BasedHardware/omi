@@ -330,10 +330,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        // Ensure the app always shows in the Dock (LSUIElement=false in Info.plist)
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-        }
+        // Ensure app always shows in dock as a regular app
+        NSApp.setActivationPolicy(.regular)
 
         // Set up menu bar icon with NSStatusBar (more reliable than SwiftUI MenuBarExtra)
         // Called synchronously on main thread to ensure status item is created before app finishes launching
@@ -373,6 +371,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     window.appearance = NSAppearance(named: .darkAqua)
                     // Ensure fullscreen always creates a dedicated Space
                     window.collectionBehavior.insert(.fullScreenPrimary)
+                    log("AppDelegate: Main window shown on launch")
                 }
             }
             if !foundOmiWindow {
@@ -537,20 +536,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
     }
 
-    /// Show the main Omi window (used by menu bar "Open Omi" and Dock icon click)
-    private func showMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        var foundWindow = false
-        for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-                foundWindow = true
-                window.makeKeyAndOrderFront(nil)
-                window.appearance = NSAppearance(named: .darkAqua)
+    // Dock icon is always visible — LSUIElement=false and activation policy stays .regular
+
+    /// Force-refresh the menu bar icon after activation policy changes.
+    /// Works around a macOS Sequoia bug where NSStatusBar items vanish
+    /// when switching to .accessory activation policy.
+    @MainActor private func refreshMenuBarIcon() {
+        guard let item = statusBarItem else {
+            // Status bar item was lost — recreate it
+            log("AppDelegate: [MENUBAR] refreshMenuBarIcon: statusBarItem is nil, recreating")
+            setupMenuBar()
+            return
+        }
+        // Re-assert visibility synchronously
+        item.isVisible = true
+        // Re-apply the icon to force the system to redraw
+        if let button = item.button {
+            if OMIApp.launchMode == .rewind {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                    icon.isTemplate = true
+                    button.image = icon
+                }
+            } else if let iconURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
+                      let icon = NSImage(contentsOf: iconURL) {
+                icon.isTemplate = true
+                let aspect = icon.size.width / icon.size.height
+                icon.size = NSSize(width: 16 * aspect, height: 16)
+                button.image = icon
             }
         }
-        if !foundWindow {
-            log("AppDelegate: WARNING - No Omi window found when trying to show main window")
+        // Safety net: verify again after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            let button = self?.statusBarItem?.button
+            let isPhantom = button != nil && button!.frame.width == 0
+            if self?.statusBarItem?.isVisible != true || isPhantom {
+                log("AppDelegate: [MENUBAR] Icon still not visible/phantom after refresh (frame=\(button?.frame ?? .zero)), recreating")
+                self?.setupMenuBar()
+            }
         }
+        log("AppDelegate: [MENUBAR] Refreshed status bar item after policy change")
     }
 
     /// Set up menu bar icon using NSStatusBar (more reliable than SwiftUI MenuBarExtra)
@@ -704,7 +728,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @MainActor @objc private func openOmiFromMenu() {
         AnalyticsManager.shared.menuBarActionClicked(action: "open_omi")
-        showMainWindow()
+        NSApp.activate(ignoringOtherApps: true)
+        var foundWindow = false
+        for window in NSApp.windows {
+            if window.title.hasPrefix("Omi") {
+                foundWindow = true
+                window.makeKeyAndOrderFront(nil)
+                window.appearance = NSAppearance(named: .darkAqua)
+            }
+        }
+        // Dock icon is always visible; just activate the app
+        NSApp.activate(ignoringOtherApps: true)
+        if !foundWindow {
+            log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
+        }
     }
 
     @MainActor @objc private func checkForUpdates() {
@@ -837,6 +874,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep app running in menu bar when all windows are closed
         return false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Always try to show the main Omi window when dock icon is clicked
+        for window in sender.windows where window.title.hasPrefix("Omi") {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+            sender.activate(ignoringOtherApps: true)
+            log("AppDelegate: Restored Omi window from dock click (wasVisible=\(flag))")
+            return false
+        }
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1020,15 +1071,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
         }
-    }
-
-    /// Called when user clicks the Dock icon while the app is already running.
-    /// Re-shows the main window if it was closed.
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            showMainWindow()
-        }
-        return true
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
