@@ -4503,6 +4503,9 @@ struct SettingsContentView: View {
 
                     isLoadingSettings = false
                 }
+
+                // Sync update channel from user profile (separate from assistant settings)
+                UpdaterViewModel.shared.syncUpdateChannelFromServer()
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {
