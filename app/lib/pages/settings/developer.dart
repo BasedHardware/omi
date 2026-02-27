@@ -393,163 +393,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // API Environment Section (TestFlight only)
-                  if (Env.isTestFlight) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2A2A2E),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Center(
-                                  child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      context.l10n.apiEnvironment,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      context.l10n.apiEnvironmentDescription,
-                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (!SharedPreferencesUtil().testFlightUseStagingApi) return;
-                                      _showApiSwitchDialog(context, 'production');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                            ? const Color(0xFF22C55E)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            context.l10n.production,
-                                            style: TextStyle(
-                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white
-                                                  : Colors.grey.shade400,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'api.omi.me',
-                                            style: TextStyle(
-                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white70
-                                                  : Colors.grey.shade600,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (SharedPreferencesUtil().testFlightUseStagingApi) return;
-                                      _showApiSwitchDialog(context, 'staging');
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      decoration: BoxDecoration(
-                                        color: SharedPreferencesUtil().testFlightUseStagingApi
-                                            ? Colors.orange.shade800
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            context.l10n.staging,
-                                            style: TextStyle(
-                                              color: SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white
-                                                  : Colors.grey.shade400,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            Uri.parse(Env.stagingApiUrl).host,
-                                            style: TextStyle(
-                                              color: SharedPreferencesUtil().testFlightUseStagingApi
-                                                  ? Colors.white70
-                                                  : Colors.grey.shade600,
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey.shade600, size: 12),
-                              const SizedBox(width: 6),
-                              Text(
-                                context.l10n.switchRequiresRestart,
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
                   // Persona Section
                   GestureDetector(
                     onTap: () {
@@ -1792,6 +1635,154 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       ],
                     ),
                   ),
+
+                  // API Environment Section (TestFlight only)
+                  if (Env.isTestFlight) ...[
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      context.l10n.apiEnvironment,
+                      subtitle: context.l10n.apiEnvironmentDescription,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (!SharedPreferencesUtil().testFlightUseStagingApi) return;
+                                      _showApiSwitchDialog(context, 'production');
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: !SharedPreferencesUtil().testFlightUseStagingApi
+                                            ? const Color(0xFF22C55E)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            context.l10n.production,
+                                            style: TextStyle(
+                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
+                                                  ? Colors.white
+                                                  : Colors.grey.shade400,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'api.omi.me',
+                                            style: TextStyle(
+                                              color: !SharedPreferencesUtil().testFlightUseStagingApi
+                                                  ? Colors.white70
+                                                  : Colors.grey.shade600,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (SharedPreferencesUtil().testFlightUseStagingApi) return;
+                                      _showApiSwitchDialog(context, 'staging');
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: SharedPreferencesUtil().testFlightUseStagingApi
+                                            ? Colors.orange.shade800
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Text(
+                                            context.l10n.staging,
+                                            style: TextStyle(
+                                              color: SharedPreferencesUtil().testFlightUseStagingApi
+                                                  ? Colors.white
+                                                  : Colors.grey.shade400,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            Uri.parse(Env.stagingApiUrl).host,
+                                            style: TextStyle(
+                                              color: SharedPreferencesUtil().testFlightUseStagingApi
+                                                  ? Colors.white70
+                                                  : Colors.grey.shade600,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey.shade600, size: 12),
+                              const SizedBox(width: 6),
+                              Text(
+                                context.l10n.switchRequiresRestart,
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (SharedPreferencesUtil().testFlightUseStagingApi) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade900.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade700.withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade300, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.l10n.stagingDisclaimer,
+                                style: TextStyle(color: Colors.orange.shade300, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
 
                   const SizedBox(height: 48),
                 ],
