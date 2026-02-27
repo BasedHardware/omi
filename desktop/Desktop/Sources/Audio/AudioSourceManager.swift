@@ -234,7 +234,7 @@ final class AudioSourceManager: ObservableObject {
             onAudioLevel: { [weak self] level in
                 Task { @MainActor in
                     self?.audioLevel = level
-                    AudioLevelMonitor.shared.microphoneLevel = level
+                    AudioLevelMonitor.shared.updateMicrophoneLevel(level)
                 }
             }
         )
@@ -247,7 +247,7 @@ final class AudioSourceManager: ObservableObject {
                 },
                 onAudioLevel: { level in
                     Task { @MainActor in
-                        AudioLevelMonitor.shared.systemLevel = level
+                        AudioLevelMonitor.shared.updateSystemLevel(level)
                     }
                 }
             )
