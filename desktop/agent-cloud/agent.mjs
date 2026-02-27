@@ -678,6 +678,7 @@ function startPersistentSession(send, log) {
     session_id: "",
   });
 
+  log(`Starting persistent session with model: ${options.model}`);
   const q = query({ prompt: messageQueue, options });
 
   // Session state

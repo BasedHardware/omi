@@ -8167,4 +8167,34 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+
+  @override
+  String get apiEnvironment => 'API Environment';
+
+  @override
+  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+
+  @override
+  String get production => 'Production';
+
+  @override
+  String get staging => 'Staging';
+
+  @override
+  String get switchRequiresRestart => 'Switching requires app restart';
+
+  @override
+  String get switchApiConfirmTitle => 'Switch API Environment';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Switch to $environment? The app will close and you need to reopen it.';
+  }
+
+  @override
+  String get switchAndRestart => 'Switch & Close';
+
+  @override
+  String get stagingDisclaimer =>
+      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
 }

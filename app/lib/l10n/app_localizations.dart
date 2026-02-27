@@ -15362,6 +15362,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This map updates as Omi learns from your conversations.'**
   String get onboardingWhatIKnowAboutYouDescription;
+
+  /// Title for the API environment switcher in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'API Environment'**
+  String get apiEnvironment;
+
+  /// Subtitle for the API environment switcher
+  ///
+  /// In en, this message translates to:
+  /// **'Choose which backend to connect to'**
+  String get apiEnvironmentDescription;
+
+  /// Label for production API environment
+  ///
+  /// In en, this message translates to:
+  /// **'Production'**
+  String get production;
+
+  /// Label for staging API environment
+  ///
+  /// In en, this message translates to:
+  /// **'Staging'**
+  String get staging;
+
+  /// Hint that switching API environment requires restart
+  ///
+  /// In en, this message translates to:
+  /// **'Switching requires app restart'**
+  String get switchRequiresRestart;
+
+  /// Title for the API switch confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Switch API Environment'**
+  String get switchApiConfirmTitle;
+
+  /// Body for the API switch confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to {environment}? The app will close and you need to reopen it.'**
+  String switchApiConfirmBody(String environment);
+
+  /// Button label to confirm API switch and close the app
+  ///
+  /// In en, this message translates to:
+  /// **'Switch & Close'**
+  String get switchAndRestart;
+
+  /// No description provided for @stagingDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.'**
+  String get stagingDisclaimer;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

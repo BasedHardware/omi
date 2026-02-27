@@ -92,6 +92,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -296,6 +297,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -438,6 +440,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -540,6 +543,195 @@ workflows:
           - Internal
           - Discord Folks
         submit_to_app_store: false
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - appstore_credentials
+      vars:
+        APP_ID: 6502156163
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+      flutter: 3.35.3
+      xcode: 26.0.1
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    #triggering:
+    #  events:
+    #    - tag
+    #  tag_patterns:
+    #    - pattern: "v*-desktop-cm"
+    #      include: true
+    working_directory: app
+    scripts:
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up Google Service Info
+        script: |
+          # Copy GoogleService-Info.plist
+          cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install pods
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Set up keychain for code signing
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_STORE \
+            --create
+
+      - name: Fetch Mac Installer Distribution certificates
+        script: |
+          # Try to find an existing certificate with our private key
+          echo "Checking for existing Mac Installer Distribution certificate with our private key..."
+          if app-store-connect certificates list --type MAC_INSTALLER_DISTRIBUTION --save 2>&1 | grep -q "Saved Signing Certificate"; then
+            echo "Found existing certificate with matching private key"
+          else
+            echo "No matching certificate found, creating new one for Codemagic..."
+            app-store-connect certificates create --type MAC_INSTALLER_DISTRIBUTION --save
+          fi
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings
+        script: |
+          xcode-project use-profiles
+
+      - name: Flutter build macOS
+        script: |
+          # Build
+          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-desktop-cm$/\2/')
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Package application for App Store
+        script: |
+          set -x
+
+          # Find the app bundle
+          APP_NAME=$(find $(pwd) -name "Omi.app" | head -1)
+          echo "Found app at: $APP_NAME"
+
+          # Set output directory
+          OUTPUT_DIR="$(pwd)/build/macos"
+          mkdir -p "$OUTPUT_DIR"
+
+          # Create unsigned package
+          PACKAGE_NAME="Omi.pkg"
+          xcrun productbuild --component "$APP_NAME" /Applications/ "$OUTPUT_DIR/unsigned.pkg"
+
+          # Find the installer certificate common name in keychain
+          INSTALLER_CERT_NAME=$(keychain list-certificates \
+            | jq -r '.[] | select(.common_name | contains("3rd Party Mac Developer Installer")) | .common_name' \
+            | head -1)
+
+          if [ -z "$INSTALLER_CERT_NAME" ]; then
+            echo "ERROR: No Mac Installer Distribution certificate found"
+            echo "Available certificates:"
+            keychain list-certificates | jq -r '.[].common_name'
+            exit 1
+          fi
+
+          echo "Using installer certificate: $INSTALLER_CERT_NAME"
+
+          # Sign the package
+          xcrun productsign --sign "$INSTALLER_CERT_NAME" "$OUTPUT_DIR/unsigned.pkg" "$OUTPUT_DIR/$PACKAGE_NAME"
+
+          # Clean up
+          rm -f "$OUTPUT_DIR/unsigned.pkg"
+
+          echo "Package created at: $OUTPUT_DIR/$PACKAGE_NAME"
+
+    artifacts:
+      - build/macos/*.pkg
+      - build/macos/**/*.app
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+          - i@m13v.com
+        notify:
+          success: true
+          failure: false
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal
+          - Discord Folks
+        submit_to_app_store: false
+
   android-prod-internal:
     name: Release Android Internal Production
     instance_type: mac_mini_m2
@@ -663,6 +855,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -802,6 +995,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -845,6 +1039,625 @@ workflows:
         notify:
           success: true
           failure: false
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - appstore_credentials
+      vars:
+        PLATFORM: "macos"
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+      flutter: 3.35.3
+      xcode: 26.0.1
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    # DISABLED: Triggering removed — replaced by omi-desktop-swift-release workflow
+    working_directory: app
+    scripts:
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up Google Service Info
+        script: |
+          # Copy GoogleService-Info.plist
+          cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
+          echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
+
+      - name: Extract version (from tag or auto-increment)
+        script: |
+          # Check if triggered by tag or push
+          if [ -n "$CM_TAG" ]; then
+            # Tag-triggered: extract version from tag (supports both -desktop-cm and -macos-cm)
+            echo "Triggered by tag: $CM_TAG"
+            BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+            BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+            TAG_NAME="$CM_TAG"
+          else
+            # Push-triggered: extract version from pubspec and auto-increment build number
+            echo "Triggered by push to main, auto-incrementing build number..."
+
+            # Extract version name from pubspec.yaml (source of truth)
+            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+
+            # Get latest build number from GitHub releases for desktop tags and increment
+            LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -E 'desktop-cm|macos-cm|desktop-auto' | head -1 | grep -oE '\+[0-9]+' | tr -d '+' || echo "0")
+            if [ -z "$LATEST_BUILD" ] || [ "$LATEST_BUILD" = "0" ]; then
+              # Fallback: try to get build number from release title format "Omi Desktop vX.X.X (BUILD_NUM)"
+              LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -i 'desktop\|macos' | head -1 | grep -oE '\([0-9]+\)' | tr -d '()' || echo "0")
+            fi
+            if [ -z "$LATEST_BUILD" ]; then
+              LATEST_BUILD=0
+            fi
+            BUILD_NUMBER=$((LATEST_BUILD + 1))
+            TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-auto"
+          fi
+
+          echo "Building macOS with version $BUILD_NAME ($BUILD_NUMBER)"
+
+          # Export to environment for all subsequent steps
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+          echo VERSION="${BUILD_NAME}+${BUILD_NUMBER}" >> $CM_ENV
+          echo TAG_NAME="$TAG_NAME" >> $CM_ENV
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install pods
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Download Omi Computer app for bundling
+        script: |
+          # Get latest Omi Computer release (Swift app) to bundle into Flutter app
+          echo "Looking for latest Omi Computer release..."
+          LATEST_MACOS_TAG=$(gh release list --repo BasedHardware/omi --limit 50 | grep -E '\-macos\s' | head -1 | awk -F'\t' '{print $3}')
+
+          if [ -n "$LATEST_MACOS_TAG" ]; then
+            echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
+
+            # Create directory where bundle_helper.sh expects to find the app
+            # bundle_helper.sh looks at: $PROJECT_DIR/../../desktop/build/
+            # PROJECT_DIR = /path/clone/app/macos
+            # From working_directory (app/), that's ../desktop
+            mkdir -p ../desktop/build
+
+            # Download the signed app ZIP from GitHub releases
+            gh release download "$LATEST_MACOS_TAG" \
+              --repo BasedHardware/omi \
+              --pattern "Omi.zip" \
+              --dir /tmp
+
+            # Extract - the ZIP contains "Omi Computer.app"
+            unzip -o /tmp/Omi.zip -d ../desktop/build/
+
+            # Verify extraction
+            if [ -d "../desktop/build/Omi Computer.app" ]; then
+              echo "SUCCESS: Omi Computer app ready for bundling"
+              ls -la "../desktop/build/"
+            else
+              echo "WARNING: Extraction may have failed, checking contents..."
+              ls -la ../desktop/build/
+            fi
+          else
+            echo "WARNING: No Omi Computer release found with -macos tag"
+            echo "The Flutter app will be built without bundled Omi Computer"
+          fi
+
+      - name: Verify Sparkle signing key
+        script: |
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "ERROR: SPARKLE_PRIVATE_KEY environment variable not set"
+            exit 1
+          fi
+
+      - name: Clean up entitlements (this step can be removed once we move away from AppStore)
+        script: |
+          # Process all Release entitlements files (including -prod variants)
+          find macos -name "*Release*.entitlements" -type f | while read entitlements_file; do
+            # Remove Sign in with Apple (if present)
+            grep -q "applesignin" "$entitlements_file" 2>/dev/null && \
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" 2>/dev/null || true
+
+            # Remove App Sandbox (if present)
+            grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && \
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null || true
+
+            # Remove get-task-allow (debug-only, blocks notarization)
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null || true
+
+            # Add hardened runtime entitlements
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || true
+          done
+
+      - name: Set up keychain and import Developer ID certificate
+        script: |
+          # Initialize keychain
+          keychain initialize
+
+          # Import Developer ID Application certificate
+          echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
+
+          KEYCHAIN_PATH=$(keychain get-default)
+
+          security import /tmp/developer_id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+
+          rm /tmp/developer_id.p12
+
+          # Find and export the Developer ID cert name
+          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+
+          if [ -z "$DEVELOPER_ID_CERT" ]; then
+            echo "ERROR: No Developer ID Application certificate found!"
+            exit 1
+          fi
+
+          echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
+
+      - name: Install Developer ID provisioning profile
+        script: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+
+          # Decode and save the provisioning profile
+          echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > /tmp/developer_id.provisionprofile
+
+          # Extract the plist from the CMS-signed provisioning profile
+          security cms -D -i /tmp/developer_id.provisionprofile > /tmp/profile.plist
+
+          # Get the profile UUID
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
+
+          # Now install it with the UUID as the filename (this is what Xcode expects)
+          cp /tmp/developer_id.provisionprofile "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
+
+          # Export UUID for later use
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
+
+      - name: Configure Xcode project for Developer ID signing
+        script: |
+          cd macos
+
+          # Use Codemagic's xcode-project tool to configure manual signing
+          xcode-project use-profiles \
+            --project Runner.xcodeproj \
+            --code-signing-setup-verbose-logging
+
+          cd ..
+
+      - name: Flutter build macOS
+        script: |
+          # Build with release configuration using Developer ID certificate and provisioning profile
+          export CODE_SIGN_STYLE=Manual
+          export CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT"
+          export DEVELOPMENT_TEAM=9536L8KLMP
+          export PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID"
+
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Bundle .env into app
+        script: |
+          # Copy .env file into app bundle for native Swift code to access
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+          cp .env "$APP_PATH/Contents/Resources/.env"
+          echo "Bundled .env into $APP_PATH/Contents/Resources/.env"
+
+      - name: Sign app for notarization
+        script: |
+          # Find the built app
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+
+          # Create hardened runtime entitlements for notarization
+          cat > /tmp/notarization.entitlements << 'ENTITLEMENTS_EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.allow-jit</key>
+            <true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+            <key>com.apple.security.device.audio-input</key>
+            <true/>
+            <key>com.apple.security.device.bluetooth</key>
+            <true/>
+            <key>com.apple.security.network.client</key>
+            <true/>
+            <key>com.apple.security.network.server</key>
+            <true/>
+            <key>com.apple.security.personal-information.calendars</key>
+            <true/>
+            <key>com.apple.security.files.user-selected.read-only</key>
+            <true/>
+            <key>com.apple.developer.aps-environment</key>
+            <string>production</string>
+            <key>keychain-access-groups</key>
+            <array>
+              <string>9536L8KLMP.com.google.GIDSignIn</string>
+              <string>9536L8KLMP.com.friend-app-with-wearable.ios12</string>
+            </array>
+          </dict>
+          </plist>
+          ENTITLEMENTS_EOF
+
+          # Sign ALL embedded frameworks FIRST (REQUIRED when re-signing app with --force)
+          # Sign embedded frameworks
+          find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d -print0 | while IFS= read -r -d '' framework; do
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$framework"
+          done
+
+          # Sign any dylibs
+          find "$APP_PATH" -name "*.dylib" -type f -print0 | while IFS= read -r -d '' dylib; do
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$dylib"
+          done
+
+          # Sign bundled Omi Computer.app (if present)
+          # The bundled app was signed with a different cert, must re-sign with our Developer ID
+          BUNDLED_APP="$APP_PATH/Contents/MacOS/Omi Computer.app"
+          if [ -d "$BUNDLED_APP" ]; then
+            echo "Signing bundled Omi Computer.app..."
+            # Sign all nested code first
+            find "$BUNDLED_APP" -name "*.framework" -type d | while read fw; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$fw"
+            done
+            find "$BUNDLED_APP" -name "*.dylib" -type f | while read lib; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" "$lib"
+            done
+            # Sign the bundled app itself
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$BUNDLED_APP"
+            echo "Bundled Omi Computer.app signed"
+          fi
+
+          # Sign Sparkle framework and its components first
+          SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+
+          if [ -d "$SPARKLE_FW" ]; then
+            # Sign XPC services
+            find "$SPARKLE_FW" -name "*.xpc" -type d | while read xpc; do
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$xpc"
+            done
+
+            # Sign Updater.app
+            [ -d "$SPARKLE_FW/Versions/B/Updater.app" ] && \
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$SPARKLE_FW/Versions/B/Updater.app"
+
+            # Sign Autoupdate binary
+            [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ] && \
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$SPARKLE_FW/Versions/B/Autoupdate"
+
+            # Sign the framework itself
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$SPARKLE_FW"
+          fi
+
+          # Sign the app bundle with --force to update entitlements
+          codesign --force --timestamp --options runtime \
+            --sign "$DEVELOPER_ID_CERT" \
+            --entitlements /tmp/notarization.entitlements \
+            "$APP_PATH"
+
+          # Verify no get-task-allow entitlement (blocks notarization)
+          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "get-task-allow"; then
+            echo "ERROR: get-task-allow entitlement found"
+            exit 1
+          fi
+
+      - name: Notarize app
+        script: |
+          set -e
+
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+          APP_ZIP="build/macos/Omi.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
+
+          # Check if private key is a file or content
+          if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
+            PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
+          else
+            mkdir -p ~/private_keys
+            PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+            echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+          fi
+
+          RESULT=$(xcrun notarytool submit "$APP_ZIP" \
+            --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --wait \
+            --output-format json)
+
+          SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
+          STATUS=$(echo "$RESULT" | jq -r '.status')
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization failed"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
+
+          xcrun stapler staple "$APP_PATH"
+
+      - name: Install create-dmg
+        script: |
+          brew install create-dmg
+
+      - name: Create DMG installer
+        script: |
+          set -e
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
+
+          mkdir -p build/macos/dmg
+          DMG_NAME="Omi.dmg"
+          DMG_PATH="build/macos/dmg/${DMG_NAME}"
+
+          # Create professional DMG with Applications folder shortcut
+          # Use --skip-jenkins to avoid AppleScript timeout issues in CI
+          create-dmg \
+            --volname "Omi ${VERSION}" \
+            --volicon "$APP_PATH/Contents/Resources/prodAppIcon.icns" \
+            --window-pos 200 120 \
+            --window-size 660 400 \
+            --icon-size 130 \
+            --text-size 16 \
+            --icon "Omi.app" 180 180 \
+            --hide-extension "Omi.app" \
+            --app-drop-link 480 180 \
+            --no-internet-enable \
+            --skip-jenkins \
+            "$DMG_PATH" \
+            "$APP_PATH"
+
+          # Sign DMG
+          codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
+          codesign --verify --verbose "$DMG_PATH"
+
+      - name: Notarize DMG
+        script: |
+          set -e
+
+          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+
+          # Check if private key is a file or content
+          if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
+            PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
+          else
+            mkdir -p ~/private_keys
+            PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+            echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+          fi
+
+          RESULT=$(xcrun notarytool submit "$DMG_PATH" \
+            --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --wait \
+            --output-format json)
+
+          SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
+          STATUS=$(echo "$RESULT" | jq -r '.status')
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "DMG notarization failed"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
+
+          xcrun stapler staple "$DMG_PATH"
+
+      - name: Create and sign Sparkle-compatible ZIP
+        script: |
+          APP_PATH="$(pwd)/build/macos/Build/Products/Release-prod/Omi.app"
+
+          ZIP_NAME="Omi.zip"
+          DIST_DIR="dist/${VERSION}-macos"
+          APP_DIR=$(pwd)
+
+          mkdir -p "$DIST_DIR"
+
+          # Create ZIP that Sparkle can use
+          cd "$(dirname "$APP_PATH")"
+          ditto -c -k --sequesterRsrc --keepParent "Omi.app" "$(pwd)/$ZIP_NAME"
+          mv "$ZIP_NAME" "$APP_DIR/$DIST_DIR/"
+
+          # Sign the ZIP file for Sparkle
+          cd "$APP_DIR"
+
+          [ ! -f "macos/Pods/Sparkle/bin/sign_update" ] && echo "ERROR: Sparkle sign_update binary not found" && exit 1
+
+          # Sign using Sparkle's sign_update with private key from environment variable
+          SIGN_OUTPUT=$(echo "$SPARKLE_PRIVATE_KEY" | macos/Pods/Sparkle/bin/sign_update --ed-key-file - "$DIST_DIR/$ZIP_NAME" 2>&1)
+
+          # Extract the signature value
+          SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -oE 'sparkle:edSignature="[^"]+"' | sed 's/sparkle:edSignature="//;s/"$//')
+
+          if [ -z "$SIGNATURE" ]; then
+            echo "ERROR: Failed to extract signature"
+            echo "Output: $SIGN_OUTPUT"
+            exit 1
+          fi
+
+          echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
+
+      - name: Create GitHub Release
+        script: |
+          # Get the recent commits for changelog
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
+          else
+            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
+          fi
+
+          # Read the EdDSA signature for Sparkle
+          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
+
+          # Create release notes
+          cat > /tmp/release_notes.md <<EOF
+          ## What's Changed
+
+          $CHANGELOG
+
+          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
+
+          <!-- KEY_VALUE_START
+          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
+          mandatory: false
+          minimum_app_version: 1.0.70
+          isLive: true
+          edSignature: $SIGNATURE
+          KEY_VALUE_END -->
+          EOF
+
+          # Find the DMG file
+          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
+
+          # Find the Sparkle ZIP and signature files
+          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
+          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
+
+          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
+          if [ -f "$DMG_FILE" ]; then
+            # Create the release with the DMG first
+            gh release create "$TAG_NAME" \
+              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
+              --notes-file /tmp/release_notes.md \
+              --repo BasedHardware/omi \
+              "$DMG_FILE"
+
+            # Upload Sparkle ZIP if it exists
+            if [ -f "$SPARKLE_ZIP" ]; then
+              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
+              gh release upload "$TAG_NAME" \
+                "$SPARKLE_ZIP" \
+                --repo BasedHardware/omi \
+                --clobber
+            else
+              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
+            fi
+
+            # Upload signature file if it exists
+            if [ -f "$SIGNATURE_FILE" ]; then
+              echo "Uploading signature file: $SIGNATURE_FILE"
+              gh release upload "$TAG_NAME" \
+                "$SIGNATURE_FILE" \
+                --repo BasedHardware/omi \
+                --clobber
+            else
+              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
+            fi
+          else
+            echo "ERROR: DMG file not found"
+            exit 1
+          fi
+
+    artifacts:
+      - dist/**/*
+      - build/macos/**/*.app
+      - build/macos/dmg/*.dmg
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+          - i@m13v.com
+        notify:
+          success: true
+          failure: false
+
   android-prod-patch:
     name: Patch Android to Production
     instance_type: mac_mini_m2
@@ -973,6 +1786,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |

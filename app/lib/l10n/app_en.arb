@@ -10032,5 +10032,43 @@
   "onboardingWhatIKnowAboutYouDescription": "This map updates as Omi learns from your conversations.",
   "@onboardingWhatIKnowAboutYouDescription": {
     "description": "Description for onboarding memory graph preview step"
-  }
+  },
+  "apiEnvironment": "API Environment",
+  "@apiEnvironment": {
+    "description": "Title for the API environment switcher in developer settings"
+  },
+  "apiEnvironmentDescription": "Choose which backend to connect to",
+  "@apiEnvironmentDescription": {
+    "description": "Subtitle for the API environment switcher"
+  },
+  "production": "Production",
+  "@production": {
+    "description": "Label for production API environment"
+  },
+  "staging": "Staging",
+  "@staging": {
+    "description": "Label for staging API environment"
+  },
+  "switchRequiresRestart": "Switching requires app restart",
+  "@switchRequiresRestart": {
+    "description": "Hint that switching API environment requires restart"
+  },
+  "switchApiConfirmTitle": "Switch API Environment",
+  "@switchApiConfirmTitle": {
+    "description": "Title for the API switch confirmation dialog"
+  },
+  "switchApiConfirmBody": "Switch to {environment}? The app will close and you need to reopen it.",
+  "@switchApiConfirmBody": {
+    "description": "Body for the API switch confirmation dialog",
+    "placeholders": {
+      "environment": {
+        "type": "String"
+      }
+    }
+  },
+  "switchAndRestart": "Switch & Close",
+  "@switchAndRestart": {
+    "description": "Button label to confirm API switch and close the app"
+  },
+  "stagingDisclaimer": "Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only."
 }
