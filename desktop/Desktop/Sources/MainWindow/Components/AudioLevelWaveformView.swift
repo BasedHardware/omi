@@ -13,6 +13,14 @@ struct AudioLevelWaveformView: View {
         self.isActive = isActive
     }
 
+    /// Fixed width computed from bar count and spacing so sizeThatFits() can
+    /// short-circuit without traversing child bars.
+    private var fixedWidth: CGFloat {
+        let barWidth: CGFloat = 3
+        let spacing: CGFloat = 3
+        return CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * spacing
+    }
+
     var body: some View {
         HStack(spacing: 3) {
             ForEach(0..<barCount, id: \.self) { index in
@@ -24,7 +32,7 @@ struct AudioLevelWaveformView: View {
                 )
             }
         }
-        .frame(height: 32)  // Fixed height container
+        .frame(width: fixedWidth, height: 32)  // Fixed size — prevents sizeThatFits() tree traversal
     }
 }
 
@@ -81,7 +89,9 @@ private struct BarView: View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            .animation(.easeOut(duration: 0.08), value: level)
+            // No .animation() — each animation generates ~5 intermediate layout frames at 60fps,
+            // and every frame triggers a full view-tree sizeThatFits() traversal.
+            // At 5 Hz update rate, the visual steps are small enough to look smooth.
     }
 }
 
