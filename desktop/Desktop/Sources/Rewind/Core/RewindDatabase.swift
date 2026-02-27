@@ -2082,6 +2082,16 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
         }
 
+        migrator.registerMigration("addScreenshotDateIndex") { db in
+            // Expression index so date-filtered queries on screenshots use index scan
+            // instead of full table scan with date() conversion on 600K+ rows
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS idx_screenshots_date_local
+                ON screenshots(date(timestamp, 'localtime'))
+            """)
+            print("[RewindDatabase] Migration: Added date(timestamp, localtime) expression index on screenshots")
+        }
+
         // Clean up orphan screenshot records that have no valid storage path.
         // These were created when VideoChunkEncoder dropped frames (e.g. aspect ratio debounce)
         // but processFrame still inserted a DB record with imagePath="" and no videoChunkPath.
