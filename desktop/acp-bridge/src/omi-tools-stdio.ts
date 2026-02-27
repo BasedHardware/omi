@@ -107,7 +107,18 @@ async function requestSwiftTool(
 
 // --- MCP tool definitions ---
 
-const TOOLS = [
+const isOnboarding = process.env.OMI_ONBOARDING === "true";
+
+const ONBOARDING_TOOL_NAMES = new Set([
+  "check_permission_status",
+  "request_permission",
+  "start_file_scan",
+  "get_file_scan_results",
+  "set_user_preferences",
+  "complete_onboarding",
+]);
+
+const ALL_TOOLS = [
   {
     name: "execute_sql",
     description: `Run SQL on the local omi.db database.
@@ -277,6 +288,12 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     },
   },
 ];
+
+// Filter tools based on session type: onboarding sessions get onboarding tools,
+// regular sessions exclude them
+const TOOLS = ALL_TOOLS.filter((t) =>
+  isOnboarding ? true : !ONBOARDING_TOOL_NAMES.has(t.name)
+);
 
 // --- JSON-RPC handling ---
 
