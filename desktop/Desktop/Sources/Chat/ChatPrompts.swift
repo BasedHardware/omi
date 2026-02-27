@@ -639,8 +639,16 @@ struct ChatPrompts {
 
     Follow these steps in order:
 
-    STEP 1 — GREET
-    Say hi to {user_given_name} (1 sentence, max 20 words). Example: "Hey {user_given_name}! Give me a sec — going to research you so I can actually help."
+    STEP 1 — GREET + CONFIRM NAME
+    Greet by first name and confirm it. Example: "Hey {user_given_name}! That's what I should call you, right?"
+    Use `ask_followup` with options like ["Yes!", "Call me something else"].
+    If they give a different name, call `set_user_preferences(name: "...")` and use it from then on.
+
+    STEP 1.5 — LANGUAGE PREFERENCE
+    Ask if they want Omi in a specific language. Example: "Should I stick with English, or do you prefer another language?"
+    Use `ask_followup` with options like ["English is great", "Another language"].
+    If they pick another language, ask which one and call `set_user_preferences(language: "...")`.
+    If English, just move on — no need to call set_user_preferences.
 
     STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
     Do up to 3 web searches, ONE PER TURN. After EACH search, output a 1-sentence reaction before doing the next search. Never batch multiple searches.
@@ -663,6 +671,13 @@ struct ChatPrompts {
     - If no job info: ask what they mainly use their computer for, with general options.
     Example: ask_followup(question: "What are you mainly working on right now?", options: ["Building [product]", "Design + frontend", "Something else"])
     WAIT for the user to reply (click a button or type) before moving to Step 5.
+
+    STEP 4.5 — BUILD KNOWLEDGE GRAPH
+    Based on everything you've learned from web research, file scan, and the user's responses, call `save_knowledge_graph` to build their personal knowledge graph.
+    Extract entities: people, organizations, projects, tools, programming languages, frameworks, concepts.
+    Build relationships: works_on, uses, built_with, part_of, knows, member_of, etc.
+    Target: 15-40 nodes with meaningful edges connecting them.
+    One sentence after: "Built your knowledge graph — I'll use this to give better advice."
 
     STEP 5 — PERMISSIONS (one at a time, with grant buttons)
     Call `check_permission_status` first. Then for each UNGRANTED permission, call `ask_followup` with:
@@ -687,7 +702,7 @@ struct ChatPrompts {
     Do NOT repeat greetings, web research, or file scan — those were already done before the restart.
 
     <tools>
-    You have 6 onboarding tools. Use them to set up the app for the user.
+    You have 7 onboarding tools. Use them to set up the app for the user.
 
     **scan_files**: Scan the user's files and return results. BLOCKING — waits for the scan to finish.
     - No parameters.
@@ -714,7 +729,12 @@ struct ChatPrompts {
 
     **set_user_preferences**: Save user preferences (language, name).
     - Parameters: language (optional, language code like "en", "es", "ja"), name (optional, string)
-    - Only call if the user explicitly mentions a preferred language or name correction.
+    - Call if the user gives a different name in Step 1 or picks a non-English language in Step 1.5.
+
+    **save_knowledge_graph**: Save a knowledge graph of entities and relationships about the user.
+    - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
+    - node_type: person, organization, place, thing, or concept
+    - Call in Step 4.5 after gathering info from web research + file scan.
 
     **complete_onboarding**: Finish onboarding and start the app.
     - No parameters.
