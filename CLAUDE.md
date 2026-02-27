@@ -126,8 +126,26 @@ cd app && flutter gen-l10n
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
 cd app && flutter run -d <device-id> --flavor prod
-cd app && flutter run -d <device-id> --flavor dev
 ```
+
+**Always use `--flavor prod`** for simulator testing. The dev flavor appends `.development` to the bundle ID (`com.friend-app-with-wearable.ios12.development`), but Firebase only knows about `com.friend-app-with-wearable.ios12` — so Firebase Auth fails silently with the dev flavor.
+
+**To hit the dev backend** while using prod flavor, edit `app/.env`:
+```
+API_BASE_URL=https://api.omiapi.com/
+USE_WEB_AUTH=false
+```
+Then regenerate env files:
+```bash
+cd app && rm -rf .dart_tool/build lib/env/prod_env.g.dart lib/env/dev_env.g.dart && dart run build_runner build --delete-conflicting-outputs
+```
+
+**Simulator auth notes:**
+- Use **Google Sign In** — Apple Sign In doesn't work in the iOS simulator (error 1000)
+- `USE_WEB_AUTH` must be `false` — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
+- iOS Keychain persists across app uninstalls in the simulator, so Firebase Auth sessions survive reinstalls
+- The `claudeAgentEnabled` flag defaults to `false` on fresh install — toggle it on in Settings → Developer Mode
+- The Flutter debug connection frequently dies ("Lost connection to device") when the app goes to background or on heavy startup — the app itself keeps running, just relaunch `flutter run`
 
 ### Firebase Prod Config
 
