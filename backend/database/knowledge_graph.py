@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import uuid
@@ -7,6 +8,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.api_core import exceptions as google_exceptions
 
 from ._client import db
+
+logger = logging.getLogger(__name__)
 
 users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
@@ -250,76 +253,77 @@ def cleanup_for_memory(uid: str, memory_id: str):
     """
     try:
         user_ref = db.collection(users_collection).document(uid)
-        
+
         @firestore.transactional
-        def update_in_transaction(transaction, nodes_to_delete_ids):
-            # Fetch nodes and edges that currently contain memory_id
-            nodes_query = user_ref.collection(knowledge_nodes_collection).where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
-            edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
+        def update_in_transaction(transaction):
+            # Build queries for nodes and edges containing this memory_id
+            nodes_query = user_ref.collection(knowledge_nodes_collection).where(
+                filter=FieldFilter('memory_ids', 'array_contains', memory_id)
+            )
+            edges_query = user_ref.collection(knowledge_edges_collection).where(
+                filter=FieldFilter('memory_ids', 'array_contains', memory_id)
+            )
 
-            # Fetch relevant documents within the transaction
-            nodes_docs = list(nodes_query.stream())
-            edges_docs = list(edges_query.stream())
+            # Transactional reads - binds to snapshot for optimistic concurrency
+            nodes_docs = list(transaction.get(nodes_query))
+            edges_docs = list(transaction.get(edges_query))
 
-            # Track nodes that will be deleted to clean up related edges
+            # Track nodes that will be deleted to clean up orphaned edges
             nodes_fully_deleted_in_this_tx = set()
 
             # Process Nodes
             for doc in nodes_docs:
                 node_data = doc.to_dict()
                 memory_ids = node_data.get('memory_ids', [])
-                
+
                 if len(memory_ids) == 1 and memory_ids[0] == memory_id:
-                    # Node will be deleted as this is its only remaining memory_id
                     transaction.delete(doc.reference)
                     nodes_fully_deleted_in_this_tx.add(doc.id)
                 else:
-                    # Only remove the memory_id
                     transaction.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
 
             # Process Edges (those explicitly linked to this memory_id)
             for doc in edges_docs:
                 edge_data = doc.to_dict()
                 memory_ids = edge_data.get('memory_ids', [])
-                
+
                 if len(memory_ids) == 1 and memory_ids[0] == memory_id:
-                    # Edge will be deleted as this is its only remaining memory_id
                     transaction.delete(doc.reference)
                 else:
-                    # Only remove the memory_id
                     transaction.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
 
-            # Process potentially orphaned edges (those whose source/target nodes are deleted in this transaction)
+            # Clean up orphaned edges (source/target node deleted in this transaction)
             if nodes_fully_deleted_in_this_tx:
-                # Firestore 'in' query limit is 10, so chunk the node IDs if necessary
-                chunk_size = 10
-                nodes_chunks = [list(nodes_fully_deleted_in_this_tx)[i:i + chunk_size] for i in range(0, len(nodes_fully_deleted_in_this_tx), chunk_size)]
+                chunk_size = 10  # Firestore 'in' query limit
+                node_id_list = list(nodes_fully_deleted_in_this_tx)
+                chunks = [node_id_list[i:i + chunk_size] for i in range(0, len(node_id_list), chunk_size)]
 
-                for chunk in nodes_chunks:
-                    # Delete edges where source node is in the chunk
-                    source_edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('source_id', 'in', chunk))
-                    for doc in source_edges_query.stream():
+                for chunk in chunks:
+                    source_edges_query = user_ref.collection(knowledge_edges_collection).where(
+                        filter=FieldFilter('source_id', 'in', chunk)
+                    )
+                    for doc in transaction.get(source_edges_query):
                         transaction.delete(doc.reference)
-                    
-                    # Delete edges where target node is in the chunk
-                    target_edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('target_id', 'in', chunk))
-                    for doc in target_edges_query.stream():
-                        transaction.delete(doc.reference)
-            
-            print(f"Knowledge graph transaction complete for memory_id: {memory_id}")
 
-        # Run the transaction
+                    target_edges_query = user_ref.collection(knowledge_edges_collection).where(
+                        filter=FieldFilter('target_id', 'in', chunk)
+                    )
+                    for doc in transaction.get(target_edges_query):
+                        transaction.delete(doc.reference)
+
+            logger.info(f"Knowledge graph cleanup complete for memory_id: {memory_id}")
+
         transaction = db.transaction()
-        update_in_transaction(transaction, set()) # Pass an empty set for initial call. Nodes to delete are determined inside.
+        update_in_transaction(transaction)
 
     except google_exceptions.GoogleAPICallError as e:
-        print(f"ERROR: Firestore API error during KG cleanup for memory_id {memory_id}: {e}")
-        raise # Re-raise to indicate a critical failure
+        logger.error(f"Firestore API error during KG cleanup for memory_id {memory_id}: {e}")
+        raise
 
     except ValueError as e:
-        print(f"ERROR: Data validation error during KG cleanup for memory_id {memory_id}: {e}")
-        raise # Re-raise to indicate a critical failure
-    
-    except Exception as e: # Catch any other unexpected errors
-        print(f"ERROR: Unexpected error during KG cleanup for memory_id {memory_id}: {e}")
-        raise # Re-raise to indicate a critical failure
+        logger.error(f"Data validation error during KG cleanup for memory_id {memory_id}: {e}")
+        raise
+
+    except Exception as e:
+        logger.error(f"Unexpected error during KG cleanup for memory_id {memory_id}: {e}")
+        raise
