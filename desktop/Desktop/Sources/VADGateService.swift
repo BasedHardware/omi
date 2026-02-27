@@ -11,7 +11,7 @@ import onnxruntime
 /// Wraps Silero VAD ONNX model for speech probability inference.
 /// Input: 512 Float32 samples at 16kHz. Output: speech probability [0,1].
 final class SileroVADModel {
-#if canImport(onnxruntime)
+#if canImport(OnnxRuntimeBindings) || canImport(onnxruntime)
     private let session: ORTSession
     private let env: ORTEnv
     private var state: [Float]  // [2, 1, 128] = 256 floats (combined h+c for v5)
