@@ -1011,6 +1011,10 @@ struct SettingsContentView: View {
                                         .frame(width: 180)
                                         .onChange(of: transcriptionLanguage) { _, newValue in
                                             AssistantSettings.shared.transcriptionLanguage = newValue
+                                            let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+                                            transcriptionAutoDetect = supportsMulti
+                                            AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
+                                            updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
                                             updateLanguage(newValue)
                                             restartTranscriptionIfNeeded()
                                         }

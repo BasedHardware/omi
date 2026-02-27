@@ -5188,6 +5188,7 @@ impl FirestoreService {
             use_case: self.parse_string(fields, "use_case"),
             job: self.parse_string(fields, "job"),
             company: self.parse_string(fields, "company"),
+            desktop_update_channel: self.parse_string(fields, "desktop_update_channel"),
         })
     }
 

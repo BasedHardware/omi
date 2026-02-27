@@ -135,6 +135,9 @@ pub struct UserProfile {
     /// Onboarding: user's company
     #[serde(default)]
     pub company: Option<String>,
+    /// Desktop Sparkle update channel (staging, beta, stable)
+    #[serde(default)]
+    pub desktop_update_channel: Option<String>,
 }
 
 /// Complete user settings response (aggregated)

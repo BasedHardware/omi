@@ -504,7 +504,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            self?.acpBridge.stop()
+            guard let self else { return }
+            Task { @MainActor [bridge = self.acpBridge] in
+                await bridge.stop()
+            }
         }
     }
 
@@ -1729,11 +1732,6 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             await acpBridge.interrupt()
         }
         // Result flows back normally through the bridge with partial text
-    }
-
-    /// Terminate the ACP bridge subprocess. Call on app quit to prevent orphaned Node.js processes.
-    func stopBridge() {
-        acpBridge.stop()
     }
 
     /// Send a follow-up message while the agent is still running.
