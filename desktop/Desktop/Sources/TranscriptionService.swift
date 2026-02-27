@@ -556,6 +556,95 @@ extension TranscriptionService {
         log("TranscriptionService: Batch transcription result: \(transcript ?? "(empty)")")
         return transcript
     }
+
+    /// Transcribe a stereo audio buffer using Deepgram's pre-recorded REST API.
+    /// Returns full TranscriptSegment per channel with word-level timestamps.
+    static func batchTranscribeFull(
+        audioData: Data,
+        language: String = "en",
+        vocabulary: [String] = [],
+        apiKey: String? = nil
+    ) async throws -> [TranscriptSegment] {
+        guard let key = apiKey ?? ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] else {
+            throw TranscriptionError.missingAPIKey
+        }
+
+        var components = URLComponents(string: "https://api.deepgram.com/v1/listen")!
+        var queryItems = [
+            URLQueryItem(name: "model", value: "nova-3"),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "channels", value: "2"),
+            URLQueryItem(name: "multichannel", value: "true"),
+            URLQueryItem(name: "diarize", value: "true"),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "utterances", value: "true"),
+            URLQueryItem(name: "utt_split", value: "0.8"),
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+        ]
+
+        for term in vocabulary {
+            queryItems.append(URLQueryItem(name: "keyterm", value: term))
+        }
+
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Token \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = audioData
+
+        log("TranscriptionService: Batch transcribing (full) \(audioData.count) bytes (\(String(format: "%.1f", Double(audioData.count) / 64000.0))s stereo)")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Batch full transcription failed with status \(statusCode): \(body)", error: nil)
+            throw TranscriptionError.invalidResponse
+        }
+
+        let json = try JSONDecoder().decode(BatchResponse.self, from: data)
+
+        var segments: [TranscriptSegment] = []
+        guard let channels = json.results?.channels else { return segments }
+
+        for (channelIndex, channel) in channels.enumerated() {
+            guard let alt = channel.alternatives.first,
+                  !alt.transcript.isEmpty else { continue }
+
+            let words = alt.words?.map { bw in
+                TranscriptSegment.Word(
+                    word: bw.word,
+                    start: bw.start,
+                    end: bw.end,
+                    confidence: bw.confidence,
+                    speaker: bw.speaker,
+                    punctuatedWord: bw.punctuated_word ?? bw.word
+                )
+            } ?? []
+
+            segments.append(TranscriptSegment(
+                text: alt.transcript,
+                isFinal: true,
+                speechFinal: true,
+                confidence: alt.confidence,
+                words: words,
+                channelIndex: channelIndex
+            ))
+
+            log("TranscriptionService: Batch ch\(channelIndex): \(words.count) words, \(alt.transcript.prefix(80))...")
+        }
+
+        return segments
+    }
 }
 
 /// Response model for Deepgram pre-recorded API
@@ -573,6 +662,16 @@ private struct BatchResponse: Decodable {
     struct BatchAlternative: Decodable {
         let transcript: String
         let confidence: Double
+        let words: [BatchWord]?
+    }
+
+    struct BatchWord: Decodable {
+        let word: String
+        let start: Double
+        let end: Double
+        let confidence: Double
+        let speaker: Int?
+        let punctuated_word: String?
     }
 }
 

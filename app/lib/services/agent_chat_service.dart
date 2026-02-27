@@ -100,6 +100,13 @@ class AgentChatService {
             // Skip init/prewarm messages that arrive before or between queries
             if (type == 'init' || type == 'prewarm' || type == 'prewarm_ack') return;
 
+            // Log thinking_done timing (VM tells us how long Claude spent thinking)
+            if (type == 'thinking_done') {
+              final thinkingMs = msg['thinkingMs'] as int? ?? 0;
+              agentLog('[TIMING] *** THINKING DONE *** +${elapsed}ms (VM thinking: ${thinkingMs}ms)');
+              return;
+            }
+
             if (_eventController == null || _eventController!.isClosed) return;
 
             // Reset response timeout on every incoming event

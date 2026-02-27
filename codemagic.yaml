@@ -543,9 +543,6 @@ workflows:
           - Internal
           - Discord Folks
         submit_to_app_store: false
-
-  macos-prod-testflight:
-    name: "[DISABLED] Flutter macOS to Testflight (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1042,9 +1039,6 @@ workflows:
         notify:
           success: true
           failure: false
-
-  macos-desktop-release:
-    name: "[DISABLED] Flutter macOS Desktop Release (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
