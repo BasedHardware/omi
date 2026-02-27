@@ -20,22 +20,25 @@ jobs:
 
       - name: Compute next version and push tag
         run: |
-          # Get latest desktop release tag — only v0.* tags (canonical versioning scheme)
-          LATEST=$(git tag -l 'v0.*-macos' | sort -V | tail -1)
+          # Read major.minor from desktop/VERSION (e.g. "0.11" or "1.0")
+          # To bump major/minor, edit desktop/VERSION and merge to main.
+          BASE_VERSION=$(cat desktop/VERSION | tr -d '[:space:]')
+          echo "Base version (from desktop/VERSION): $BASE_VERSION"
+
+          # Find the latest released tag for this major.minor
+          LATEST=$(git tag -l "v${BASE_VERSION}.*-macos" | sort -V | tail -1)
 
           if [ -z "$LATEST" ]; then
-            VERSION="0.0.1"
+            # First release for this major.minor
+            VERSION="${BASE_VERSION}.0"
           else
-            # Strip v prefix and +build-macos suffix  e.g. v0.11.9+11009-macos -> 0.11.9
-            VER=$(echo "$LATEST" | sed -E 's/^v([0-9.]+)\+[0-9]+-macos$/\1/')
-            MAJOR=$(echo "$VER" | cut -d. -f1)
-            MINOR=$(echo "$VER" | cut -d. -f2)
-            PATCH=$(echo "$VER" | cut -d. -f3)
-            PATCH=$((${PATCH:-0} + 1))
-            VERSION="$MAJOR.$MINOR.$PATCH"
+            # Increment patch: v0.11.9+11009-macos -> patch=9 -> 10 -> 0.11.10
+            PATCH=$(echo "$LATEST" | sed -E "s|^v${BASE_VERSION}\\.([0-9]+)\\+[0-9]+-macos\$|\\1|")
+            PATCH=$((PATCH + 1))
+            VERSION="${BASE_VERSION}.${PATCH}"
           fi
 
-          # Build number: 11.5.2 -> 11005002  (each component * 1000)
+          # Build number: 0.11.10 -> 11010  (each component * 1000, summed)
           BUILD_NUMBER=$(echo "$VERSION" | tr '.' '\n' | awk '{s=s*1000+$1}END{print s}')
           RELEASE_TAG="v${VERSION}+${BUILD_NUMBER}-macos"
 
