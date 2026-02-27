@@ -733,6 +733,8 @@ struct ChatPrompts {
         "staged_tasks": "AI-extracted task candidates pending user review",
         "task_chat_messages": "Claude Code agent ↔ user chat history, one thread per task (action item)",
         "observations": "per-screenshot AI observations used to detect tasks and activities",
+        "local_kg_nodes": "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
+        "local_kg_edges": "knowledge graph edges — relationships between entities",
     ]
 
     /// Per-column descriptions for every non-excluded table.
