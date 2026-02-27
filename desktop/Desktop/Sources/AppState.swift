@@ -1116,8 +1116,17 @@ class AppState: ObservableObject {
                 // VAD gate is always needed for batch mode (chunk boundaries),
                 // and optional for streaming mode (silence gating)
                 if useBatchTranscription || AssistantSettings.shared.vadGateEnabled {
-                    vadGateService = VADGateService()
-                    log("Transcription: VAD gate enabled\(useBatchTranscription ? " (batch mode)" : "")")
+                    let gate = VADGateService()
+                    if useBatchTranscription && !gate.modelAvailable {
+                        // Batch mode requires working VAD — fall back to streaming
+                        log("Transcription: VAD models unavailable, falling back from batch to streaming mode")
+                        useBatchTranscription = false
+                        vadGateService = nil
+                        transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+                    } else {
+                        vadGateService = gate
+                        log("Transcription: VAD gate enabled\(useBatchTranscription ? " (batch mode)" : "")")
+                    }
                 } else {
                     vadGateService = nil
                 }
