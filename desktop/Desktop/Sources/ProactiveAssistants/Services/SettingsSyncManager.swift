@@ -92,10 +92,8 @@ class SettingsSyncManager {
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
 
-        // Update channel (server-authoritative override)
-        if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
-            UpdaterViewModel.shared.updateChannel = parsed
-        }
+        // Update channel: synced separately via UpdaterViewModel.syncUpdateChannelFromServer()
+        // which reads the correct `desktop_update_channel` field from the user profile.
     }
 
     // MARK: - Build Local → Response
@@ -150,7 +148,7 @@ class SettingsSyncManager {
             task: task,
             advice: advice,
             memory: memory,
-            updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
+            updateChannel: nil  // Channel is managed via desktop_update_channel on user profile
         )
     }
 }
