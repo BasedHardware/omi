@@ -8229,13 +8229,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? The app will close and you need to reopen it.';
+    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
   }
 
   @override
-  String get switchAndRestart => 'Switch & Close';
+  String get switchAndRestart => 'Switch';
 
   @override
   String get stagingDisclaimer =>
       'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
 }
