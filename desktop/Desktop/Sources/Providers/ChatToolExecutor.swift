@@ -17,6 +17,9 @@ class ChatToolExecutor {
         case "semantic_search":
             return await executeSemanticSearch(toolCall.arguments)
 
+        case "get_daily_recap":
+            return await executeDailyRecap(toolCall.arguments)
+
         default:
             return "Unknown tool: \(toolCall.name)"
         }
@@ -173,6 +176,110 @@ class ChatToolExecutor {
         }
 
         return "OK: \(changes) row(s) affected"
+    }
+
+    // MARK: - Daily Recap
+
+    /// Get a pre-formatted daily activity recap
+    private static func executeDailyRecap(_ args: [String: Any]) async -> String {
+        let daysAgo = max(0, (args["days_ago"] as? Int) ?? 1)
+        let dateLabel = daysAgo == 0 ? "Today" : daysAgo == 1 ? "Yesterday" : "Past \(daysAgo) days"
+
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+            return "Error: database not available"
+        }
+
+        // For today (daysAgo=0), upper bound is now; for past days, upper bound is start of today
+        let upperBound = daysAgo == 0
+            ? "datetime('now', 'localtime')"
+            : "datetime('now', 'start of day', 'localtime')"
+
+        do {
+            return try await dbQueue.read { db in
+                // Q1: App usage
+                let apps = try Row.fetchAll(db, sql: """
+                    SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
+                        MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+                    FROM screenshots
+                    WHERE timestamp >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                        AND timestamp < \(upperBound)
+                        AND appName IS NOT NULL AND appName != ''
+                    GROUP BY appName ORDER BY screenshots DESC
+                    """)
+
+                // Q2: Conversations
+                let convos = try Row.fetchAll(db, sql: """
+                    SELECT title, overview, emoji, category, startedAt, finishedAt,
+                        ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
+                    FROM transcription_sessions
+                    WHERE startedAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                        AND startedAt < \(upperBound)
+                        AND deleted = 0 AND discarded = 0
+                    ORDER BY startedAt DESC
+                    """)
+
+                // Q3: Action items
+                let tasks = try Row.fetchAll(db, sql: """
+                    SELECT description, completed, priority, createdAt FROM action_items
+                    WHERE createdAt >= datetime('now', 'start of day', '-\(daysAgo) day', 'localtime')
+                        AND createdAt < \(upperBound)
+                        AND deleted = 0
+                    ORDER BY createdAt DESC
+                    """)
+
+                // Format compact markdown
+                var out = "# \(dateLabel) Recap\n\n"
+
+                out += "## Apps (\(apps.count) apps)\n"
+                if apps.isEmpty {
+                    out += "No screen activity recorded.\n"
+                } else {
+                    for app in apps.prefix(20) {
+                        let name = app["appName"] as? String ?? "Unknown"
+                        let minutes = app["minutes"] as? Double ?? 0
+                        let screenshots = app["screenshots"] as? Int ?? 0
+                        let firstSeen = app["first_seen"] as? String ?? ""
+                        let lastSeen = app["last_seen"] as? String ?? ""
+                        out += "- **\(name)**: \(minutes) min (\(screenshots) captures, \(firstSeen)–\(lastSeen))\n"
+                    }
+                    if apps.count > 20 { out += "- ...and \(apps.count - 20) more apps\n" }
+                }
+
+                out += "\n## Conversations (\(convos.count))\n"
+                if convos.isEmpty {
+                    out += "No conversations recorded.\n"
+                } else {
+                    for convo in convos {
+                        let title = convo["title"] as? String ?? "Untitled"
+                        let overview = convo["overview"] as? String ?? "No summary"
+                        let emoji = convo["emoji"] as? String ?? ""
+                        let durMin = convo["duration_min"] as? Double ?? 0
+                        let dur = durMin > 0 ? " (\(durMin) min)" : ""
+                        out += "- \(emoji) **\(title)**\(dur): \(overview)\n"
+                    }
+                }
+
+                out += "\n## Tasks (\(tasks.count))\n"
+                if tasks.isEmpty {
+                    out += "No tasks created.\n"
+                } else {
+                    for task in tasks {
+                        let desc = task["description"] as? String ?? ""
+                        let completed = (task["completed"] as? Int ?? 0) == 1
+                        let priority = task["priority"] as? String ?? ""
+                        let check = completed ? "[x]" : "[ ]"
+                        let pri = priority.isEmpty ? "" : " (\(priority))"
+                        out += "- \(check) \(desc)\(pri)\n"
+                    }
+                }
+
+                log("Tool get_daily_recap: \(apps.count) apps, \(convos.count) convos, \(tasks.count) tasks")
+                return out
+            }
+        } catch {
+            logError("Tool get_daily_recap failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Semantic Search
