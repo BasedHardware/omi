@@ -282,6 +282,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
+
+    /// When set, sendMessage uses this as the session key instead of "main".
+    /// Used by OnboardingChatView to isolate onboarding messages in a dedicated session.
+    var onboardingSessionKey: String?
     @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
     @Published var hasMoreMessages = false
@@ -1943,7 +1947,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let queryResult = try await acpBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: sessionKey ?? "main",
+                sessionKey: onboardingSessionKey ?? sessionKey ?? "main",
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
