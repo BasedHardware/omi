@@ -918,16 +918,16 @@ function handleSessionUpdate(
       const kind = (update.kind as string) ?? "";
       const status = (update.status as string) ?? "pending";
 
-      // Fix undefined titles for server-side tools (e.g. WebSearch, WebFetch)
-      // where input may not be populated when the notification fires
-      if (title.includes("undefined")) {
+      // Recover real tool name for server-side tools (e.g. WebSearch, WebFetch)
+      // where title may arrive as undefined/unknown
+      if (title === "unknown" || title.includes("undefined")) {
         const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
         const toolName = meta?.claudeCode?.toolName;
         const rawInput = update.rawInput as Record<string, unknown> | undefined;
         if (toolName === "WebSearch" && rawInput?.query) {
-          title = `"${rawInput.query}"`;
+          title = `WebSearch: "${rawInput.query}"`;
         } else if (toolName === "WebFetch" && rawInput?.url) {
-          title = `Fetch ${rawInput.url}`;
+          title = `WebFetch: ${rawInput.url}`;
         } else if (toolName) {
           title = toolName;
         }
@@ -962,7 +962,16 @@ function handleSessionUpdate(
     case "tool_call_update": {
       const toolCallId = (update.toolCallId as string) ?? "";
       const status = (update.status as string) ?? "";
-      const title = (update.title as string) ?? "unknown";
+      let title = (update.title as string) ?? "unknown";
+
+      // Recover real tool name (same logic as tool_call)
+      if (title === "unknown" || title.includes("undefined")) {
+        const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
+        const toolName = meta?.claudeCode?.toolName;
+        if (toolName) {
+          title = toolName;
+        }
+      }
 
       if (status === "completed" || status === "failed" || status === "cancelled") {
         // Remove from pending
