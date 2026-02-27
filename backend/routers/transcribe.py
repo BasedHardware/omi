@@ -131,6 +131,7 @@ async def _stream_handler(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -733,9 +734,15 @@ async def _stream_handler(
             # so preseconds filtering uses uncompressed DG timestamps. After profile
             # completes, switch to active mode to start saving cost.
             nonlocal vad_gate
-            if is_gate_enabled() and stt_service == STTService.deepgram:
-                gate_mode = VAD_GATE_MODE
-                if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
+            gate_enabled_by_override = vad_gate_override == 'enabled'
+            gate_disabled_by_override = vad_gate_override == 'disabled'
+            if (
+                not gate_disabled_by_override
+                and (is_gate_enabled() or gate_enabled_by_override)
+                and stt_service == STTService.deepgram
+            ):
+                gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
+                if speech_profile_preseconds > 0 and gate_mode == 'active':
                     gate_mode = 'shadow'  # Shadow during profile, activate later
                 try:
                     vad_gate = VADStreamingGate(
@@ -1796,7 +1803,11 @@ async def _stream_handler(
                         deepgram_profile_socket = None  # Stop sending immediately
 
                         # Activate VAD gate now that speech profile phase is done
-                        if vad_gate is not None and VAD_GATE_MODE == 'active' and vad_gate.mode == 'shadow':
+                        if (
+                            vad_gate is not None
+                            and (VAD_GATE_MODE == 'active' or vad_gate_override == 'enabled')
+                            and vad_gate.mode == 'shadow'
+                        ):
                             vad_gate.activate()
                             logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
 
@@ -2143,6 +2154,7 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2168,6 +2180,7 @@ async def _listen(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
     logger.info(f"_listen ended {uid}")
 
@@ -2187,10 +2200,12 @@ async def listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     speaker_auto_assign: str = 'disabled',
+    vad_gate: str = '',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
     speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
+    vad_gate_override = vad_gate if vad_gate in ('enabled', 'disabled') else None
     await _listen(
         websocket,
         uid,
@@ -2205,6 +2220,7 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
 
 
