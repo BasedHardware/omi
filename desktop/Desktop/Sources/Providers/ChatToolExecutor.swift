@@ -172,6 +172,10 @@ class ChatToolExecutor {
             if upper.contains("ACTION_ITEMS") {
                 log("Tool execute_sql: action_items modified, refreshing TasksStore")
                 await TasksStore.shared.reloadFromLocalCache()
+                // Sync newly inserted action items to the backend (Firestore)
+                if upper.contains("INSERT") {
+                    await TasksStore.shared.retryUnsyncedItems(includeRecent: true)
+                }
             }
         }
 
