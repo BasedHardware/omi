@@ -32,6 +32,7 @@ from utils.speaker_assignment import (
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
+from database.auth import get_user_name
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
@@ -1315,7 +1316,7 @@ async def _stream_handler(
                         continue
                     emb = profile.get('speaker_embedding')
                     if emb:
-                        name = profile.get('display_name') or owner_uid[:8]
+                        name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
                         person_embeddings_cache[f"shared:{owner_uid}"] = {
                             'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                             'name': name,

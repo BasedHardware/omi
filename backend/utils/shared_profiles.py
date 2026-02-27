@@ -7,6 +7,8 @@ from models.other import Person
 
 def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
     """Resolve shared:{owner_uid} person IDs into Person objects, validating ownership."""
+    from database.auth import get_user_name
+
     shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
     if not shared_pids:
         return []
@@ -19,7 +21,7 @@ def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
         profile = users_db.get_user_profile(owner_uid)
         if not profile:
             continue
-        name = profile.get('display_name') or owner_uid[:8]
+        name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
         people.append(
             Person(
                 id=shared_pid,

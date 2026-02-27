@@ -5,7 +5,6 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
-from database.auth import get_user_name
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
@@ -1081,12 +1080,11 @@ def get_profiles_shared_with_user(target_uid: str):
     return [share.reference.parent.parent.id for share in shares_query.stream()]
 
 
-def _fetch_user_names(uids: list) -> dict:
-    """Fetch display names from Firebase Auth for a list of UIDs."""
-    names = {}
-    for uid in uids:
-        names[uid] = get_user_name(uid, use_default=False) or ''
-    return names
+def _get_user_display_name(uid: str) -> str:
+    """Get user display name from Firebase Auth (lazy import to avoid test breakage)."""
+    from database.auth import get_user_name
+
+    return get_user_name(uid, use_default=False) or ''
 
 
 def get_profiles_shared_with_user_details(target_uid: str):
@@ -1094,8 +1092,7 @@ def get_profiles_shared_with_user_details(target_uid: str):
     owner_uids = get_profiles_shared_with_user(target_uid)
     if not owner_uids:
         return []
-    names = _fetch_user_names(owner_uids)
-    return [{'uid': uid, 'name': names.get(uid, '')} for uid in owner_uids]
+    return [{'uid': uid, 'name': _get_user_display_name(uid)} for uid in owner_uids]
 
 
 def remove_shared_profile_from_me(owner_uid: str, target_uid: str):
@@ -1120,5 +1117,4 @@ def get_users_shared_with_details(owner_uid: str):
     target_uids = get_users_shared_with(owner_uid)
     if not target_uids:
         return []
-    names = _fetch_user_names(target_uids)
-    return [{'uid': uid, 'name': names.get(uid, '')} for uid in target_uids]
+    return [{'uid': uid, 'name': _get_user_display_name(uid)} for uid in target_uids]

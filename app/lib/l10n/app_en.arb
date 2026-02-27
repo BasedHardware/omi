@@ -10039,15 +10039,15 @@
   "@sharedWithYouSection": {
     "description": "Section header for profiles shared with the user"
   },
-  "noSharedProfiles": "You haven't shared your voice profile with anyone yet",
+  "noSharedProfiles": "You haven't shared your speech profile with anyone yet",
   "@noSharedProfiles": {
     "description": "Empty state text when user has not shared their profile"
   },
-  "noProfilesSharedWithYou": "No one has shared their voice profile with you yet",
+  "noProfilesSharedWithYou": "No one has shared their speech profile with you yet",
   "@noProfilesSharedWithYou": {
     "description": "Empty state text when no profiles shared with user"
   },
-  "revokeShareConfirmation": "Stop sharing your voice profile with this user?",
+  "revokeShareConfirmation": "Stop sharing your speech profile with this user?",
   "@revokeShareConfirmation": {
     "description": "Confirmation message for revoking speech profile sharing"
   },
@@ -10079,9 +10079,10 @@
   "@removeSharedProfileConfirmation": {
     "description": "Confirmation message for removing a shared profile"
   },
-  "alreadySharedWithUser": "You have already shared your voice profile with this user",
+  "alreadySharedWithUser": "You have already shared your speech profile with this user",
   "@alreadySharedWithUser": {
     "description": "Error when trying to share with someone you already shared with"
+  },
   "appIconLabel": "App Icon",
   "onboardingWhatIKnowAboutYouTitle": "Here is what I know about you",
   "@onboardingWhatIKnowAboutYouTitle": {

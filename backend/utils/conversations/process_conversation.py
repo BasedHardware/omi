@@ -22,7 +22,6 @@ import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
 from utils.llm.memories import resolve_memory_conflict
-from utils.shared_profiles import resolve_shared_people
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -633,8 +632,23 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
         # Resolve shared profile names for LLM transcript
-        shared_people = resolve_shared_people(person_ids, uid)
-        people.extend(shared_people)
+        shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
+        if shared_pids:
+            from database.auth import get_user_name
+
+            for shared_pid in shared_pids:
+                owner_uid = shared_pid.split(":", 1)[1]
+                profile = users_db.get_user_profile(owner_uid)
+                if profile:
+                    name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
+                    people.append(
+                        Person(
+                            id=shared_pid,
+                            name=name,
+                            created_at=datetime.now(timezone.utc),
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                    )
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)

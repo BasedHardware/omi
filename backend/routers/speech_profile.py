@@ -91,7 +91,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
         embedding = extract_embedding(file_path)
         set_user_speaker_embedding(uid, embedding.flatten().tolist())
     except Exception as e:
-        print(f"Failed to extract speaker embedding during profile upload: {e}", uid)
+        logger.error(f"Failed to extract speaker embedding during profile upload: {e} {uid}")
 
     return {"url": url}
 

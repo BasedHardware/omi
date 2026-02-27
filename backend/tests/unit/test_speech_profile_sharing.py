@@ -14,6 +14,7 @@ os.environ.setdefault(
 )
 
 sys.modules["database._client"] = MagicMock()
+sys.modules["database.auth"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
 
 
@@ -464,46 +465,12 @@ def test_match_empty_cache_returns_none():
     assert name is None
 
 
-def test_fetch_user_names_returns_display_names():
-    """Test that _fetch_user_names fetches names from Firebase Auth via get_user_name."""
-    with patch('database.users.get_user_name') as mock_get_name:
-        mock_get_name.side_effect = lambda uid, use_default=True: {
-            'uid1': 'Alice',
-            'uid2': 'Bob',
-        }.get(uid, '')
-
-        result = users_db._fetch_user_names(['uid1', 'uid2'])
-
-        assert result == {'uid1': 'Alice', 'uid2': 'Bob'}
-        assert mock_get_name.call_count == 2
-
-
-def test_fetch_user_names_handles_missing_names():
-    """Test that _fetch_user_names returns empty string for users without display names."""
-    with patch('database.users.get_user_name') as mock_get_name:
-        mock_get_name.return_value = None
-
-        result = users_db._fetch_user_names(['uid1'])
-
-        assert result == {'uid1': ''}
-
-
-def test_fetch_user_names_empty_list():
-    """Test that _fetch_user_names handles empty UID list."""
-    with patch('database.users.get_user_name') as mock_get_name:
-        result = users_db._fetch_user_names([])
-
-        assert result == {}
-        mock_get_name.assert_not_called()
-
-
 def test_get_profiles_shared_with_user_details_returns_uid_and_name():
     """Test that details endpoint returns {uid, name} dicts."""
-    with patch('database.users.get_profiles_shared_with_user') as mock_shared, patch(
-        'database.users.get_user_name'
-    ) as mock_get_name:
+    with patch('database.users.get_profiles_shared_with_user') as mock_shared, \
+         patch('database.auth.get_user_name') as mock_name:
         mock_shared.return_value = ['owner1', 'owner2']
-        mock_get_name.side_effect = lambda uid, use_default=True: {
+        mock_name.side_effect = lambda uid, use_default=True: {
             'owner1': 'Alice',
             'owner2': 'Bob',
         }.get(uid, '')
@@ -525,11 +492,10 @@ def test_get_profiles_shared_with_user_details_empty():
 
 def test_get_users_shared_with_details_returns_uid_and_name():
     """Test that owner's shared list returns {uid, name} dicts."""
-    with patch('database.users.get_users_shared_with') as mock_shared, patch(
-        'database.users.get_user_name'
-    ) as mock_get_name:
+    with patch('database.users.get_users_shared_with') as mock_shared, \
+         patch('database.auth.get_user_name') as mock_name:
         mock_shared.return_value = ['target1', 'target2']
-        mock_get_name.side_effect = lambda uid, use_default=True: {
+        mock_name.side_effect = lambda uid, use_default=True: {
             'target1': 'Charlie',
             'target2': 'Diana',
         }.get(uid, '')
@@ -833,9 +799,11 @@ def test_spoofed_shared_pid_rejected_by_ownership_check():
     """Spoofed shared:{attacker_uid} is rejected because attacker hasn't shared with current user."""
     from utils.shared_profiles import resolve_shared_people
 
-    with patch('utils.shared_profiles.users_db') as mock_users:
+    with patch('utils.shared_profiles.users_db') as mock_users, \
+         patch('database.auth.get_user_name') as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid']
-        mock_users.get_user_profile.return_value = {'display_name': 'Alice'}
+        mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
+        mock_name.return_value = 'Alice'
 
         people = resolve_shared_people(['shared:alice_uid', 'shared:attacker_uid'], 'bob_uid')
 
@@ -850,15 +818,14 @@ def test_all_valid_shared_pids_resolved():
     """All legitimate shared profiles are resolved with correct names."""
     from utils.shared_profiles import resolve_shared_people
 
-    def mock_profile(uid):
-        return {
-            'alice_uid': {'display_name': 'Alice Smith'},
-            'charlie_uid': {'display_name': 'Charlie Brown'},
-        }.get(uid, {})
+    def mock_name_fn(uid, use_default=True):
+        return {'alice_uid': 'Alice Smith', 'charlie_uid': 'Charlie Brown'}.get(uid)
 
-    with patch('utils.shared_profiles.users_db') as mock_users:
+    with patch('utils.shared_profiles.users_db') as mock_users, \
+         patch('database.auth.get_user_name') as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
-        mock_users.get_user_profile.side_effect = mock_profile
+        mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
+        mock_name.side_effect = mock_name_fn
 
         people = resolve_shared_people(['shared:alice_uid', 'shared:charlie_uid'], 'bob_uid')
 
