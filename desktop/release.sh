@@ -869,7 +869,7 @@ echo ""
 echo "[12/12] Triggering installation test on GitHub Actions..."
 
 # Trigger the test workflow via repository_dispatch
-TEST_REPO="m13v/omi-computer-swift"
+TEST_REPO="BasedHardware/omi"
 if command -v gh &> /dev/null; then
     gh workflow run test-install.yml \
         --repo "$TEST_REPO" \

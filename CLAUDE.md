@@ -199,14 +199,17 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 
 ### Agent-proxy (GKE, namespace `prod-omi-backend`)
 ```bash
-kubectl logs -n prod-omi-backend -l app=agent-proxy --tail=50 | grep -v health
+kubectl logs -n prod-omi-backend -l app=agent-proxy --timestamps --since=10m | grep "<uid>"
 ```
 
 ### Agent VM
 ```bash
-gcloud compute instances describe <vm-name> --zone=us-central1-a --project=based-hardware --format="table(status,networkInterfaces[0].accessConfigs[0].natIP)"
-curl -s http://<vm-ip>:8080/health
+gcloud compute ssh omi-agent-<id> --zone=us-central1-a --project=based-hardware \
+  --command="journalctl -u omi-agent --no-pager --since '10 minutes ago' | grep -E 'Client|Query|Prewarm|session|disconnect|error|Persistent'"
 ```
+
+### Agent Chat Debugging
+For end-to-end debugging of the mobile agent chat pipeline (phone → agent-proxy → VM), see the `ai-chat-debug` skill.
 
 ## Testing
 

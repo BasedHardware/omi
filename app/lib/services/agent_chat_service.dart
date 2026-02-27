@@ -220,8 +220,8 @@ class AgentChatService {
 
   void _resetResponseTimer() {
     _responseTimer?.cancel();
-    _responseTimer = Timer(const Duration(seconds: 45), () {
-      agentLog('[TIMING] *** RESPONSE TIMEOUT *** — no event received in 45s');
+    _responseTimer = Timer(const Duration(seconds: 120), () {
+      agentLog('[TIMING] *** RESPONSE TIMEOUT *** — no event received in 120s');
       _queryStopwatch?.stop();
       _connected = false;
       if (_eventController != null && !_eventController!.isClosed) {
