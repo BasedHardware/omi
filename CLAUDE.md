@@ -129,18 +129,7 @@ cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.co
 cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
 ```
 
-Use `--flavor dev` for development — it hits the dev backend (`api.omiapi.com`) with native Google Sign In. Use `--flavor prod` for testing against production.
-
-**Env files:** `--flavor prod` reads from `app/.env`, `--flavor dev` reads from `app/.dev.env`. After changing either file, regenerate:
-```bash
-cd app && rm -rf .dart_tool/build lib/env/prod_env.g.dart lib/env/dev_env.g.dart && dart run build_runner build --delete-conflicting-outputs
-```
-
-**Simulator notes:**
-- Dev flavor has `USE_WEB_AUTH=false` (native sign in) — web auth opens Safari and the `omi://` deep link callback is unreliable in the simulator
-- iOS Keychain persists across app uninstalls in the simulator, so Firebase Auth sessions survive reinstalls
-- The `claudeAgentEnabled` flag defaults to `false` on fresh install — toggle it on in Settings → Developer Mode
-- The Flutter debug connection frequently dies ("Lost connection to device") when the app goes to background — the app itself keeps running, just relaunch `flutter run`
+See `/local-dev mobile` skill for full setup details, env file configuration, and troubleshooting.
 
 ### Firebase Prod Config
 
