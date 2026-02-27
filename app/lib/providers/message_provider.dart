@@ -741,9 +741,11 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
+      bool gotContent = false;
       await for (var event in _agentChatService.sendQuery(prompt)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            gotContent = true;
             silenceTimer?.cancel();
             rotateTimer?.cancel();
             if (agentThinkingAfterText) {
@@ -803,10 +805,11 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
-      // Auto-reconnect + retry: if the response is empty and connection died (timeout),
+      // Auto-reconnect + retry: if we got no real content and connection died (timeout),
       // reconnect once and retry the query
-      if (message.text.isEmpty && !_agentChatService.isConnected) {
-        agentLog('[RETRY] Response empty + disconnected — attempting reconnect');
+      if (!gotContent && !_agentChatService.isConnected) {
+        agentLog('[RETRY] No content + disconnected — attempting reconnect');
+        message.text = '';
         message.thinkings.add('Reconnecting...');
         notifyListeners();
         final reconnected = await _agentChatService.reconnect();
