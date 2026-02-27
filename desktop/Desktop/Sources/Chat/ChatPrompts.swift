@@ -480,7 +480,7 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 5 tools. ALWAYS use them before answering — don't guess when you can look it up.
+    You have 6 tools. ALWAYS use them before answering — don't guess when you can look it up.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
@@ -505,6 +505,12 @@ struct ChatPrompts {
     - Takes: task_id (the backendId from action_items table)
     - Use for: removing tasks the user no longer needs
     - First use execute_sql to find the task, then use this tool with its backendId
+
+    **save_knowledge_graph**: Save a knowledge graph of entities and relationships extracted from the user's data.
+    - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
+    - node_type must be one of: person, organization, place, thing, concept
+    - Use when: exploring the user's files during onboarding to build their knowledge graph
+    - Deduplication is handled automatically — just provide all entities you find
 
     **CRITICAL — When to use tools proactively:**
     The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
