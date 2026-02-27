@@ -12,6 +12,7 @@ struct OnboardingChatView: View {
     @State private var inputText: String = ""
     @State private var hasStarted: Bool = false
     @State private var showCompleteButton: Bool = false
+    @State private var onboardingCompleted: Bool = false
     @FocusState private var isInputFocused: Bool
 
     // Timer to periodically check permission status
@@ -61,8 +62,25 @@ struct OnboardingChatView: View {
                             .id("typing")
                         }
 
-                        // Safety timeout button
-                        if showCompleteButton && !chatProvider.isSending {
+                        // "Continue to App" button — shown after AI calls complete_onboarding
+                        if onboardingCompleted && !chatProvider.isSending {
+                            Button(action: {
+                                handleOnboardingComplete()
+                            }) {
+                                Text("Continue to App")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: 220)
+                                    .padding(.vertical, 12)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 12)
+                        }
+
+                        // Safety timeout button — fallback if AI never calls complete_onboarding
+                        if showCompleteButton && !onboardingCompleted && !chatProvider.isSending {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
@@ -200,7 +218,9 @@ struct OnboardingChatView: View {
 
         // Wire up onboarding tools
         ChatToolExecutor.onboardingAppState = appState
-        ChatToolExecutor.onCompleteOnboarding = { handleOnboardingComplete() }
+        ChatToolExecutor.onCompleteOnboarding = {
+            onboardingCompleted = true
+        }
 
         // Build onboarding system prompt
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
