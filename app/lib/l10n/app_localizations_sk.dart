@@ -1017,7 +1017,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Pripojiť';
 
   @override
   String get comingSoon => 'Čoskoro';
@@ -2272,7 +2272,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get folderName => 'Názov priečinka';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Popis (voliteľný)';
 
   @override
   String get failedToDeleteFolder => 'Odstránenie priečinka zlyhalo';
@@ -5930,7 +5930,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return 'Vytvorených $count konverzácií';
   }
 
   @override
@@ -6328,7 +6328,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get setupAnswerAllQuestions => 'Odpovedzte prosím na všetky otázky';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Preskočiť, nechcem pomáhať :C';
 
   @override
   String get professionEntrepreneur => 'Podnikateľ';
@@ -6352,7 +6352,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get usageAtWork => 'V práci';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Osobné podujatia';
 
   @override
   String get usageOnline => 'Online';
@@ -6724,7 +6724,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String connectingToDeviceName(String deviceName) {
-    return 'Connecting to $deviceName';
+    return 'Pripájanie k $deviceName...';
   }
 
   @override
@@ -6741,7 +6741,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get recordingDetails => 'Podrobnosti nahrávky';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD karta';
 
   @override
   String get storageLocationLimitlessPendant => 'Prívesok Limitless';
@@ -6754,7 +6754,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Uložené na $deviceName';
   }
 
   @override
@@ -6776,7 +6776,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transferToPhone => 'Preniesť do telefónu';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Súkromné a bezpečné na vašom zariadení';
 
   @override
   String get recordingInfo => 'Informácie o nahrávke';
@@ -6794,7 +6794,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get recordingIdLabel => 'ID nahrávky';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Dátum a čas';
 
   @override
   String get durationLabel => 'Trvanie';
@@ -6924,7 +6924,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Pri aktualizácii stavu aplikácie došlo k chybe.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Výpočet...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6935,7 +6935,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Zostáva približne minúta';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Takmer hotovo...';
 
   @override
   String get omiSays => 'omi says';
@@ -6949,7 +6949,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Žiadne dáta na migráciu. Dokončovanie...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
@@ -6971,13 +6971,13 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'chaty';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'dáta';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Au';
 
   @override
   String get fallNotificationBody => 'Zistili sme pád. Ste v poriadku?';
@@ -7989,27 +7989,27 @@ class AppLocalizationsSk extends AppLocalizations {
   String get addTask => 'Pridať úlohu';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Pridať MCP server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Pripojiť externé AI nástroje';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Úspešne pripojených $count nástrojov';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nepodarilo sa pripojiť k MCP serveru';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizácia...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Ako ste nás našli?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8027,19 +8027,19 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Priateľ';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Iné';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Upresnite prosím';
 
   @override
-  String get event => 'Event';
+  String get event => 'Udalosť';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kolega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8211,41 +8211,41 @@ class AppLocalizationsSk extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Tu je, čo o vás viem';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Táto mapa sa aktualizuje, keď sa Omi učí z vašich konverzácií.';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'API prostredie';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => 'Vyberte server na pripojenie';
 
   @override
-  String get production => 'Production';
+  String get production => 'Produkcia';
 
   @override
-  String get staging => 'Staging';
+  String get staging => 'Testovacie prostredie';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => 'Prepnutie vyžaduje reštart aplikácie';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'Prepnúť API prostredie';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return 'Prepnúť na $environment? Budete musieť zatvoriť a znova otvoriť aplikáciu, aby sa zmeny prejavili.';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => 'Prepnúť';
 
   @override
   String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+      'Testovacie prostredie môže byť nestabilné, s nekonzistentným výkonom a dáta sa môžu stratiť. Iba na testovanie.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => 'Uložené. Zatvorte a znova otvorte aplikáciu na použitie zmien.';
 }

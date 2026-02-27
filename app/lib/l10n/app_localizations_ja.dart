@@ -1001,7 +1001,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '接続';
 
   @override
   String get comingSoon => '近日公開';
@@ -2225,7 +2225,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get folderName => 'フォルダ名';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '説明（任意）';
 
   @override
   String get failedToDeleteFolder => 'フォルダの削除に失敗しました';
@@ -7865,27 +7865,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addTask => 'タスクを追加';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCPサーバーを追加';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '外部AIツールを接続';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count個のツールが正常に接続されました';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCPサーバーへの接続に失敗しました';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '認証中...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'どこで知りましたか？';
 
   @override
   String get tiktok => 'TikTok';
@@ -7903,19 +7903,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '友人';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'その他';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '詳しく教えてください';
 
   @override
-  String get event => 'Event';
+  String get event => 'イベント';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '同僚';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8082,41 +8082,40 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'あなたについて知っていること';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'このマップはOmiがあなたの会話から学ぶにつれて更新されます。';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'API環境';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => '接続するサーバーを選択';
 
   @override
-  String get production => 'Production';
+  String get production => '本番';
 
   @override
-  String get staging => 'Staging';
+  String get staging => 'ステージング';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => '切替にはアプリの再起動が必要です';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'API環境の切替';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return '$environmentに切り替えますか？変更を適用するにはアプリを閉じて再度開く必要があります。';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => '切替';
 
   @override
-  String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+  String get stagingDisclaimer => 'ステージング環境は不安定で、パフォーマンスが一定でなく、データが失われる可能性があります。テスト専用です。';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => '保存しました。変更を適用するにはアプリを閉じて再度開いてください。';
 }

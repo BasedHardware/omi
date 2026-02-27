@@ -417,7 +417,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get planAndUsage => 'Paketti ja käyttö';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Offline-synkronointi';
 
   @override
   String get deviceSettings => 'Laitteen asetukset';
@@ -1011,7 +1011,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Yhdistä';
 
   @override
   String get comingSoon => 'Tulossa pian';
@@ -1518,7 +1518,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get provider => 'Palveluntarjoaja';
 
   @override
-  String get live => 'Live';
+  String get live => 'Livenä';
 
   @override
   String get onDevice => 'Laitteella';
@@ -2140,7 +2140,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get saveMemory => 'Tallenna muisto';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Yritä uudelleen';
 
   @override
   String get createActionItem => 'Luo tehtävä';
@@ -2264,7 +2264,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get folderName => 'Kansion nimi';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Kuvaus (valinnainen)';
 
   @override
   String get failedToDeleteFolder => 'Kansion poistaminen epäonnistui';
@@ -2391,7 +2391,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get unpairAndForgetDevice => 'Poista pariliitos ja unohda laite';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Tuntematon';
 
   @override
   String get unknown => 'Tuntematon';
@@ -5849,7 +5849,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncingStatus => 'Synkronoidaan';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Epäonnistui';
 
   @override
   String etaLabel(String time) {
@@ -5860,13 +5860,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transferMethod => 'Siirtotapa';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Nopea';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Puhelin';
 
   @override
   String get cancelSync => 'Peruuta synkronointi';
@@ -5931,7 +5931,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count keskustelua luotu';
   }
 
   @override
@@ -5941,7 +5941,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processAudio => 'Käsittele ääni';
 
   @override
-  String get start => 'Start';
+  String get start => 'Aloita';
 
   @override
   String get noRecordings => 'Ei nauhoituksia';
@@ -6317,31 +6317,31 @@ class AppLocalizationsFi extends AppLocalizations {
   String get setupQuestionsIntro => 'Auta meitä parantamaan Omia vastaamalla muutamaan kysymykseen. 🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Mikä on ammattisi?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Missä aiot käyttää Omi-laitetta?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Minkä ikäinen olet?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Et ole vielä vastannut kaikkiin kysymyksiin! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Ohita, en halua auttaa :C';
 
   @override
   String get professionEntrepreneur => 'Yrittäjä';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Ohjelmistoinsinööri';
 
   @override
-  String get professionProductManager => 'Product Manager';
+  String get professionProductManager => 'Tuotepäällikkö';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Johtaja';
 
   @override
   String get professionSales => 'Myynti';
@@ -6353,13 +6353,13 @@ class AppLocalizationsFi extends AppLocalizations {
   String get usageAtWork => 'Työssä';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Livetapahtumat';
 
   @override
-  String get usageOnline => 'Online';
+  String get usageOnline => 'Verkossa';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Sosiaalisissa tilanteissa';
 
   @override
   String get usageEverywhere => 'Kaikkialla';
@@ -6530,7 +6530,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get sharePublicLink => 'Jaa julkinen linkki';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Tee persoonasta julkinen';
 
   @override
   String get connectedKnowledgeData => 'Yhdistetty tietolähteisiin';
@@ -6552,7 +6552,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get getOmi => 'Hanki Omi';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Minulla on Omi-laite';
 
   @override
   String get goal => 'TAVOITE';
@@ -6631,7 +6631,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Tämä nimi on jo olemassa';
 
   @override
   String get selectYouFromList => 'Merkitäksesi itsesi, valitse \"Sinä\" luettelosta.';
@@ -6640,7 +6640,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get enterPersonsName => 'Syötä henkilön nimi';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Lisää henkilö';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
@@ -6749,14 +6749,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Puhelin';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Puhelin (muisti)';
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Tallennettu laitteelle $deviceName';
   }
 
   @override
@@ -6779,7 +6779,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transferToPhone => 'Siirrä puhelimeen';
 
   @override
-  String get privateAndSecureOnDevice => 'Private & secure on your device';
+  String get privateAndSecureOnDevice => 'Yksityinen ja turvallinen laitteellasi';
 
   @override
   String get recordingInfo => 'Nauhoituksen tiedot';
@@ -6798,10 +6798,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get recordingIdLabel => 'Nauhoituksen tunnus';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Päivämäärä ja aika';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Kesto';
 
   @override
   String get audioFormatLabel => 'Äänimuoto';
@@ -6810,7 +6810,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get storageLocationLabel => 'Tallennussijainti';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Arvioitu koko';
 
   @override
   String get deviceModelLabel => 'Laitteen malli';
@@ -6825,7 +6825,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get statusProcessed => 'Käsitelty';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Käsittelemätön';
 
   @override
   String get switchedToFastTransfer => 'Vaihdettu nopeaan siirtoon';
@@ -6927,32 +6927,32 @@ class AppLocalizationsFi extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Sovelluksen tilan päivittämisessä tapahtui virhe.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Lasketaan...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Noin $minutes minuuttia jäljellä';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Noin minuutti jäljellä';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Melkein valmis...';
 
   @override
   String get omiSays => 'omi says';
 
   @override
-  String get analyzingYourData => 'Analyzing your data...';
+  String get analyzingYourData => 'Analysoidaan tietojasi...';
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Siirretään $level-suojaukseen...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Ei dataa siirrettäväksi. Viimeistellään...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
@@ -6960,7 +6960,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Kaikki kohteet siirretty. Viimeistellään...';
 
   @override
   String get migrationErrorOccurred => 'Siirron aikana tapahtui virhe. Yritä uudelleen.';
@@ -6974,16 +6974,16 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'keskustelut';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'tiedot';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Auts';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Kaaduiitko?';
 
   @override
   String get importantConversationTitle => 'Tärkeä keskustelu';
@@ -7235,7 +7235,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get xHandlePleaseEnterValid => 'Syötä kelvollinen X-käyttäjätunnus';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Seuraava';
 
   @override
   String get connectOmiDevice => 'Yhdistä Omi-laite';
@@ -7266,7 +7266,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Päivityssivua ei voitu avata. Yritä uudelleen.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Liitä JSON-asetukset tähän...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7886,7 +7886,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get categoryOther => 'Muut';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Keskustelu';
 
   @override
   String get capabilityConversations => 'Keskustelut';
@@ -7997,27 +7997,27 @@ class AppLocalizationsFi extends AppLocalizations {
   String get addTask => 'Lisää tehtävä';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Lisää MCP-palvelin';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Yhdistä ulkoiset tekoälytyökalut';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count työkalua yhdistetty onnistuneesti';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP-palvelimeen yhdistäminen epäonnistui';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Valtuutetaan...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Miten löysit meidät?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8035,19 +8035,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Ystävä';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Muu';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Tarkenna';
 
   @override
-  String get event => 'Event';
+  String get event => 'Tapahtuma';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Työkaveri';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8219,41 +8219,42 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Tässä on mitä tiedän sinusta';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Tämä kartta päivittyy, kun Omi oppii keskusteluistasi.';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'API-ympäristö';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => 'Valitse mihin palvelimeen yhdistetään';
 
   @override
-  String get production => 'Production';
+  String get production => 'Tuotanto';
 
   @override
-  String get staging => 'Staging';
+  String get staging => 'Testiympäristö';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => 'Vaihto vaatii sovelluksen uudelleenkäynnistyksen';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'Vaihda API-ympäristö';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return 'Vaihdetaanko ympäristöön $environment? Sinun on suljettava ja avattava sovellus uudelleen, jotta muutokset tulevat voimaan.';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => 'Vaihda';
 
   @override
   String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+      'Testiympäristö voi olla epävakaa, suorituskyky voi vaihdella ja tietoja voi kadota. Vain testausta varten.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired =>
+      'Tallennettu. Sulje ja avaa sovellus uudelleen, jotta muutokset tulevat voimaan.';
 }

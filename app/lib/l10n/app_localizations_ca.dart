@@ -1018,7 +1018,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Connecta';
 
   @override
   String get comingSoon => 'Properament';
@@ -2279,7 +2279,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get folderName => 'Nom de la carpeta';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Descripció (opcional)';
 
   @override
   String get failedToDeleteFolder => 'No s\'ha pogut eliminar la carpeta';
@@ -8047,27 +8047,27 @@ class AppLocalizationsCa extends AppLocalizations {
   String get addTask => 'Afegir tasca';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Afegeix servidor MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Connecta eines d\'IA externes';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count eines connectades correctament';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'No s\'ha pogut connectar al servidor MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoritzant...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Com ens has trobat?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8085,19 +8085,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Amic';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Altres';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Si us plau, especifica';
 
   @override
-  String get event => 'Event';
+  String get event => 'Esdeveniment';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Company de feina';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8271,41 +8271,42 @@ class AppLocalizationsCa extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'El que sé de tu';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Aquí tens un resum del que sé de tu basant-me en les nostres converses. Pots editar qualsevol cosa que no sigui correcta.';
 
   @override
-  String get apiEnvironment => 'API Environment';
+  String get apiEnvironment => 'Entorn de l\'API';
 
   @override
-  String get apiEnvironmentDescription => 'Choose which backend to connect to';
+  String get apiEnvironmentDescription => 'Canvia entre els entorns de producció i staging de l\'API';
 
   @override
-  String get production => 'Production';
+  String get production => 'Producció';
 
   @override
   String get staging => 'Staging';
 
   @override
-  String get switchRequiresRestart => 'Switching requires app restart';
+  String get switchRequiresRestart => 'Canviar d\'entorn requereix reiniciar l\'aplicació';
 
   @override
-  String get switchApiConfirmTitle => 'Switch API Environment';
+  String get switchApiConfirmTitle => 'Canviar l\'entorn de l\'API?';
 
   @override
   String switchApiConfirmBody(String environment) {
-    return 'Switch to $environment? You will need to close and reopen the app for changes to take effect.';
+    return 'Canviar a $environment? Hauràs de tancar i tornar a obrir l\'aplicació perquè els canvis tinguin efecte.';
   }
 
   @override
-  String get switchAndRestart => 'Switch';
+  String get switchAndRestart => 'Canvia';
 
   @override
   String get stagingDisclaimer =>
-      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+      'L\'entorn de staging pot ser inestable, tenir un rendiment inconsistent i es poden perdre dades. Utilitza\'l només per a proves.';
 
   @override
-  String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+  String get apiEnvSavedRestartRequired => 'Desat. Tanca i torna a obrir l\'aplicació per aplicar els canvis.';
 }
