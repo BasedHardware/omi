@@ -193,6 +193,8 @@ class AuthService {
                     self?.loadNameFromBackendIfNeeded()
                     // Sync assistant settings from backend (fire-and-forget)
                     Task { await SettingsSyncManager.shared.syncFromServer() }
+                    // Sync Sparkle update channel from server (fire-and-forget)
+                    UpdaterViewModel.shared.syncUpdateChannelFromServer()
                 } else {
                     // Firebase has no user - check if we have a saved session (for dev builds where Keychain doesn't persist)
                     let savedSignedIn = UserDefaults.standard.bool(forKey: self?.kAuthIsSignedIn ?? "")
