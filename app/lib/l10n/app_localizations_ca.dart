@@ -8301,4 +8301,8 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get switchAndRestart => 'Switch & Close';
+
+  @override
+  String get stagingDisclaimer =>
+      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
 }
