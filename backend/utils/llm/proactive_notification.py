@@ -430,10 +430,17 @@ WHAT DOES NOT QUALIFY (instant has_advice=false):
 == FREQUENCY ==
 {frequency_guidance}
 
-FORMAT: Keep notification_text under 100 characters. Start with the actionable part. No filler.
+FORMAT: Keep notification_text under 100 characters.
+- NEVER start with a goal name ("30-video goal:", "12-people goal:")
+- NEVER say "your X goal" in the notification
+- NEVER start with: Confirm, Ensure, Clarify, Consider, Prioritize, Remember, Review, Align, Reassess
+- Lead with the action or the conflict, not the goal
+- Write like you're texting a friend, not writing a corporate memo
+- GOOD: "You just paused videos but your deadline means you'll fall behind by 6"
+- GOOD: "Ask [Name] to grab coffee — strong fit and you're only at 4/12"
 - GOOD: "Call Mike about the deal — he mentioned a deadline Friday"
-- GOOD: "You said you'd stop taking on extra projects. This is that."
-- BAD: "Nikita, it sounds like frustration is high right now. When you feel overwhelmed..."
+- BAD: "30-video goal: line up a backup editor today"
+- BAD: "Consider aligning your NYC plans with your growth strategy"
 - BAD: "Your messages show frustration and maybe anger. Let's take a moment."
 
 REASONING must cite a SPECIFIC date, quote, or detail from {user_name}'s facts, goals, or past conversations. Example: "On Feb 12, {user_name} told Mike he'd finish by Friday — that's tomorrow and he hasn't started." If your reasoning only says "{user_name} mentioned X" without a concrete reference, set has_advice=false."""
