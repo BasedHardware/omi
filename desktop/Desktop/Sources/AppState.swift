@@ -1135,7 +1135,9 @@ class AppState: ObservableObject {
             if useBatchTranscription {
                 // Batch mode: start audio capture directly (no WebSocket to wait for)
                 recordingStartCATime = CACurrentMediaTime()
-                await startAudioCapture(source: effectiveSource)
+                Task { @MainActor [weak self] in
+                    await self?.startAudioCapture(source: effectiveSource)
+                }
             } else {
                 // Streaming mode: start transcription service first, then audio on connect
                 transcriptionService?.start(
