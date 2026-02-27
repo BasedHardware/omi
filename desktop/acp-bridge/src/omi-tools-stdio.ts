@@ -163,6 +163,36 @@ Runs app usage, conversations, and action items queries in one call — much fas
     },
   },
   {
+    name: "complete_task",
+    description: `Toggle a task's completion status. Syncs to backend (Firestore).
+Use after finding the task with execute_sql. Pass the backendId from the action_items table.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        task_id: {
+          type: "string" as const,
+          description: "The backendId of the task from action_items table",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "delete_task",
+    description: `Delete a task permanently. Syncs to backend (Firestore).
+Use after finding the task with execute_sql. Pass the backendId from the action_items table.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        task_id: {
+          type: "string" as const,
+          description: "The backendId of the task from action_items table",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
     name: "load_skill",
     description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
     inputSchema: {
@@ -278,6 +308,26 @@ async function handleJsonRpc(
       } else if (toolName === "get_daily_recap") {
         const daysAgo = (args.days_ago as number) ?? 1;
         const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "complete_task") {
+        const taskId = args.task_id as string;
+        const result = await requestSwiftTool("complete_task", { task_id: taskId });
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "delete_task") {
+        const taskId = args.task_id as string;
+        const result = await requestSwiftTool("delete_task", { task_id: taskId });
         if (!isNotification) {
           send({
             jsonrpc: "2.0",
