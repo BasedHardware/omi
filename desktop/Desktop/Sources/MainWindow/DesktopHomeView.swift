@@ -267,14 +267,9 @@ struct DesktopHomeView: View {
                     if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
-                        // Remove .minSize from hosting view's sizingOptions
-                        if let contentView = window.contentView {
-                            for subview in contentView.subviews {
-                                if let hosting = subview as? any HostingSizingConfigurable {
-                                    hosting.sizingOptions = [.maxSize]
-                                }
-                            }
-                        }
+                        // Remove .minSize from hosting view's sizingOptions.
+                        // Search contentView itself + all descendants.
+                        Self.disableMinSizeComputation(in: window)
                     }
                 }
             }
@@ -283,6 +278,25 @@ struct DesktopHomeView: View {
         }
         .onChange(of: currentTierLevel) { _, _ in
             redirectIfPageHidden()
+        }
+    }
+
+    /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
+    /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
+    /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
+    private static func disableMinSizeComputation(in window: NSWindow) {
+        func visit(_ view: NSView) {
+            if let hosting = view as? any HostingSizingConfigurable {
+                let before = hosting.sizingOptions
+                hosting.sizingOptions = []
+                log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+            }
+            for subview in view.subviews {
+                visit(subview)
+            }
+        }
+        if let contentView = window.contentView {
+            visit(contentView)
         }
     }
 
