@@ -553,7 +553,7 @@ function startPersistentSession(send, log) {
   const sessionAbort = new AbortController();
 
   const options = {
-    model: "claude-opus-4-6",
+    model: "claude-sonnet-4-6",
     abortController: sessionAbort,
     systemPrompt: defaultSystemPrompt,
     allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
@@ -637,16 +637,8 @@ function startPersistentSession(send, log) {
                   log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
                   send({ type: "tool_activity", name: block.name, status: "started" });
                   pendingTools.push(block.name);
-                } else if (block.type === "text" && typeof block.text === "string") {
-                  if (pendingTools.length > 0) {
-                    for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
-                    pendingTools.length = 0;
-                  }
-                  if (!fullText.includes(block.text)) {
-                    fullText += block.text;
-                    send({ type: "text_delta", text: block.text });
-                  }
                 }
+                // Text is already streamed via stream_event handler — don't send again here
               }
             }
             break;
