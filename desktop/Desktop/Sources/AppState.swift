@@ -2085,6 +2085,51 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Batch Transcription
+
+    /// Transcribe a completed speech chunk from VAD batch mode.
+    /// Offsets word timestamps to session-relative time, then feeds through handleTranscriptSegment.
+    private func batchTranscribeChunk(audioBuffer: Data, wallStartTime: Double) async {
+        let offsetSec = wallStartTime - recordingStartCATime
+        let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let vocabulary = AssistantSettings.shared.effectiveVocabulary
+
+        do {
+            let segments = try await TranscriptionService.batchTranscribeFull(
+                audioData: audioBuffer,
+                language: effectiveLanguage,
+                vocabulary: vocabulary
+            )
+
+            for segment in segments {
+                // Offset all word timestamps by the chunk's start time relative to recording start
+                let offsetWords = segment.words.map { word in
+                    TranscriptionService.TranscriptSegment.Word(
+                        word: word.word,
+                        start: word.start + offsetSec,
+                        end: word.end + offsetSec,
+                        confidence: word.confidence,
+                        speaker: word.speaker,
+                        punctuatedWord: word.punctuatedWord
+                    )
+                }
+
+                let offsetSegment = TranscriptionService.TranscriptSegment(
+                    text: segment.text,
+                    isFinal: true,
+                    speechFinal: true,
+                    confidence: segment.confidence,
+                    words: offsetWords,
+                    channelIndex: segment.channelIndex
+                )
+
+                handleTranscriptSegment(offsetSegment)
+            }
+        } catch {
+            logError("Transcription: Batch transcribe chunk failed", error: error)
+        }
+    }
+
     /// Handle incoming transcript segment with speaker diarization
     /// Uses channel index for primary speaker attribution:
     ///   - Channel 0 = microphone = user (speaker 0)
