@@ -3399,31 +3399,19 @@ extension APIClient {
 
     // MARK: - Knowledge Graph API
 
-    // Knowledge graph uses the main omi API (not the desktop backend)
-    private var knowledgeGraphBaseURL: String { "https://api.omi.me/" }
-
     /// Get the full knowledge graph (nodes and edges)
     func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-        return try await get("v1/knowledge-graph", customBaseURL: knowledgeGraphBaseURL)
+        return try await get("v1/knowledge-graph")
     }
 
     /// Rebuild the knowledge graph from memories
     func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody(), customBaseURL: knowledgeGraphBaseURL)
+        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
     }
 
     /// Delete the knowledge graph
     func deleteKnowledgeGraph() async throws {
-        let url = URL(string: knowledgeGraphBaseURL + "v1/knowledge-graph")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-
-        let (_, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
+        return try await delete("v1/knowledge-graph")
     }
 }
 
