@@ -19,7 +19,6 @@ import 'package:opus_dart/opus_dart.dart';
 import 'package:opus_flutter/opus_flutter.dart' as opus_flutter;
 import 'package:provider/provider.dart';
 import 'package:talker_flutter/talker_flutter.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
@@ -63,7 +62,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
@@ -210,11 +208,6 @@ Future _init() async {
     return true;
   };
 
-  // Initialize desktop updater
-  if (PlatformService.isDesktop) {
-    await DesktopUpdateService().initialize();
-  }
-
   await ServiceManager.instance().start();
   return;
 }
@@ -224,22 +217,6 @@ void main() {
     () async {
       // Ensure
       WidgetsFlutterBinding.ensureInitialized();
-      if (PlatformService.isDesktop) {
-        await windowManager.ensureInitialized();
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(1300, 800),
-          minimumSize: Size(1100, 700),
-          center: true,
-          title: "Omi",
-          titleBarStyle: TitleBarStyle.hidden,
-        );
-        windowManager.waitUntilReadyToShow(windowOptions, () async {
-          await windowManager.setAsFrameless();
-          await windowManager.show();
-          await windowManager.focus();
-        });
-      }
-
       await _init();
       runApp(const MyApp());
     },
@@ -273,32 +250,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       DebugLogManager.setEnabled(true);
     }
 
-    // Auto-start macOS recording if enabled
-    if (PlatformService.isDesktop) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _autoStartMacOSRecording();
-      });
-    }
-
     super.initState();
-  }
-
-  Future<void> _autoStartMacOSRecording() async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!SharedPreferencesUtil().autoRecordingEnabled) return;
-
-    try {
-      final context = MyApp.navigatorKey.currentContext;
-      if (context == null) return;
-
-      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-      if (captureProvider.recordingState == RecordingState.stop) {
-        await captureProvider.streamSystemAudioRecording();
-      }
-    } catch (e) {
-      Logger.debug('[AutoRecord] Error: $e');
-    }
   }
 
   void _deinit() {
