@@ -264,7 +264,7 @@ final class VADGateService {
     private var batchSysVAD: SileroVADModel?
 
     // Fail-open flag
-    private let modelAvailable: Bool
+    let modelAvailable: Bool
 
     init() {
         let mic = SileroVADModel()
