@@ -502,7 +502,7 @@ struct ChatPrompts {
 
     **When to use which tool:**
     - "how old am I?" / "what's my name?" / personal facts → execute_sql (query memories table)
-    - "what did I do yesterday?" → execute_sql (query screenshots by timestamp)
+    - "what did I do yesterday?" → execute_sql (run ALL 3 recap queries below in a SINGLE round of tool calls)
     - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
     - "find where I was reading about AI" → semantic_search (conceptual)
     - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
@@ -523,10 +523,24 @@ struct ChatPrompts {
     WHERE deleted = 0 AND isDismissed = 0 AND content LIKE '%keyword%'
     ORDER BY createdAt DESC
 
-    -- What did I do today (app breakdown):
-    SELECT appName, COUNT(*) as count, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
-    FROM screenshots WHERE timestamp >= datetime('now', 'start of day', 'localtime')
-    GROUP BY appName ORDER BY count DESC
+    -- Daily recap (run ALL 3 for "what did I do" questions — use -1 day for yesterday, -7 day for past week):
+    -- Q1: App usage
+    SELECT appName, COUNT(*) as count, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
+    MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+    FROM screenshots WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime')
+    AND timestamp < datetime('now', 'start of day', 'localtime')
+    AND appName IS NOT NULL AND appName != '' GROUP BY appName ORDER BY count DESC
+    -- Q2: Conversations
+    SELECT title, overview, emoji, startedAt, finishedAt,
+    ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
+    FROM transcription_sessions WHERE startedAt >= datetime('now', 'start of day', '-1 day', 'localtime')
+    AND startedAt < datetime('now', 'start of day', 'localtime') AND deleted = 0 AND discarded = 0
+    ORDER BY startedAt DESC
+    -- Q3: Tasks
+    SELECT description, completed, priority FROM action_items
+    WHERE createdAt >= datetime('now', 'start of day', '-1 day', 'localtime')
+    AND createdAt < datetime('now', 'start of day', 'localtime') AND deleted = 0
+    ORDER BY createdAt DESC
 
     -- Recent screenshots with context:
     SELECT timestamp, appName, windowTitle, substr(ocrText, 1, 200) as preview
