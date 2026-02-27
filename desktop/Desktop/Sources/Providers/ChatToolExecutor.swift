@@ -55,6 +55,9 @@ class ChatToolExecutor {
         case "complete_onboarding":
             return await executeCompleteOnboarding(toolCall.arguments)
 
+        case "save_knowledge_graph":
+            return await executeSaveKnowledgeGraph(toolCall.arguments)
+
         default:
             return "Unknown tool: \(toolCall.name)"
         }
@@ -686,6 +689,88 @@ class ChatToolExecutor {
             return "No preferences were changed. Provide 'language' (code like 'en', 'es', 'ja') and/or 'name' (string)."
         }
         return results.joined(separator: ". ") + "."
+    }
+
+    // MARK: - Knowledge Graph Tool
+
+    /// Save a knowledge graph extracted by the AI during file exploration
+    private static func executeSaveKnowledgeGraph(_ args: [String: Any]) async -> String {
+        guard let nodesArray = args["nodes"] as? [[String: Any]] else {
+            return "Error: 'nodes' array is required"
+        }
+        let edgesArray = args["edges"] as? [[String: Any]] ?? []
+
+        let now = Date()
+        var nodeRecords: [LocalKGNodeRecord] = []
+        var edgeRecords: [LocalKGEdgeRecord] = []
+
+        // Deduplicate nodes by label (case-insensitive)
+        var seenLabels: [String: String] = [:] // lowercase label → nodeId
+        var idRemap: [String: String] = [:] // original id → canonical id
+
+        for node in nodesArray {
+            guard let id = node["id"] as? String,
+                  let label = node["label"] as? String else { continue }
+
+            let nodeType = node["node_type"] as? String ?? "concept"
+            let aliases = node["aliases"] as? [String] ?? []
+            let lowerLabel = label.lowercased()
+
+            if let existingId = seenLabels[lowerLabel] {
+                idRemap[id] = existingId
+                continue
+            }
+
+            seenLabels[lowerLabel] = id
+            idRemap[id] = id
+
+            var aliasesJson: String?
+            if !aliases.isEmpty, let data = try? JSONEncoder().encode(aliases) {
+                aliasesJson = String(data: data, encoding: .utf8)
+            }
+
+            nodeRecords.append(LocalKGNodeRecord(
+                nodeId: id,
+                label: label,
+                nodeType: nodeType,
+                aliasesJson: aliasesJson,
+                sourceFileIds: nil,
+                createdAt: now,
+                updatedAt: now
+            ))
+        }
+
+        for edge in edgesArray {
+            guard let sourceId = edge["source_id"] as? String,
+                  let targetId = edge["target_id"] as? String,
+                  let label = edge["label"] as? String else { continue }
+
+            let remappedSource = idRemap[sourceId] ?? sourceId
+            let remappedTarget = idRemap[targetId] ?? targetId
+
+            // Skip self-referencing edges and edges to missing nodes
+            guard remappedSource != remappedTarget,
+                  seenLabels.values.contains(remappedSource),
+                  seenLabels.values.contains(remappedTarget) else { continue }
+
+            let edgeId = "\(remappedSource)_\(remappedTarget)_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))"
+            edgeRecords.append(LocalKGEdgeRecord(
+                edgeId: edgeId,
+                sourceNodeId: remappedSource,
+                targetNodeId: remappedTarget,
+                label: label,
+                createdAt: now
+            ))
+        }
+
+        do {
+            try await KnowledgeGraphStorage.shared.saveGraph(nodes: nodeRecords, edges: edgeRecords)
+            log("Local graph built with \(nodeRecords.count) nodes, \(edgeRecords.count) edges")
+            return "OK: saved \(nodeRecords.count) nodes and \(edgeRecords.count) edges to local knowledge graph"
+        } catch {
+            logError("Tool save_knowledge_graph failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
     }
 
     /// Complete the onboarding process
