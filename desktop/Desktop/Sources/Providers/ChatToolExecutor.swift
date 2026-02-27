@@ -12,8 +12,8 @@ class ChatToolExecutor {
     static var onboardingAppState: AppState?
     /// Called when AI invokes complete_onboarding
     static var onCompleteOnboarding: (() -> Void)?
-    /// Called when AI invokes ask_followup — delivers options (and optional permission image) to the UI
-    static var onQuickReplyOptions: ((_ options: [String], _ permissionImage: String?) -> Void)?
+    /// Called when AI invokes ask_followup — delivers quick-reply options to the UI
+    static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
 
     private static var fileScanStarted = false
     private static var fileScanFileCount = 0
@@ -813,10 +813,9 @@ class ChatToolExecutor {
             return "Error: 'question' parameter is required"
         }
         let options = (args["options"] as? [String]) ?? []
-        let permissionImage = args["permission_image"] as? String
 
         // Notify the UI to render quick-reply buttons
-        onQuickReplyOptions?(options, permissionImage)
+        onQuickReplyOptions?(options)
 
         return "Presented to user: \"\(question)\" with options: \(options.joined(separator: ", "))"
     }
