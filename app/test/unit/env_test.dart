@@ -67,6 +67,11 @@ void main() {
       Env.overrideApiBaseUrl('https://something-else.example.com/');
       expect(Env.isUsingStagingApi, isFalse);
     });
+
+    test('true with case-insensitive and whitespace-trimmed URL', () {
+      Env.overrideApiBaseUrl('  HTTPS://API.OMIAPI.COM/  ');
+      expect(Env.isUsingStagingApi, isTrue);
+    });
   });
 
   group('Env.isTestFlight', () {
