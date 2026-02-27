@@ -31,7 +31,13 @@ abstract class Env {
     return 'https://api.omiapi.com/';
   }
 
-  static bool get isUsingStagingApi => _apiBaseUrlOverride != null && _apiBaseUrlOverride == stagingApiUrl;
+  static bool get isUsingStagingApi {
+    final effective = apiBaseUrl;
+    if (effective == null) return false;
+    return _normalizeUrl(effective) == _normalizeUrl(stagingApiUrl);
+  }
+
+  static String _normalizeUrl(String url) => url.endsWith('/') ? url.substring(0, url.length - 1) : url;
 
   /// WebSocket URL for the agent proxy service.
   /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
