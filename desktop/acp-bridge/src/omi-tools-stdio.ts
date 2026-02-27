@@ -206,6 +206,76 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
       required: ["name"],
     },
   },
+  // --- Onboarding tools ---
+  {
+    name: "check_permission_status",
+    description: `Check which macOS permissions are currently granted. Returns JSON with status of all 5 permissions: screen_recording, microphone, notifications, accessibility, automation. Call before requesting permissions.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "request_permission",
+    description: `Request a specific macOS permission from the user. Triggers the macOS system permission dialog. Returns "granted", "pending", or "denied". Call one at a time.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        type: {
+          type: "string" as const,
+          description:
+            "Permission type: screen_recording, microphone, notifications, accessibility, or automation",
+        },
+      },
+      required: ["type"],
+    },
+  },
+  {
+    name: "start_file_scan",
+    description: `Start scanning the user's files in the background. Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications. Returns immediately. Call get_file_scan_results after a few seconds.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "get_file_scan_results",
+    description: `Get results of the background file scan. Returns file type breakdown, project indicators (package.json, Cargo.toml, etc.), recently modified files, and installed applications.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "set_user_preferences",
+    description: `Save user preferences like language and name. Only call if the user explicitly mentions a preferred language or name correction.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        language: {
+          type: "string" as const,
+          description: "Language code (e.g. en, es, ja)",
+        },
+        name: {
+          type: "string" as const,
+          description: "User's preferred name",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "complete_onboarding",
+    description: `Finish onboarding and start the app. Logs analytics, starts background services, enables launch-at-login. Call as the LAST step after permissions are done.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // --- JSON-RPC handling ---
@@ -369,6 +439,23 @@ async function handleJsonRpc(
                 text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
               }],
             },
+          });
+        }
+      } else if (
+        toolName === "check_permission_status" ||
+        toolName === "request_permission" ||
+        toolName === "start_file_scan" ||
+        toolName === "get_file_scan_results" ||
+        toolName === "set_user_preferences" ||
+        toolName === "complete_onboarding"
+      ) {
+        // Onboarding tools — forward directly to Swift
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (!isNotification) {
