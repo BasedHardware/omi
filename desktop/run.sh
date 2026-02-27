@@ -89,10 +89,8 @@ CONFLICTING_APPS=(
     "/Applications/Omi.app/Contents/MacOS/Omi Computer.app"
     "$HOME/Desktop/Omi.app"
     "$HOME/Downloads/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Release/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
 )
 for app in "${CONFLICTING_APPS[@]}"; do
     if [ -d "$app" ]; then
@@ -101,7 +99,7 @@ for app in "${CONFLICTING_APPS[@]}"; do
     fi
 done
 # Also remove any "Omi Computer.app" nested inside Flutter builds (any config: Debug/Release/Release-prod/etc.)
-find "$(dirname "$0")/../omi/app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$(dirname "$0")/../app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
 
 step "Starting Cloudflare tunnel..."
 cloudflared tunnel run omi-computer-dev &
