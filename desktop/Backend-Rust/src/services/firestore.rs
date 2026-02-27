@@ -5025,6 +5025,16 @@ impl FirestoreService {
             self.update_user_fields(uid, fields, &["assistant_settings"]).await?;
         }
 
+        // Write update_channel as top-level field on user doc (not inside assistant_settings)
+        if let Some(ref channel) = data.update_channel {
+            let fields = json!({
+                "update_channel": {
+                    "stringValue": channel
+                }
+            });
+            self.update_user_fields(uid, fields, &["update_channel"]).await?;
+        }
+
         // Return merged state
         self.get_assistant_settings(uid).await
     }
