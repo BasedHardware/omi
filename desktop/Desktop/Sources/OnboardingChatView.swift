@@ -13,6 +13,9 @@ struct OnboardingChatView: View {
     @State private var hasStarted: Bool = false
     @State private var showCompleteButton: Bool = false
     @State private var onboardingCompleted: Bool = false
+    @State private var quickReplyOptions: [String] = []
+    @State private var quickReplyPermissionImage: String? = nil
+    @State private var isGrantingPermission: Bool = false
     @FocusState private var isInputFocused: Bool
 
     // Timer to periodically check permission status
@@ -58,6 +61,47 @@ struct OnboardingChatView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.leading, 44) // align with message text (32px avatar + 12px spacing)
                                 .id("typing")
+                        }
+
+                        // Quick reply buttons + optional permission image
+                        if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            VStack(spacing: 12) {
+                                // Permission guide image (if applicable)
+                                if let permImage = quickReplyPermissionImage {
+                                    OnboardingPermissionImage(permissionType: permImage)
+                                        .id("permission-image")
+                                }
+
+                                // Quick reply chips
+                                HStack(spacing: 8) {
+                                    ForEach(quickReplyOptions, id: \.self) { option in
+                                        Button(action: {
+                                            handleQuickReply(option)
+                                        }) {
+                                            Text(option)
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundColor(isGrantButton(option) ? .white : OmiColors.purplePrimary)
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    isGrantButton(option)
+                                                        ? OmiColors.purplePrimary
+                                                        : OmiColors.purplePrimary.opacity(0.1)
+                                                )
+                                                .cornerRadius(20)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 20)
+                                                        .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(isGrantingPermission)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 44) // align with message text
+                            }
+                            .id("quick-replies")
                         }
 
                         // "Continue to App" button — shown after AI calls complete_onboarding
@@ -107,6 +151,19 @@ struct OnboardingChatView: View {
                     if sending {
                         withAnimation {
                             proxy.scrollTo("typing", anchor: .bottom)
+                        }
+                    } else if !quickReplyOptions.isEmpty {
+                        withAnimation {
+                            proxy.scrollTo("quick-replies", anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: quickReplyOptions) { _, options in
+                    if !options.isEmpty {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation {
+                                proxy.scrollTo("quick-replies", anchor: .bottom)
+                            }
                         }
                     }
                 }
@@ -219,6 +276,10 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onCompleteOnboarding = {
             onboardingCompleted = true
         }
+        ChatToolExecutor.onQuickReplyOptions = { options, permissionImage in
+            quickReplyOptions = options
+            quickReplyPermissionImage = permissionImage
+        }
 
         // Build onboarding system prompt
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
@@ -254,8 +315,56 @@ struct OnboardingChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
 
+        // Clear quick replies when user types their own message
+        quickReplyOptions = []
+        quickReplyPermissionImage = nil
+
         Task {
             await chatProvider.sendMessage(text, sessionKey: "onboarding")
+        }
+    }
+
+    /// Whether a quick reply option is a "Grant" permission button
+    private func isGrantButton(_ option: String) -> Bool {
+        option.hasPrefix("Grant ")
+    }
+
+    /// Extract permission type from a "Grant [Permission]" button label
+    private func permissionType(from option: String) -> String? {
+        guard isGrantButton(option) else { return nil }
+        let name = String(option.dropFirst("Grant ".count)).lowercased()
+        let mapping: [String: String] = [
+            "microphone": "microphone",
+            "mic": "microphone",
+            "notifications": "notifications",
+            "accessibility": "accessibility",
+            "automation": "automation",
+            "screen recording": "screen_recording",
+        ]
+        return mapping[name]
+    }
+
+    /// Handle quick reply button tap — triggers permission if applicable, then sends as user message
+    private func handleQuickReply(_ option: String) {
+        let options = quickReplyOptions
+        quickReplyOptions = []
+        quickReplyPermissionImage = nil
+
+        if let permType = permissionType(from: option) {
+            // Grant button — trigger the permission directly
+            isGrantingPermission = true
+            Task {
+                let result = await ChatToolExecutor.execute(ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil))
+                isGrantingPermission = false
+                // Send the result as a user message so the AI knows what happened
+                let replyText = result.contains("granted") ? "\(option) — done!" : "\(option) — \(result)"
+                await chatProvider.sendMessage(replyText, sessionKey: "onboarding")
+            }
+        } else {
+            // Regular quick reply — just send as message
+            Task {
+                await chatProvider.sendMessage(option, sessionKey: "onboarding")
+            }
         }
     }
 
@@ -327,13 +436,13 @@ struct OnboardingChatView: View {
 struct OnboardingChatBubble: View {
     let message: ChatMessage
 
-    /// Whether this AI message has any visible content (non-empty text or tool calls)
+    /// Whether this AI message has any visible content (non-empty text or visible tool calls)
     private var hasVisibleContent: Bool {
         if message.sender != .ai { return true }
         return message.contentBlocks.contains { block in
             switch block {
-            case .toolCall:
-                return true
+            case .toolCall(_, let name, _, _, _, _):
+                return name != "ask_followup" // ask_followup renders its own UI separately
             case .text(_, let text):
                 return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             case .thinking:
@@ -365,7 +474,10 @@ struct OnboardingChatBubble: View {
                         ForEach(message.contentBlocks) { block in
                             switch block {
                             case .toolCall(_, let name, let status, _, _, _):
-                                OnboardingToolIndicator(toolName: name, status: status)
+                                let indicator = OnboardingToolIndicator(toolName: name, status: status)
+                                if !indicator.isHidden {
+                                    indicator
+                                }
                             case .text(_, let text):
                                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                     Markdown(text)
@@ -432,6 +544,11 @@ struct OnboardingToolIndicator: View {
         .padding(.vertical, 2)
     }
 
+    /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
+    var isHidden: Bool {
+        toolName == "ask_followup"
+    }
+
     private var displayText: String {
         switch toolName {
         case "scan_files", "start_file_scan":
@@ -456,6 +573,54 @@ struct OnboardingToolIndicator: View {
                 return status == .running ? "Reading webpage..." : "Webpage read"
             }
             return status == .running ? "Working..." : "Done"
+        }
+    }
+}
+
+// MARK: - Permission Guide Image
+
+struct OnboardingPermissionImage: View {
+    let permissionType: String
+
+    private var resourceInfo: (name: String, ext: String)? {
+        switch permissionType {
+        case "microphone":
+            return ("microphone-settings", "png")
+        case "notifications":
+            return ("enable_notifications", "gif")
+        case "accessibility":
+            return ("accessibility_permission", "gif")
+        case "screen_recording":
+            return ("permissions", "gif")
+        case "folder_access":
+            return ("folder_access", "png")
+        default:
+            return nil
+        }
+    }
+
+    var body: some View {
+        if let info = resourceInfo {
+            if info.ext == "gif" {
+                AnimatedGIFView(gifName: info.name)
+                    .frame(maxWidth: 320, maxHeight: 200)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                    )
+            } else if let url = Bundle.resourceBundle.url(forResource: info.name, withExtension: info.ext),
+                      let nsImage = NSImage(contentsOf: url) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 320, maxHeight: 200)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                    )
+            }
         }
     }
 }
