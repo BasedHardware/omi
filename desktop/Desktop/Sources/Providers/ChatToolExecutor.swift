@@ -30,6 +30,12 @@ class ChatToolExecutor {
         case "get_daily_recap":
             return await executeDailyRecap(toolCall.arguments)
 
+        case "complete_task":
+            return await executeCompleteTask(toolCall.arguments)
+
+        case "delete_task":
+            return await executeDeleteTask(toolCall.arguments)
+
         // Onboarding tools
         case "request_permission":
             return await executeRequestPermission(toolCall.arguments)
@@ -383,6 +389,60 @@ class ChatToolExecutor {
         } catch {
             logError("Tool semantic_search failed", error: error)
             return "Failed to search: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Task Tools
+
+    /// Toggle a task's completion status via TasksStore (handles local + API sync)
+    private static func executeCompleteTask(_ args: [String: Any]) async -> String {
+        guard let taskId = args["task_id"] as? String, !taskId.isEmpty else {
+            return "Error: task_id is required"
+        }
+
+        do {
+            guard let task = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: taskId) else {
+                return "Error: task not found with id '\(taskId)'"
+            }
+
+            if task.deleted == true {
+                return "Error: task '\(task.description)' has been deleted"
+            }
+
+            let wasCompleted = task.completed
+            await TasksStore.shared.toggleTask(task)
+
+            let newState = wasCompleted ? "incomplete" : "completed"
+            log("Tool complete_task: toggled '\(task.description)' to \(newState)")
+            return "OK: task '\(task.description)' marked as \(newState)"
+        } catch {
+            logError("Tool complete_task failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
+    }
+
+    /// Delete a task via TasksStore (handles local + API sync)
+    private static func executeDeleteTask(_ args: [String: Any]) async -> String {
+        guard let taskId = args["task_id"] as? String, !taskId.isEmpty else {
+            return "Error: task_id is required"
+        }
+
+        do {
+            guard let task = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: taskId) else {
+                return "Error: task not found with id '\(taskId)'"
+            }
+
+            if task.deleted == true {
+                return "Error: task '\(task.description)' is already deleted"
+            }
+
+            await TasksStore.shared.deleteTask(task)
+
+            log("Tool delete_task: deleted '\(task.description)'")
+            return "OK: task '\(task.description)' deleted"
+        } catch {
+            logError("Tool delete_task failed", error: error)
+            return "Error: \(error.localizedDescription)"
         }
     }
 
