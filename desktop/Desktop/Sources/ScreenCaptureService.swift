@@ -160,12 +160,12 @@ final class ScreenCaptureService: Sendable {
     ensureLaunchServicesRegistration()
 
     // 0.5. Detect stale TCC entry: TCC says granted but capture actually fails.
-    // This happens after a code signing identity change (e.g. personal cert → company cert).
-    // CGRequestScreenCaptureAccess() is a no-op when an entry already exists, so we must
-    // reset the stale entry first to make the system dialog appear.
+    // This happens after a code signing identity change (e.g. Sparkle update).
+    // Do NOT auto-reset with tccutil — that removes the app from System Settings
+    // and leaves the user stuck. Instead, just log the stale state and let the user
+    // toggle off/on in System Settings, which refreshes the TCC entry in place.
     if CGPreflightScreenCaptureAccess() && !testCapturePermission() {
-      log("Screen capture: stale TCC entry detected (signing identity changed), auto-resetting...")
-      _ = resetScreenCapturePermission()
+      log("Screen capture: stale TCC entry detected (signing identity changed). User should toggle off/on in System Settings.")
     }
 
     // 1. Request traditional Screen Recording TCC permission
@@ -178,9 +178,7 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    // 3. Also open System Settings directly as a fallback
-    // Sometimes CGRequestScreenCaptureAccess doesn't show a dialog if permission
-    // was previously denied or if there's Launch Services confusion
+    // 3. Open System Settings so the user can grant/toggle permission
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
       openScreenRecordingPreferences()
     }

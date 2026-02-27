@@ -748,31 +748,46 @@ class AppState: ObservableObject {
     func checkScreenRecordingPermission() {
         let tccGranted = CGPreflightScreenCaptureAccess()
 
-        // Detect stale TCC entry from old developer signing (e.g. after developer account change).
-        // CGPreflight returns true from the old entry, but actual capture fails with new signing.
-        // Auto-reset the stale entry so the user gets prompted to re-grant.
-        if tccGranted {
-            Task.detached {
-                let actuallyWorks = ScreenCaptureService.testCapturePermission()
-                if !actuallyWorks {
-                    log("Screen capture: stale TCC entry detected at launch (developer signing changed), auto-resetting...")
+        if !tccGranted {
+            hasScreenRecordingPermission = false
+            isScreenCaptureKitBroken = false
+            return
+        }
+
+        // TCC says granted. If the permission alert is currently showing (permission was
+        // previously false or broken), do a real capture test to verify the stale TCC case
+        // (e.g. after Sparkle update changes code signature). This avoids spawning a
+        // screencapture process on every didBecomeActive when everything is fine.
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken {
+            let realPermission = ScreenCaptureService.checkPermission()
+            hasScreenRecordingPermission = realPermission
+
+            // Stale TCC entry from old developer signing: CGPreflight says granted but
+            // actual capture fails. Auto-reset so the user gets prompted to re-grant.
+            if !realPermission {
+                Task.detached {
+                    log("Screen capture: stale TCC entry detected (developer signing changed), auto-resetting...")
                     ScreenCaptureService.ensureLaunchServicesRegistrationSync()
                     _ = ScreenCaptureService.resetScreenCapturePermission()
-                    await MainActor.run {
-                        self.hasScreenRecordingPermission = false
+                }
+            }
+
+            if isScreenCaptureKitBroken {
+                // Re-check if SCK has recovered (user toggled permission in System Settings)
+                if #available(macOS 14.0, *) {
+                    Task {
+                        let sckWorks = await ScreenCaptureService.testScreenCaptureKitPermission()
+                        if sckWorks {
+                            log("AppState: ScreenCaptureKit recovered — clearing broken flag")
+                            self.isScreenCaptureKitBroken = false
+                            self.hasScreenRecordingPermission = true
+                        }
                     }
                 }
             }
+        } else {
+            hasScreenRecordingPermission = true
         }
-
-        hasScreenRecordingPermission = tccGranted
-
-        // If TCC is not granted, clear the "broken" flag
-        // (broken = TCC granted but SCK failing, not applicable if TCC not granted)
-        if !tccGranted {
-            isScreenCaptureKitBroken = false
-        }
-        // If TCC is granted AND broken flag is set, leave it set until reset/restart
     }
 
     /// Check automation permission without triggering a prompt
