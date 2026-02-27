@@ -480,16 +480,21 @@ struct FileIndexingView: View {
         2. Recently modified files to see what I'm working on now
         3. Dig into interesting patterns — tech stack, recurring themes
 
-        Keep your responses SHORT — 2-4 sentences per discovery, not essays.
+        CRITICAL RESPONSE FORMAT:
+        - Each message to me: MAX 1-2 sentences. No essays, no bullet lists, no headers.
+        - Just quick observations like "You've got 3 active Rust projects and heavy VS Code usage."
+        - Save the detailed analysis for the knowledge graph — don't dump it in chat.
 
-        IMPORTANT — After exploring, call save_knowledge_graph with all entities and relationships you found. Extract:
+        After exploring, call save_knowledge_graph with all entities and relationships you found. Extract:
         - People (me, collaborators, companies I work with)
         - Organizations (companies, teams, services)
         - Things (projects, repos, tools, languages, frameworks)
         - Concepts (domains, interests, skills)
         - Relationships between them (uses, works_on, built_with, part_of, etc.)
 
-        Aim for 15-40 nodes and meaningful edges connecting them. This builds my personal knowledge graph visualization.
+        Aim for 15-40 nodes and meaningful edges connecting them.
+
+        After saving the graph, end with ONE sentence summarizing what you found about me overall.
         """
         await chatProvider.sendMessage(prompt)
 
@@ -501,10 +506,14 @@ struct FileIndexingView: View {
         }
 
         // Append the AI's exploration response to the user's AI profile
+        // and inject a collapsible discovery card into the chat
         await appendExplorationToProfile()
 
-        // Follow up: ask the model to find something actionable (keep it short)
-        await chatProvider.sendMessage("Based on what you found, what's one thing you could actually help me finish right now? Be specific and brief.")
+        // Inject discovery card with the full profile text
+        await injectDiscoveryCard()
+
+        // Follow up: concise actionable suggestion
+        await chatProvider.sendMessage("What's one specific thing you could help me finish right now? One sentence.")
     }
 
     /// Append the AI's file exploration response to the latest AI user profile
@@ -530,6 +539,32 @@ struct FileIndexingView: View {
             log("FileIndexingView: No existing AI profile, triggering generation")
             _ = try? await service.generateProfile()
         }
+    }
+
+    /// Inject a collapsible discovery card into the chat with the full AI exploration text
+    private func injectDiscoveryCard() async {
+        // Collect all AI messages from the exploration as the full profile text
+        let aiMessages = chatProvider.messages
+            .filter { $0.sender == .ai }
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !aiMessages.isEmpty else { return }
+
+        let fullText = aiMessages.joined(separator: "\n\n")
+
+        // Build a short summary from the last AI message
+        let lastMsg = aiMessages.last ?? ""
+        let summary = lastMsg.count > 120 ? String(lastMsg.prefix(120)) + "..." : lastMsg
+
+        await MainActor.run {
+            chatProvider.appendDiscoveryCard(
+                title: "Your Digital Profile",
+                summary: summary,
+                fullText: fullText
+            )
+        }
+        log("FileIndexingView: Injected discovery card into chat")
     }
 
     private func skip() {

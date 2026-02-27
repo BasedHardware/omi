@@ -667,6 +667,8 @@ struct ChatBubble: View {
                             ToolCallsGroup(calls: calls)
                         case .thinking(_, let text):
                             ThinkingBlock(text: text)
+                        case .discoveryCard(_, let title, let summary, let fullText):
+                            DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         }
                     }
                     // Show typing indicator at end if still streaming
@@ -847,16 +849,18 @@ enum ContentBlockGroup: Identifiable {
     case text(id: String, text: String)
     case toolCalls(id: String, calls: [ChatContentBlock])
     case thinking(id: String, text: String)
+    case discoveryCard(id: String, title: String, summary: String, fullText: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
         case .toolCalls(let id, _): return id
         case .thinking(let id, _): return id
+        case .discoveryCard(let id, _, _, _): return id
         }
     }
 
-    /// Groups consecutive `.toolCall` blocks together; passes `.text` and `.thinking` through
+    /// Groups consecutive `.toolCall` blocks together; passes `.text`, `.thinking`, `.discoveryCard` through
     static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
         var groups: [ContentBlockGroup] = []
         var pendingToolCalls: [ChatContentBlock] = []
@@ -878,6 +882,9 @@ enum ContentBlockGroup: Identifiable {
             case .thinking(let id, let text):
                 flushToolCalls()
                 groups.append(.thinking(id: id, text: text))
+            case .discoveryCard(let id, let title, let summary, let fullText):
+                flushToolCalls()
+                groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
             }
         }
         flushToolCalls()
@@ -1150,6 +1157,73 @@ struct ThinkingBlock: View {
         }
         .background(OmiColors.backgroundTertiary.opacity(0.3))
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Discovery Card
+
+/// Collapsible card that shows a brief summary with expandable full profile text
+struct DiscoveryCard: View {
+    let title: String
+    let summary: String
+    let fullText: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header — always visible
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(summary)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 10)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    SelectableMarkdown(text: fullText, sender: .ai)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

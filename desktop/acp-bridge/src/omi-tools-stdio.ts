@@ -114,7 +114,9 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "request_permission",
   "scan_files",
   "set_user_preferences",
+  "ask_followup",
   "complete_onboarding",
+  "save_knowledge_graph",
 ]);
 
 const ALL_TOOLS = [
@@ -269,12 +271,75 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
     },
   },
   {
+    name: "ask_followup",
+    description: `Present a question with quick-reply buttons to the user. The UI renders clickable buttons.
+Use in Step 4 (follow-up question after file discoveries) and Step 5 (permission grant buttons).
+The user can click a button OR type their own reply. Wait for their response before continuing.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        question: {
+          type: "string" as const,
+          description: "The question to present to the user",
+        },
+        options: {
+          type: "array" as const,
+          items: { type: "string" as const },
+          description:
+            "2-3 quick-reply button labels. For permissions, include 'Grant [Permission]' and 'Skip'.",
+        },
+      },
+      required: ["question", "options"],
+    },
+  },
+  {
     name: "complete_onboarding",
     description: `Finish onboarding and start the app. Logs analytics, starts background services, enables launch-at-login. Call as the LAST step after permissions are done.`,
     inputSchema: {
       type: "object" as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: "save_knowledge_graph",
+    description: `Save a knowledge graph of entities and relationships discovered about the user.
+Extract people, organizations, projects, tools, languages, frameworks, and concepts.
+Build relationships like: works_on, uses, built_with, part_of, knows, etc.
+Aim for 15-40 nodes with meaningful edges connecting them.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        nodes: {
+          type: "array" as const,
+          items: {
+            type: "object" as const,
+            properties: {
+              id: { type: "string" as const },
+              label: { type: "string" as const },
+              node_type: {
+                type: "string" as const,
+                enum: ["person", "organization", "place", "thing", "concept"],
+              },
+              aliases: { type: "array" as const, items: { type: "string" as const } },
+            },
+            required: ["id", "label", "node_type"],
+          },
+        },
+        edges: {
+          type: "array" as const,
+          items: {
+            type: "object" as const,
+            properties: {
+              source_id: { type: "string" as const },
+              target_id: { type: "string" as const },
+              label: { type: "string" as const },
+            },
+            required: ["source_id", "target_id", "label"],
+          },
+        },
+      },
+      required: ["nodes", "edges"],
     },
   },
 ];
@@ -453,7 +518,9 @@ async function handleJsonRpc(
         toolName === "request_permission" ||
         toolName === "scan_files" ||
         toolName === "set_user_preferences" ||
-        toolName === "complete_onboarding"
+        toolName === "ask_followup" ||
+        toolName === "complete_onboarding" ||
+        toolName === "save_knowledge_graph"
       ) {
         // Onboarding tools — forward directly to Swift
         const result = await requestSwiftTool(toolName, args);

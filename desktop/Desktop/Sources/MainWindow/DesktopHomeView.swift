@@ -80,6 +80,16 @@ struct DesktopHomeView: View {
             } else {
                 // State 3: Signed in and onboarded - show main content
                 ZStack {
+                    // After onboarding completes, navigate to Chat page so the conversation continues
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .onAppear {
+                            if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
+                                UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
+                                log("DesktopHomeView: Onboarding just completed — navigating to Chat page")
+                                selectedIndex = SidebarNavItem.chat.rawValue
+                            }
+                        }
                     mainContent
                         .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
                         .onAppear {

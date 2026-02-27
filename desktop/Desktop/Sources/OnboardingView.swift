@@ -117,8 +117,9 @@ struct OnboardingView: View {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
 
-        // Clean up onboarding session key
+        // Clean up onboarding session key and persisted chat data
         chatProvider.onboardingSessionKey = nil
+        OnboardingChatPersistence.clear()
 
         if let onComplete = onComplete {
             onComplete()
