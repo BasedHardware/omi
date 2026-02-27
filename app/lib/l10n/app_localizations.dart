@@ -15410,6 +15410,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch & Close'**
   String get switchAndRestart;
+
+  /// No description provided for @stagingDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.'**
+  String get stagingDisclaimer;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
