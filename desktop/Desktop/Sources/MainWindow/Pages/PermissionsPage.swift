@@ -566,6 +566,8 @@ struct ScreenRecordingPermissionSection: View {
             Button(action: {
                 // First trigger screen capture to make app appear in list
                 appState.triggerScreenRecordingPermission()
+                // Track attempt — if still not granted on next check, show recovery instructions
+                appState.screenRecordingGrantAttempts += 1
                 // Then open System Settings after a brief delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
