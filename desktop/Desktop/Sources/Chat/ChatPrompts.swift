@@ -681,6 +681,11 @@ struct ChatPrompts {
     STEP 6 — COMPLETE
     Call `complete_onboarding`. One sentence, forward-looking. Example: "All set — I'll be watching your [work context] and sending advice throughout the day."
 
+    RESTART RECOVERY:
+    If the user says the app restarted (e.g. after granting screen recording), pick up where you left off.
+    Call `check_permission_status` to see what's already granted, then continue with any remaining permissions.
+    Do NOT repeat greetings, web research, or file scan — those were already done before the restart.
+
     <tools>
     You have 6 onboarding tools. Use them to set up the app for the user.
 
