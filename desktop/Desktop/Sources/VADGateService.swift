@@ -128,6 +128,12 @@ struct GateOutput {
     let shouldFinalize: Bool
 }
 
+struct BatchGateOutput {
+    let audioBuffer: Data?          // Complete speech audio (nil if still accumulating)
+    let speechStartWallTime: Double // CACurrentMediaTime() when speech started
+    let isComplete: Bool            // True when hangover→silence emits the buffer
+}
+
 // MARK: - DG Wall-Clock Timestamp Mapper
 
 /// Maps Deepgram audio-time timestamps to wall-clock-relative timestamps.
@@ -241,6 +247,22 @@ final class VADGateService {
     private var lastMetricsLogTime: Double = 0
     private let metricsLogInterval: Double = 30  // Log metrics every 30 seconds
 
+    // Batch mode state
+    private var batchAudioBuffer = Data()
+    private var batchSpeechStartWallTime: Double = 0.0
+    private var batchState: GateState = .silence
+    private var batchLastSpeechMs: Double = 0.0
+    private var batchAudioCursorMs: Double = 0.0
+    private var batchPreRollChunks: [Data] = []
+    private var batchPreRollTotalMs: Double = 0.0
+
+    // Batch mode VAD buffers (separate from streaming mode)
+    private var batchMicVADBuffer: [Float] = []
+    private var batchSysVADBuffer: [Float] = []
+    // Separate VAD models for batch mode (each model carries internal state)
+    private var batchMicVAD: SileroVADModel?
+    private var batchSysVAD: SileroVADModel?
+
     // Fail-open flag
     private let modelAvailable: Bool
 
@@ -250,6 +272,8 @@ final class VADGateService {
         micVAD = mic
         sysVAD = sys
         modelAvailable = mic != nil && sys != nil
+        batchMicVAD = SileroVADModel()
+        batchSysVAD = SileroVADModel()
         if modelAvailable {
             log("VADGateService: Initialized with Silero VAD models")
         } else {
@@ -468,6 +492,152 @@ final class VADGateService {
             lastSendWallTime = wallTime
             return GateOutput(audioToSend: pcmData, shouldFinalize: false)
         }
+    }
+
+    // MARK: - Batch Mode
+
+    /// Process stereo Int16 audio through VAD, accumulating a buffer until silence.
+    /// Returns a completed buffer when hangover→silence transition occurs.
+    func processAudioBatch(_ stereoData: Data) -> BatchGateOutput {
+        guard modelAvailable else {
+            // Fail-open: return every chunk immediately as a complete buffer
+            return BatchGateOutput(audioBuffer: stereoData, speechStartWallTime: CACurrentMediaTime(), isComplete: true)
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        let wallTime = CACurrentMediaTime()
+
+        // Calculate chunk duration
+        let bytesPerFrame = 4  // Stereo Int16: 2 channels * 2 bytes
+        let numFrames = stereoData.count / bytesPerFrame
+        let chunkMs = Double(numFrames) * 1000.0 / Double(sampleRate)
+        batchAudioCursorMs += chunkMs
+
+        // Deinterleave and run VAD
+        let (micSamples, sysSamples) = deinterleave(stereoData)
+
+        batchMicVADBuffer.append(contentsOf: micSamples)
+        batchSysVADBuffer.append(contentsOf: sysSamples)
+
+        var micSpeech = false
+        var sysSpeech = false
+
+        if batchMicVADBuffer.count >= vadWindowSamples, let vad = batchMicVAD {
+            while batchMicVADBuffer.count >= vadWindowSamples {
+                let window = Array(batchMicVADBuffer.prefix(vadWindowSamples))
+                batchMicVADBuffer.removeFirst(vadWindowSamples)
+                if vad.predict(window) > speechThreshold { micSpeech = true }
+            }
+        }
+
+        if batchSysVADBuffer.count >= vadWindowSamples, let vad = batchSysVAD {
+            while batchSysVADBuffer.count >= vadWindowSamples {
+                let window = Array(batchSysVADBuffer.prefix(vadWindowSamples))
+                batchSysVADBuffer.removeFirst(vadWindowSamples)
+                if vad.predict(window) > speechThreshold { sysSpeech = true }
+            }
+        }
+
+        // Keep buffers bounded
+        if batchMicVADBuffer.count > vadWindowSamples {
+            batchMicVADBuffer = Array(batchMicVADBuffer.suffix(vadWindowSamples))
+        }
+        if batchSysVADBuffer.count > vadWindowSamples {
+            batchSysVADBuffer = Array(batchSysVADBuffer.suffix(vadWindowSamples))
+        }
+
+        let isSpeech = micSpeech || sysSpeech
+        if isSpeech { batchLastSpeechMs = batchAudioCursorMs }
+
+        // Batch state machine
+        switch batchState {
+        case .silence:
+            // Buffer pre-roll
+            batchPreRollChunks.append(stereoData)
+            batchPreRollTotalMs += chunkMs
+            while batchPreRollTotalMs > preRollMs && batchPreRollChunks.count > 1 {
+                let evicted = batchPreRollChunks.removeFirst()
+                let evictedMs = Double(evicted.count / bytesPerFrame) * 1000.0 / Double(sampleRate)
+                batchPreRollTotalMs -= evictedMs
+            }
+
+            if isSpeech {
+                // SILENCE -> SPEECH: start new buffer with pre-roll
+                batchState = .speech
+                batchAudioBuffer = Data()
+                for chunk in batchPreRollChunks {
+                    batchAudioBuffer.append(chunk)
+                }
+                batchSpeechStartWallTime = wallTime - (batchPreRollTotalMs / 1000.0)
+                batchPreRollChunks.removeAll()
+                batchPreRollTotalMs = 0.0
+            }
+
+            return BatchGateOutput(audioBuffer: nil, speechStartWallTime: 0, isComplete: false)
+
+        case .speech:
+            batchAudioBuffer.append(stereoData)
+
+            if !isSpeech {
+                // SPEECH -> HANGOVER
+                batchState = .hangover
+            }
+
+            return BatchGateOutput(audioBuffer: nil, speechStartWallTime: batchSpeechStartWallTime, isComplete: false)
+
+        case .hangover:
+            batchAudioBuffer.append(stereoData)
+            let timeSinceSpeechMs = batchAudioCursorMs - batchLastSpeechMs
+
+            if isSpeech {
+                // HANGOVER -> SPEECH
+                batchState = .speech
+                return BatchGateOutput(audioBuffer: nil, speechStartWallTime: batchSpeechStartWallTime, isComplete: false)
+            }
+
+            if timeSinceSpeechMs > hangoverMs {
+                // HANGOVER -> SILENCE: emit completed buffer
+                batchState = .silence
+                let completedBuffer = batchAudioBuffer
+                let startTime = batchSpeechStartWallTime
+                batchAudioBuffer = Data()
+                batchPreRollChunks.removeAll()
+                batchPreRollTotalMs = 0.0
+                // Seed pre-roll with current chunk for next speech
+                batchPreRollChunks.append(stereoData)
+                batchPreRollTotalMs = chunkMs
+
+                let durationSec = Double(completedBuffer.count / bytesPerFrame) / Double(sampleRate)
+                log("VADGate [batch]: Speech chunk complete — \(completedBuffer.count) bytes (\(String(format: "%.1f", durationSec))s)")
+
+                return BatchGateOutput(audioBuffer: completedBuffer, speechStartWallTime: startTime, isComplete: true)
+            }
+
+            return BatchGateOutput(audioBuffer: nil, speechStartWallTime: batchSpeechStartWallTime, isComplete: false)
+        }
+    }
+
+    /// Flush remaining batch audio buffer (call when recording stops).
+    func flushBatchBuffer() -> BatchGateOutput? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard batchState != .silence && !batchAudioBuffer.isEmpty else { return nil }
+
+        let completedBuffer = batchAudioBuffer
+        let startTime = batchSpeechStartWallTime
+        batchAudioBuffer = Data()
+        batchState = .silence
+        batchPreRollChunks.removeAll()
+        batchPreRollTotalMs = 0.0
+
+        let bytesPerFrame = 4
+        let durationSec = Double(completedBuffer.count / bytesPerFrame) / Double(sampleRate)
+        log("VADGate [batch]: Flushing remaining buffer — \(completedBuffer.count) bytes (\(String(format: "%.1f", durationSec))s)")
+
+        return BatchGateOutput(audioBuffer: completedBuffer, speechStartWallTime: startTime, isComplete: true)
     }
 
     /// Deinterleave stereo Int16 data into two Float32 arrays normalized to [-1.0, 1.0].
