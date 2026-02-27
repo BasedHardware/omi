@@ -2101,6 +2101,12 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addMemoryHeadline") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "headline", .text)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
