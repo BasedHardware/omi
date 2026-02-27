@@ -149,7 +149,8 @@ class SettingsSyncManager {
             focus: focus,
             task: task,
             advice: advice,
-            memory: memory
+            memory: memory,
+            updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
         )
     }
 }
