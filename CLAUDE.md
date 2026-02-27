@@ -125,9 +125,11 @@ cd app && flutter gen-l10n
 
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
-cd app && flutter run -d <device-id> --flavor prod
-cd app && flutter run -d <device-id> --flavor dev
+cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.com)
+cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
 ```
+
+See `/local-dev mobile` skill for full setup details, env file configuration, and troubleshooting.
 
 ### Firebase Prod Config
 
