@@ -164,6 +164,10 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "request_permission":
+            summary = input["type"] as? String
+        case "ask_followup":
+            summary = input["question"] as? String
         default:
             // Try common key names
             summary = (input["file_path"] ?? input["path"] ?? input["query"] ?? input["command"]) as? String
