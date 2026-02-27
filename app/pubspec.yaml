@@ -17,10 +17,6 @@ dependencies:
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
 
-  # Desktop
-  window_manager: 0.3.7
-  auto_updater: ^1.0.0
-
   # Localizations
   flutter_localizations:
     sdk: flutter
@@ -139,7 +135,6 @@ dependencies:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
       ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
   disk_space_2: ^1.0.11
-  desktop_drop: ^0.7.0
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
 
