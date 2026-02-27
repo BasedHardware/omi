@@ -432,8 +432,15 @@ struct OnboardingToolIndicator: View {
         case "complete_onboarding":
             return status == .running ? "Finishing setup..." : "Setup complete"
         default:
-            if toolName.contains("search") || toolName.contains("web") {
+            if toolName.hasPrefix("WebSearch:") {
+                let query = String(toolName.dropFirst("WebSearch: ".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                return status == .running ? "Searching: \(query)" : "Searched: \(query)"
+            }
+            if toolName == "WebSearch" || toolName.contains("search") || toolName.contains("web") {
                 return status == .running ? "Searching the web..." : "Web search complete"
+            }
+            if toolName.hasPrefix("WebFetch:") || toolName == "WebFetch" {
+                return status == .running ? "Reading webpage..." : "Webpage read"
             }
             return status == .running ? "Working..." : "Done"
         }
