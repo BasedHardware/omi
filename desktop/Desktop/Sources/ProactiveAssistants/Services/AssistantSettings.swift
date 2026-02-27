@@ -16,6 +16,7 @@ class AssistantSettings {
     private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
     private let transcriptionVocabularyKey = "transcriptionVocabulary"
     private let vadGateEnabledKey = "vadGateEnabled"
+    private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
 
     // MARK: - Default Values
 
@@ -28,6 +29,7 @@ class AssistantSettings {
     private let defaultTranscriptionAutoDetect = false
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = true
+    private let defaultBatchTranscriptionEnabled = true
 
     private init() {
         // Register defaults
@@ -41,6 +43,7 @@ class AssistantSettings {
             transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
             transcriptionVocabularyKey: defaultTranscriptionVocabulary,
             vadGateEnabledKey: defaultVadGateEnabled,
+            batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
         ])
     }
 
@@ -180,6 +183,15 @@ class AssistantSettings {
         }
     }
 
+    /// Whether batch transcription mode is enabled (transcribes audio in chunks at silence boundaries)
+    var batchTranscriptionEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
+            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+        }
+    }
+
     /// Whether local VAD gate is enabled to skip silence and reduce Deepgram usage
     var vadGateEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: vadGateEnabledKey) }
@@ -207,6 +219,7 @@ class AssistantSettings {
         transcriptionAutoDetect = defaultTranscriptionAutoDetect
         transcriptionVocabulary = defaultTranscriptionVocabulary
         vadGateEnabled = defaultVadGateEnabled
+        batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
     }
 
     // MARK: - Supported Languages
