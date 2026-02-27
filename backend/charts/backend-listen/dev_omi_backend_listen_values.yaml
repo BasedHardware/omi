@@ -77,7 +77,7 @@ ingress:
 
 env:
   - name: GEMINI_API_KEY
-    value: "AIzaSyAwkcbfKOgBp_7V6VNs10MIyn1AGx8nsl8"
+    value: "AIzaSyATTd67fscQ1f68l3Ww1bLVGToE30k5EVs"
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
