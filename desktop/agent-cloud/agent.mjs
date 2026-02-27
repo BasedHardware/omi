@@ -113,6 +113,13 @@ function openDatabase() {
   db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
+  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
+  } catch (e) {
+    console.log(`[db] Index creation skipped: ${e.message}`);
+  }
+
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
   defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
@@ -870,7 +877,7 @@ function startServer() {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         status: "ok",
-        uptime: process.uptime(),
+        uptime: Math.round(process.uptime()),
         databaseReady: isDatabaseReady(),
       }));
       return;
