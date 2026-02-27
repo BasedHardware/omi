@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 /// Proactive advice assistant that provides contextual suggestions based on screen content
 actor AdviceAssistant: ProactiveAssistant {
@@ -25,9 +26,6 @@ actor AdviceAssistant: ProactiveAssistant {
     private let maxAdviceInPrompt = 30 // Only include first 30 in prompt to keep token count reasonable
     private var currentApp: String?
     private var pendingFrame: CapturedFrame?
-    private var currentAppStartTime: Date?
-    private var recentAppSessions: [(app: String, duration: TimeInterval)] = [] // Ring buffer of last 8 sessions
-    private let maxRecentSessions = 8
     private var cachedLanguage: String?
     private var languageFetchedAt: Date = .distantPast
     private var processingTask: Task<Void, Never>?
@@ -81,7 +79,6 @@ actor AdviceAssistant: ProactiveAssistant {
 
     private func startProcessing() {
         isRunning = true
-        currentAppStartTime = Date()
         Task {
             await loadPreviousAdviceFromDB()
         }
@@ -341,19 +338,12 @@ actor AdviceAssistant: ProactiveAssistant {
 
     func onAppSwitch(newApp: String) async {
         if newApp != currentApp {
-            // Record session duration for the previous app
-            if let previousApp = currentApp, let startTime = currentAppStartTime {
-                let duration = Date().timeIntervalSince(startTime)
-                recentAppSessions.append((app: previousApp, duration: duration))
-                if recentAppSessions.count > maxRecentSessions {
-                    recentAppSessions.removeFirst()
-                }
-                log("Advice: APP SWITCH: \(previousApp) (\(Int(duration))s) -> \(newApp)")
+            if let previousApp = currentApp {
+                log("Advice: APP SWITCH: \(previousApp) -> \(newApp)")
             } else {
                 log("Advice: Active app: \(newApp)")
             }
             currentApp = newApp
-            currentAppStartTime = Date()
         }
     }
 
@@ -414,48 +404,30 @@ actor AdviceAssistant: ProactiveAssistant {
     private func extractAdvice(from frame: CapturedFrame) async throws -> AdviceExtractionResult? {
         let appName = frame.appName
 
-        // Build rich context prompt
-        var prompt = "Screenshot from \(appName)."
-
-        // Add window title
+        // Build prompt with screenshot context
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a, EEEE"
+        var prompt = "LATEST SCREENSHOT from \(appName)."
         if let windowTitle = frame.windowTitle, !windowTitle.isEmpty {
             prompt += " Window: \"\(windowTitle)\"."
         }
+        prompt += " Time: \(timeFormatter.string(from: Date()))."
 
-        // Add current time
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "h:mm a, EEEE"
-        prompt += " Current time: \(timeFormatter.string(from: Date()))."
-
-        // Add session duration
-        if let startTime = currentAppStartTime {
-            let minutes = Int(Date().timeIntervalSince(startTime) / 60)
-            if minutes > 0 {
-                prompt += " User has been in \(appName) for \(minutes) min."
-            }
-        }
-
-        prompt += "\n\nIs the user about to make a mistake or missing a non-obvious shortcut/tool?\n"
-
-        // Add recent activity
-        if !recentAppSessions.isEmpty {
-            prompt += "\nRECENT ACTIVITY (before current app):\n"
-            for session in recentAppSessions.suffix(5).reversed() {
-                let mins = Int(session.duration / 60)
-                let display = mins > 0 ? "\(mins) min" : "\(Int(session.duration))s"
-                prompt += "- \(session.app) (\(display))\n"
-            }
+        // Add activity summary from database
+        let activitySummary = await buildActivitySummary()
+        if !activitySummary.isEmpty {
+            prompt += "\n\n" + activitySummary
         }
 
         // Add user profile for context
         if let profile = await AIUserProfileService.shared.getLatestProfile() {
-            prompt += "\nUSER PROFILE (who this user is):\n"
+            prompt += "\n\nUSER PROFILE (who this user is):\n"
             prompt += profile.profileText + "\n"
         }
 
         // Add previous advice for dedup
         if !previousAdvice.isEmpty {
-            prompt += "\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
+            prompt += "\n\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
             let adviceToInclude = previousAdvice.prefix(maxAdviceInPrompt)
             for (index, advice) in adviceToInclude.enumerated() {
                 prompt += "\(index + 1). \(advice.advice)"
@@ -466,53 +438,253 @@ actor AdviceAssistant: ProactiveAssistant {
             }
             prompt += "\nOnly provide advice if there's a genuinely NEW non-obvious insight not covered above."
         } else {
-            prompt += "\nOnly provide advice if there's something specific and non-obvious that would help."
+            prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
         }
 
-        // Get current system prompt from settings, optionally with language
+        prompt += "\n\nAnalyze the activity summary and screenshot. Use execute_sql to investigate OCR text from interesting windows if needed. Then call provide_advice or no_advice."
+
+        // Build system prompt
         var currentSystemPrompt = await systemPrompt
         if let language = await getUserLanguage(), language != "en" {
             currentSystemPrompt += "\n\nIMPORTANT: Respond in the user's preferred language: \(language)"
         }
+        currentSystemPrompt += "\n\nDATABASE SCHEMA for execute_sql:\nscreenshots table columns: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT"
 
-        // Build response schema for single advice extraction with conditional logic
-        let adviceProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
-            "advice": .init(type: "string", description: "The advice text (1-2 sentences, max 30 words)"),
-            "headline": .init(type: "string", description: "Ultra-short summary (max 5 words) for notification preview. E.g. 'Wrong year in calendar', 'Credentials visible in terminal', 'Stale git stash detected'"),
-            "reasoning": .init(type: "string", description: "Brief explanation of why this advice is relevant"),
-            "category": .init(type: "string", enum: ["productivity", "communication", "learning", "other"], description: "Category of advice"),
-            "source_app": .init(type: "string", description: "App where context was observed"),
-            "confidence": .init(type: "number", description: "Confidence score 0.0-1.0")
+        // Build tool definitions
+        let tools = buildAdviceTools()
+
+        // Build initial contents with image
+        let base64Data = frame.jpegData.base64EncodedString()
+        var contents: [GeminiImageToolRequest.Content] = [
+            GeminiImageToolRequest.Content(
+                role: "user",
+                parts: [
+                    GeminiImageToolRequest.Part(text: prompt),
+                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
+                ]
+            )
         ]
 
-        let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
-            type: "object",
-            properties: [
-                "has_advice": .init(type: "boolean", description: "True only if there is a specific, non-obvious insight. False if nothing qualifies or would duplicate previous advice."),
-                "advice": .init(
-                    type: "object",
-                    description: "The specific insight (only if has_advice is true)",
-                    properties: adviceProperties,
-                    required: ["advice", "headline", "category", "source_app", "confidence"]
-                ),
-                "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
-                "current_activity": .init(type: "string", description: "High-level description of user's activity")
-            ],
-            required: ["has_advice", "context_summary", "current_activity"]
-        )
-
-        do {
-            let responseText = try await geminiClient.sendRequest(
-                prompt: prompt,
-                imageData: frame.jpegData,
+        // Agentic loop (max 5 iterations)
+        for iteration in 0..<5 {
+            let result = try await geminiClient.sendImageToolLoop(
+                contents: contents,
                 systemPrompt: currentSystemPrompt,
-                responseSchema: responseSchema
+                tools: [tools],
+                forceToolCall: iteration == 0
             )
 
-            return try JSONDecoder().decode(AdviceExtractionResult.self, from: Data(responseText.utf8))
-        } catch {
-            logError("Advice analysis error", error: error)
-            return nil
+            guard let toolCall = result.toolCalls.first else {
+                log("Advice: No tool call on iteration \(iteration), breaking")
+                break
+            }
+
+            switch toolCall.name {
+            case "provide_advice":
+                log("Advice: provide_advice on iteration \(iteration)")
+                return parseProvideAdvice(toolCall)
+
+            case "no_advice":
+                let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
+                let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
+                log("Advice: no_advice — \(contextSummary)")
+                return AdviceExtractionResult(
+                    hasAdvice: false,
+                    advice: nil,
+                    contextSummary: contextSummary,
+                    currentActivity: currentActivity
+                )
+
+            case "execute_sql":
+                let query = toolCall.arguments["query"] as? String ?? ""
+                log("Advice: execute_sql iteration \(iteration): \(query)")
+                let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+                let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+
+                // Append model's tool call + function response
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["query": query]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: resultStr)
+                    ))]
+                ))
+                continue
+
+            default:
+                log("Advice: Unknown tool call: \(toolCall.name), breaking")
+                break
+            }
         }
+
+        log("Advice: Loop exhausted without terminal tool")
+        return nil
+    }
+
+    // MARK: - Activity Summary
+
+    /// Query the screenshots table to build a summary of recent activity
+    private func buildActivitySummary() async -> String {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+            return ""
+        }
+
+        let now = Date()
+        // Cap lookback: since last analysis or max 1 hour ago
+        let lookbackStart = max(lastAnalysisTime, now.addingTimeInterval(-3600))
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let startStr = dateFormatter.string(from: lookbackStart)
+        let endStr = dateFormatter.string(from: now)
+
+        do {
+            return try await dbQueue.read { db in
+                let rows = try Row.fetchAll(db, sql: """
+                    SELECT appName, windowTitle, COUNT(*) as count,
+                           MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
+                    FROM screenshots
+                    WHERE timestamp >= ? AND timestamp <= ?
+                      AND appName IS NOT NULL AND appName != ''
+                    GROUP BY appName, windowTitle
+                    ORDER BY count DESC
+                    LIMIT 30
+                    """, arguments: [startStr, endStr])
+
+                if rows.isEmpty {
+                    return ""
+                }
+
+                let totalScreenshots = rows.reduce(0) { $0 + (($1["count"] as? Int) ?? 0) }
+                let elapsedMin = now.timeIntervalSince(lookbackStart) / 60.0
+
+                let timeOnlyFormatter = DateFormatter()
+                timeOnlyFormatter.dateFormat = "HH:mm:ss"
+
+                var lines: [String] = []
+                lines.append("ACTIVITY SUMMARY (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots):")
+                lines.append("Time range: \(timeOnlyFormatter.string(from: lookbackStart)) – \(timeOnlyFormatter.string(from: now))")
+                lines.append("")
+                lines.append("App | Window | Screenshots | Est. Duration")
+                lines.append(String(repeating: "-", count: 60))
+
+                for row in rows {
+                    let app = row["appName"] as? String ?? "Unknown"
+                    let window = row["windowTitle"] as? String ?? ""
+                    let count = row["count"] as? Int ?? 0
+                    let estMinutes = String(format: "%.1f", Double(count) / 60.0)
+                    let windowDisplay = window.isEmpty ? "(no title)" : String(window.prefix(50))
+                    lines.append("\(app) | \(windowDisplay) | \(count) | \(estMinutes) min")
+                }
+
+                let summary = lines.joined(separator: "\n")
+                log("Advice: Activity summary (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots)")
+                return summary
+            }
+        } catch {
+            logError("Advice: Failed to build activity summary", error: error)
+            return ""
+        }
+    }
+
+    // MARK: - Tool Definitions
+
+    /// Build the 3 advice tools: execute_sql, provide_advice, no_advice
+    private func buildAdviceTools() -> GeminiTool {
+        GeminiTool(functionDeclarations: [
+            // execute_sql — investigation tool
+            GeminiTool.FunctionDeclaration(
+                name: "execute_sql",
+                description: "Execute a SQL query on the local database to investigate screen activity. The screenshots table has: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT. Use this to read OCR text from interesting windows, check what the user was doing, etc. SELECT queries only. Auto-limited to 200 rows.",
+                parameters: GeminiTool.FunctionDeclaration.Parameters(
+                    type: "object",
+                    properties: [
+                        "query": .init(type: "string", description: "SQL SELECT query to execute on the screenshots table")
+                    ],
+                    required: ["query"]
+                )
+            ),
+            // provide_advice — terminal tool (produces advice)
+            GeminiTool.FunctionDeclaration(
+                name: "provide_advice",
+                description: "Call this when you have a specific, non-obvious insight for the user. This ends the analysis.",
+                parameters: GeminiTool.FunctionDeclaration.Parameters(
+                    type: "object",
+                    properties: [
+                        "advice": .init(type: "string", description: "The advice text (1-2 sentences, max 100 chars). Start with the actionable part."),
+                        "headline": .init(type: "string", description: "Ultra-short summary (max 5 words) for notification preview. E.g. 'Wrong year in calendar', 'Credentials visible in terminal'"),
+                        "reasoning": .init(type: "string", description: "Brief explanation of why this advice is relevant"),
+                        "category": .init(type: "string", description: "Category of advice", enumValues: ["productivity", "communication", "learning", "other"]),
+                        "source_app": .init(type: "string", description: "App where context was observed"),
+                        "confidence": .init(type: "number", description: "Confidence score 0.0-1.0. 0.90+: preventing clear mistake. 0.75-0.89: highly relevant non-obvious tip. 0.60-0.74: useful but user might know."),
+                        "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
+                        "current_activity": .init(type: "string", description: "High-level description of user's activity")
+                    ],
+                    required: ["advice", "headline", "category", "source_app", "confidence", "context_summary", "current_activity"]
+                )
+            ),
+            // no_advice — terminal tool (nothing worth mentioning)
+            GeminiTool.FunctionDeclaration(
+                name: "no_advice",
+                description: "Call this when there is nothing worth advising about. Nothing qualifies as a specific, non-obvious insight. This ends the analysis.",
+                parameters: GeminiTool.FunctionDeclaration.Parameters(
+                    type: "object",
+                    properties: [
+                        "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
+                        "current_activity": .init(type: "string", description: "High-level description of user's activity")
+                    ],
+                    required: ["context_summary", "current_activity"]
+                )
+            ),
+        ])
+    }
+
+    // MARK: - Parse Tool Results
+
+    /// Parse the provide_advice tool call into an AdviceExtractionResult
+    private func parseProvideAdvice(_ toolCall: ToolCall) -> AdviceExtractionResult {
+        let adviceText = toolCall.arguments["advice"] as? String ?? ""
+        let headline = toolCall.arguments["headline"] as? String
+        let reasoning = toolCall.arguments["reasoning"] as? String
+        let categoryStr = toolCall.arguments["category"] as? String ?? "other"
+        let category = AdviceCategory(rawValue: categoryStr) ?? .other
+        let sourceApp = toolCall.arguments["source_app"] as? String ?? ""
+        let contextSummary = toolCall.arguments["context_summary"] as? String ?? ""
+        let currentActivity = toolCall.arguments["current_activity"] as? String ?? ""
+
+        let confidence: Double
+        if let confValue = toolCall.arguments["confidence"] as? Double {
+            confidence = confValue
+        } else if let confInt = toolCall.arguments["confidence"] as? Int {
+            confidence = Double(confInt)
+        } else if let confStr = toolCall.arguments["confidence"] as? String, let parsed = Double(confStr) {
+            confidence = parsed
+        } else {
+            confidence = 0.5
+        }
+
+        let advice = ExtractedAdvice(
+            advice: adviceText,
+            headline: headline,
+            reasoning: reasoning,
+            category: category,
+            sourceApp: sourceApp,
+            confidence: confidence
+        )
+
+        log("Advice: provide_advice — \"\(adviceText)\" (confidence: \(confidence))")
+        return AdviceExtractionResult(
+            hasAdvice: true,
+            advice: advice,
+            contextSummary: contextSummary,
+            currentActivity: currentActivity
+        )
     }
 }
