@@ -1053,9 +1053,11 @@ struct ServerMemory: Codable, Identifiable {
     let inputDeviceName: String?
     // Window title when memory was extracted
     let windowTitle: String?
+    // Short headline for notification preview (advice/tips only)
+    let headline: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning
+        case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning, headline
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case conversationId = "conversation_id"
@@ -1094,6 +1096,7 @@ struct ServerMemory: Codable, Identifiable {
         currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
         inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
         windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
+        headline = try container.decodeIfPresent(String.self, forKey: .headline)
     }
 
     var isPublic: Bool {
@@ -1295,7 +1298,8 @@ extension APIClient {
         reasoning: String? = nil,
         currentActivity: String? = nil,
         source: String? = nil,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        headline: String? = nil
     ) async throws -> CreateMemoryResponse {
         struct CreateRequest: Encodable {
             let content: String
@@ -1309,9 +1313,10 @@ extension APIClient {
             let currentActivity: String?
             let source: String?
             let windowTitle: String?
+            let headline: String?
 
             enum CodingKeys: String, CodingKey {
-                case content, visibility, category, confidence, tags, reasoning, source
+                case content, visibility, category, confidence, tags, reasoning, source, headline
                 case sourceApp = "source_app"
                 case contextSummary = "context_summary"
                 case currentActivity = "current_activity"
@@ -1329,7 +1334,8 @@ extension APIClient {
             reasoning: reasoning,
             currentActivity: currentActivity,
             source: source,
-            windowTitle: windowTitle
+            windowTitle: windowTitle,
+            headline: headline
         )
         return try await post("v3/memories", body: body)
     }
