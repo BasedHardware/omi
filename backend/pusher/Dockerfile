@@ -50,4 +50,4 @@ COPY --from=builder /opt/venv /opt/venv
 COPY backend/ .
 
 EXPOSE 8080
-CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20"]
+CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080"]
