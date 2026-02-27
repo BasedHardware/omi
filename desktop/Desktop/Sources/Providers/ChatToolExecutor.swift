@@ -6,6 +6,16 @@ import GRDB
 @MainActor
 class ChatToolExecutor {
 
+    // MARK: - Onboarding State
+
+    /// Set by OnboardingChatView before starting the chat
+    static var onboardingAppState: AppState?
+    /// Called when AI invokes complete_onboarding
+    static var onCompleteOnboarding: (() -> Void)?
+
+    private static var fileScanStarted = false
+    private static var fileScanFileCount = 0
+
     /// Execute a tool call and return the result as a string
     static func execute(_ toolCall: ToolCall) async -> String {
         log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
@@ -19,6 +29,25 @@ class ChatToolExecutor {
 
         case "get_daily_recap":
             return await executeDailyRecap(toolCall.arguments)
+
+        // Onboarding tools
+        case "request_permission":
+            return await executeRequestPermission(toolCall.arguments)
+
+        case "check_permission_status":
+            return await executeCheckPermissionStatus(toolCall.arguments)
+
+        case "start_file_scan":
+            return await executeStartFileScan(toolCall.arguments)
+
+        case "get_file_scan_results":
+            return await executeGetFileScanResults(toolCall.arguments)
+
+        case "set_user_preferences":
+            return await executeSetUserPreferences(toolCall.arguments)
+
+        case "complete_onboarding":
+            return await executeCompleteOnboarding(toolCall.arguments)
 
         default:
             return "Unknown tool: \(toolCall.name)"
@@ -172,6 +201,10 @@ class ChatToolExecutor {
             if upper.contains("ACTION_ITEMS") {
                 log("Tool execute_sql: action_items modified, refreshing TasksStore")
                 await TasksStore.shared.reloadFromLocalCache()
+                // Sync newly inserted action items to the backend (Firestore)
+                if upper.contains("INSERT") {
+                    await TasksStore.shared.retryUnsyncedItems(includeRecent: true)
+                }
             }
         }
 
@@ -351,5 +384,281 @@ class ChatToolExecutor {
             logError("Tool semantic_search failed", error: error)
             return "Failed to search: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - Onboarding Tools
+
+    /// Request a specific macOS permission
+    private static func executeRequestPermission(_ args: [String: Any]) async -> String {
+        guard let type = args["type"] as? String else {
+            return "Error: 'type' parameter is required (screen_recording, microphone, notifications, accessibility, automation)"
+        }
+
+        guard let appState = onboardingAppState else {
+            return "Error: onboarding not active"
+        }
+
+        AnalyticsManager.shared.permissionRequested(permission: type)
+
+        switch type {
+        case "screen_recording":
+            appState.triggerScreenRecordingPermission()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            appState.checkScreenRecordingPermission()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasScreenRecordingPermission {
+                return "granted"
+            } else {
+                return "pending - user needs to toggle Screen Recording for Omi in System Settings, then quit and reopen the app"
+            }
+
+        case "microphone":
+            appState.requestMicrophonePermission()
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if appState.hasMicrophonePermission {
+                return "granted"
+            } else {
+                return "pending - user needs to allow microphone access in the system dialog"
+            }
+
+        case "notifications":
+            appState.requestNotificationPermission()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            appState.checkNotificationPermission()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasNotificationPermission {
+                return "granted"
+            } else {
+                return "pending - user needs to allow notifications in the system dialog"
+            }
+
+        case "accessibility":
+            appState.triggerAccessibilityPermission()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            appState.checkAccessibilityPermission()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasAccessibilityPermission {
+                return "granted"
+            } else {
+                return "pending - user needs to toggle Accessibility for Omi in System Settings"
+            }
+
+        case "automation":
+            appState.triggerAutomationPermission()
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            appState.checkAutomationPermission()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if appState.hasAutomationPermission {
+                return "granted"
+            } else {
+                return "pending - user needs to toggle Automation for Omi in System Settings"
+            }
+
+        default:
+            return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation"
+        }
+    }
+
+    /// Check status of all macOS permissions
+    private static func executeCheckPermissionStatus(_ args: [String: Any]) async -> String {
+        guard let appState = onboardingAppState else {
+            return "Error: onboarding not active"
+        }
+
+        appState.checkAllPermissions()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        let statuses: [String: String] = [
+            "screen_recording": appState.hasScreenRecordingPermission ? "granted" : "not_granted",
+            "microphone": appState.hasMicrophonePermission ? "granted" : "not_granted",
+            "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
+            "accessibility": appState.hasAccessibilityPermission ? "granted" : "not_granted",
+            "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
+        ]
+
+        if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
+           let json = String(data: data, encoding: .utf8) {
+            return json
+        }
+        return "screen_recording: \(statuses["screen_recording"]!), microphone: \(statuses["microphone"]!), notifications: \(statuses["notifications"]!), accessibility: \(statuses["accessibility"]!), automation: \(statuses["automation"]!)"
+    }
+
+    /// Start background file scanning
+    private static func executeStartFileScan(_ args: [String: Any]) async -> String {
+        guard !fileScanStarted else {
+            return "File scan already started"
+        }
+        fileScanStarted = true
+
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let foldersToScan = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
+            .map { homeDir.appendingPathComponent($0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+
+        let applicationsURL = URL(fileURLWithPath: "/Applications")
+        var allFolders = foldersToScan
+        if FileManager.default.fileExists(atPath: applicationsURL.path) {
+            allFolders.append(applicationsURL)
+        }
+
+        // Fire off scan in background
+        Task.detached {
+            let count = await FileIndexerService.shared.scanFolders(allFolders)
+            await MainActor.run {
+                fileScanFileCount = count
+            }
+            log("Onboarding file scan completed: \(count) files indexed")
+        }
+
+        return "File scan started for \(allFolders.count) folders: \(foldersToScan.map { $0.lastPathComponent }.joined(separator: ", ")), /Applications. Results will be ready in a few seconds."
+    }
+
+    /// Get file scan results summary
+    private static func executeGetFileScanResults(_ args: [String: Any]) async -> String {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+            return "Error: database not available"
+        }
+
+        do {
+            return try await dbQueue.read { db in
+                // File type breakdown
+                let typeBreakdown = try Row.fetchAll(db, sql: """
+                    SELECT fileType, COUNT(*) as count
+                    FROM indexed_files
+                    GROUP BY fileType
+                    ORDER BY count DESC
+                    LIMIT 10
+                """)
+
+                // Project indicators
+                let projectIndicators = try Row.fetchAll(db, sql: """
+                    SELECT filename, path FROM indexed_files
+                    WHERE filename IN ('package.json', 'Cargo.toml', 'Podfile', 'go.mod',
+                        'requirements.txt', 'Pipfile', 'setup.py', 'pyproject.toml',
+                        'build.gradle', 'pom.xml', 'CMakeLists.txt', 'Makefile',
+                        '.xcodeproj', '.xcworkspace', 'Package.swift', 'Gemfile',
+                        'composer.json', 'mix.exs', 'pubspec.yaml')
+                    LIMIT 30
+                """)
+
+                // Recently modified files
+                let recentFiles = try Row.fetchAll(db, sql: """
+                    SELECT filename, path, fileType, modifiedAt FROM indexed_files
+                    ORDER BY modifiedAt DESC
+                    LIMIT 15
+                """)
+
+                // Applications
+                let apps = try Row.fetchAll(db, sql: """
+                    SELECT filename, path FROM indexed_files
+                    WHERE folder = '/Applications' AND fileExtension = 'app'
+                    ORDER BY filename
+                    LIMIT 30
+                """)
+
+                let totalCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files") ?? 0
+
+                var out = "# File Scan Results (\(totalCount) files indexed)\n\n"
+
+                out += "## File Types\n"
+                for row in typeBreakdown {
+                    let type = row["fileType"] as? String ?? "unknown"
+                    let count = row["count"] as? Int ?? 0
+                    out += "- \(type): \(count) files\n"
+                }
+
+                out += "\n## Project Indicators (build files found)\n"
+                if projectIndicators.isEmpty {
+                    out += "- No project build files found\n"
+                } else {
+                    for row in projectIndicators {
+                        let filename = row["filename"] as? String ?? ""
+                        let path = row["path"] as? String ?? ""
+                        // Extract project directory name
+                        let dir = (path as NSString).deletingLastPathComponent
+                        let projectName = (dir as NSString).lastPathComponent
+                        out += "- \(projectName)/\(filename)\n"
+                    }
+                }
+
+                out += "\n## Recently Modified Files\n"
+                for row in recentFiles {
+                    let filename = row["filename"] as? String ?? ""
+                    let fileType = row["fileType"] as? String ?? ""
+                    let modifiedAt = row["modifiedAt"] as? String ?? ""
+                    out += "- \(filename) (\(fileType)) — modified \(modifiedAt)\n"
+                }
+
+                if !apps.isEmpty {
+                    out += "\n## Installed Applications\n"
+                    let appNames = apps.compactMap { ($0["filename"] as? String)?.replacingOccurrences(of: ".app", with: "") }
+                    out += appNames.joined(separator: ", ")
+                    out += "\n"
+                }
+
+                log("Tool get_file_scan_results: \(totalCount) files, \(projectIndicators.count) projects, \(apps.count) apps")
+                return out
+            }
+        } catch {
+            logError("Tool get_file_scan_results failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
+    }
+
+    /// Set user preferences (language, name)
+    private static func executeSetUserPreferences(_ args: [String: Any]) async -> String {
+        var results: [String] = []
+
+        if let language = args["language"] as? String, !language.isEmpty {
+            AssistantSettings.shared.transcriptionLanguage = language
+            Task {
+                _ = try? await APIClient.shared.updateUserLanguage(language)
+            }
+            results.append("Language set to \(language)")
+        }
+
+        if let name = args["name"] as? String, !name.isEmpty {
+            await AuthService.shared.updateGivenName(name)
+            results.append("Name updated to \(name)")
+        }
+
+        if results.isEmpty {
+            return "No preferences were changed. Provide 'language' (code like 'en', 'es', 'ja') and/or 'name' (string)."
+        }
+        return results.joined(separator: ". ") + "."
+    }
+
+    /// Complete the onboarding process
+    private static func executeCompleteOnboarding(_ args: [String: Any]) async -> String {
+        guard let appState = onboardingAppState else {
+            return "Error: onboarding not active"
+        }
+
+        // Log analytics for each permission
+        let permissions: [(String, Bool)] = [
+            ("screen_recording", appState.hasScreenRecordingPermission),
+            ("microphone", appState.hasMicrophonePermission),
+            ("notifications", appState.hasNotificationPermission),
+            ("accessibility", appState.hasAccessibilityPermission),
+            ("automation", appState.hasAutomationPermission),
+        ]
+        for (name, granted) in permissions {
+            if granted {
+                AnalyticsManager.shared.permissionGranted(permission: name)
+            } else {
+                AnalyticsManager.shared.permissionSkipped(permission: name)
+            }
+        }
+
+        // Call the completion callback
+        onCompleteOnboarding?()
+
+        // Clean up state
+        onboardingAppState = nil
+        onCompleteOnboarding = nil
+        fileScanStarted = false
+        fileScanFileCount = 0
+
+        return "Onboarding completed successfully! The app is now set up."
     }
 }

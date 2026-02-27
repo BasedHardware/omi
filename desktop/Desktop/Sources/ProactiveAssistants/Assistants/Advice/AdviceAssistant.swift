@@ -20,10 +20,16 @@ actor AdviceAssistant: ProactiveAssistant {
     private let geminiClient: GeminiClient
     private var isRunning = false
     private var lastAnalysisTime: Date = .distantPast
-    private var previousAdvice: [ExtractedAdvice] = [] // Last 10 pieces of advice for context
-    private let maxPreviousAdvice = 10
+    private var previousAdvice: [ExtractedAdvice] = [] // Dedup window for advice context
+    private let maxPreviousAdvice = 50
+    private let maxAdviceInPrompt = 30 // Only include first 30 in prompt to keep token count reasonable
     private var currentApp: String?
     private var pendingFrame: CapturedFrame?
+    private var currentAppStartTime: Date?
+    private var recentAppSessions: [(app: String, duration: TimeInterval)] = [] // Ring buffer of last 8 sessions
+    private let maxRecentSessions = 8
+    private var cachedLanguage: String?
+    private var languageFetchedAt: Date = .distantPast
     private var processingTask: Task<Void, Never>?
     private let frameSignal: AsyncStream<Void>
     private let frameSignalContinuation: AsyncStream<Void>.Continuation
@@ -75,8 +81,38 @@ actor AdviceAssistant: ProactiveAssistant {
 
     private func startProcessing() {
         isRunning = true
+        currentAppStartTime = Date()
+        Task {
+            await loadPreviousAdviceFromDB()
+        }
         processingTask = Task {
             await processLoop()
+        }
+    }
+
+    /// Load previous advice from SQLite to persist dedup across app restarts
+    private func loadPreviousAdviceFromDB() async {
+        do {
+            let memories = try await MemoryStorage.shared.getLocalMemories(
+                limit: maxPreviousAdvice,
+                category: "system",
+                tags: ["tips"]
+            )
+            for memory in memories {
+                let advice = ExtractedAdvice(
+                    advice: memory.content,
+                    reasoning: nil,
+                    category: .other,
+                    sourceApp: memory.sourceApp ?? "",
+                    confidence: 0.0
+                )
+                previousAdvice.append(advice)
+            }
+            if !previousAdvice.isEmpty {
+                log("Advice: Loaded \(previousAdvice.count) previous tips from DB for dedup")
+            }
+        } catch {
+            logError("Advice: Failed to load previous tips from DB", error: error)
         }
     }
 
@@ -302,13 +338,19 @@ actor AdviceAssistant: ProactiveAssistant {
 
     func onAppSwitch(newApp: String) async {
         if newApp != currentApp {
-            if let currentApp = currentApp {
-                log("Advice: APP SWITCH: \(currentApp) -> \(newApp)")
+            // Record session duration for the previous app
+            if let previousApp = currentApp, let startTime = currentAppStartTime {
+                let duration = Date().timeIntervalSince(startTime)
+                recentAppSessions.append((app: previousApp, duration: duration))
+                if recentAppSessions.count > maxRecentSessions {
+                    recentAppSessions.removeFirst()
+                }
+                log("Advice: APP SWITCH: \(previousApp) (\(Int(duration))s) -> \(newApp)")
             } else {
                 log("Advice: Active app: \(newApp)")
             }
             currentApp = newApp
-            // Don't clear previous advice on app switch - we want to track across apps
+            currentAppStartTime = Date()
         }
     }
 
@@ -324,12 +366,34 @@ actor AdviceAssistant: ProactiveAssistant {
         pendingFrame = nil
     }
 
+    // MARK: - Helpers
+
+    /// Get user's preferred language, cached for 1 hour
+    private func getUserLanguage() async -> String? {
+        // Return cached value if fresh (< 1 hour)
+        if let cached = cachedLanguage, Date().timeIntervalSince(languageFetchedAt) < 3600 {
+            return cached
+        }
+
+        do {
+            let response = try await APIClient.shared.getUserLanguage()
+            let lang = response.language
+            cachedLanguage = lang
+            languageFetchedAt = Date()
+            return lang.isEmpty ? nil : lang
+        } catch {
+            // Fall back to transcription language setting
+            let fallback = await MainActor.run { AssistantSettings.shared.transcriptionLanguage }
+            return fallback.isEmpty || fallback == "en" ? nil : fallback
+        }
+    }
+
     // MARK: - Analysis
 
     private func processFrame(_ frame: CapturedFrame) async {
         guard await isEnabled else { return }
         do {
-            guard let result = try await extractAdvice(from: frame.jpegData, appName: frame.appName) else {
+            guard let result = try await extractAdvice(from: frame) else {
                 return
             }
 
@@ -344,13 +408,53 @@ actor AdviceAssistant: ProactiveAssistant {
         }
     }
 
-    private func extractAdvice(from jpegData: Data, appName: String) async throws -> AdviceExtractionResult? {
-        // Build context with previous advice
-        var prompt = "Screenshot from \(appName). Is the user about to make a mistake or missing a non-obvious shortcut/tool for what they're doing?\n\n"
+    private func extractAdvice(from frame: CapturedFrame) async throws -> AdviceExtractionResult? {
+        let appName = frame.appName
 
+        // Build rich context prompt
+        var prompt = "Screenshot from \(appName)."
+
+        // Add window title
+        if let windowTitle = frame.windowTitle, !windowTitle.isEmpty {
+            prompt += " Window: \"\(windowTitle)\"."
+        }
+
+        // Add current time
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a, EEEE"
+        prompt += " Current time: \(timeFormatter.string(from: Date()))."
+
+        // Add session duration
+        if let startTime = currentAppStartTime {
+            let minutes = Int(Date().timeIntervalSince(startTime) / 60)
+            if minutes > 0 {
+                prompt += " User has been in \(appName) for \(minutes) min."
+            }
+        }
+
+        prompt += "\n\nIs the user about to make a mistake or missing a non-obvious shortcut/tool?\n"
+
+        // Add recent activity
+        if !recentAppSessions.isEmpty {
+            prompt += "\nRECENT ACTIVITY (before current app):\n"
+            for session in recentAppSessions.suffix(5).reversed() {
+                let mins = Int(session.duration / 60)
+                let display = mins > 0 ? "\(mins) min" : "\(Int(session.duration))s"
+                prompt += "- \(session.app) (\(display))\n"
+            }
+        }
+
+        // Add user profile for context
+        if let profile = await AIUserProfileService.shared.getLatestProfile() {
+            prompt += "\nUSER PROFILE (who this user is):\n"
+            prompt += profile.profileText + "\n"
+        }
+
+        // Add previous advice for dedup
         if !previousAdvice.isEmpty {
-            prompt += "PREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
-            for (index, advice) in previousAdvice.enumerated() {
+            prompt += "\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
+            let adviceToInclude = previousAdvice.prefix(maxAdviceInPrompt)
+            for (index, advice) in adviceToInclude.enumerated() {
                 prompt += "\(index + 1). \(advice.advice)"
                 if let reasoning = advice.reasoning {
                     prompt += " (Reasoning: \(reasoning))"
@@ -359,11 +463,14 @@ actor AdviceAssistant: ProactiveAssistant {
             }
             prompt += "\nOnly provide advice if there's a genuinely NEW non-obvious insight not covered above."
         } else {
-            prompt += "Only provide advice if there's something specific and non-obvious that would help."
+            prompt += "\nOnly provide advice if there's something specific and non-obvious that would help."
         }
 
-        // Get current system prompt from settings
-        let currentSystemPrompt = await systemPrompt
+        // Get current system prompt from settings, optionally with language
+        var currentSystemPrompt = await systemPrompt
+        if let language = await getUserLanguage(), language != "en" {
+            currentSystemPrompt += "\n\nIMPORTANT: Respond in the user's preferred language: \(language)"
+        }
 
         // Build response schema for single advice extraction with conditional logic
         let adviceProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
@@ -393,7 +500,7 @@ actor AdviceAssistant: ProactiveAssistant {
         do {
             let responseText = try await geminiClient.sendRequest(
                 prompt: prompt,
-                imageData: jpegData,
+                imageData: frame.jpegData,
                 systemPrompt: currentSystemPrompt,
                 responseSchema: responseSchema
             )

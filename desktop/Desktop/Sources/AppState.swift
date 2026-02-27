@@ -762,6 +762,16 @@ class AppState: ObservableObject {
             let realPermission = ScreenCaptureService.checkPermission()
             hasScreenRecordingPermission = realPermission
 
+            // Stale TCC entry from old developer signing: CGPreflight says granted but
+            // actual capture fails. Auto-reset so the user gets prompted to re-grant.
+            if !realPermission {
+                Task.detached {
+                    log("Screen capture: stale TCC entry detected (developer signing changed), auto-resetting...")
+                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
+                    _ = ScreenCaptureService.resetScreenCapturePermission()
+                }
+            }
+
             if isScreenCaptureKitBroken {
                 // Re-check if SCK has recovered (user toggled permission in System Settings)
                 if #available(macOS 14.0, *) {

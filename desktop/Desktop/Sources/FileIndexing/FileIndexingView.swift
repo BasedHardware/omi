@@ -375,6 +375,13 @@ struct FileIndexingView: View {
         if !graphViewModel.isEmpty {
             // User already has a graph (e.g. from mobile app) — use it directly
             log("FileIndexingView: Using existing knowledge graph")
+            let response = try? await APIClient.shared.getKnowledgeGraph()
+            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+                nodeCount: response?.nodes.count ?? 0,
+                edgeCount: response?.edges.count ?? 0,
+                pollAttempts: 0,
+                hadExistingGraph: true
+            )
             await MainActor.run {
                 progress = 1.0
                 statusText = "Done!"
@@ -384,6 +391,10 @@ struct FileIndexingView: View {
         }
 
         // No existing graph — build from scratch
+        await AnalyticsManager.shared.knowledgeGraphBuildStarted(
+            filesIndexed: totalFilesScanned,
+            hadExistingGraph: false
+        )
         await MainActor.run {
             statusText = "Building your knowledge graph..."
             progress = 0.95
@@ -411,15 +422,33 @@ struct FileIndexingView: View {
 
         // Poll until graph has data
         let maxAttempts = 15 // 15 × 3s = 45s max
+        var finalPollAttempt = maxAttempts
         for attempt in 1...maxAttempts {
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await graphViewModel.loadGraph()
 
             if !graphViewModel.isEmpty {
                 log("FileIndexingView: Graph ready after \(attempt) polls")
+                finalPollAttempt = attempt
                 break
             }
             log("FileIndexingView: Graph poll \(attempt)/\(maxAttempts), still empty")
+        }
+
+        if !graphViewModel.isEmpty {
+            let response = try? await APIClient.shared.getKnowledgeGraph()
+            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+                nodeCount: response?.nodes.count ?? 0,
+                edgeCount: response?.edges.count ?? 0,
+                pollAttempts: finalPollAttempt,
+                hadExistingGraph: false
+            )
+        } else {
+            await AnalyticsManager.shared.knowledgeGraphBuildFailed(
+                reason: "timeout_empty",
+                pollAttempts: maxAttempts,
+                filesIndexed: totalFilesScanned
+            )
         }
 
         await MainActor.run {
