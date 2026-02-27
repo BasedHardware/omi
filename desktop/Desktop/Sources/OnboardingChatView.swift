@@ -447,6 +447,8 @@ struct OnboardingChatBubble: View {
                 return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             case .thinking:
                 return false
+            case .discoveryCard:
+                return true
             }
         }
     }
@@ -490,6 +492,8 @@ struct OnboardingChatBubble: View {
                                 }
                             case .thinking:
                                 EmptyView()
+                            case .discoveryCard(_, let title, let summary, let fullText):
+                                DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             }
                         }
                     } else {
