@@ -424,12 +424,12 @@ struct ScreenRecordingPermissionSection: View {
                     // Icon
                     ZStack {
                         Circle()
-                            .fill(appState.hasScreenRecordingPermission ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary)
+                            .fill(appState.isScreenRecordingStale ? Color.red.opacity(0.15) : (appState.hasScreenRecordingPermission ? Color.green.opacity(0.15) : OmiColors.backgroundTertiary))
                             .frame(width: 48, height: 48)
 
-                        Image(systemName: "rectangle.inset.filled.and.person.filled")
+                        Image(systemName: appState.isScreenRecordingStale ? "rectangle.on.rectangle.slash" : "rectangle.inset.filled.and.person.filled")
                             .scaledFont(size: 22)
-                            .foregroundColor(appState.hasScreenRecordingPermission ? .green : OmiColors.textSecondary)
+                            .foregroundColor(appState.isScreenRecordingStale ? .red : (appState.hasScreenRecordingPermission ? .green : OmiColors.textSecondary))
                     }
 
                     // Title and status
@@ -439,12 +439,30 @@ struct ScreenRecordingPermissionSection: View {
                                 .scaledFont(size: 16, weight: .semibold)
                                 .foregroundColor(OmiColors.textPrimary)
 
-                            statusBadge(isGranted: appState.hasScreenRecordingPermission)
+                            if appState.isScreenRecordingStale {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .scaledFont(size: 12)
+                                    Text("Re-enable Required")
+                                        .scaledFont(size: 12, weight: .medium)
+                                }
+                                .foregroundColor(.red)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.red.opacity(0.15))
+                                )
+                            } else {
+                                statusBadge(isGranted: appState.hasScreenRecordingPermission)
+                            }
                         }
 
-                        Text("Required for proactive monitoring and context awareness")
+                        Text(appState.isScreenRecordingStale
+                            ? "Permission needs re-enabling after app update"
+                            : "Required for proactive monitoring and context awareness")
                             .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
+                            .foregroundColor(appState.isScreenRecordingStale ? .red.opacity(0.8) : OmiColors.textTertiary)
                     }
 
                     Spacer()
@@ -458,54 +476,18 @@ struct ScreenRecordingPermissionSection: View {
             .buttonStyle(.plain)
 
             // Expanded content
-            if isExpanded && !appState.hasScreenRecordingPermission {
+            if isExpanded && (!appState.hasScreenRecordingPermission || appState.isScreenRecordingStale) {
                 VStack(alignment: .leading, spacing: 16) {
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
-                    Text("How to grant screen recording access:")
-                        .scaledFont(size: 14, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        instructionStep(number: 1, text: "Click \"Open Settings\" below - this will make Omi appear in the list")
-                        instructionStep(number: 2, text: "Find \"\(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")\" in the Screen Recording list")
-                        instructionStep(number: 3, text: "Toggle the switch to enable screen recording")
-                        instructionStep(number: 4, text: "Return to Omi - permission will update automatically")
+                    if appState.isScreenRecordingStale {
+                        // STALE STATE - developer signing changed, user must toggle off/on
+                        stalePermissionContent
+                    } else {
+                        // NORMAL STATE - first-time grant flow
+                        normalGrantContent
                     }
-
-                    // Tutorial GIF
-                    AnimatedGIFView(gifName: "permissions")
-                        .frame(maxWidth: 400, maxHeight: 300)
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
-                        )
-
-                    Button(action: {
-                        // First trigger screen capture to make app appear in list
-                        appState.triggerScreenRecordingPermission()
-                        // Then open System Settings after a brief delay
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "gear")
-                                .scaledFont(size: 14)
-                            Text("Open Settings")
-                                .scaledFont(size: 14, weight: .semibold)
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(OmiColors.purplePrimary)
-                        )
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -513,12 +495,98 @@ struct ScreenRecordingPermissionSection: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(OmiColors.backgroundSecondary.opacity(0.5))
+                .fill(appState.isScreenRecordingStale ? Color.red.opacity(0.05) : OmiColors.backgroundSecondary.opacity(0.5))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(appState.hasScreenRecordingPermission ? Color.green.opacity(0.3) : OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                        .stroke(appState.hasScreenRecordingPermission ? Color.green.opacity(0.3) : (appState.isScreenRecordingStale ? Color.red.opacity(0.5) : OmiColors.backgroundQuaternary.opacity(0.5)), lineWidth: appState.isScreenRecordingStale ? 2 : 1)
                 )
         )
+    }
+
+    // Content for STALE state - developer signing changed, user must toggle off/on
+    private var stalePermissionContent: some View {
+        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Screen recording needs to be re-enabled after an app update.")
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                instructionStep(number: 1, text: "Click \"Open Settings\" below")
+                instructionStep(number: 2, text: "Find \"\(appName)\" in the Screen Recording list")
+                instructionStep(number: 3, text: "Toggle the switch OFF, then back ON")
+                instructionStep(number: 4, text: "Return to Omi - permission will update automatically")
+            }
+
+            Button(action: {
+                ScreenCaptureService.openScreenRecordingPreferences()
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "gear")
+                        .scaledFont(size: 14)
+                    Text("Open Settings")
+                        .scaledFont(size: 14, weight: .semibold)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(OmiColors.purplePrimary)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // Content for NORMAL state - first-time grant flow
+    private var normalGrantContent: some View {
+        let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("How to grant screen recording access:")
+                .scaledFont(size: 14, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+            VStack(alignment: .leading, spacing: 12) {
+                instructionStep(number: 1, text: "Click \"Open Settings\" below - this will make Omi appear in the list")
+                instructionStep(number: 2, text: "Find \"\(appName)\" in the Screen Recording list")
+                instructionStep(number: 3, text: "Toggle the switch to enable screen recording")
+                instructionStep(number: 4, text: "Return to Omi - permission will update automatically")
+            }
+
+            // Tutorial GIF
+            AnimatedGIFView(gifName: "permissions")
+                .frame(maxWidth: 400, maxHeight: 300)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                )
+
+            Button(action: {
+                // First trigger screen capture to make app appear in list
+                appState.triggerScreenRecordingPermission()
+                // Then open System Settings after a brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "gear")
+                        .scaledFont(size: 14)
+                    Text("Open Settings")
+                        .scaledFont(size: 14, weight: .semibold)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(OmiColors.purplePrimary)
+                )
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 
