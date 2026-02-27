@@ -550,7 +550,6 @@ function startPersistentSession(send, log) {
     return null;
   }
 
-  const messageQueue = new AsyncMessageQueue();
   const sessionAbort = new AbortController();
 
   const options = {
@@ -571,6 +570,17 @@ function startPersistentSession(send, log) {
     },
   };
 
+  // Queue for all messages — used as the prompt (async iterable)
+  const messageQueue = new AsyncMessageQueue();
+
+  // Push the prewarm message to boot the Claude process
+  messageQueue.push({
+    type: "user",
+    message: { role: "user", content: "ready" },
+    parent_tool_use_id: null,
+    session_id: "",
+  });
+
   const q = query({ prompt: messageQueue, options });
 
   // Session state
@@ -582,6 +592,7 @@ function startPersistentSession(send, log) {
   let fullText = "";
   let pendingTools = [];
   let turnActive = false;
+  let isPrewarmTurn = true; // First turn is prewarm, suppress output
 
   // Background message processing loop — runs for entire WS lifetime
   const loopPromise = (async () => {
@@ -598,6 +609,7 @@ function startPersistentSession(send, log) {
             break;
 
           case "stream_event": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
             const event = message.event;
             if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
               const name = event.content_block.name;
@@ -616,6 +628,7 @@ function startPersistentSession(send, log) {
           }
 
           case "assistant": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
             const content = message.message?.content;
             if (Array.isArray(content)) {
               for (const block of content) {
@@ -640,6 +653,15 @@ function startPersistentSession(send, log) {
           case "result": {
             for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
             pendingTools.length = 0;
+
+            if (isPrewarmTurn) {
+              isPrewarmTurn = false;
+              fullText = "";
+              pendingTools = [];
+              turnActive = false;
+              log("Prewarm turn completed, session ready for queries");
+              break;
+            }
 
             if (message.subtype === "success") {
               const costUsd = message.total_cost_usd || 0;
@@ -1208,7 +1230,7 @@ function startServer() {
           session.setTurnActive(true);
           send({ type: "status", message: "Processing..." });
 
-          // Push user message into the persistent session
+          // Push user message into the persistent session via streamInput
           session.messageQueue.push({
             type: "user",
             message: { role: "user", content: prompt },
@@ -1235,6 +1257,7 @@ function startServer() {
       log("Client disconnected");
       if (session) {
         session.messageQueue.end();
+        session.query.close();
         session.sessionAbort.abort();
         session = null;
       }
