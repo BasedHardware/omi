@@ -105,17 +105,16 @@ actor ScreenActivitySyncService {
                     dict["ocrText"] = (row["ocrText"] as? String) ?? ""
 
                     // Convert embedding BLOB to [Double] array
-                    if let blobValue = row["embedding"] as DatabaseValue {
-                        if case .blob(let data) = blobValue.storage {
-                            let floatCount = data.count / MemoryLayout<Float>.size
-                            let floats = data.withUnsafeBytes { ptr in
-                                Array(UnsafeBufferPointer(
-                                    start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
-                                    count: floatCount
-                                ))
-                            }
-                            dict["embedding"] = floats.map { Double($0) }
+                    let blobValue = row["embedding"] as DatabaseValue
+                    if case .blob(let data) = blobValue.storage {
+                        let floatCount = data.count / MemoryLayout<Float>.size
+                        let floats = data.withUnsafeBytes { ptr in
+                            Array(UnsafeBufferPointer(
+                                start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
+                                count: floatCount
+                            ))
                         }
+                        dict["embedding"] = floats.map { Double($0) }
                     }
 
                     return dict
