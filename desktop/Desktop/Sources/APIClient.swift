@@ -3589,12 +3589,14 @@ struct UserProfileResponse: Codable {
     let useCase: String?
     let job: String?
     let company: String?
+    let desktopUpdateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case uid, email, name, motivation, job, company
         case timeZone = "time_zone"
         case createdAt = "created_at"
         case useCase = "use_case"
+        case desktopUpdateChannel = "desktop_update_channel"
     }
 
     init(from decoder: Decoder) throws {
@@ -3608,6 +3610,7 @@ struct UserProfileResponse: Codable {
         useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
         job = try container.decodeIfPresent(String.self, forKey: .job)
         company = try container.decodeIfPresent(String.self, forKey: .company)
+        desktopUpdateChannel = try container.decodeIfPresent(String.self, forKey: .desktopUpdateChannel)
     }
 }
 
