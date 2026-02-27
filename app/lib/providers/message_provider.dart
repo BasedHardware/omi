@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/agent_chat_service.dart' show agentLog, initAgentLog;
 import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
@@ -597,10 +598,14 @@ class MessageProvider extends ChangeNotifier {
 
     // Route through agent VM if Claude Agent is enabled
     if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
+      agentLog('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
+
+    await initAgentLog();
+    agentLog(
+        '[MessageProvider] sending via /v2/messages — appId=$currentAppId, text="${text.length > 80 ? text.substring(0, 80) : text}"');
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
@@ -611,6 +616,7 @@ class MessageProvider extends ChangeNotifier {
     clearUploadedFiles();
     String textBuffer = '';
     Timer? timer;
+    int chunkCount = 0;
 
     void flushBuffer() {
       if (textBuffer.isNotEmpty) {
@@ -624,14 +630,17 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+        chunkCount++;
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
+          agentLog('[MessageProvider] think: ${chunk.text.length > 100 ? chunk.text.substring(0, 100) : chunk.text}');
           message.thinkings.add(chunk.text);
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
+          if (chunkCount <= 3) agentLog('[MessageProvider] first data chunk received');
           textBuffer += chunk.text;
           timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
             flushBuffer();
@@ -644,6 +653,7 @@ class MessageProvider extends ChangeNotifier {
         flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
+          agentLog('[MessageProvider] done — $chunkCount chunks, final text ${message.text.length} chars');
           message = chunk.message!;
           messages[aiIndex] = message;
           notifyListeners();
@@ -651,17 +661,20 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          agentLog('[MessageProvider] error: ${chunk.text}');
           message.text = chunk.text;
           notifyListeners();
           continue;
         }
       }
     } catch (e) {
+      agentLog('[MessageProvider] exception: $e');
       message.text = ServerMessageChunk.failedMessage().text;
       notifyListeners();
     } finally {
       timer?.cancel();
       flushBuffer();
+      agentLog('[MessageProvider] stream complete — $chunkCount chunks total');
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
