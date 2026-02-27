@@ -9,8 +9,6 @@ actor EmbeddingService {
     static let embeddingDimension = 3072
     static let modelName = "gemini-embedding-001"
 
-    private let geminiApiKey: String?
-
     /// In-memory index: action_item.id -> normalized embedding
     private var index: [Int64: [Float]] = [:]
     private var isIndexLoaded = false
@@ -18,9 +16,17 @@ actor EmbeddingService {
     /// Cap in-memory embeddings to limit memory (~12KB each, 5000 = ~60MB max)
     private let maxIndexSize = 5000
 
-    private init() {
-        self.geminiApiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"]
+    /// Read GEMINI_API_KEY lazily from the C environment (set by loadEnvironment/setenv).
+    /// ProcessInfo.processInfo.environment is a launch-time snapshot and misses keys
+    /// loaded from .env files after startup.
+    private var geminiApiKey: String? {
+        if let cString = getenv("GEMINI_API_KEY") {
+            return String(validatingUTF8: cString)
+        }
+        return nil
     }
+
+    private init() {}
 
     // MARK: - Embedding API
 
