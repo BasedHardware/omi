@@ -20,13 +20,13 @@ jobs:
 
       - name: Compute next version and push tag
         run: |
-          # Get latest desktop release tag
-          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
+          # Get latest desktop release tag — only v0.* tags (canonical versioning scheme)
+          LATEST=$(git tag -l 'v0.*-macos' | sort -V | tail -1)
 
           if [ -z "$LATEST" ]; then
             VERSION="0.0.1"
           else
-            # Strip v prefix and +build-macos suffix  e.g. v11.5.1+11005001-macos -> 11.5.1
+            # Strip v prefix and +build-macos suffix  e.g. v0.11.9+11009-macos -> 0.11.9
             VER=$(echo "$LATEST" | sed -E 's/^v([0-9.]+)\+[0-9]+-macos$/\1/')
             MAJOR=$(echo "$VER" | cut -d. -f1)
             MINOR=$(echo "$VER" | cut -d. -f2)
