@@ -10,10 +10,10 @@ class AudioLevelMonitor: ObservableObject {
     static let shared = AudioLevelMonitor()
 
     /// Microphone audio level (0.0 - 1.0)
-    @Published var microphoneLevel: Float = 0.0
+    @Published private(set) var microphoneLevel: Float = 0.0
 
     /// System audio level (0.0 - 1.0)
-    @Published var systemLevel: Float = 0.0
+    @Published private(set) var systemLevel: Float = 0.0
 
     // Throttle: only publish at ~15 Hz (every ~67ms)
     private let updateInterval: Double = 1.0 / 15.0
