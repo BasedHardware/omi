@@ -3450,6 +3450,16 @@ struct KnowledgeGraphNode: Codable, Identifiable {
         case updatedAt = "updated_at"
     }
 
+    init(id: String, label: String, nodeType: KnowledgeGraphNodeType, aliases: [String] = [], memoryIds: [String] = [], createdAt: Date = Date(), updatedAt: Date = Date()) {
+        self.id = id
+        self.label = label
+        self.nodeType = nodeType
+        self.aliases = aliases
+        self.memoryIds = memoryIds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -3483,6 +3493,15 @@ struct KnowledgeGraphEdge: Codable, Identifiable {
         case createdAt = "created_at"
     }
 
+    init(id: String, sourceId: String, targetId: String, label: String, memoryIds: [String] = [], createdAt: Date = Date()) {
+        self.id = id
+        self.sourceId = sourceId
+        self.targetId = targetId
+        self.label = label
+        self.memoryIds = memoryIds
+        self.createdAt = createdAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -3498,6 +3517,11 @@ struct KnowledgeGraphEdge: Codable, Identifiable {
 struct KnowledgeGraphResponse: Codable {
     let nodes: [KnowledgeGraphNode]
     let edges: [KnowledgeGraphEdge]
+
+    init(nodes: [KnowledgeGraphNode], edges: [KnowledgeGraphEdge]) {
+        self.nodes = nodes
+        self.edges = edges
+    }
 }
 
 /// Response for rebuild operation
