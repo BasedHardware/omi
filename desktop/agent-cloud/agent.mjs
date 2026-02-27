@@ -570,14 +570,18 @@ function startPersistentSession(send, log) {
     },
   };
 
-  // Start with a prewarm prompt — this boots the Claude process
-  const q = query({ prompt: "ready", options });
-
-  // Queue for subsequent messages — connected immediately so generator stays alive
+  // Queue for all messages — used as the prompt (async iterable)
   const messageQueue = new AsyncMessageQueue();
-  q.streamInput(messageQueue).catch(err => {
-    log(`streamInput error: ${err.message}`);
+
+  // Push the prewarm message to boot the Claude process
+  messageQueue.push({
+    type: "user",
+    message: { role: "user", content: "ready" },
+    parent_tool_use_id: null,
+    session_id: "",
   });
+
+  const q = query({ prompt: messageQueue, options });
 
   // Session state
   let sessionId = null;
