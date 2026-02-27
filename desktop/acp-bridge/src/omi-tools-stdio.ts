@@ -116,6 +116,7 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "set_user_preferences",
   "ask_followup",
   "complete_onboarding",
+  "save_knowledge_graph",
 ]);
 
 const ALL_TOOLS = [
@@ -300,6 +301,47 @@ The user can click a button OR type their own reply. Wait for their response bef
       required: [],
     },
   },
+  {
+    name: "save_knowledge_graph",
+    description: `Save a knowledge graph of entities and relationships discovered about the user.
+Extract people, organizations, projects, tools, languages, frameworks, and concepts.
+Build relationships like: works_on, uses, built_with, part_of, knows, etc.
+Aim for 15-40 nodes with meaningful edges connecting them.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        nodes: {
+          type: "array" as const,
+          items: {
+            type: "object" as const,
+            properties: {
+              id: { type: "string" as const },
+              label: { type: "string" as const },
+              node_type: {
+                type: "string" as const,
+                enum: ["person", "organization", "place", "thing", "concept"],
+              },
+              aliases: { type: "array" as const, items: { type: "string" as const } },
+            },
+            required: ["id", "label", "node_type"],
+          },
+        },
+        edges: {
+          type: "array" as const,
+          items: {
+            type: "object" as const,
+            properties: {
+              source_id: { type: "string" as const },
+              target_id: { type: "string" as const },
+              label: { type: "string" as const },
+            },
+            required: ["source_id", "target_id", "label"],
+          },
+        },
+      },
+      required: ["nodes", "edges"],
+    },
+  },
 ];
 
 // Filter tools based on session type: onboarding sessions get onboarding tools,
@@ -477,7 +519,8 @@ async function handleJsonRpc(
         toolName === "scan_files" ||
         toolName === "set_user_preferences" ||
         toolName === "ask_followup" ||
-        toolName === "complete_onboarding"
+        toolName === "complete_onboarding" ||
+        toolName === "save_knowledge_graph"
       ) {
         // Onboarding tools — forward directly to Swift
         const result = await requestSwiftTool(toolName, args);
