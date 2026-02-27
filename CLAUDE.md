@@ -175,15 +175,39 @@ clang-format -i <files>
 
 ## Git
 
-- Never squash merge PRs — use regular merge
+### After Completing Work
+When you finish implementing a task, **commit and push your changes** before ending the conversation:
+
+1. Stage only the files you modified:
+   ```bash
+   git add <file1> <file2> ...
+   ```
+2. Commit with a clear message (verb-first, max 72 chars):
+   ```bash
+   git commit -m "Fix race condition in VAD gate service"
+   ```
+3. Push to the current branch:
+   ```bash
+   git push
+   ```
+
+### Rules
+- **Always commit to the current branch** — never switch branches
+- **Never squash merge PRs** — use regular merge
 - Make individual commits per file, not bulk commits
-- **RELEASE command**: When the user says "RELEASE", perform the full release flow:
+- The pre-commit hook auto-formats staged code — no need to format manually before committing
+- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
+
+### RELEASE command
+When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
   2. Make individual commits per changed file
   3. Push and create a PR
   4. Merge the PR (no squash — regular merge)
   5. Switch back to main and pull
-- **RELEASEWITHBACKEND command**: Same as RELEASE, plus deploy the backend to production after merging:
+
+### RELEASEWITHBACKEND command
+Same as RELEASE, plus deploy the backend to production after merging:
   ```bash
   gh workflow run gcp_backend.yml -f environment=prod -f branch=main
   ```

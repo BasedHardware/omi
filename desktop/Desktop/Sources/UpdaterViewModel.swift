@@ -298,9 +298,9 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
-    /// Sync update channel from server (called on auth state change).
+    /// Sync update channel from server.
     /// If the backend has a `desktop_update_channel` field set on the user doc,
-    /// override the local channel preference.
+    /// override the local channel preference. Triggers a Sparkle check if the channel changed.
     func syncUpdateChannelFromServer() {
         Task {
             do {
@@ -310,6 +310,9 @@ final class UpdaterViewModel: ObservableObject {
                 if updateChannel != channel {
                     log("Sparkle: Server assigned update channel: \(serverChannel)")
                     updateChannel = channel
+                    // Trigger an immediate update check so the new channel takes effect
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s for Sparkle to pick up new channel
+                    updaterController.updater.checkForUpdatesInBackground()
                 }
             } catch {
                 // Non-fatal — channel sync is best-effort

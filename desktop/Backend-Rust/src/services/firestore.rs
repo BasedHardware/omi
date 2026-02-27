@@ -61,8 +61,8 @@ pub const MESSAGES_SUBCOLLECTION: &str = "messages";
 pub const FOLDERS_SUBCOLLECTION: &str = "folders";
 pub const CHAT_SESSIONS_SUBCOLLECTION: &str = "chat_sessions";
 pub const GOALS_SUBCOLLECTION: &str = "goals";
-pub const KG_NODES_SUBCOLLECTION: &str = "kg_nodes";
-pub const KG_EDGES_SUBCOLLECTION: &str = "kg_edges";
+pub const KG_NODES_SUBCOLLECTION: &str = "knowledge_nodes";
+pub const KG_EDGES_SUBCOLLECTION: &str = "knowledge_edges";
 pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
 pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
@@ -5023,6 +5023,16 @@ impl FirestoreService {
             });
 
             self.update_user_fields(uid, fields, &["assistant_settings"]).await?;
+        }
+
+        // Write update_channel as top-level field on user doc (not inside assistant_settings)
+        if let Some(ref channel) = data.update_channel {
+            let fields = json!({
+                "update_channel": {
+                    "stringValue": channel
+                }
+            });
+            self.update_user_fields(uid, fields, &["update_channel"]).await?;
         }
 
         // Return merged state
