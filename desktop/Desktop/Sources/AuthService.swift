@@ -1030,6 +1030,7 @@ class AuthService {
         UserDefaults.standard.removeObject(forKey: "hasTriggeredSystemAudio")
         UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
         UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
+        UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
 
         // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
         // it from the server within ~200ms of sign-in. Instead, onboarding force-starts
