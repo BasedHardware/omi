@@ -117,13 +117,17 @@ workflows:
         script: |
           xcode-project use-profiles
 
-          # Extract version name from pubspec.yaml (source of truth)
+          # Extract version from pubspec.yaml (source of truth for both name and build number)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
+          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
 
-          # Auto-increment build number based on latest TestFlight build
+          # Skip if this build number is already on TestFlight
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number $APP_ID || echo "0")
-          BUILD_NUMBER=$((LATEST_BUILD + 1))
+          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
+            echo "Build $BUILD_NUMBER already on TestFlight (latest: $LATEST_BUILD). Skipping."
+            exit 0
+          fi
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -303,13 +307,17 @@ workflows:
 
       - name: Build AAB with Flutter
         script: |
-          # Extract version name from pubspec.yaml (source of truth)
+          # Extract version from pubspec.yaml (source of truth for both name and build number)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
+          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
 
-          # Get latest build number from Google Play and increment
+          # Skip if this build number is already on Google Play
           LATEST_BUILD=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal || echo "0")
-          BUILD_NUMBER=$((LATEST_BUILD + 1))
+          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
+            echo "Build $BUILD_NUMBER already on Google Play (latest: $LATEST_BUILD). Skipping."
+            exit 0
+          fi
 
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
