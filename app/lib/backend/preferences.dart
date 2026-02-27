@@ -176,6 +176,11 @@ class SharedPreferencesUtil {
 
   bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
 
+  // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
+  set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
+
+  bool get vadGateEnabled => getBool('vadGateEnabled');
+
   // Claude Agent — route chat through desktop agent VM (experimental)
   set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
 
