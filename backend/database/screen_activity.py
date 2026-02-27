@@ -52,10 +52,11 @@ def get_screen_activity(
     query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING)
 
     if start_date:
-        ts = start_date.isoformat() if isinstance(start_date, datetime) else start_date
+        # Timestamps stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings — must match format for comparison
+        ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else start_date
         query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
     if end_date:
-        ts = end_date.isoformat() if isinstance(end_date, datetime) else end_date
+        ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else end_date
         query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
     if app_filter:
         query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
