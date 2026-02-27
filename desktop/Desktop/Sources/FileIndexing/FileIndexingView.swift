@@ -361,93 +361,72 @@ struct FileIndexingView: View {
         }
     }
 
-    /// Stage 3: Load knowledge graph (or build from scratch if none exists), progress 90% → 100%
+    /// Stage 3: Load knowledge graph, progress 90% → 100%
+    /// The AI exploration session populates the local graph via save_knowledge_graph tool.
+    /// We poll the local SQLite briefly, then fall back to API if needed.
     private func runKnowledgeGraphBuild() async {
         await MainActor.run {
             statusText = "Loading your knowledge graph..."
             progress = 0.92
         }
 
-        // First, try loading the existing graph (user may already have one from mobile)
-        await graphViewModel.loadGraph()
-        log("FileIndexingView: Existing graph check — isEmpty=\(graphViewModel.isEmpty)")
-
-        if !graphViewModel.isEmpty {
-            // User already has a graph (e.g. from mobile app) — use it directly
-            log("FileIndexingView: Using existing knowledge graph")
-            let response = try? await APIClient.shared.getKnowledgeGraph()
-            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
-                nodeCount: response?.nodes.count ?? 0,
-                edgeCount: response?.edges.count ?? 0,
-                pollAttempts: 0,
-                hadExistingGraph: true
-            )
-            await MainActor.run {
-                progress = 1.0
-                statusText = "Done!"
-            }
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            return
-        }
-
-        // No existing graph — build from scratch
         await AnalyticsManager.shared.knowledgeGraphBuildStarted(
             filesIndexed: totalFilesScanned,
             hadExistingGraph: false
         )
-        await MainActor.run {
-            statusText = "Building your knowledge graph..."
-            progress = 0.95
-        }
 
-        // Fire-and-forget the rebuild with a short timeout — the endpoint can hang
-        Task {
-            do {
-                _ = try await withThrowingTaskGroup(of: Void.self) { group in
-                    group.addTask {
-                        _ = try await APIClient.shared.rebuildKnowledgeGraph()
-                    }
-                    group.addTask {
-                        try await Task.sleep(nanoseconds: 10_000_000_000) // 10s timeout
-                        throw CancellationError()
-                    }
-                    try await group.next()
-                    group.cancelAll()
-                }
-                log("FileIndexingView: Knowledge graph rebuild completed")
-            } catch {
-                log("FileIndexingView: Knowledge graph rebuild timed out or failed: \(error.localizedDescription)")
-            }
-        }
-
-        // Poll until graph has data
-        let maxAttempts = 15 // 15 × 3s = 45s max
-        var finalPollAttempt = maxAttempts
+        // Poll local SQLite — the exploration chat is still running and will call
+        // save_knowledge_graph when it finishes extracting entities
+        let maxAttempts = 20 // 20 × 2s = 40s max
         for attempt in 1...maxAttempts {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            await graphViewModel.loadGraph()
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
 
-            if !graphViewModel.isEmpty {
-                log("FileIndexingView: Graph ready after \(attempt) polls")
-                finalPollAttempt = attempt
-                break
+            let localEmpty = await KnowledgeGraphStorage.shared.isEmpty()
+            if !localEmpty {
+                log("FileIndexingView: Local graph ready after \(attempt) polls")
+                await graphViewModel.loadGraph()
+
+                await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+                    nodeCount: 0,
+                    edgeCount: 0,
+                    pollAttempts: attempt,
+                    hadExistingGraph: false
+                )
+
+                await MainActor.run {
+                    progress = 1.0
+                    statusText = "Done!"
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                return
             }
-            log("FileIndexingView: Graph poll \(attempt)/\(maxAttempts), still empty")
+
+            // Update progress smoothly 92% → 98%
+            let p = 0.92 + Double(attempt) / Double(maxAttempts) * 0.06
+            await MainActor.run { progress = p }
+            log("FileIndexingView: Local graph poll \(attempt)/\(maxAttempts), still empty")
         }
 
-        if !graphViewModel.isEmpty {
-            let response = try? await APIClient.shared.getKnowledgeGraph()
-            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
-                nodeCount: response?.nodes.count ?? 0,
-                edgeCount: response?.edges.count ?? 0,
-                pollAttempts: finalPollAttempt,
-                hadExistingGraph: false
-            )
-        } else {
+        // Local graph still empty — try loading from API (user may have one from mobile)
+        log("FileIndexingView: Local graph empty after polling, trying API")
+        await graphViewModel.loadGraph()
+
+        if graphViewModel.isEmpty {
+            // Last resort: fire-and-forget backend rebuild
+            Task {
+                _ = try? await APIClient.shared.rebuildKnowledgeGraph()
+            }
             await AnalyticsManager.shared.knowledgeGraphBuildFailed(
-                reason: "timeout_empty",
+                reason: "local_empty_api_empty",
                 pollAttempts: maxAttempts,
                 filesIndexed: totalFilesScanned
+            )
+        } else {
+            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+                nodeCount: 0,
+                edgeCount: 0,
+                pollAttempts: maxAttempts,
+                hadExistingGraph: true
             )
         }
 
@@ -494,17 +473,23 @@ struct FileIndexingView: View {
         }
 
         let prompt = """
-        I just indexed \(totalFilesScanned) files on your computer. I want to understand who you are — your projects, passions, and what you're building.
+        I just indexed \(totalFilesScanned) files on your computer. Explore them to learn about me, then build my knowledge graph.
 
-        Use the execute_sql tool to explore the indexed_files table. Start with an overview (file types, folders, project indicators), then dig deeper:
+        Use execute_sql to query the indexed_files table (columns: path, filename, fileExtension, fileType, sizeBytes, folder, depth, createdAt, modifiedAt). Do 3-5 queries:
+        1. Overview: file types, folders, project indicators (package.json, Cargo.toml, etc.)
+        2. Recently modified files to see what I'm working on now
+        3. Dig into interesting patterns — tech stack, recurring themes
 
-        1. Find project files (package.json, Cargo.toml, etc.) to identify active projects
-        2. Look at recently modified files to understand what you're working on right now
-        3. Search for patterns — recurring themes, technologies, interests
-        4. Open interesting files (read_file tool) to understand project purposes and context
-        5. Don't stop at surface level — keep investigating, follow threads, connect the dots
+        Keep your responses SHORT — 2-4 sentences per discovery, not essays.
 
-        Tell me a story about this person. Who are they? What are they building? What drives them? What's their tech stack and workflow? Share discoveries as you find them, like you're exploring and getting to know a new friend.
+        IMPORTANT — After exploring, call save_knowledge_graph with all entities and relationships you found. Extract:
+        - People (me, collaborators, companies I work with)
+        - Organizations (companies, teams, services)
+        - Things (projects, repos, tools, languages, frameworks)
+        - Concepts (domains, interests, skills)
+        - Relationships between them (uses, works_on, built_with, part_of, etc.)
+
+        Aim for 15-40 nodes and meaningful edges connecting them. This builds my personal knowledge graph visualization.
         """
         await chatProvider.sendMessage(prompt)
 
@@ -518,8 +503,8 @@ struct FileIndexingView: View {
         // Append the AI's exploration response to the user's AI profile
         await appendExplorationToProfile()
 
-        // Follow up: ask the model to find something actionable
-        await chatProvider.sendMessage("Now based on everything you discovered, find something that you can actually help me with to get done. Something that is clearly not done yet and something that you as an AI agent can execute upon.")
+        // Follow up: ask the model to find something actionable (keep it short)
+        await chatProvider.sendMessage("Based on what you found, what's one thing you could actually help me finish right now? Be specific and brief.")
     }
 
     /// Append the AI's file exploration response to the latest AI user profile

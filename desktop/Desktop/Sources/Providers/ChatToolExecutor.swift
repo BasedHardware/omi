@@ -43,17 +43,20 @@ class ChatToolExecutor {
         case "check_permission_status":
             return await executeCheckPermissionStatus(toolCall.arguments)
 
-        case "start_file_scan":
-            return await executeStartFileScan(toolCall.arguments)
+        case "scan_files", "start_file_scan":
+            return await executeScanFiles(toolCall.arguments)
 
         case "get_file_scan_results":
-            return await executeGetFileScanResults(toolCall.arguments)
+            return await executeScanFiles(toolCall.arguments)
 
         case "set_user_preferences":
             return await executeSetUserPreferences(toolCall.arguments)
 
         case "complete_onboarding":
             return await executeCompleteOnboarding(toolCall.arguments)
+
+        case "save_knowledge_graph":
+            return await executeSaveKnowledgeGraph(toolCall.arguments)
 
         default:
             return "Unknown tool: \(toolCall.name)"
@@ -543,38 +546,67 @@ class ChatToolExecutor {
         return "screen_recording: \(statuses["screen_recording"]!), microphone: \(statuses["microphone"]!), notifications: \(statuses["notifications"]!), accessibility: \(statuses["accessibility"]!), automation: \(statuses["automation"]!)"
     }
 
-    /// Start background file scanning
-    private static func executeStartFileScan(_ args: [String: Any]) async -> String {
-        guard !fileScanStarted else {
-            return "File scan already started"
-        }
-        fileScanStarted = true
-
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+    /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
+    private static func executeScanFiles(_ args: [String: Any]) async -> String {
+        let fm = FileManager.default
+        let homeDir = fm.homeDirectoryForCurrentUser
         let foldersToScan = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
             .map { homeDir.appendingPathComponent($0) }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .filter { fm.fileExists(atPath: $0.path) }
 
         let applicationsURL = URL(fileURLWithPath: "/Applications")
         var allFolders = foldersToScan
-        if FileManager.default.fileExists(atPath: applicationsURL.path) {
+        if fm.fileExists(atPath: applicationsURL.path) {
             allFolders.append(applicationsURL)
         }
 
-        // Fire off scan in background
-        Task.detached {
-            let count = await FileIndexerService.shared.scanFolders(allFolders)
-            await MainActor.run {
-                fileScanFileCount = count
+        // Pre-check folder access — this triggers macOS TCC dialogs
+        var deniedFolders: [String] = []
+        var accessibleFolders: [URL] = []
+        for folder in allFolders {
+            do {
+                _ = try fm.contentsOfDirectory(
+                    at: folder,
+                    includingPropertiesForKeys: [.fileSizeKey],
+                    options: [.skipsHiddenFiles]
+                )
+                accessibleFolders.append(folder)
+            } catch {
+                let nsError = error as NSError
+                if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
+                    // Permission denied — TCC dialog was shown or already denied
+                    deniedFolders.append(folder.lastPathComponent)
+                } else {
+                    // Other error (e.g. folder doesn't exist) — skip silently
+                    log("FileIndexer: Pre-check failed for \(folder.lastPathComponent): \(error.localizedDescription)")
+                }
             }
-            log("Onboarding file scan completed: \(count) files indexed")
         }
 
-        return "File scan started for \(allFolders.count) folders: \(foldersToScan.map { $0.lastPathComponent }.joined(separator: ", ")), /Applications. Results will be ready in a few seconds."
+        // Actually scan accessible folders (blocking)
+        let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
+        fileScanFileCount = count
+        log("Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied")
+
+        // Build results from database
+        let resultsStr = await getFileScanResultsFromDB()
+
+        var out = resultsStr
+
+        if !deniedFolders.isEmpty {
+            out += "\n\n## FOLDER ACCESS DENIED\n"
+            out += "The following folders were NOT scanned because the user didn't grant access:\n"
+            for folder in deniedFolders {
+                out += "- ~/\(folder)\n"
+            }
+            out += "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
+        }
+
+        return out
     }
 
-    /// Get file scan results summary
-    private static func executeGetFileScanResults(_ args: [String: Any]) async -> String {
+    /// Get file scan results from the database
+    private static func getFileScanResultsFromDB() async -> String {
         guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
             return "Error: database not available"
         }
@@ -686,6 +718,88 @@ class ChatToolExecutor {
             return "No preferences were changed. Provide 'language' (code like 'en', 'es', 'ja') and/or 'name' (string)."
         }
         return results.joined(separator: ". ") + "."
+    }
+
+    // MARK: - Knowledge Graph Tool
+
+    /// Save a knowledge graph extracted by the AI during file exploration
+    private static func executeSaveKnowledgeGraph(_ args: [String: Any]) async -> String {
+        guard let nodesArray = args["nodes"] as? [[String: Any]] else {
+            return "Error: 'nodes' array is required"
+        }
+        let edgesArray = args["edges"] as? [[String: Any]] ?? []
+
+        let now = Date()
+        var nodeRecords: [LocalKGNodeRecord] = []
+        var edgeRecords: [LocalKGEdgeRecord] = []
+
+        // Deduplicate nodes by label (case-insensitive)
+        var seenLabels: [String: String] = [:] // lowercase label → nodeId
+        var idRemap: [String: String] = [:] // original id → canonical id
+
+        for node in nodesArray {
+            guard let id = node["id"] as? String,
+                  let label = node["label"] as? String else { continue }
+
+            let nodeType = node["node_type"] as? String ?? "concept"
+            let aliases = node["aliases"] as? [String] ?? []
+            let lowerLabel = label.lowercased()
+
+            if let existingId = seenLabels[lowerLabel] {
+                idRemap[id] = existingId
+                continue
+            }
+
+            seenLabels[lowerLabel] = id
+            idRemap[id] = id
+
+            var aliasesJson: String?
+            if !aliases.isEmpty, let data = try? JSONEncoder().encode(aliases) {
+                aliasesJson = String(data: data, encoding: .utf8)
+            }
+
+            nodeRecords.append(LocalKGNodeRecord(
+                nodeId: id,
+                label: label,
+                nodeType: nodeType,
+                aliasesJson: aliasesJson,
+                sourceFileIds: nil,
+                createdAt: now,
+                updatedAt: now
+            ))
+        }
+
+        for edge in edgesArray {
+            guard let sourceId = edge["source_id"] as? String,
+                  let targetId = edge["target_id"] as? String,
+                  let label = edge["label"] as? String else { continue }
+
+            let remappedSource = idRemap[sourceId] ?? sourceId
+            let remappedTarget = idRemap[targetId] ?? targetId
+
+            // Skip self-referencing edges and edges to missing nodes
+            guard remappedSource != remappedTarget,
+                  seenLabels.values.contains(remappedSource),
+                  seenLabels.values.contains(remappedTarget) else { continue }
+
+            let edgeId = "\(remappedSource)_\(remappedTarget)_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))"
+            edgeRecords.append(LocalKGEdgeRecord(
+                edgeId: edgeId,
+                sourceNodeId: remappedSource,
+                targetNodeId: remappedTarget,
+                label: label,
+                createdAt: now
+            ))
+        }
+
+        do {
+            try await KnowledgeGraphStorage.shared.saveGraph(nodes: nodeRecords, edges: edgeRecords)
+            log("Local graph built with \(nodeRecords.count) nodes, \(edgeRecords.count) edges")
+            return "OK: saved \(nodeRecords.count) nodes and \(edgeRecords.count) edges to local knowledge graph"
+        } catch {
+            logError("Tool save_knowledge_graph failed", error: error)
+            return "Error: \(error.localizedDescription)"
+        }
     }
 
     /// Complete the onboarding process

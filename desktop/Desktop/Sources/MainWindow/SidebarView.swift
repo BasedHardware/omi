@@ -877,8 +877,8 @@ struct SidebarView: View {
 
                 Button(action: {
                     if isStale {
-                        // Stale developer signing — just open Settings, user must toggle off/on
-                        ScreenCaptureService.openScreenRecordingPreferences()
+                        // Stale/corrupted TCC — navigate to Permissions page with full instructions
+                        selectedIndex = SidebarNavItem.permissions.rawValue
                     } else if needsReset {
                         // Track reset button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
@@ -889,6 +889,8 @@ struct SidebarView: View {
                         ScreenCaptureService.requestAllScreenCapturePermissions()
                         // Also open settings for manual grant if needed
                         ScreenCaptureService.openScreenRecordingPreferences()
+                        // Track attempt — if still not granted on next check, show recovery instructions
+                        appState.screenRecordingGrantAttempts += 1
                     }
                 }) {
                     Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))

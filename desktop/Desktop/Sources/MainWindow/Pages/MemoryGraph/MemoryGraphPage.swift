@@ -182,7 +182,13 @@ class MemoryGraphViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let response = try await APIClient.shared.getKnowledgeGraph()
+            // Try local SQLite first (populated during file exploration)
+            var response = await KnowledgeGraphStorage.shared.loadGraph()
+            if response.nodes.isEmpty {
+                // Fall back to API (user may have graph from mobile)
+                response = try await APIClient.shared.getKnowledgeGraph()
+            }
+
             log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
             isEmpty = response.nodes.isEmpty
 

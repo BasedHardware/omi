@@ -101,6 +101,9 @@ struct OnboardingView: View {
         AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat_Skipped")
         AnalyticsManager.shared.onboardingCompleted()
 
+        // Stop the AI if it's still running
+        chatProvider.stopAgent()
+
         appState.hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 

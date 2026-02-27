@@ -12,6 +12,7 @@ struct OnboardingChatView: View {
     @State private var inputText: String = ""
     @State private var hasStarted: Bool = false
     @State private var showCompleteButton: Bool = false
+    @State private var onboardingCompleted: Bool = false
     @FocusState private var isInputFocused: Bool
 
     // Timer to periodically check permission status
@@ -51,18 +52,33 @@ struct OnboardingChatView: View {
                                 .id(message.id)
                         }
 
-                        // Typing indicator
+                        // Typing indicator (floating, no avatar)
                         if chatProvider.isSending {
-                            HStack(spacing: 12) {
-                                omiAvatar
-                                TypingIndicator()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id("typing")
+                            TypingIndicator()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 44) // align with message text (32px avatar + 12px spacing)
+                                .id("typing")
                         }
 
-                        // Safety timeout button
-                        if showCompleteButton && !chatProvider.isSending {
+                        // "Continue to App" button — shown after AI calls complete_onboarding
+                        if onboardingCompleted && !chatProvider.isSending {
+                            Button(action: {
+                                handleOnboardingComplete()
+                            }) {
+                                Text("Continue to App")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: 220)
+                                    .padding(.vertical, 12)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(12)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 12)
+                        }
+
+                        // Safety timeout button — fallback if AI never calls complete_onboarding
+                        if showCompleteButton && !onboardingCompleted && !chatProvider.isSending {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
@@ -200,7 +216,9 @@ struct OnboardingChatView: View {
 
         // Wire up onboarding tools
         ChatToolExecutor.onboardingAppState = appState
-        ChatToolExecutor.onCompleteOnboarding = { handleOnboardingComplete() }
+        ChatToolExecutor.onCompleteOnboarding = {
+            onboardingCompleted = true
+        }
 
         // Build onboarding system prompt
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
@@ -309,67 +327,84 @@ struct OnboardingChatView: View {
 struct OnboardingChatBubble: View {
     let message: ChatMessage
 
+    /// Whether this AI message has any visible content (non-empty text or tool calls)
+    private var hasVisibleContent: Bool {
+        if message.sender != .ai { return true }
+        return message.contentBlocks.contains { block in
+            switch block {
+            case .toolCall:
+                return true
+            case .text(_, let text):
+                return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .thinking:
+                return false
+            }
+        }
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            if message.sender == .ai {
-                // Omi logo
-                if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                   let logoImage = NSImage(contentsOf: logoURL) {
-                    Image(nsImage: logoImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
+        if hasVisibleContent {
+            HStack(alignment: .top, spacing: 12) {
+                if message.sender == .ai {
+                    // Omi logo
+                    if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+                       let logoImage = NSImage(contentsOf: logoURL) {
+                        Image(nsImage: logoImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                            .frame(width: 32, height: 32)
+                            .background(OmiColors.backgroundTertiary)
+                            .clipShape(Circle())
+                    }
+                }
+
+                VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+                    if message.sender == .ai {
+                        // Render content blocks in order — interleaving tool indicators with text
+                        ForEach(message.contentBlocks) { block in
+                            switch block {
+                            case .toolCall(_, let name, let status, _, _, _):
+                                OnboardingToolIndicator(toolName: name, status: status)
+                            case .text(_, let text):
+                                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Markdown(text)
+                                        .markdownTheme(.aiMessage())
+                                        .textSelection(.enabled)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 10)
+                                        .background(OmiColors.backgroundSecondary)
+                                        .cornerRadius(18)
+                                }
+                            case .thinking:
+                                EmptyView()
+                            }
+                        }
+                    } else {
+                        if !message.text.isEmpty {
+                            Markdown(message.text)
+                                .markdownTheme(.userMessage())
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(OmiColors.purplePrimary)
+                                .cornerRadius(18)
+                        }
+                    }
+                }
+
+                if message.sender == .user {
+                    // User avatar
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textSecondary)
                         .frame(width: 32, height: 32)
                         .background(OmiColors.backgroundTertiary)
                         .clipShape(Circle())
                 }
             }
-
-            VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
-                if message.sender == .ai {
-                    // Render content blocks in order — interleaving tool indicators with text
-                    ForEach(message.contentBlocks) { block in
-                        switch block {
-                        case .toolCall(_, let name, let status, _, _, _):
-                            OnboardingToolIndicator(toolName: name, status: status)
-                        case .text(_, let text):
-                            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                Markdown(text)
-                                    .markdownTheme(.aiMessage())
-                                    .textSelection(.enabled)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(OmiColors.backgroundSecondary)
-                                    .cornerRadius(18)
-                            }
-                        case .thinking:
-                            EmptyView()
-                        }
-                    }
-                } else {
-                    if !message.text.isEmpty {
-                        Markdown(message.text)
-                            .markdownTheme(.userMessage())
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(OmiColors.purplePrimary)
-                            .cornerRadius(18)
-                    }
-                }
-            }
-
-            if message.sender == .user {
-                // User avatar
-                Image(systemName: "person.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(OmiColors.textSecondary)
-                    .frame(width: 32, height: 32)
-                    .background(OmiColors.backgroundTertiary)
-                    .clipShape(Circle())
-            }
+            .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         }
-        .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     }
 }
 
@@ -399,10 +434,8 @@ struct OnboardingToolIndicator: View {
 
     private var displayText: String {
         switch toolName {
-        case "start_file_scan":
+        case "scan_files", "start_file_scan":
             return status == .running ? "Scanning your files..." : "Files scanned"
-        case "get_file_scan_results":
-            return status == .running ? "Analyzing your files..." : "Files analyzed"
         case "check_permission_status":
             return status == .running ? "Checking permissions..." : "Permissions checked"
         case "request_permission":
@@ -412,8 +445,15 @@ struct OnboardingToolIndicator: View {
         case "complete_onboarding":
             return status == .running ? "Finishing setup..." : "Setup complete"
         default:
-            if toolName.contains("search") || toolName.contains("web") {
+            if toolName.hasPrefix("WebSearch:") {
+                let query = String(toolName.dropFirst("WebSearch: ".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                return status == .running ? "Searching: \(query)" : "Searched: \(query)"
+            }
+            if toolName == "WebSearch" || toolName.contains("search") || toolName.contains("web") {
                 return status == .running ? "Searching the web..." : "Web search complete"
+            }
+            if toolName.hasPrefix("WebFetch:") || toolName == "WebFetch" {
+                return status == .running ? "Reading webpage..." : "Webpage read"
             }
             return status == .running ? "Working..." : "Done"
         }

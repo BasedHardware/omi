@@ -2107,6 +2107,28 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("createLocalKnowledgeGraph") { db in
+            try db.create(table: "local_kg_nodes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("nodeId", .text).notNull().unique()
+                t.column("label", .text).notNull()
+                t.column("nodeType", .text).notNull()
+                t.column("aliasesJson", .text)
+                t.column("sourceFileIds", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "local_kg_edges") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("edgeId", .text).notNull().unique()
+                t.column("sourceNodeId", .text).notNull()
+                t.column("targetNodeId", .text).notNull()
+                t.column("label", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

@@ -89,6 +89,7 @@ class AppState: ObservableObject {
     private var lastNotificationBadgeEnabled: Bool?
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
     @Published var isScreenRecordingStale = false  // TCC says yes but capture fails (developer signing changed)
+    var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
     @Published var hasAutomationPermission = false
     @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
     private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
@@ -752,7 +753,13 @@ class AppState: ObservableObject {
         if !tccGranted {
             hasScreenRecordingPermission = false
             isScreenCaptureKitBroken = false
-            isScreenRecordingStale = false
+            // If user already tried Grant once and permission is still not granted,
+            // the TCC entry is likely corrupted (e.g. after developer account change
+            // + tccutil reset). Show stale UI with toggle off/on instructions.
+            if screenRecordingGrantAttempts > 0 && !isScreenRecordingStale {
+                log("Screen capture: Grant attempted but permission still denied — showing recovery instructions")
+                isScreenRecordingStale = true
+            }
             return
         }
 
@@ -778,6 +785,7 @@ class AppState: ObservableObject {
             } else if realPermission {
                 // Permission recovered (user toggled off/on in System Settings)
                 isScreenRecordingStale = false
+                screenRecordingGrantAttempts = 0
             }
 
             if isScreenCaptureKitBroken {

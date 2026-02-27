@@ -97,6 +97,16 @@ enum ChatContentBlock: Identifiable {
             cleanName = toolName
         }
 
+        // Handle tool names with embedded details (e.g. "WebSearch: \"query\"")
+        if cleanName.hasPrefix("WebSearch:") {
+            let query = String(cleanName.dropFirst("WebSearch: ".count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return query.isEmpty ? "Searching the web" : "Searching: \(query)"
+        }
+        if cleanName.hasPrefix("WebFetch:") {
+            return "Fetching page"
+        }
+
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
