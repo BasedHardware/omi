@@ -747,14 +747,37 @@ class AppState: ObservableObject {
     /// Check screen recording permission status
     func checkScreenRecordingPermission() {
         let tccGranted = CGPreflightScreenCaptureAccess()
-        hasScreenRecordingPermission = tccGranted
 
-        // If TCC is not granted, clear the "broken" flag
-        // (broken = TCC granted but SCK failing, not applicable if TCC not granted)
         if !tccGranted {
+            hasScreenRecordingPermission = false
             isScreenCaptureKitBroken = false
+            return
         }
-        // If TCC is granted AND broken flag is set, leave it set until reset/restart
+
+        // TCC says granted. If the permission alert is currently showing (permission was
+        // previously false or broken), do a real capture test to verify the stale TCC case
+        // (e.g. after Sparkle update changes code signature). This avoids spawning a
+        // screencapture process on every didBecomeActive when everything is fine.
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken {
+            let realPermission = ScreenCaptureService.checkPermission()
+            hasScreenRecordingPermission = realPermission
+
+            if isScreenCaptureKitBroken {
+                // Re-check if SCK has recovered (user toggled permission in System Settings)
+                if #available(macOS 14.0, *) {
+                    Task {
+                        let sckWorks = await ScreenCaptureService.testScreenCaptureKitPermission()
+                        if sckWorks {
+                            log("AppState: ScreenCaptureKit recovered — clearing broken flag")
+                            self.isScreenCaptureKitBroken = false
+                            self.hasScreenRecordingPermission = true
+                        }
+                    }
+                }
+            }
+        } else {
+            hasScreenRecordingPermission = true
+        }
     }
 
     /// Check automation permission without triggering a prompt
