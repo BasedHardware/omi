@@ -102,6 +102,17 @@ actor ActionItemStorage {
         }
     }
 
+    /// Check if a non-deleted action item with the given description exists
+    func actionItemExists(description: String) async -> Bool {
+        guard let db = try? await ensureInitialized() else { return false }
+        return (try? await db.read { database in
+            try ActionItemRecord
+                .filter(Column("description") == description)
+                .filter(Column("deleted") == false)
+                .fetchCount(database) > 0
+        }) ?? false
+    }
+
     /// Get a single action item by its backend ID
     func getLocalActionItem(byBackendId backendId: String) async throws -> TaskActionItem? {
         let db = try await ensureInitialized()
