@@ -49,6 +49,7 @@ from database.apps import (
     set_app_popular_db,
     set_app_official_db,
     search_apps_db,
+    promote_app_to_prod_db,
 )
 from database.auth import get_user_from_uid
 from database.redis_db import (
@@ -1911,6 +1912,24 @@ def reject_app(app_id: str, reason: Optional[str] = Query(None), secret_key: str
         notification_body += ' Please make the necessary changes and resubmit for approval.'
     send_notification(uid, 'App Rejected 😔', notification_body)
     return {'status': 'ok'}
+
+
+@router.post('/v1/apps/{app_id}/promote', tags=['v1'])
+def promote_app_to_prod(app_id: str, secret_key: str = Header(..., alias='x-admin-key')):
+    """Promote a dev app to the production Firestore project.
+
+    Copies the app document from the dev database (nooto-dev) to the prod
+    database (nooto-e2d27). Requires PROD_SERVICE_ACCOUNT_JSON env var.
+    """
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    try:
+        app_data = promote_app_to_prod_db(app_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='App not found in dev database')
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {'status': 'ok', 'app_id': app_id, 'app_name': app_data.get('name')}
 
 
 @router.get('/v1/admin/analytics', tags=['v1'])
