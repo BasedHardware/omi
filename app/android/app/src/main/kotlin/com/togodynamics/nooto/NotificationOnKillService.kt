@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.togodynamics.nooto
 
 import android.annotation.SuppressLint
 import android.app.NotificationChannel
@@ -37,7 +37,7 @@ class NotificationOnKillService: Service() {
             val notificationIntent = packageManager.getLaunchIntentForPackage(packageName)
             val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
     
-            val notificationBuilder = NotificationCompat.Builder(this, "com.friend.ios")
+            val notificationBuilder = NotificationCompat.Builder(this, "com.togodynamics.nooto")
                 .setSmallIcon(getSmallIconForNotification())
                 .setContentTitle(title)
                 .setContentText(description)
@@ -49,7 +49,7 @@ class NotificationOnKillService: Service() {
             val name = "Notification permission"
             val descriptionText = "You need to enable notifications to receive your pro-active feedback."
             val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel("com.friend.ios", name, importance).apply {
+            val channel = NotificationChannel("com.togodynamics.nooto", name, importance).apply {
                 description = descriptionText
             }
 
