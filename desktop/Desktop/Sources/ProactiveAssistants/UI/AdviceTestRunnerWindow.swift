@@ -515,7 +515,8 @@ struct AdviceTestRunnerView: View {
                     let (result, sqlCount) = try await adviceAssistant.testAnalyze(
                         jpegData: jpegData,
                         appName: screenshot.appName,
-                        windowTitle: screenshot.windowTitle
+                        windowTitle: screenshot.windowTitle,
+                        screenshotTime: screenshot.timestamp
                     )
                     let duration = Date().timeIntervalSince(analyzeStart)
 
