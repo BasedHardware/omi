@@ -357,6 +357,15 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     echo "  Copied acp-bridge to bundle"
 fi
 
+# Embed provisioning profile (required for Apple Development signing + restricted entitlements)
+if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied dev provisioning profile"
+elif [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
+fi
+
 # Copy and fix Info.plist
 cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
