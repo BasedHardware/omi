@@ -10,6 +10,9 @@
 class FontFamily {
   FontFamily._();
 
+  /// Font family: Geist
+  static const String geist = 'Geist';
+
   /// Font family: SF Pro Display
   static const String sFProDisplay = 'SF Pro Display';
 }
