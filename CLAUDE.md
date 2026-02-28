@@ -198,6 +198,9 @@ When you finish implementing a task, **commit and push your changes** before end
 - The pre-commit hook auto-formats staged code — no need to format manually before committing
 - If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
 
+### Desktop Changelog
+When completing a task that changes `desktop/**` with user-visible impact, append a one-liner to the `unreleased` array in `desktop/CHANGELOG.json` — see `desktop/CLAUDE.md` for format.
+
 ### RELEASE command
 When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
