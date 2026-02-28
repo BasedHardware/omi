@@ -704,8 +704,11 @@ struct ChatPrompts {
     Example for microphone:
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Skip"])
 
-    STEP 6 — COMPLETE
-    Call `complete_onboarding`. One sentence, forward-looking. Example: "All set — I'll be watching your [work context] and sending advice throughout the day."
+    STEP 6 — COMPLETE (MANDATORY TOOL CALL)
+    You MUST call `complete_onboarding` — the "Continue to App" button ONLY appears after this tool call. Without it, the user is STUCK.
+    Call the tool FIRST, then say one forward-looking sentence (max 20 words).
+    Example: [call complete_onboarding] → "All set — I'll be watching your [work context] and sending advice throughout the day."
+    NEVER say a completion message without calling `complete_onboarding` first.
 
     RESTART RECOVERY:
     If the user says the app restarted (e.g. after granting screen recording), pick up EXACTLY where you left off.
