@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import GRDB
 
 // MARK: - Onboarding Chat Persistence
 
@@ -397,6 +398,9 @@ struct OnboardingChatView: View {
                     await vm.addGraphFromStorage()
                 }
 
+                // If files are already indexed from prior run, kick off exploration immediately
+                await checkAndStartExploration(graphViewModel: graphViewModel)
+
                 // Build a conversation summary so the AI has context even if session/resume fails
                 let conversationContext = buildConversationContext(from: chatProvider.messages)
                 let resumeSystemPrompt: String
@@ -575,6 +579,21 @@ struct OnboardingChatView: View {
     }
 
     // MARK: - Parallel Exploration
+
+    /// Check if files are already indexed and start exploration if so (for resume path)
+    private func checkAndStartExploration(graphViewModel: MemoryGraphViewModel?) async {
+        guard !explorationRunning && !explorationCompleted else { return }
+
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
+        let fileCount = (try? await dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files")
+        }) ?? 0
+
+        if fileCount > 0 {
+            log("OnboardingChat: Files already indexed (\(fileCount)), starting exploration on resume")
+            startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
+        }
+    }
 
     private func startExploration(fileCount: Int, graphViewModel: MemoryGraphViewModel?) {
         guard !explorationRunning else { return }
