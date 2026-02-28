@@ -1804,7 +1804,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, sessionKey: String? = nil, imageData: Data? = nil) async {
+    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, sessionKey: String? = nil, resume: String? = nil, imageData: Data? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -1981,6 +1981,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
+                resume: resume,
                 imageData: imageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
@@ -2071,6 +2072,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
 
             log("Chat response complete")
+
+            // Persist the ACP session ID during onboarding so we can resume after app restart
+            if onboardingSessionKey != nil && !queryResult.sessionId.isEmpty {
+                OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
+            }
 
             // Analytics: track query completion
             let durationMs = Int(Date().timeIntervalSince(queryStartTime) * 1000)
