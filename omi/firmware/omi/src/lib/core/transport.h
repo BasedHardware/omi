@@ -37,4 +37,9 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size);
  */
 struct bt_conn *get_current_connection();
 
+/**
+ * @brief Flush any pending offline storage buffer to SD card
+ */
+void storage_flush_buffer(void);
+
 #endif // TRANSPORT_H
