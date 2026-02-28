@@ -84,9 +84,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add desktop/CHANGELOG.json
-          git commit -m "Update CHANGELOG.json for v${VERSION} [skip ci]" || echo "No changelog changes to commit"
+          git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
           # Tag the commit that includes the consolidated changelog
+          # NOTE: commit message must NOT contain [skip ci] — Codemagic uses this tag to trigger builds
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
 
