@@ -278,7 +278,7 @@ env:
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
   - name: VAD_GATE_MODE
-    value: "off"
+    value: "active"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
