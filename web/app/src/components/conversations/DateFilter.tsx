@@ -173,14 +173,14 @@ export function DateFilter({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-lg',
+          'flex items-center gap-2 px-3 py-2 rounded-lg flex-shrink-0 whitespace-nowrap',
           'text-sm font-medium transition-all duration-150',
           'border',
           isOpen
             ? 'bg-bg-tertiary border-purple-primary/40 text-text-primary'
             : selectedDate
-            ? 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary'
-            : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+              ? 'bg-purple-primary/10 border-purple-primary/30 text-purple-primary'
+              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
         )}
       >
         <Calendar className="w-4 h-4" />

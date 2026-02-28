@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/theme/app_theme.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -384,7 +385,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
 
                             // Update the user's primary language
                             final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                            await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+                            final userProvider = Provider.of<UserProvider>(context, listen: false);
+                            await homeProvider.updateUserPrimaryLanguage(selectedLanguage!, userProvider: userProvider);
 
                             widget.goNext();
                           },

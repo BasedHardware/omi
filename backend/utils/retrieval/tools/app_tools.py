@@ -14,6 +14,9 @@ from langchain_core.runnables import RunnableConfig
 
 from models.app import ChatTool
 from utils.mcp_client import call_mcp_tool
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for accessing user context
 try:
@@ -269,7 +272,7 @@ def load_app_tools(uid: str) -> List[Callable]:
         try:
             app = App(**app_data)
         except Exception as e:
-            print(f"Error parsing app {app_id}: {e}")
+            logger.error(f"Error parsing app {app_id}: {e}")
             continue
 
         # Only load tools if app has chat_tools defined
@@ -291,9 +294,9 @@ def load_app_tools(uid: str) -> List[Callable]:
                         mcp_oauth_tokens=mcp_oauth_tokens,
                     )
                     tools.append(tool_func)
-                    print(f"✅ Loaded tool '{app_tool.name}' from app '{app.name}' ({app_id})")
+                    logger.info(f"✅ Loaded tool '{app_tool.name}' from app '{app.name}' ({app_id})")
                 except Exception as e:
-                    print(f"❌ Error creating tool {app_tool.name} for app {app_id}: {e}")
+                    logger.error(f"❌ Error creating tool {app_tool.name} for app {app_id}: {e}")
 
-    print(f"📦 Loaded {len(tools)} app tools for user {uid}")
+    logger.info(f"📦 Loaded {len(tools)} app tools for user {uid}")
     return tools

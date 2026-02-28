@@ -9,6 +9,9 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.notifications as notification_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
 try:
@@ -65,7 +68,7 @@ def manage_daily_summary_tool(
         - "what time is my daily summary?" → action="get_settings"
         - "set reflection to 9pm" → action="set_time", hour=21
     """
-    print(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
+    logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
     # Get config from parameter or context variable
     if config is None:
@@ -126,4 +129,3 @@ def manage_daily_summary_tool(
 
     else:
         return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
-

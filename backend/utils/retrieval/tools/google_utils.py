@@ -7,6 +7,9 @@ from typing import Optional
 
 import database.users as users_db
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
@@ -53,7 +56,7 @@ def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
                 users_db.set_integration(uid, 'google_calendar', integration)
                 return new_access_token
     except Exception as e:
-        print(f"Error refreshing Google token: {e}")
+        logger.error(f"Error refreshing Google token: {e}")
 
     return None
 
@@ -66,7 +69,7 @@ def google_api_request(
     body: dict | None = None,
     allow_204: bool = False,
 ):
-    print(f"🌐 Google API {method.upper()} {url}")
+    logger.info(f"🌐 Google API {method.upper()} {url}")
 
     r = requests.request(
         method=method,
@@ -77,7 +80,7 @@ def google_api_request(
         timeout=10,
     )
 
-    print(f"🔎 Status {r.status_code}")
+    logger.info(f"🔎 Status {r.status_code}")
 
     if allow_204 and r.status_code == 204:
         return None

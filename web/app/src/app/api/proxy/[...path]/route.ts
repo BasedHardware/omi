@@ -117,6 +117,18 @@ async function handleRequest(
       });
     }
 
+    // Handle download/streaming responses (e.g., data export) — pass body through without buffering
+    const contentDisposition = response.headers.get('content-disposition');
+    if (contentDisposition) {
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers: {
+          'Content-Type': responseContentType || 'application/octet-stream',
+          'Content-Disposition': contentDisposition,
+        },
+      });
+    }
+
     // Handle JSON responses
     if (responseContentType?.includes('application/json')) {
       const data = await response.json();

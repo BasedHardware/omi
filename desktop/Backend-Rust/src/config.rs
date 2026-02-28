@@ -48,14 +48,16 @@ pub struct Config {
     pub sentry_auth_token: Option<String>,
     /// Firestore UID where Sentry feedback action items are created
     pub sentry_admin_uid: Option<String>,
-    /// Anthropic API key for agent VMs (passed to VMs during provisioning)
-    pub agent_anthropic_api_key: Option<String>,
     /// Crisp plugin identifier (for REST API authentication)
     pub crisp_plugin_identifier: Option<String>,
     /// Crisp plugin key (for REST API authentication)
     pub crisp_plugin_key: Option<String>,
     /// Crisp website ID
     pub crisp_website_id: Option<String>,
+    /// Pinecone API key for vector embeddings
+    pub pinecone_api_key: Option<String>,
+    /// Pinecone host URL (e.g. https://index-name-xxx.svc.environment.pinecone.io)
+    pub pinecone_host: Option<String>,
 }
 
 impl Config {
@@ -93,10 +95,11 @@ impl Config {
             sentry_webhook_secret: env::var("SENTRY_WEBHOOK_SECRET").ok(),
             sentry_auth_token: env::var("SENTRY_AUTH_TOKEN").ok(),
             sentry_admin_uid: env::var("SENTRY_ADMIN_UID").ok(),
-            agent_anthropic_api_key: env::var("AGENT_ANTHROPIC_API_KEY").ok(),
             crisp_plugin_identifier: env::var("CRISP_PLUGIN_IDENTIFIER").ok(),
             crisp_plugin_key: env::var("CRISP_PLUGIN_KEY").ok(),
             crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
+            pinecone_api_key: env::var("PINECONE_API_KEY").ok(),
+            pinecone_host: env::var("PINECONE_HOST").ok(),
         }
     }
 

@@ -737,16 +737,22 @@ struct FocusSessionRow: View {
         }
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d h:mm a"
+        return f
+    }()
+
     private func formatTime(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "h:mm a"
-            return formatter.string(from: date)
+        if Calendar.current.isDateInToday(date) {
+            return Self.timeFormatter.string(from: date)
         } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "M/d h:mm a"
-            return formatter.string(from: date)
+            return Self.dateTimeFormatter.string(from: date)
         }
     }
 }

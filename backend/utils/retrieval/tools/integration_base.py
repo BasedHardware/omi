@@ -3,6 +3,9 @@ from typing import Optional, Tuple
 from datetime import datetime
 
 import database.users as users_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -57,14 +60,16 @@ def cap_limit(value: int, cap: int) -> int:
 def ensure_capped(value: int, cap: int, warn_msg: str) -> int:
     if value > cap:
         try:
-            print(warn_msg.format(value, cap))
+            logger.info(warn_msg.format(value, cap))
         except Exception:
-            print(warn_msg)
+            logger.info(warn_msg)
         return cap
     return value
 
 
-def parse_iso_with_tz(field_name: str, value: Optional[str], tz_required_msg: str) -> Tuple[Optional[datetime], Optional[str]]:
+def parse_iso_with_tz(
+    field_name: str, value: Optional[str], tz_required_msg: str
+) -> Tuple[Optional[datetime], Optional[str]]:
     if not value:
         return None, None
     try:

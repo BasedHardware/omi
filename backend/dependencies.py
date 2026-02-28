@@ -7,6 +7,9 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.scopes import Scopes, has_scope
+import logging
+
+logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
 
@@ -21,7 +24,7 @@ async def get_current_user_id(
         decoded_token = auth.verify_id_token(id_token)
         return decoded_token["uid"]
     except Exception as e:
-        print(f"Error verifying Firebase ID token: {e}")
+        logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 

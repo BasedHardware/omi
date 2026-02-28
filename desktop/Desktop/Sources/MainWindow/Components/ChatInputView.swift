@@ -1,3 +1,4 @@
+import Cocoa
 import SwiftUI
 
 /// Reusable chat input field with send button, extracted from ChatPage.
@@ -12,69 +13,66 @@ struct ChatInputView: View {
     var onFollowUp: ((String) -> Void)? = nil
     var onStop: (() -> Void)? = nil
     let isSending: Bool
+    var isStopping: Bool = false
     var placeholder: String = "Type a message..."
     @Binding var mode: ChatMode
     /// Optional text to pre-fill the input (e.g. task context). Consumed on change.
     var pendingText: Binding<String>?
 
     @AppStorage("askModeEnabled") private var askModeEnabled = false
-    @State private var inputText = ""
-    @FocusState private var isInputFocused: Bool
+    @Environment(\.fontScale) private var fontScale
+    @Binding var inputText: String
 
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Padding used for both the NSTextView (via textContainerInset) and the
+    /// placeholder overlay — guaranteeing the cursor and placeholder align.
+    private let inputPaddingH: CGFloat = 12
+    private let inputPaddingV: CGFloat = 12
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             // Input field with floating toggle
             ZStack(alignment: .topTrailing) {
-                // Input field — TextEditor with auto-grow height
-                ZStack(alignment: .topLeading) {
-                    // Hidden text to calculate content height (drives ZStack size)
-                    Text(inputText.isEmpty ? " " : inputText + " ")
-                        .scaledFont(size: 14)
-                        .padding(.horizontal, 17)
-                        .padding(.vertical, 12)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .opacity(0)
-                        .accessibilityHidden(true)
-
-                    // Placeholder text
-                    if inputText.isEmpty {
-                        Text(placeholder)
-                            .scaledFont(size: 14)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextEditor(text: $inputText)
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .focused($isInputFocused)
-                        .scrollContentBackground(.hidden)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 0, maxHeight: .infinity)
-                        .onKeyPress(keys: [.return], phases: .down) { keyPress in
-                            if keyPress.modifiers.contains(.shift) {
-                                return .ignored // Shift+Enter: newline
-                            }
-                            handleSubmit()
-                            return .handled // Enter: send
+                // Hidden Text drives the SwiftUI height; OmiTextEditor overlays it exactly.
+                // This lets SwiftUI measure height from text content without fighting AppKit's
+                // scroll view layout — the onHeightChange pattern caused layout loops inside
+                // the TaskChatPanel VStack with frame(maxHeight: .infinity).
+                Text(inputText.isEmpty ? " " : inputText + " ")
+                    .scaledFont(size: 14)
+                    .padding(.horizontal, inputPaddingH)
+                    .padding(.vertical, inputPaddingV)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .overlay(alignment: .topLeading) {
+                        // Placeholder text — padding matches textContainerInset exactly
+                        if inputText.isEmpty {
+                            Text(placeholder)
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .padding(.horizontal, inputPaddingH)
+                                .padding(.vertical, inputPaddingV)
+                                .allowsHitTesting(false)
                         }
-                }
-                .frame(maxHeight: 200)
-                .fixedSize(horizontal: false, vertical: true)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(12)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isInputFocused = true
-                }
+                    }
+                    .overlay {
+                        OmiTextEditor(
+                            text: $inputText,
+                            fontSize: round(14 * fontScale),
+                            textColor: NSColor(OmiColors.textPrimary),
+                            textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
+                            onSubmit: handleSubmit
+                        )
+                    }
+                    .frame(maxHeight: 200)
+                    .clipped()
+                    .background(OmiColors.backgroundSecondary)
+                    .cornerRadius(12)
 
                 // Floating Ask/Act toggle (top-right, inside the input area)
                 if askModeEnabled {
@@ -86,12 +84,18 @@ struct ChatInputView: View {
 
             // Send/Stop button — inline to the right of the input
             if isSending && !hasText {
-                Button(action: { onStop?() }) {
-                    Image(systemName: "stop.circle.fill")
-                        .scaledFont(size: 24)
-                        .foregroundColor(.red.opacity(0.8))
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                } else {
+                    Button(action: { onStop?() }) {
+                        Image(systemName: "stop.circle.fill")
+                            .scaledFont(size: 24)
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else {
                 Button(action: handleSubmit) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -102,8 +106,8 @@ struct ChatInputView: View {
                 .disabled(!hasText)
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
         .onAppear {
-            isInputFocused = true
             // When ask mode is disabled, ensure we're always in act mode
             if !askModeEnabled {
                 mode = .act

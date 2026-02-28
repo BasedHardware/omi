@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.524+690
+version: 1.0.525+761
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -16,10 +16,6 @@ dependencies:
   provider: ^6.1.2
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
-
-  # Desktop
-  window_manager: 0.3.7
-  auto_updater: ^1.0.0
 
   # Localizations
   flutter_localizations:
@@ -140,9 +136,9 @@ dependencies:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
       ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
   disk_space_2: ^1.0.11
-  desktop_drop: ^0.7.0
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
+  marionette_flutter: ^0.3.0
 
 dependency_overrides:
   js: ^0.7.1

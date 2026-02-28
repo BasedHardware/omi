@@ -9,7 +9,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/pages/speech_profile/page.dart';
@@ -55,28 +54,28 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         }
                       },
                       child: Container(
-                        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          borderRadius: BorderRadius.all(Radius.circular(24)),
+                        ),
+                        margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
+                        padding: const EdgeInsets.all(16),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Row(
                                 children: [
-                                  const Icon(Icons.multitrack_audio, size: 18, color: Colors.white60),
-                                  const SizedBox(width: 12),
+                                  const Icon(Icons.multitrack_audio),
+                                  const SizedBox(width: 16),
                                   Text(
-                                    'Teach ${Env.appName} your voice',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                    context.l10n.teachOmiYourVoice,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16),
                                   ),
                                 ],
                               ),
                             ),
-                            const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 14),
+                            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                           ],
                         ),
                       ),

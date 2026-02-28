@@ -221,7 +221,7 @@ async fn create_conversation_from_segments(
 
         // Format timestamps
         let started_at = request.started_at.to_rfc3339();
-        let user_name = "User"; // TODO: Get from user profile
+        let user_name = user.name.as_deref().unwrap_or("User");
 
         llm_client
             .process_conversation(
@@ -439,7 +439,7 @@ async fn reprocess_conversation(
         .transcript_segments
         .iter()
         .map(|s| {
-            let speaker = if s.is_user { "User".to_string() } else { format!("Speaker {}", s.speaker_id) };
+            let speaker = if s.is_user { user.name.clone().unwrap_or_else(|| "User".to_string()) } else { format!("Speaker {}", s.speaker_id) };
             format!("{}: {}", speaker, s.text)
         })
         .collect::<Vec<_>>()
@@ -845,7 +845,7 @@ async fn merge_conversations(
                     &started_at_str,
                     "UTC",
                     &merged_conversation.language,
-                    "User",
+                    user.name.as_deref().unwrap_or("User"),
                     &[],
                     &existing_memories,
                 )

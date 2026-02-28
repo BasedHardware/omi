@@ -6,7 +6,7 @@ import CoreAudio
 /// Uses CoreAudio IOProc directly on the default input device to avoid
 /// AVAudioEngine's implicit aggregate device creation, which degrades
 /// system audio output quality (especially Bluetooth A2DP → SCO switch).
-class AudioCaptureService {
+class AudioCaptureService: @unchecked Sendable {
 
     // MARK: - Types
 
@@ -64,6 +64,10 @@ class AudioCaptureService {
     private var isReconfiguring = false
     private let listenerQueue = DispatchQueue(label: "com.omi.audiocapture.listener")
 
+    /// Dedicated queue for CoreAudio device operations (start/stop/reconfigure)
+    /// to avoid blocking the main thread on AudioDeviceStart/Stop calls.
+    private let audioQueue = DispatchQueue(label: "com.omi.audiocapture.device")
+
     // MARK: - Public Methods
 
     /// Check if microphone permission is granted
@@ -101,7 +105,7 @@ class AudioCaptureService {
     /// - Parameters:
     ///   - onAudioChunk: Callback receiving 16-bit PCM audio data chunks at 16kHz
     ///   - onAudioLevel: Optional callback receiving normalized audio level (0.0 - 1.0)
-    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) throws {
+    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
         guard !isCapturing else {
             log("AudioCapture: Already capturing")
             return
@@ -110,6 +114,28 @@ class AudioCaptureService {
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
 
+        // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
+        // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
+        // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
+        // mirroring the pattern already used in stopCapture() and handleConfigurationChange().
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            audioQueue.async { [weak self] in
+                guard let self else {
+                    continuation.resume()
+                    return
+                }
+                do {
+                    try self.startCaptureOnQueue()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
+    private func startCaptureOnQueue() throws {
         // 1. Get default input device
         var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -205,12 +231,12 @@ class AudioCaptureService {
 
         removePropertyListeners()
 
-        if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-            AudioDeviceStop(deviceID, procID)
-            AudioDeviceDestroyIOProcID(deviceID, procID)
-            ioProcID = nil
-        }
+        // Capture values before clearing state so we can dispatch the heavy
+        // CoreAudio calls off the main thread.
+        let procID = self.ioProcID
+        let devID = self.deviceID
 
+        ioProcID = nil
         deviceID = kAudioObjectUnknown
         isCapturing = false
         isReconfiguring = false
@@ -223,6 +249,14 @@ class AudioCaptureService {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
+
+        // AudioDeviceStop can block waiting for the IO thread — run off main thread
+        if let procID = procID, devID != kAudioObjectUnknown {
+            audioQueue.async {
+                AudioDeviceStop(devID, procID)
+                AudioDeviceDestroyIOProcID(devID, procID)
+            }
+        }
 
         log("AudioCapture: Stopped capturing")
     }
@@ -427,7 +461,7 @@ class AudioCaptureService {
         )
 
         let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -448,7 +482,7 @@ class AudioCaptureService {
         )
 
         let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -497,6 +531,7 @@ class AudioCaptureService {
     // MARK: - Device Change Handling
 
     /// Handle audio configuration change (e.g., user switched microphone)
+    /// Runs on audioQueue to avoid blocking the main thread.
     private func handleConfigurationChange() {
         guard isCapturing, !isReconfiguring else { return }
         isReconfiguring = true
@@ -527,7 +562,7 @@ class AudioCaptureService {
         }
 
         // Delay to let the audio hardware settle after device change
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        audioQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.reconfigureAfterChange(retryCount: 0)
         }
     }
@@ -630,7 +665,7 @@ class AudioCaptureService {
         )
 
         let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            DispatchQueue.main.async {
+            self?.audioQueue.async {
                 self?.handleConfigurationChange()
             }
         }
@@ -651,7 +686,7 @@ class AudioCaptureService {
         if retryCount < Self.maxRetries {
             let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
             log("AudioCapture: Retrying in \(delay)s...")
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            audioQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.reconfigureAfterChange(retryCount: retryCount + 1)
             }
         } else {
@@ -664,8 +699,11 @@ class AudioCaptureService {
         if isCapturing {
             removePropertyListeners()
             if let procID = ioProcID, deviceID != kAudioObjectUnknown {
-                AudioDeviceStop(deviceID, procID)
-                AudioDeviceDestroyIOProcID(deviceID, procID)
+                // Use sync in deinit to ensure cleanup completes before deallocation
+                audioQueue.sync {
+                    AudioDeviceStop(deviceID, procID)
+                    AudioDeviceDestroyIOProcID(deviceID, procID)
+                }
             }
         }
     }

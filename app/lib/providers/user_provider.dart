@@ -198,6 +198,14 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  /// Update local cached state without making an API call.
+  /// Used when the backend has already set the value (e.g., after language change).
+  void updateSingleLanguageModeLocally(bool value) {
+    _singleLanguageMode = value;
+    _syncToCache();
+    notifyListeners();
+  }
+
   Future<bool> setSingleLanguageMode(bool value) async {
     if (_isUpdatingSingleLanguageMode) return false;
 

@@ -63,4 +63,8 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'DISABLE_RATE_ON_STORE_ONBOARDING', obfuscate: false, defaultValue: false)
   final bool? disableRateOnStoreOnboarding = _DevEnv.disableRateOnStoreOnboarding;
+
+  @override
+  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
+  final String? stagingApiUrl = _DevEnv.stagingApiUrl;
 }

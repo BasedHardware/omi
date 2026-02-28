@@ -152,13 +152,15 @@ export function Sidebar({
 
   // Click outside handler to close menu and collapse if temporary
   useEffect(() => {
-    if (!showUserMenu || !isTemporaryExpand) return;
+    if (!showUserMenu) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
-        setIsExpanded(false);
-        setIsTemporaryExpand(false);
+        if (isTemporaryExpand) {
+          setIsExpanded(false);
+          setIsTemporaryExpand(false);
+        }
       }
     };
 
@@ -223,13 +225,14 @@ export function Sidebar({
           transform: !isDesktop ? `translateX(${isOpen ? 0 : -280}px)` : undefined,
           // Desktop: set width directly
           width: isDesktop ? sidebarWidth : 280,
+          willChange: !isDesktop ? 'transform' : undefined,
         }}
         className={cn(
           'bg-bg-secondary border-r border-white/[0.04]',
           'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
-          'transition-[transform,width] duration-150 ease-out',
+          'transition-transform duration-150 ease-out lg:transition-none',
           // Desktop: relative in flow
           'lg:relative lg:z-auto'
         )}
@@ -254,9 +257,11 @@ export function Sidebar({
                 height={showText ? 24 : 13}
                 className="object-contain"
               />
-              <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
-                Beta
-              </span>
+              {showText && (
+                <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                  Beta
+                </span>
+              )}
             </Link>
 
             {/* Mobile close button */}
@@ -337,73 +342,73 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className={cn(
-          'py-2 space-y-1',
-          showText ? 'px-3' : 'px-2'
-        )}>
-          {navItems.map((item) => {
-            const isActive =
-              pathname === item.href ||
-              (item.href === '/conversations' &&
-                pathname?.startsWith('/conversations'));
-            const showRecordingBadge = item.href === '/record' && isRecording;
-            const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
+        {/* Scrollable middle section */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <nav className={cn(
+            'py-2 space-y-1',
+            showText ? 'px-3' : 'px-2'
+          )}>
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href === '/conversations' &&
+                  pathname?.startsWith('/conversations'));
+              const showRecordingBadge = item.href === '/record' && isRecording;
+              const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => {
-                  if (!isDesktop) onClose();
-                }}
-                title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
-                className={cn(
-                  'flex items-center rounded-xl',
-                  'transition-all duration-150',
-                  showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
-                  isActive
-                    ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
-                  showComingSoon && 'opacity-60'
-                )}
-              >
-                <span className="flex-shrink-0 relative">
-                  {item.icon}
-                  {/* Recording badge - pulsing red dot */}
-                  {showRecordingBadge && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                    </span>
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    if (!isDesktop) onClose();
+                  }}
+                  title={!showText ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
+                  className={cn(
+                    'flex items-center rounded-xl border-l-[3px]',
+                    'transition-colors duration-150',
+                    showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
+                    isActive
+                      ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
+                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary border-transparent',
+                    showComingSoon && 'opacity-60'
                   )}
-                </span>
-                {showText && (
-                  <span className="font-medium flex items-center gap-2">
-                    {item.label}
-                    {showComingSoon && (
-                      <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
-                        Soon
+                >
+                  <span className="flex-shrink-0 relative">
+                    {item.icon}
+                    {/* Recording badge - pulsing red dot */}
+                    {showRecordingBadge && (
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
                       </span>
                     )}
                   </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Spacer to push footer to bottom */}
-        <div className="flex-1" />
+                  {showText && (
+                    <span className="font-medium flex items-center gap-2">
+                      {item.label}
+                      {showComingSoon && (
+                        <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                          Soon
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
 
         {/* Platform-aware app download banner */}
         {!mobileAppDismissed && (() => {
+
           const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
           const bannerHref = isMac ? 'https://macos.omi.me/' : 'https://onelink.to/rbsrxc';
           const bannerTitle = isMac ? 'Omi is 10X better on macOS' : 'Take Omi with you';
           const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
           return (
-            <div className={cn('px-3 pb-2', !showText && 'px-2')}>
+            <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
               <a
                 href={bannerHref}
                 target="_blank"

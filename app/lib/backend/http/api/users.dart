@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 
@@ -668,4 +669,30 @@ Future<bool> setMentorNotificationSettings(int frequency) async {
 
   Logger.debug('setMentorNotificationSettings response: ${response.body}');
   return response.statusCode == 200;
+}
+
+/// Streams the /v1/users/export endpoint directly to a file, avoiding loading
+/// the entire JSON into memory. Returns the file path on success, null on failure.
+Future<String?> exportUserDataToFile(String filePath) async {
+  try {
+    final response = await makeRawApiCall(
+      url: '${Env.apiBaseUrl}v1/users/export',
+      method: 'GET',
+    );
+    if (response.statusCode != 200) {
+      Logger.debug('exportUserDataToFile failed: ${response.statusCode}');
+      return null;
+    }
+    final file = File(filePath);
+    final sink = file.openWrite();
+    await for (final chunk in response.stream) {
+      sink.add(chunk);
+    }
+    await sink.flush();
+    await sink.close();
+    return filePath;
+  } catch (e) {
+    Logger.debug('exportUserDataToFile error: $e');
+    return null;
+  }
 }

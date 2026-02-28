@@ -15,6 +15,8 @@ class AssistantSettings {
     private let transcriptionLanguageKey = "transcriptionLanguage"
     private let transcriptionAutoDetectKey = "transcriptionAutoDetect"
     private let transcriptionVocabularyKey = "transcriptionVocabulary"
+    private let vadGateEnabledKey = "vadGateEnabled"
+    private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
 
     // MARK: - Default Values
 
@@ -24,8 +26,10 @@ class AssistantSettings {
     private let defaultScreenAnalysisEnabled = true
     private let defaultTranscriptionEnabled = true
     private let defaultTranscriptionLanguage = "en"
-    private let defaultTranscriptionAutoDetect = false
+    private let defaultTranscriptionAutoDetect = true
     private let defaultTranscriptionVocabulary: [String] = []
+    private let defaultVadGateEnabled = false
+    private let defaultBatchTranscriptionEnabled = false
 
     private init() {
         // Register defaults
@@ -38,6 +42,8 @@ class AssistantSettings {
             transcriptionLanguageKey: defaultTranscriptionLanguage,
             transcriptionAutoDetectKey: defaultTranscriptionAutoDetect,
             transcriptionVocabularyKey: defaultTranscriptionVocabulary,
+            vadGateEnabledKey: defaultVadGateEnabled,
+            batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
         ])
     }
 
@@ -177,6 +183,24 @@ class AssistantSettings {
         }
     }
 
+    /// Whether batch transcription mode is enabled (transcribes audio in chunks at silence boundaries)
+    var batchTranscriptionEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
+            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+        }
+    }
+
+    /// Whether local VAD gate is enabled to skip silence and reduce Deepgram usage
+    var vadGateEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: vadGateEnabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: vadGateEnabledKey)
+            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+        }
+    }
+
     /// Returns vocabulary with "Omi" always included (for DeepGram)
     var effectiveVocabulary: [String] {
         var vocab = Set(transcriptionVocabulary)
@@ -194,6 +218,8 @@ class AssistantSettings {
         transcriptionLanguage = defaultTranscriptionLanguage
         transcriptionAutoDetect = defaultTranscriptionAutoDetect
         transcriptionVocabulary = defaultTranscriptionVocabulary
+        vadGateEnabled = defaultVadGateEnabled
+        batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
     }
 
     // MARK: - Supported Languages

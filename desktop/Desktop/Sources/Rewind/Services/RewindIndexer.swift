@@ -31,6 +31,16 @@ actor RewindIndexer {
 
     private init() {}
 
+    /// Reset the indexer state so it re-initializes on the next frame.
+    /// Called during sign-out to avoid stale `isInitialized = true` after the database is closed.
+    func reset() {
+        isInitialized = false
+        isInitializing = false
+        initFailureCount = 0
+        nextRetryTime = .distantPast
+        log("RewindIndexer: Reset (will re-initialize on next frame)")
+    }
+
     /// Initialize all Rewind services
     func initialize() async throws {
         guard !isInitialized, !isInitializing else { return }
@@ -134,10 +144,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }
@@ -147,6 +162,10 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: frame.captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            // since there's no video chunk to load later
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -188,8 +207,8 @@ actor RewindIndexer {
                 appName: frame.appName,
                 windowTitle: frame.windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
@@ -226,6 +245,9 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -266,8 +288,8 @@ actor RewindIndexer {
                 appName: appName,
                 windowTitle: windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,
@@ -298,10 +320,15 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Convert JPEG to CGImage for video encoding
-            guard let nsImage = NSImage(data: frame.jpegData),
-                  let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            else {
+            // Convert JPEG to CGImage for video encoding.
+            // Wrap in autoreleasepool so the NSImage and its internal Obj-C
+            // representations are released promptly instead of accumulating.
+            let cgImage: CGImage? = autoreleasepool {
+                guard let nsImage = NSImage(data: frame.jpegData) else { return nil }
+                return nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            }
+
+            guard let cgImage = cgImage else {
                 logError("RewindIndexer: Failed to create CGImage from frame data")
                 return
             }
@@ -311,6 +338,9 @@ actor RewindIndexer {
                 image: cgImage,
                 timestamp: frame.captureTime
             )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
@@ -360,8 +390,8 @@ actor RewindIndexer {
                 appName: frame.appName,
                 windowTitle: frame.windowTitle,
                 imagePath: "",
-                videoChunkPath: encodedFrame?.videoChunkPath,
-                frameOffset: encodedFrame?.frameOffset,
+                videoChunkPath: encodedFrame.videoChunkPath,
+                frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
                 isIndexed: isIndexed,

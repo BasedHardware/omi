@@ -5,7 +5,6 @@ import app_links
 import WatchConnectivity
 import AVFoundation
 import Speech
-import EventKit
 
 extension FlutterError: Error {}
 
@@ -16,8 +15,6 @@ extension FlutterError: Error {}
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
-  private static let iso8601DateFormatter = ISO8601DateFormatter()
-
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -78,6 +75,17 @@ extension FlutterError: Error {}
         speechHandler.handle(call, result: result)
     }
 
+    // TestFlight environment detection
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
+    envChannel.setMethodCallHandler { (call, result) in
+        if call.method == "isTestFlight" {
+            let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
+            result(isTestFlight)
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
 
@@ -121,15 +129,11 @@ extension FlutterError: Error {}
 
   // MARK: - Silent Push for Apple Reminders Auto-Sync
 
-  private let syncEventStore = EKEventStore()
-
   override func application(
       _ application: UIApplication,
       didReceiveRemoteNotification userInfo: [AnyHashable: Any],
       fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      print("AppDelegate: Received remote notification: \(userInfo)")
-
       // Check if it's Apple Reminders sync
       if let type = userInfo["type"] as? String, type == "apple_reminders_sync" {
           handleAppleRemindersSync(userInfo: userInfo, completionHandler: completionHandler)
@@ -151,60 +155,20 @@ extension FlutterError: Error {}
       userInfo: [AnyHashable: Any],
       completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-      guard let actionItemId = userInfo["action_item_id"] as? String,
-            let description = userInfo["description"] as? String else {
+      guard let itemsJson = userInfo["items"] as? String else {
           completionHandler(.failed)
           return
       }
 
-      // Check permission - handle iOS 17+ new authorization states
-      let status = EKEventStore.authorizationStatus(for: .reminder)
+      let exportedIds = appleRemindersService.syncBatchFromJSON(itemsJson)
 
-      // iOS 17+ uses .fullAccess and .writeOnly, older iOS uses .authorized
-      var hasAccess = false
-      if #available(iOS 17.0, *) {
-          hasAccess = status == .fullAccess || status == .writeOnly
-      } else {
-          hasAccess = status == .authorized
-      }
-
-      guard hasAccess else {
-          completionHandler(.failed)
-          return
-      }
-
-      // Parse due date
-      let dueDate: Date? = {
-          if let dueDateStr = userInfo["due_at"] as? String, !dueDateStr.isEmpty {
-              return AppDelegate.iso8601DateFormatter.date(from: dueDateStr)
-          }
-          return nil
-      }()
-
-      // Create reminder
-      let reminder = EKReminder(eventStore: syncEventStore)
-      reminder.title = description
-      reminder.notes = "From Omi"
-      reminder.calendar = syncEventStore.defaultCalendarForNewReminders()
-
-      if let due = dueDate {
-          reminder.dueDateComponents = Calendar.current.dateComponents(
-              [.year, .month, .day, .hour, .minute], from: due
-          )
-      }
-
-      do {
-          try syncEventStore.save(reminder, commit: true)
-
-          // Notify Flutter to mark as exported via API
+      if !exportedIds.isEmpty {
           DispatchQueue.main.async {
-              self.appleRemindersChannel?.invokeMethod("markExported", arguments: ["action_item_id": actionItemId])
+              self.appleRemindersChannel?.invokeMethod("markExportedBatch", arguments: ["action_item_ids": exportedIds])
           }
-
-          completionHandler(.newData)
-      } catch {
-          completionHandler(.failed)
       }
+
+      completionHandler(exportedIds.isEmpty ? .noData : .newData)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {

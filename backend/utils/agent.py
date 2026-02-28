@@ -7,9 +7,11 @@ from agents.model_settings import Reasoning
 
 from models.app import App
 from models.chat import Message, ChatSession, MessageType
-from utils.config import get_app_name
 from utils.retrieval.graph import AsyncStreamingCallback
 from openai.types.responses import ResponseTextDeltaEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 # omi_documentation: dict = get_github_docs_content()
 # omi_documentation_str = "\n\n".join(
@@ -32,14 +34,13 @@ async def run(
     plugin: Optional[App] = None,
     stream_callback: Optional[AsyncStreamingCallback] = None,
 ):
-    app_name = get_app_name()
     docs_agent = Agent(
-        name=f"{app_name} Documentation Agent",
+        name="Omi Documentation Agent",
         instructions=omi_documentation_prompt,
         model="o4-mini",
     )
     omi_agent = Agent(
-        name=f"{app_name} Agent",
+        name="Omi Agent",
         instructions=f"You are a helpful assistant that answers questions from the user {uid}, using the tools you were provided.",
         mcp_servers=[mcp_server],
         model="o4-mini",
@@ -76,7 +77,7 @@ async def execute_agent_chat_stream(
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[str, None]:
-    print("execute_agent_chat_stream app: ", app.id if app else "<none>")
+    logger.info(f'execute_agent_chat_stream app:  {app.id if app else "<none>"}')
     callback = AsyncStreamingCallback()
 
     async with MCPServerStdio(
@@ -122,17 +123,17 @@ async def send_single_message():
         cache_tools_list=True,
         params={"command": "uvx", "args": ["mcp-server-omi"]},
     ) as server:
-        with trace(workflow_name=f"{get_app_name()} Agent"):
+        with trace(workflow_name="Omi Agent"):
             await run(
                 server,
                 "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",
                 "What do you know about me?",
-                lambda x: print(x),
+                lambda x: logger.info(x),
             )
 
 
 async def interactive_chat_stream():
-    print(f"Starting interactive chat with {get_app_name()} Agent. Type 'exit' to quit.")
+    logger.info("Starting interactive chat with Omi Agent. Type 'exit' to quit.")
     async with MCPServerStdio(
         cache_tools_list=True,
         params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
@@ -142,9 +143,9 @@ async def interactive_chat_stream():
             if user_input.lower() == "exit":
                 break
 
-            print(f"\n{get_app_name()}: ", end="", flush=True)
+            logger.info("\nOmi: ")
 
-            with trace(workflow_name=f"{get_app_name()} Agent"):
+            with trace(workflow_name="Omi Agent"):
                 await run(
                     server,
                     "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     async def main():
         async for chunk in execute_agent_chat_stream(uid="viUv7GtdoHXbK1UBCDlPuTDuPgJ2", messages=messages):
             if chunk:
-                print(chunk, end="", flush=True)
-        print()  # for newline after stream ends
+                logger.info(chunk)
+        logger.info("")  # for newline after stream ends
 
     asyncio.run(main())

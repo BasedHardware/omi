@@ -32,6 +32,7 @@ actor FocusAssistant: ProactiveAssistant {
     private var lastProcessedFrameNum = 0
     private var processingTask: Task<Void, Never>?
     private var pendingTasks: Set<Task<Void, Never>> = []
+    private let maxPendingTasks = 3
     private var currentApp: String?
 
     // MARK: - Smart Analysis Filtering
@@ -103,6 +104,12 @@ actor FocusAssistant: ProactiveAssistant {
 
         for await frame in frameStream {
             guard isRunning else { break }
+
+            // Backpressure: skip frame if too many analyses in flight
+            if pendingTasks.count >= maxPendingTasks {
+                continue
+            }
+
             // Fire off analysis in background (don't wait) - like Python version
             let task = Task { [weak self] () -> Void in
                 await self?.processFrame(frame)
@@ -132,6 +139,12 @@ actor FocusAssistant: ProactiveAssistant {
     }
 
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
+        // Skip lock screen / login screen — no useful content to analyze
+        let skipApps = ["loginwindow", "ScreenSaverEngine"]
+        if skipApps.contains(frame.appName) {
+            return nil
+        }
+
         // Skip apps excluded from focus analysis
         let excluded = await MainActor.run { FocusAssistantSettings.shared.isAppExcluded(frame.appName) }
         if excluded {
@@ -505,19 +518,14 @@ actor FocusAssistant: ProactiveAssistant {
             required: ["status", "app_or_site", "description"]
         )
 
-        do {
-            let responseText = try await geminiClient.sendRequest(
-                prompt: prompt,
-                imageData: jpegData,
-                systemPrompt: currentSystemPrompt,
-                responseSchema: responseSchema
-            )
+        let responseText = try await geminiClient.sendRequest(
+            prompt: prompt,
+            imageData: jpegData,
+            systemPrompt: currentSystemPrompt,
+            responseSchema: responseSchema
+        )
 
-            return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
-        } catch {
-            logError("Focus analysis error", error: error)
-            return nil
-        }
+        return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
     }
 
     // MARK: - Storage

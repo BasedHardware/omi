@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 from models.conversation import Conversation, Message, ConversationPhoto
 
-
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
 FREEMIUM_ACTION_NONE = "none"

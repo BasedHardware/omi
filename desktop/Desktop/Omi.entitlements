@@ -12,5 +12,9 @@
     <true/>
     <key>com.apple.security.device.screen-capture</key>
     <true/>
+    <key>com.apple.developer.applesignin</key>
+    <array>
+        <string>Default</string>
+    </array>
 </dict>
 </plist>

@@ -9,7 +9,7 @@ class AppLocalizationsMs extends AppLocalizations {
   AppLocalizationsMs([String locale = 'ms']) : super(locale);
 
   @override
-  String get appTitle => 'Nooto';
+  String get appTitle => 'Omi';
 
   @override
   String get conversationTab => 'Perbualan';
@@ -123,7 +123,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get editPerson => 'Edit Orang';
 
   @override
-  String get createPersonHint => 'Cipta orang baharu dan latih Nooto untuk mengenali pertuturan mereka juga!';
+  String get createPersonHint => 'Cipta orang baharu dan latih Omi untuk mengenali pertuturan mereka juga!';
 
   @override
   String get speechProfile => 'Profil Pertuturan';
@@ -162,7 +162,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get couldNotAccessFile => 'Tidak dapat mengakses fail yang dipilih';
 
   @override
-  String get askOmi => 'Tanya Nooto';
+  String get askOmi => 'Tanya Omi';
 
   @override
   String get done => 'Selesai';
@@ -262,7 +262,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noMessagesYet => 'Tiada mesej lagi!\nMengapa tidak mulakan perbualan?';
 
   @override
-  String get deletingMessages => 'Memadam mesej anda dari ingatan Nooto...';
+  String get deletingMessages => 'Memadam mesej anda dari ingatan Omi...';
 
   @override
   String get messageCopied => '✨ Mesej disalin ke papan keratan';
@@ -292,7 +292,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get maxFilesLimit => 'Anda hanya boleh memuat naik 4 fail pada satu masa';
 
   @override
-  String get chatWithOmi => 'Sembang dengan Nooto';
+  String get chatWithOmi => 'Sembang dengan Omi';
 
   @override
   String get apps => 'Aplikasi';
@@ -323,7 +323,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Tidak dapat mendapatkan aplikasi :(\n\nSila semak sambungan internet anda dan cuba lagi.';
 
   @override
-  String get aboutOmi => 'Tentang Nooto';
+  String get aboutOmi => 'Tentang Omi';
 
   @override
   String get privacyPolicy => 'Dasar Privasi';
@@ -438,7 +438,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get developerSettings => 'Tetapan Pembangun';
 
   @override
-  String get getOmiForMac => 'Dapatkan Nooto untuk Mac';
+  String get getOmiForMac => 'Dapatkan Omi untuk Mac';
 
   @override
   String get referralProgram => 'Program Rujukan';
@@ -457,7 +457,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get privacyIntro =>
-      'Di Nooto, kami komited untuk melindungi privasi anda. Halaman ini membolehkan anda mengawal cara data anda disimpan dan digunakan.';
+      'Di Omi, kami komited untuk melindungi privasi anda. Halaman ini membolehkan anda mengawal cara data anda disimpan dan digunakan.';
 
   @override
   String get learnMore => 'Ketahui lebih lanjut...';
@@ -528,7 +528,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get unpairAndForget => 'Nyahpasang dan Lupakan Peranti';
 
   @override
-  String get deviceDisconnectedMessage => 'Nooto anda telah diputuskan sambungan 😔';
+  String get deviceDisconnectedMessage => 'Omi anda telah diputuskan sambungan 😔';
 
   @override
   String get deviceUnpairedMessage =>
@@ -545,7 +545,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceNotConnected => 'Peranti Tidak Disambungkan';
 
   @override
-  String get connectDeviceMessage => 'Sambungkan peranti Nooto anda untuk mengakses\ntetapan peranti dan penyesuaian';
+  String get connectDeviceMessage => 'Sambungkan peranti Omi anda untuk mengakses\ntetapan peranti dan penyesuaian';
 
   @override
   String get deviceInfoSection => 'Maklumat Peranti';
@@ -678,7 +678,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get docs => 'Dokumentasi';
 
   @override
-  String get yourOmiInsights => 'Wawasan Nooto Anda';
+  String get yourOmiInsights => 'Wawasan Omi Anda';
 
   @override
   String get today => 'Hari ini';
@@ -697,13 +697,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get startConversationToSeeInsights =>
-      'Mulakan perbualan dengan Nooto.untuk melihat wawasan penggunaan anda di sini.';
+      'Mulakan perbualan dengan Omi\nuntuk melihat wawasan penggunaan anda di sini.';
 
   @override
   String get listening => 'Mendengar';
 
   @override
-  String get listeningSubtitle => 'Jumlah masa Nooto telah mendengar secara aktif.';
+  String get listeningSubtitle => 'Jumlah masa Omi telah mendengar secara aktif.';
 
   @override
   String get understanding => 'Memahami';
@@ -759,7 +759,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get shareStatsMessage => 'Berkongsi statistik Nooto saya! (omi.me - pembantu AI anda yang sentiasa aktif)';
+  String get shareStatsMessage => 'Berkongsi statistik Omi saya! (omi.me - pembantu AI anda yang sentiasa aktif)';
 
   @override
   String get sharePeriodToday => 'Hari ini, omi telah:';
@@ -806,7 +806,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noLogFilesFound => 'Tiada fail log ditemui.';
 
   @override
-  String get omiDebugLog => 'Log nyahpepijat Nooto';
+  String get omiDebugLog => 'Log nyahpepijat Omi';
 
   @override
   String get logShared => 'Log dikongsi';
@@ -830,7 +830,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get exportDataDesc => 'Eksport perbualan ke fail JSON';
 
   @override
-  String get exportedConversations => 'Perbualan Dieksport daripada Nooto';
+  String get exportedConversations => 'Perbualan Dieksport daripada Omi';
 
   @override
   String get exportShared => 'Eksport dikongsi';
@@ -893,7 +893,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get useMcpApiKey => 'Gunakan kunci API MCP anda';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => 'Acara Perbualan';
@@ -1012,10 +1012,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addWordsDesc => 'Nama, istilah, atau perkataan luar biasa';
 
   @override
-  String get vocabularyHint => 'Nooto, Callie, OpenAI';
+  String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Sambung';
 
   @override
   String get comingSoon => 'Akan Datang';
@@ -1057,7 +1057,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String authAccessMessage(String appName) {
-    return 'Anda perlu memberi kebenaran kepada Nooto untuk mengakses data $appName anda. Ini akan membuka pelayar anda untuk pengesahan.';
+    return 'Anda perlu memberi kebenaran kepada Omi untuk mengakses data $appName anda. Ini akan membuka pelayar anda untuk pengesahan.';
   }
 
   @override
@@ -1153,7 +1153,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get editName => 'Sunting Nama';
 
   @override
-  String get howShouldOmiCallYou => 'Apa yang Nooto patut panggil anda?';
+  String get howShouldOmiCallYou => 'Apa yang Omi patut panggil anda?';
 
   @override
   String get enterYourName => 'Masukkan nama anda';
@@ -1428,7 +1428,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Anda perlu memberi kebenaran kepada Nooto untuk mencipta tugasan dalam akaun $appName anda. Ini akan membuka pelayar anda untuk pengesahan.';
+    return 'Anda perlu memberi kebenaran kepada Omi untuk mencipta tugasan dalam akaun $appName anda. Ini akan membuka pelayar anda untuk pengesahan.';
   }
 
   @override
@@ -1469,7 +1469,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get freeMinutesMonth => '1,200 minit percuma/bulan disertakan. Tanpa had dengan ';
 
   @override
-  String get omiUnlimited => 'Nooto Tanpa Had';
+  String get omiUnlimited => 'Omi Tanpa Had';
 
   @override
   String get hostRequired => 'Hos diperlukan';
@@ -1587,11 +1587,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String deviceUsesCodec(String device, String reason) {
-    return '$device menggunakan $reason. Nooto akan digunakan.';
+    return '$device menggunakan $reason. Omi akan digunakan.';
   }
 
   @override
-  String get omiTranscription => 'Transkripsi Nooto';
+  String get omiTranscription => 'Transkripsi Omi';
 
   @override
   String get bestInClassTranscription => 'Transkripsi terbaik dalam kelasnya tanpa persediaan';
@@ -1743,7 +1743,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get bluetoothNeeded =>
-      'Nooto memerlukan Bluetooth untuk menyambung ke peranti boleh pakai anda. Sila dayakan Bluetooth dan cuba lagi.';
+      'Omi memerlukan Bluetooth untuk menyambung ke peranti boleh pakai anda. Sila dayakan Bluetooth dan cuba lagi.';
 
   @override
   String get contactSupport => 'Hubungi Sokongan?';
@@ -1758,7 +1758,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get backgroundActivity => 'Aktiviti latar belakang';
 
   @override
-  String get backgroundActivityDesc => 'Biarkan Nooto berjalan di latar belakang untuk kestabilan yang lebih baik';
+  String get backgroundActivityDesc => 'Biarkan Omi berjalan di latar belakang untuk kestabilan yang lebih baik';
 
   @override
   String get locationAccess => 'Akses lokasi';
@@ -1787,7 +1787,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sila pergi ke tetapan peranti dan tetapkan kebenaran lokasi kepada \"Sentiasa Benarkan\"';
 
   @override
-  String get lovingOmi => 'Suka Nooto?';
+  String get lovingOmi => 'Suka Omi?';
 
   @override
   String get leaveReviewIos =>
@@ -1807,7 +1807,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get maybeLater => 'Mungkin Kemudian';
 
   @override
-  String get speechProfileIntro => 'Nooto perlu mempelajari matlamat dan suara anda. Anda boleh mengubahnya kemudian.';
+  String get speechProfileIntro => 'Omi perlu mempelajari matlamat dan suara anda. Anda boleh mengubahnya kemudian.';
 
   @override
   String get getStarted => 'Mulakan';
@@ -1861,7 +1861,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tryAgain => 'Cuba Lagi';
 
   @override
-  String get connectOmiOmiGlass => 'Sambung Nooto / NootoGlass';
+  String get connectOmiOmiGlass => 'Sambung Omi / OmiGlass';
 
   @override
   String get continueWithoutDevice => 'Teruskan Tanpa Peranti';
@@ -1898,7 +1898,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get termsOfUse => 'Terma Penggunaan';
 
   @override
-  String get omiYourAiCompanion => 'Nooto – Sahabat AI Anda';
+  String get omiYourAiCompanion => 'Omi – Sahabat AI Anda';
 
   @override
   String get captureEveryMoment => 'Tangkap setiap detik. Dapatkan ringkasan dikuasakan AI.\nJangan ambil nota lagi.';
@@ -1914,7 +1914,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get permissionGrantedNow =>
-      'Kebenaran diberikan! Sekarang:\n\nBuka aplikasi Nooto pada jam tangan anda dan ketik \"Teruskan\" di bawah';
+      'Kebenaran diberikan! Sekarang:\n\nBuka aplikasi Omi pada jam tangan anda dan ketik \"Teruskan\" di bawah';
 
   @override
   String get needMicrophonePermission =>
@@ -1928,7 +1928,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get troubleshootingSteps =>
-      'Penyelesaian Masalah:\n\n1. Pastikan Nooto dipasang pada jam tangan anda\n2. Buka aplikasi Nooto pada jam tangan anda\n3. Cari popup kebenaran\n4. Ketik \"Benarkan\" apabila diminta\n5. Aplikasi pada jam tangan anda akan ditutup - buka semula\n6. Kembali dan ketik \"Teruskan\" pada iPhone anda';
+      'Penyelesaian Masalah:\n\n1. Pastikan Omi dipasang pada jam tangan anda\n2. Buka aplikasi Omi pada jam tangan anda\n3. Cari popup kebenaran\n4. Ketik \"Benarkan\" apabila diminta\n5. Aplikasi pada jam tangan anda akan ditutup - buka semula\n6. Kembali dan ketik \"Teruskan\" pada iPhone anda';
 
   @override
   String get recordingStartedSuccessfully => 'Rakaman bermula dengan jayanya!';
@@ -2082,17 +2082,17 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addFirstMemory => 'Tambah ingatan pertama anda';
 
   @override
-  String get clearMemoryTitle => 'Kosongkan Ingatan Nooto';
+  String get clearMemoryTitle => 'Kosongkan Ingatan Omi';
 
   @override
   String get clearMemoryMessage =>
-      'Adakah anda pasti mahu mengosongkan ingatan Nooto? Tindakan ini tidak boleh dibatalkan.';
+      'Adakah anda pasti mahu mengosongkan ingatan Omi? Tindakan ini tidak boleh dibatalkan.';
 
   @override
   String get clearMemoryButton => 'Kosongkan Memori';
 
   @override
-  String get memoryClearedSuccess => 'Ingatan Nooto tentang anda telah dikosongkan';
+  String get memoryClearedSuccess => 'Ingatan Omi tentang anda telah dikosongkan';
 
   @override
   String get noMemoriesToDelete => 'Tiada memori untuk dipadam';
@@ -2240,7 +2240,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get translationNoticeMessage =>
-      'Nooto menterjemah perbualan ke bahasa utama anda. Kemas kini pada bila-bila masa di Tetapan → Profil.';
+      'Omi menterjemah perbualan ke bahasa utama anda. Kemas kini pada bila-bila masa di Tetapan → Profil.';
 
   @override
   String get pleaseCheckInternetConnection => 'Sila semak sambungan internet anda dan cuba lagi';
@@ -2275,7 +2275,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get folderName => 'Nama folder';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Penerangan (pilihan)';
 
   @override
   String get failedToDeleteFolder => 'Gagal memadam folder';
@@ -2420,7 +2420,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get privacyPolicyTitle => 'Dasar Privasi';
 
   @override
-  String get omiSttProvider => 'Nooto';
+  String get omiSttProvider => 'Omi';
 
   @override
   String labelCopied(String label) {
@@ -2577,7 +2577,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get checksForAudioFiles => 'Memeriksa fail audio pada Kad SD';
 
   @override
-  String get omiSyncsAudioFiles => 'Nooto kemudian menyegerakkan fail audio dengan pelayan';
+  String get omiSyncsAudioFiles => 'Omi kemudian menyegerakkan fail audio dengan pelayan';
 
   @override
   String get serverProcessesAudio => 'Pelayan memproses fail audio dan mencipta kenangan';
@@ -2587,10 +2587,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get welcomeToOmiDescription =>
-      'Selamat datang ke Nooto! Pendamping AI anda bersedia membantu anda dengan perbualan, tugasan, dan banyak lagi.';
+      'Selamat datang ke Omi! Pendamping AI anda bersedia membantu anda dengan perbualan, tugasan, dan banyak lagi.';
 
   @override
-  String get startUsingOmi => 'Mula Menggunakan Nooto';
+  String get startUsingOmi => 'Mula Menggunakan Omi';
 
   @override
   String get back => 'Kembali';
@@ -2666,8 +2666,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewAndManageConversations => 'Semak dan urus perbualan yang dirakam';
 
   @override
-  String get startCapturingConversations =>
-      'Mula tangkap perbualan dengan peranti Nooto anda untuk melihatnya di sini.';
+  String get startCapturingConversations => 'Mula tangkap perbualan dengan peranti Omi anda untuk melihatnya di sini.';
 
   @override
   String get useMobileAppToCapture => 'Gunakan aplikasi mudah alih anda untuk merakam audio';
@@ -2683,7 +2682,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Tiada tugasan untuk hari ini.\\nTanya Nooto untuk lebih banyak tugasan atau cipta secara manual.';
+      'Tiada tugasan untuk hari ini.\\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.';
 
   @override
   String get dailyScore => 'SKOR HARIAN';
@@ -2832,7 +2831,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get createNewApp => 'Cipta Aplikasi Baharu';
 
   @override
-  String get buildSubmitCustomOmiApp => 'Bina dan hantar aplikasi Nooto tersuai anda';
+  String get buildSubmitCustomOmiApp => 'Bina dan hantar aplikasi Omi tersuai anda';
 
   @override
   String get submittingYourApp => 'Menghantar aplikasi anda...';
@@ -2880,7 +2879,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get submitAppTermsAgreement =>
-      'Dengan menghantar aplikasi ini, saya bersetuju dengan Terma Perkhidmatan dan Dasar Privasi Nooto AI';
+      'Dengan menghantar aplikasi ini, saya bersetuju dengan Terma Perkhidmatan dan Dasar Privasi Omi AI';
 
   @override
   String get submitApp => 'Hantar Aplikasi';
@@ -2925,7 +2924,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dataAccessWarning =>
-      'Apl ini akan mengakses data anda. Nooto AI tidak bertanggungjawab terhadap bagaimana data anda digunakan, diubah suai, atau dipadamkan oleh apl ini';
+      'Apl ini akan mengakses data anda. Omi AI tidak bertanggungjawab terhadap bagaimana data anda digunakan, diubah suai, atau dipadamkan oleh apl ini';
 
   @override
   String get installApp => 'Pasang Apl';
@@ -3276,7 +3275,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get upgradeToPro => 'Naik taraf ke Pro';
 
   @override
-  String get getOmiDevice => 'Dapatkan Peranti Nooto';
+  String get getOmiDevice => 'Dapatkan Peranti Omi';
 
   @override
   String get wearableAiCompanion => 'Teman AI boleh pakai';
@@ -3343,7 +3342,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get setAllMemoriesToPublic => 'Tetapkan semua memori kepada keterlihatan awam';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Buang semua memori dari Nooto secara kekal';
+  String get permanentlyRemoveAllMemories => 'Buang semua memori dari Omi secara kekal';
 
   @override
   String get allMemoriesAreNowPrivate => 'Semua memori kini peribadi';
@@ -3352,18 +3351,18 @@ class AppLocalizationsMs extends AppLocalizations {
   String get allMemoriesAreNowPublic => 'Semua memori kini awam';
 
   @override
-  String get clearOmisMemory => 'Kosongkan Memori Nooto';
+  String get clearOmisMemory => 'Kosongkan Memori Omi';
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Adakah anda pasti mahu mengosongkan memori Nooto? Tindakan ini tidak boleh dibatalkan dan akan memadam semua $count memori secara kekal.';
+    return 'Adakah anda pasti mahu mengosongkan memori Omi? Tindakan ini tidak boleh dibatalkan dan akan memadam semua $count memori secara kekal.';
   }
 
   @override
-  String get omisMemoryCleared => 'Memori Nooto tentang anda telah dikosongkan';
+  String get omisMemoryCleared => 'Memori Omi tentang anda telah dikosongkan';
 
   @override
-  String get welcomeToOmi => 'Selamat datang ke Nooto';
+  String get welcomeToOmi => 'Selamat datang ke Omi';
 
   @override
   String get continueWithApple => 'Teruskan dengan Apple';
@@ -3409,7 +3408,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get chooseYourLanguage => 'Pilih bahasa anda';
 
   @override
-  String get selectPreferredLanguageForBestExperience => 'Pilih bahasa pilihan anda untuk pengalaman Nooto terbaik';
+  String get selectPreferredLanguageForBestExperience => 'Pilih bahasa pilihan anda untuk pengalaman Omi terbaik';
 
   @override
   String get searchLanguages => 'Cari bahasa...';
@@ -3428,7 +3427,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get tellUsHowYouWouldLikeToBeAddressed =>
-      'Beritahu kami bagaimana anda ingin dipanggil. Ini membantu memperibadikan pengalaman Nooto anda.';
+      'Beritahu kami bagaimana anda ingin dipanggil. Ini membantu memperibadikan pengalaman Omi anda.';
 
   @override
   String charactersCount(int count) {
@@ -3436,7 +3435,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get enableFeaturesForBestExperience => 'Dayakan ciri untuk pengalaman Nooto terbaik pada peranti anda.';
+  String get enableFeaturesForBestExperience => 'Dayakan ciri untuk pengalaman Omi terbaik pada peranti anda.';
 
   @override
   String get microphoneAccess => 'Akses Mikrofon';
@@ -3446,7 +3445,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get microphoneAccessDescription =>
-      'Nooto memerlukan akses mikrofon untuk merakam perbualan anda dan menyediakan transkripsi.';
+      'Omi memerlukan akses mikrofon untuk merakam perbualan anda dan menyediakan transkripsi.';
 
   @override
   String get screenRecording => 'Rakaman Skrin';
@@ -3456,7 +3455,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get screenRecordingDescription =>
-      'Nooto memerlukan kebenaran rakaman skrin untuk menangkap audio sistem dari mesyuarat berasaskan pelayar anda.';
+      'Omi memerlukan kebenaran rakaman skrin untuk menangkap audio sistem dari mesyuarat berasaskan pelayar anda.';
 
   @override
   String get accessibility => 'Kebolehcapaian';
@@ -3466,7 +3465,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get accessibilityDescription =>
-      'Nooto memerlukan kebenaran kebolehcapaian untuk mengesan apabila anda menyertai mesyuarat Zoom, Meet, atau Teams dalam pelayar anda.';
+      'Omi memerlukan kebenaran kebolehcapaian untuk mengesan apabila anda menyertai mesyuarat Zoom, Meet, atau Teams dalam pelayar anda.';
 
   @override
   String get pleaseWait => 'Sila tunggu...';
@@ -3496,16 +3495,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get changeYourName => 'Tukar Nama Anda';
 
   @override
-  String get manageYourOmiPersona => 'Urus persona Nooto anda';
+  String get manageYourOmiPersona => 'Urus persona Omi anda';
 
   @override
   String get voiceAndPeople => 'Suara & Orang';
 
   @override
-  String get teachOmiYourVoice => 'Ajar Nooto suara anda';
+  String get teachOmiYourVoice => 'Ajar Omi suara anda';
 
   @override
-  String get tellOmiWhoSaidIt => 'Beritahu Nooto siapa yang mengatakannya 🗣️';
+  String get tellOmiWhoSaidIt => 'Beritahu Omi siapa yang mengatakannya 🗣️';
 
   @override
   String get payment => 'Pembayaran';
@@ -3517,7 +3516,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get preferences => 'Keutamaan';
 
   @override
-  String get helpImproveOmiBySharing => 'Bantu tingkatkan Nooto dengan berkongsi data analitik tanpa nama';
+  String get helpImproveOmiBySharing => 'Bantu tingkatkan Omi dengan berkongsi data analitik tanpa nama';
 
   @override
   String get deleteAccount => 'Padam Akaun';
@@ -3543,7 +3542,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get mcpDescription =>
-      'Untuk menyambungkan Nooto dengan aplikasi lain untuk membaca, mencari, dan mengurus kenangan dan perbualan anda. Cipta kunci untuk bermula.';
+      'Untuk menyambungkan Omi dengan aplikasi lain untuk membaca, mencari, dan mengurus kenangan dan perbualan anda. Cipta kunci untuk bermula.';
 
   @override
   String get apiKeys => 'Kunci API';
@@ -3578,7 +3577,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get triggersWhenDaySummaryGenerated => 'Dicetuskan apabila ringkasan hari dijana.';
 
   @override
-  String get tryLatestExperimentalFeatures => 'Cuba ciri eksperimental terkini daripada Pasukan Nooto.';
+  String get tryLatestExperimentalFeatures => 'Cuba ciri eksperimental terkini daripada Pasukan Omi.';
 
   @override
   String get transcriptionServiceDiagnosticStatus => 'Status diagnostik perkhidmatan transkripsi';
@@ -3650,7 +3649,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get letOmiChooseAutomatically => 'Biarkan Nooto memilih aplikasi terbaik secara automatik';
+  String get letOmiChooseAutomatically => 'Biarkan Omi memilih aplikasi terbaik secara automatik';
 
   @override
   String get deleteConversationConfirmation =>
@@ -3849,7 +3848,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get customVocabularyHeader => 'PERBENDAHARAAN KATA TERSUAI';
 
   @override
-  String get addWordsDescription => 'Tambah perkataan yang Nooto harus kenali semasa transkripsi.';
+  String get addWordsDescription => 'Tambah perkataan yang Omi harus kenali semasa transkripsi.';
 
   @override
   String get enterWordsHint => 'Masukkan perkataan (dipisahkan koma)';
@@ -3937,7 +3936,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Ini akan memadam semua data graf pengetahuan yang diperoleh. Ingatan asal anda kekal selamat.';
 
   @override
-  String get connectOmiWithAI => 'Sambungkan Nooto dengan pembantu AI';
+  String get connectOmiWithAI => 'Sambungkan Omi dengan pembantu AI';
 
   @override
   String get noAPIKeys => 'Tiada kunci API. Cipta satu untuk bermula.';
@@ -4137,7 +4136,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dataAccessNoticeDescription =>
-      'Aplikasi ini akan mengakses data anda. Nooto AI tidak bertanggungjawab atas cara data anda digunakan oleh aplikasi ini.';
+      'Aplikasi ini akan mengakses data anda. Omi AI tidak bertanggungjawab atas cara data anda digunakan oleh aplikasi ini.';
 
   @override
   String get copyUrl => 'Salin URL';
@@ -4222,14 +4221,14 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get omiApiKeys => 'Kunci API Nooto';
+  String get omiApiKeys => 'Kunci API Omi';
 
   @override
   String get apiKeysDescription =>
       'Kunci API digunakan untuk pengesahan apabila aplikasi anda berkomunikasi dengan pelayan OMI. Ia membenarkan aplikasi anda mencipta memori dan mengakses perkhidmatan OMI lain dengan selamat.';
 
   @override
-  String get aboutOmiApiKeys => 'Tentang Kunci API Nooto';
+  String get aboutOmiApiKeys => 'Tentang Kunci API Omi';
 
   @override
   String get yourNewKey => 'Kunci baharu anda:';
@@ -4373,7 +4372,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get e2eeDescription =>
-      'Penyulitan hujung ke hujung adalah standard emas untuk privasi. Apabila diaktifkan, data anda disulitkan pada peranti anda sebelum dihantar ke pelayan kami. Ini bermakna tiada sesiapa, malah Nooto, boleh mengakses kandungan anda.';
+      'Penyulitan hujung ke hujung adalah standard emas untuk privasi. Apabila diaktifkan, data anda disulitkan pada peranti anda sebelum dihantar ke pelayan kami. Ini bermakna tiada sesiapa, malah Omi, boleh mengakses kandungan anda.';
 
   @override
   String get importantTradeoffs => 'Pertimbangan Penting:';
@@ -4409,7 +4408,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get secureEncryptionDescription =>
-      'Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Nooto atau Google, terus dari pangkalan data.';
+      'Data anda disulitkan dengan kunci yang unik untuk anda di pelayan kami, yang dihoskan di Google Cloud. Ini bermakna kandungan mentah anda tidak boleh diakses oleh sesiapa, termasuk kakitangan Omi atau Google, terus dari pangkalan data.';
 
   @override
   String get endToEndEncryption => 'Penyulitan Hujung ke Hujung';
@@ -4479,14 +4478,14 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get omiTraining => 'Latihan Nooto';
+  String get omiTraining => 'Latihan Omi';
 
   @override
   String get trainingDataProgram => 'Program Data Latihan';
 
   @override
   String get getOmiUnlimitedFree =>
-      'Dapatkan Nooto Unlimited percuma dengan menyumbang data anda untuk melatih model AI.';
+      'Dapatkan Omi Unlimited percuma dengan menyumbang data anda untuk melatih model AI.';
 
   @override
   String get trainingDataBullets =>
@@ -4573,7 +4572,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get youAreOnUnlimitedPlan => 'Anda berada di Pelan Tanpa Had.';
 
   @override
-  String get yourOmiUnleashed => 'Nooto anda, dibebaskan. Pilih tanpa had untuk kemungkinan tanpa batas.';
+  String get yourOmiUnleashed => 'Omi anda, dibebaskan. Pilih tanpa had untuk kemungkinan tanpa batas.';
 
   @override
   String planEndedOn(String date) {
@@ -4598,10 +4597,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get unlimitedConversations => 'Perbualan tanpa had';
 
   @override
-  String get askOmiAnything => 'Tanya Nooto apa sahaja tentang hidup anda';
+  String get askOmiAnything => 'Tanya Omi apa sahaja tentang hidup anda';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Buka kunci memori tak terhingga Nooto';
+  String get unlockOmiInfiniteMemory => 'Buka kunci memori tak terhingga Omi';
 
   @override
   String get youreOnAnnualPlan => 'Anda berada di Pelan Tahunan';
@@ -4655,7 +4654,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get privacyIntroText =>
-      'Di Nooto, kami mengambil privasi anda dengan sangat serius. Kami ingin telus tentang data yang kami kumpul dan cara kami menggunakannya. Inilah yang perlu anda ketahui:';
+      'Di Omi, kami mengambil privasi anda dengan sangat serius. Kami ingin telus tentang data yang kami kumpul dan cara kami menggunakannya. Inilah yang perlu anda ketahui:';
 
   @override
   String get whatWeTrack => 'Apa yang Kami Jejaki';
@@ -4671,11 +4670,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get commitmentText =>
-      'Kami komited untuk menggunakan data yang kami kumpul hanya untuk menjadikan Nooto produk yang lebih baik untuk anda. Privasi dan kepercayaan anda adalah yang paling penting bagi kami.';
+      'Kami komited untuk menggunakan data yang kami kumpul hanya untuk menjadikan Omi produk yang lebih baik untuk anda. Privasi dan kepercayaan anda adalah yang paling penting bagi kami.';
 
   @override
   String get thankYouText =>
-      'Terima kasih kerana menjadi pengguna Nooto yang dihargai. Jika anda mempunyai sebarang soalan atau kebimbangan, sila hubungi kami di team@basedhardware.com.';
+      'Terima kasih kerana menjadi pengguna Omi yang dihargai. Jika anda mempunyai sebarang soalan atau kebimbangan, sila hubungi kami di team@basedhardware.com.';
 
   @override
   String get wifiSyncSettings => 'Tetapan Segerak WiFi';
@@ -4787,7 +4786,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get minutes => 'minit';
 
   @override
-  String get omiHas => 'Nooto mempunyai:';
+  String get omiHas => 'Omi mempunyai:';
 
   @override
   String get premiumMinutesUsed => 'Minit premium digunakan.';
@@ -4880,7 +4879,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get howPeopleWorks =>
-      'Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Nooto akan dapat mengenali pertuturan mereka juga!';
+      'Sebaik sahaja seseorang dicipta, anda boleh pergi ke transkrip perbualan dan menetapkan segmen yang sepadan kepada mereka, dengan cara itu Omi akan dapat mengenali pertuturan mereka juga!';
 
   @override
   String get tapToDelete => 'Ketik untuk memadam';
@@ -5162,7 +5161,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get enableApps => 'Dayakan aplikasi';
 
   @override
-  String get omiAppName => 'Nooto';
+  String get omiAppName => 'Omi';
 
   @override
   String get showMore => 'tunjukkan lagi ↓';
@@ -5186,18 +5185,18 @@ class AppLocalizationsMs extends AppLocalizations {
   String get checkingAppleWatch => 'Menyemak Apple Watch...';
 
   @override
-  String get installOmiOnAppleWatch => 'Pasang Nooto pada\nApple Watch anda';
+  String get installOmiOnAppleWatch => 'Pasang Omi pada\nApple Watch anda';
 
   @override
   String get installOmiOnAppleWatchDescription =>
-      'Untuk menggunakan Apple Watch dengan Nooto, anda perlu memasang aplikasi Nooto pada jam tangan anda terlebih dahulu.';
+      'Untuk menggunakan Apple Watch dengan Omi, anda perlu memasang aplikasi Omi pada jam tangan anda terlebih dahulu.';
 
   @override
-  String get openOmiOnAppleWatch => 'Buka Nooto pada\nApple Watch anda';
+  String get openOmiOnAppleWatch => 'Buka Omi pada\nApple Watch anda';
 
   @override
   String get openOmiOnAppleWatchDescription =>
-      'Aplikasi Nooto dipasang pada Apple Watch anda. Buka dan ketik Mula untuk bermula.';
+      'Aplikasi Omi dipasang pada Apple Watch anda. Buka dan ketik Mula untuk bermula.';
 
   @override
   String get openWatchApp => 'Buka Aplikasi Watch';
@@ -5207,14 +5206,14 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get unableToOpenWatchApp =>
-      'Tidak dapat membuka aplikasi Apple Watch. Sila buka aplikasi Watch secara manual pada Apple Watch anda dan pasang Nooto dari bahagian \"Aplikasi Tersedia\".';
+      'Tidak dapat membuka aplikasi Apple Watch. Sila buka aplikasi Watch secara manual pada Apple Watch anda dan pasang Omi dari bahagian \"Aplikasi Tersedia\".';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch berjaya disambungkan!';
 
   @override
   String get appleWatchNotReachable =>
-      'Apple Watch masih tidak dapat dicapai. Pastikan aplikasi Nooto dibuka pada jam tangan anda.';
+      'Apple Watch masih tidak dapat dicapai. Pastikan aplikasi Omi dibuka pada jam tangan anda.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5302,7 +5301,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get welcomeBackSimple => 'Selamat kembali';
 
   @override
-  String get addVocabularyDescription => 'Tambah perkataan yang Nooto perlu kenali semasa transkripsi.';
+  String get addVocabularyDescription => 'Tambah perkataan yang Omi perlu kenali semasa transkripsi.';
 
   @override
   String get enterWordsCommaSeparated => 'Masukkan perkataan (dipisahkan koma)';
@@ -5463,13 +5462,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get wrappedNoDataAvailable => 'Tiada data tersedia';
 
   @override
-  String get wrappedOmiLifeRecap => 'Rumusan Hidup Nooto';
+  String get wrappedOmiLifeRecap => 'Rumusan Hidup Omi';
 
   @override
   String get wrappedSwipeUpToBegin => 'Leret ke atas untuk mula';
 
   @override
-  String get wrappedShareText => '2025 saya, diingati oleh Nooto ✨ omi.me/wrapped';
+  String get wrappedShareText => '2025 saya, diingati oleh Omi ✨ omi.me/wrapped';
 
   @override
   String get wrappedFailedToShare => 'Gagal berkongsi. Sila cuba lagi.';
@@ -5490,7 +5489,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get wrappedMy2025 => '2025 Saya';
 
   @override
-  String get wrappedRememberedByOmi => 'diingati oleh Nooto';
+  String get wrappedRememberedByOmi => 'diingati oleh Omi';
 
   @override
   String get wrappedMostFunDay => 'Paling Seronok';
@@ -5706,7 +5705,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get notificationFrequency => 'Kekerapan Pemberitahuan';
 
   @override
-  String get controlNotificationFrequency => 'Kawal kekerapan Nooto menghantar pemberitahuan proaktif kepada anda.';
+  String get controlNotificationFrequency => 'Kawal kekerapan Omi menghantar pemberitahuan proaktif kepada anda.';
 
   @override
   String get yourScore => 'Skor anda';
@@ -5732,7 +5731,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get notificationFrequencyDescription =>
-      'Kawal kekerapan Nooto menghantar pemberitahuan dan peringatan proaktif kepada anda.';
+      'Kawal kekerapan Omi menghantar pemberitahuan dan peringatan proaktif kepada anda.';
 
   @override
   String get sliderOff => 'Mati';
@@ -5969,7 +5968,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get noRecordings => 'Tiada Rakaman';
 
   @override
-  String get audioFromOmiWillAppearHere => 'Audio dari peranti Nooto anda akan muncul di sini';
+  String get audioFromOmiWillAppearHere => 'Audio dari peranti Omi anda akan muncul di sini';
 
   @override
   String get deleteProcessed => 'Padam yang Diproses';
@@ -6089,7 +6088,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get batteryUsageHigher => 'Penggunaan bateri akan lebih tinggi daripada transkripsi awan.';
 
   @override
-  String get considerOmiCloud => 'Pertimbangkan menggunakan Nooto Cloud untuk prestasi yang lebih baik.';
+  String get considerOmiCloud => 'Pertimbangkan menggunakan Omi Cloud untuk prestasi yang lebih baik.';
 
   @override
   String get highResourceUsage => 'Penggunaan Sumber Tinggi';
@@ -6248,7 +6247,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get omiTranscriptionOptimized =>
-      'Transkripsi langsung terbina dalam Nooto dioptimumkan untuk perbualan masa nyata dengan pengesanan penutur automatik dan diarisasi.';
+      'Transkripsi langsung terbina dalam Omi dioptimumkan untuk perbualan masa nyata dengan pengesanan penutur automatik dan diarisasi.';
 
   @override
   String get reset => 'Set semula';
@@ -6336,13 +6335,13 @@ class AppLocalizationsMs extends AppLocalizations {
   String get writeReviewOptional => 'Tulis ulasan (pilihan)';
 
   @override
-  String get setupQuestionsIntro => 'Bantu kami memperbaiki Nooto dengan menjawab beberapa soalan.  🫶 💜';
+  String get setupQuestionsIntro => 'Bantu kami memperbaiki Omi dengan menjawab beberapa soalan.  🫶 💜';
 
   @override
   String get setupQuestionProfession => '1. Apakah pekerjaan anda?';
 
   @override
-  String get setupQuestionUsage => '2. Di mana anda bercadang menggunakan Nooto anda?';
+  String get setupQuestionUsage => '2. Di mana anda bercadang menggunakan Omi anda?';
 
   @override
   String get setupQuestionAge => '3. Berapakah julat umur anda?';
@@ -6571,10 +6570,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get getOmiDeviceDescription => 'Cipta klon yang lebih tepat dengan perbualan peribadi anda';
 
   @override
-  String get getOmi => 'Dapatkan Nooto';
+  String get getOmi => 'Dapatkan Omi';
 
   @override
-  String get iHaveOmiDevice => 'Saya mempunyai peranti Nooto';
+  String get iHaveOmiDevice => 'Saya mempunyai peranti Omi';
 
   @override
   String get goal => 'MATLAMAT';
@@ -6873,13 +6872,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get fastTransferDescription =>
-      'Pemindahan Pantas menggunakan WiFi untuk kelajuan ~5x lebih pantas. Telefon anda akan bersambung sementara ke rangkaian WiFi peranti Nooto semasa pemindahan.';
+      'Pemindahan Pantas menggunakan WiFi untuk kelajuan ~5x lebih pantas. Telefon anda akan bersambung sementara ke rangkaian WiFi peranti Omi semasa pemindahan.';
 
   @override
   String get internetAccessPausedDuringTransfer => 'Akses internet dijeda semasa pemindahan';
 
   @override
-  String get chooseTransferMethodDescription => 'Pilih cara rakaman dipindahkan dari peranti Nooto ke telefon anda.';
+  String get chooseTransferMethodDescription => 'Pilih cara rakaman dipindahkan dari peranti Omi ke telefon anda.';
 
   @override
   String get wifiSpeed => '~150 KB/s melalui WiFi';
@@ -6889,7 +6888,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get fastTransferMethodDescription =>
-      'Mencipta sambungan WiFi terus ke peranti Nooto anda. Telefon anda terputus sementara dari WiFi biasa semasa pemindahan.';
+      'Mencipta sambungan WiFi terus ke peranti Omi anda. Telefon anda terputus sementara dari WiFi biasa semasa pemindahan.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6914,17 +6913,17 @@ class AppLocalizationsMs extends AppLocalizations {
   String get lowBatteryAlertBody => 'Bateri peranti anda lemah. Masa untuk mengecas semula! 🔋';
 
   @override
-  String get deviceDisconnectedNotificationTitle => 'Peranti Nooto Anda Terputus';
+  String get deviceDisconnectedNotificationTitle => 'Peranti Omi Anda Terputus';
 
   @override
-  String get deviceDisconnectedNotificationBody => 'Sila sambung semula untuk terus menggunakan Nooto.';
+  String get deviceDisconnectedNotificationBody => 'Sila sambung semula untuk terus menggunakan Omi.';
 
   @override
   String get firmwareUpdateAvailable => 'Kemas Kini Firmware Tersedia';
 
   @override
   String firmwareUpdateAvailableDescription(String version) {
-    return 'Kemas kini firmware baharu ($version) tersedia untuk peranti Nooto anda. Adakah anda mahu mengemas kini sekarang?';
+    return 'Kemas kini firmware baharu ($version) tersedia untuk peranti Omi anda. Adakah anda mahu mengemas kini sekarang?';
   }
 
   @override
@@ -7141,8 +7140,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get personaFailedToCreate => 'Gagal mencipta persona';
 
   @override
-  String get personaConnectKnowledgeSource =>
-      'Sila sambungkan sekurang-kurangnya satu sumber data (Nooto atau Twitter)';
+  String get personaConnectKnowledgeSource => 'Sila sambungkan sekurang-kurangnya satu sumber data (Omi atau Twitter)';
 
   @override
   String get personaUpdatedSuccessfully => 'Persona berjaya dikemas kini';
@@ -7247,7 +7245,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get xHandleTitle => 'Apakah nama pengguna X anda?';
 
   @override
-  String get xHandleDescription => 'Kami akan melatih klon Nooto anda terlebih dahulu\nberdasarkan aktiviti akaun anda';
+  String get xHandleDescription => 'Kami akan melatih klon Omi anda terlebih dahulu\nberdasarkan aktiviti akaun anda';
 
   @override
   String get xHandleHint => '@nikshevchenko';
@@ -7262,7 +7260,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get nextButton => 'Seterusnya';
 
   @override
-  String get connectOmiDevice => 'Sambung Peranti Nooto';
+  String get connectOmiDevice => 'Sambung Peranti Omi';
 
   @override
   String planSwitchingDescriptionWithTitle(String title) {
@@ -7293,7 +7291,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionJsonPlaceholder => 'Tampal konfigurasi JSON anda di sini...';
 
   @override
-  String get transcriptionSourceOmi => 'Nooto';
+  String get transcriptionSourceOmi => 'Omi';
 
   @override
   String get pricePlaceholder => '0.00';
@@ -7323,7 +7321,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get dailyReflectionNotificationBody => 'Ceritakan tentang hari anda';
 
   @override
-  String get actionItemReminderTitle => 'Peringatan Nooto';
+  String get actionItemReminderTitle => 'Peringatan Omi';
 
   @override
   String deviceDisconnectedTitle(String deviceName) {
@@ -7351,7 +7349,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onboardingComplete => 'Selesai';
 
   @override
-  String get onboardingWelcomeToOmi => 'Selamat datang ke Nooto';
+  String get onboardingWelcomeToOmi => 'Selamat datang ke Omi';
 
   @override
   String get onboardingTellUsAboutYourself => 'Ceritakan tentang diri anda';
@@ -8024,27 +8022,27 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addTask => 'Tambah tugas';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Tambah pelayan MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Sambungkan alat AI luaran';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count alat berjaya disambungkan';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Gagal menyambung ke pelayan MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Memberi kebenaran...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bagaimana anda tahu tentang kami?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8062,19 +8060,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Rakan';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Lain-lain';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Sila nyatakan';
 
   @override
-  String get event => 'Event';
+  String get event => 'Acara';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Rakan sekerja';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8107,20 +8105,20 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reportAnIssue => 'Laporkan masalah';
 
   @override
-  String get pairingTitleOmi => 'Hidupkan Nooto';
+  String get pairingTitleOmi => 'Hidupkan Omi';
 
   @override
   String get pairingDescOmi => 'Tekan dan tahan peranti sehingga ia bergetar untuk menghidupkannya.';
 
   @override
-  String get pairingTitleOmiDevkit => 'Letakkan Nooto DevKit dalam Mod Berpasangan';
+  String get pairingTitleOmiDevkit => 'Letakkan Omi DevKit dalam Mod Berpasangan';
 
   @override
   String get pairingDescOmiDevkit =>
       'Tekan butang sekali untuk menghidupkan. LED akan berkelip ungu dalam mod berpasangan.';
 
   @override
-  String get pairingTitleOmiGlass => 'Hidupkan Nooto Glass';
+  String get pairingTitleOmiGlass => 'Hidupkan Omi Glass';
 
   @override
   String get pairingDescOmiGlass => 'Tekan dan tahan butang sisi selama 3 saat untuk menghidupkan.';
@@ -8163,7 +8161,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get pairingDescAppleWatch =>
-      'Pasang dan buka aplikasi Nooto pada Apple Watch anda, kemudian ketik Sambung dalam aplikasi.';
+      'Pasang dan buka aplikasi Omi pada Apple Watch anda, kemudian ketik Sambung dalam aplikasi.';
 
   @override
   String get pairingTitleNeoOne => 'Letakkan Neo One dalam Mod Berpasangan';
@@ -8247,5 +8245,42 @@ class AppLocalizationsMs extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get officialTeamName => 'Nooto Team';
+  String get onboardingWhatIKnowAboutYouTitle => 'Inilah yang saya tahu tentang anda';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Peta ini dikemas kini apabila Omi belajar daripada perbualan anda.';
+
+  @override
+  String get apiEnvironment => 'Persekitaran API';
+
+  @override
+  String get apiEnvironmentDescription => 'Pilih pelayan yang hendak disambungkan';
+
+  @override
+  String get production => 'Pengeluaran';
+
+  @override
+  String get staging => 'Ujian';
+
+  @override
+  String get switchRequiresRestart => 'Penukaran memerlukan permulaan semula aplikasi';
+
+  @override
+  String get switchApiConfirmTitle => 'Tukar Persekitaran API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Tukar ke $environment? Anda perlu menutup dan membuka semula aplikasi untuk perubahan berkuat kuasa.';
+  }
+
+  @override
+  String get switchAndRestart => 'Tukar';
+
+  @override
+  String get stagingDisclaimer =>
+      'Persekitaran ujian mungkin tidak stabil, mempunyai prestasi tidak konsisten dan data mungkin hilang. Untuk ujian sahaja.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Disimpan. Tutup dan buka semula aplikasi untuk menggunakan perubahan.';
 }

@@ -37,6 +37,7 @@ struct StoredAdvice: Codable, Identifiable {
         let category = AdviceCategory(rawValue: categoryTag ?? "other") ?? .other
         self.advice = ExtractedAdvice(
             advice: memory.content,
+            headline: memory.headline,
             reasoning: memory.reasoning,
             category: category,
             sourceApp: memory.sourceApp ?? "Unknown",

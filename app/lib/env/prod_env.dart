@@ -63,4 +63,8 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'DISABLE_RATE_ON_STORE_ONBOARDING', obfuscate: false, defaultValue: false)
   final bool? disableRateOnStoreOnboarding = _ProdEnv.disableRateOnStoreOnboarding;
+
+  @override
+  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
+  final String? stagingApiUrl = _ProdEnv.stagingApiUrl;
 }

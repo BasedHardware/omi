@@ -25,7 +25,12 @@ final class BluetoothManager: NSObject, ObservableObject {
     // MARK: - Private Properties
 
     /// The underlying CBCentralManager (exposed for transport creation)
-    private(set) var centralManager: CBCentralManager!
+    /// Created lazily to avoid triggering Bluetooth permission dialog at app startup
+    private(set) lazy var centralManager: CBCentralManager = {
+        let manager = CBCentralManager(delegate: nil, queue: nil)
+        manager.delegate = self
+        return manager
+    }()
     private var scanTimer: Timer?
     private var discoveredPeripherals: [UUID: CBPeripheral] = [:]
 
@@ -39,8 +44,6 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     private override init() {
         super.init()
-        centralManager = CBCentralManager(delegate: nil, queue: nil)
-        centralManager.delegate = self
     }
 
     // MARK: - Public Methods

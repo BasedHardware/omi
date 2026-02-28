@@ -307,8 +307,13 @@ class TaskAgentManager: ObservableObject {
 
                 guard !Task.isCancelled else { break }
 
-                let output = self.readTmuxOutput(sessionName: sessionName)
-                let editedFiles = self.parseEditedFiles(from: output)
+                let rawOutput = self.readTmuxOutput(sessionName: sessionName)
+                // Cap stored output to 100KB — tmux scrollback can grow very large
+                let maxOutputSize = 100_000
+                let output = rawOutput.count > maxOutputSize
+                    ? String(rawOutput.suffix(maxOutputSize))
+                    : rawOutput
+                let editedFiles = self.parseEditedFiles(from: rawOutput)
 
                 await MainActor.run {
                     self.activeSessions[taskId]?.output = output
@@ -478,9 +483,9 @@ class TaskAgentManager: ObservableObject {
     }
 
     private func extractPlan(from output: String) -> String {
-        // Extract the plan section from Claude's output
-        // For now, return the full output - could be refined later
-        return output
+        // Truncate to 2000 chars — the UI only displays plan.prefix(2000) anyway.
+        // Returning the full output string would duplicate the output buffer in memory.
+        return String(output.suffix(2000))
     }
 
     private func openTmuxSessionInTerminal(sessionName: String) {

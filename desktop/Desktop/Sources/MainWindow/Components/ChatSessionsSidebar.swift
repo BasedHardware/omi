@@ -185,6 +185,7 @@ struct ChatSessionsSidebar: View {
                         SessionRow(
                             session: session,
                             isSelected: chatProvider.currentSession?.id == session.id,
+                            isDeleting: chatProvider.deletingSessionIds.contains(session.id),
                             onSelect: {
                                 Task {
                                     await chatProvider.selectSession(session)
@@ -283,6 +284,7 @@ struct ChatSessionsSidebar: View {
 struct SessionRow: View {
     let session: ChatSession
     let isSelected: Bool
+    var isDeleting: Bool = false
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onToggleStar: () -> Void
@@ -338,8 +340,14 @@ struct SessionRow: View {
 
                 Spacer()
 
+                if isDeleting {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 14, height: 14)
+                }
+
                 // Hover actions
-                if isHovering && !isEditing {
+                if isHovering && !isEditing && !isDeleting {
                     HStack(spacing: 4) {
                         // Rename button
                         Button(action: startEditing) {

@@ -7,6 +7,9 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
@@ -137,7 +140,7 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
                             if stripe_sub_dict['items']['data']:
                                 current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
-                        print(f"Error retrieving current price ID: {e}")
+                        logger.error(f"Error retrieving current price ID: {e}")
 
                 # If different price, allow upgrade/downgrade
                 if current_price_id and current_price_id != target_price_id:
@@ -272,6 +275,6 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
 
     except Exception as e:
         # Don't break user flows on reconciliation issues; just log and continue with existing data.
-        print(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
+        logger.error(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
 
     return subscription

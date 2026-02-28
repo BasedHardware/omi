@@ -1,7 +1,9 @@
 import json
+import logging
 import os
 
-import sentry_sdk
+logging.basicConfig(level=logging.INFO)
+
 import firebase_admin
 from fastapi import FastAPI
 
@@ -41,6 +43,7 @@ from routers import (
     folders,
     goals,
     announcements,
+    agent_tools,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -49,45 +52,10 @@ from utils.observability import log_langsmith_status
 # Log LangSmith tracing status at startup
 log_langsmith_status()
 
-# Initialize Sentry for error tracking and performance monitoring
-# SENTRY_ENABLED must be explicitly set to 'true' to enable Sentry (prevents local dev from sending errors)
-sentry_enabled = os.environ.get('SENTRY_ENABLED', 'false').lower() == 'true'
-sentry_dsn = os.environ.get('SENTRY_DSN')
-if sentry_enabled and sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        # Set traces_sample_rate to capture performance data
-        # Adjust this value in production (e.g., 0.1 for 10% of transactions)
-        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
-        # Set profiles_sample_rate to profile performance
-        profiles_sample_rate=float(os.environ.get('SENTRY_PROFILES_SAMPLE_RATE', '1.0')),
-        # Set environment
-        environment=os.environ.get('SENTRY_ENVIRONMENT', 'development'),
-        # Enable sending of default PII (be careful with this in production)
-        send_default_pii=os.environ.get('SENTRY_SEND_PII', 'false').lower() == 'true',
-    )
-elif sentry_dsn:
-    print("Sentry DSN found but SENTRY_ENABLED is not 'true'. Sentry is disabled.")
-
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
-    try:
-        service_account_info = json.loads(json_str)
-    except json.JSONDecodeError:
-        # Handle escaped JSON from Coolify (quotes are escaped as \")
-        cleaned = json_str.replace('\\', '')
-        service_account_info = json.loads(cleaned)
-
-    # Check credential type - Firebase Certificate() only works with service_account
-    cred_type = service_account_info.get('type')
-    if cred_type == 'service_account':
-        credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials)
-    else:
-        # For authorized_user, use default initialization with explicit project ID
-        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or service_account_info.get('quota_project_id')
-        options = {'projectId': project_id} if project_id else None
-        firebase_admin.initialize_app(options=options)
+    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    credentials = firebase_admin.credentials.Certificate(service_account_info)
+    firebase_admin.initialize_app(credentials)
 else:
     firebase_admin.initialize_app()
 
@@ -133,6 +101,7 @@ app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(announcements.router)
+app.include_router(agent_tools.router)
 
 
 methods_timeout = {

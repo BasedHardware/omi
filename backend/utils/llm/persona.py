@@ -4,10 +4,13 @@ from models.app import App
 from models.chat import Message, MessageSender
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
 from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
-    print("initial_persona_chat_message")
+    logger.info("initial_persona_chat_message")
     chat_messages = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:
@@ -26,7 +29,7 @@ def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: 
 
 
 def answer_persona_question_stream(app: App, messages: List[Message], callbacks: []) -> str:
-    print("answer_persona_question_stream")
+    logger.info("answer_persona_question_stream")
     chat_messages = [SystemMessage(content=app.persona_prompt)]
     for msg in messages:
         if msg.sender == MessageSender.ai:

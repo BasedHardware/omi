@@ -266,13 +266,16 @@ final class WifiSyncService: ObservableObject {
                 switch state {
                 case .ready:
                     self?.logger.info("TCP connection ready")
+                    connection.stateUpdateHandler = nil
                     continuation.resume()
 
                 case .failed(let error):
                     self?.logger.error("TCP connection failed: \(error.localizedDescription)")
+                    connection.stateUpdateHandler = nil
                     continuation.resume(throwing: WifiSyncServiceError.connectionFailed)
 
                 case .cancelled:
+                    connection.stateUpdateHandler = nil
                     continuation.resume(throwing: CancellationError())
 
                 default:

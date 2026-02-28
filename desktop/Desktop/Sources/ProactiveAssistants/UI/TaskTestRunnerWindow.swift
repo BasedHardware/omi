@@ -18,17 +18,17 @@ struct TaskTestResult: Identifiable {
 // MARK: - SwiftUI View
 
 struct TaskTestRunnerView: View {
-    @State private var screenshotCount = 10
+    @State private var periodFrom: Date = Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date()
+    @State private var periodTo: Date = Date()
     @State private var isRunning = false
     @State private var results: [TaskTestResult] = []
     @State private var progress: Double = 0
     @State private var elapsedTime: TimeInterval = 0
     @State private var statusMessage = "Ready"
     @State private var cancellationRequested = false
+    @State private var totalContextSwitches = 0
 
     var onClose: (() -> Void)?
-
-    private let screenshotOptions = [5, 10, 20, 50]
 
     private var tasksFound: Int {
         results.filter { $0.result?.hasNewTask == true }.count
@@ -114,24 +114,27 @@ struct TaskTestRunnerView: View {
             }
 
             HStack(spacing: 16) {
-                // Context switch count picker
+                // Time range pickers
                 HStack(spacing: 8) {
-                    Text("Context switches:")
+                    Text("From:")
                         .scaledFont(size: 13)
                         .foregroundColor(.secondary)
 
-                    Picker("", selection: $screenshotCount) {
-                        ForEach(screenshotOptions, id: \.self) { count in
-                            Text("\(count)").tag(count)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .disabled(isRunning)
+                    DatePicker("", selection: $periodFrom, in: ...periodTo)
+                        .labelsHidden()
+                        .datePickerStyle(.field)
+                        .frame(width: 180)
+                        .disabled(isRunning)
 
-                    Text("(last 24h)")
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary.opacity(0.7))
+                    Text("To:")
+                        .scaledFont(size: 13)
+                        .foregroundColor(.secondary)
+
+                    DatePicker("", selection: $periodTo, in: periodFrom...Date())
+                        .labelsHidden()
+                        .datePickerStyle(.field)
+                        .frame(width: 180)
+                        .disabled(isRunning)
                 }
 
                 Spacer()
@@ -364,7 +367,7 @@ struct TaskTestRunnerView: View {
         HStack {
             if !results.isEmpty {
                 HStack(spacing: 16) {
-                    Label("\(results.count)/\(screenshotCount)", systemImage: "arrow.triangle.swap")
+                    Label("\(results.count)/\(totalContextSwitches)", systemImage: "arrow.triangle.swap")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
 
@@ -389,7 +392,7 @@ struct TaskTestRunnerView: View {
                     }
                 }
             } else {
-                Text("Select context switch count and click Run Test")
+                Text("Select a time range and click Run Test")
                     .scaledFont(size: 12)
                     .foregroundColor(.secondary.opacity(0.7))
             }
@@ -413,14 +416,15 @@ struct TaskTestRunnerView: View {
         results = []
         progress = 0
         elapsedTime = 0
+        totalContextSwitches = 0
         cancellationRequested = false
         statusMessage = "Finding context switches..."
 
         Task {
             log("TaskTestRunner: Starting test task")
             let startTime = Date()
-            let now = Date()
-            let periodStart = now.addingTimeInterval(-24 * 60 * 60) // last 24 hours
+            let periodStart = periodFrom
+            let now = periodTo
 
             // Get TaskAssistant from coordinator
             log("TaskTestRunner: Looking up task-extraction assistant")
@@ -448,8 +452,8 @@ struct TaskTestRunnerView: View {
             log("TaskTestRunner: browserApps = \(browserApps)")
             log("TaskTestRunner: browserPatterns count = \(browserPatterns.count)")
 
-            // Fetch all filtered screenshots chronologically from last 24h
-            log("TaskTestRunner: Fetching screenshots from last 24h with filters")
+            // Fetch all filtered screenshots chronologically from selected range
+            log("TaskTestRunner: Fetching screenshots from \(periodStart) to \(now) with filters")
             let allScreenshots: [Screenshot]
             do {
                 allScreenshots = try await RewindDatabase.shared.getScreenshotsFiltered(
@@ -469,12 +473,12 @@ struct TaskTestRunnerView: View {
                 return
             }
 
-            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots from last 24h")
+            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots from selected range")
 
             guard allScreenshots.count >= 2 else {
                 log("TaskTestRunner: ERROR - Not enough screenshots (\(allScreenshots.count) < 2)")
                 await MainActor.run {
-                    statusMessage = "Not enough screenshots in last 24h to detect context switches"
+                    statusMessage = "Not enough screenshots in selected range to detect context switches"
                     isRunning = false
                 }
                 return
@@ -498,17 +502,17 @@ struct TaskTestRunnerView: View {
 
             guard !departingFrames.isEmpty else {
                 await MainActor.run {
-                    statusMessage = "No context switches found in \(allScreenshots.count) screenshots from last 24h"
+                    statusMessage = "No context switches found in \(allScreenshots.count) screenshots from selected range"
                     isRunning = false
                 }
                 return
             }
 
-            // Take the most recent N departing frames
-            let sampled = Array(departingFrames.suffix(screenshotCount))
+            let sampled = departingFrames
 
             await MainActor.run {
-                statusMessage = "Found \(departingFrames.count) context switches, testing \(sampled.count) most recent..."
+                totalContextSwitches = sampled.count
+                statusMessage = "Found \(sampled.count) context switches, testing all..."
             }
 
             // Process each departing frame

@@ -16,25 +16,14 @@ from google.cloud.exceptions import NotFound
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
 from database import users as users_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
-    try:
-        service_account_info = json.loads(json_str)
-    except json.JSONDecodeError:
-        # Handle escaped JSON from Coolify (quotes are escaped as \")
-        cleaned = json_str.replace('\\', '')
-        service_account_info = json.loads(cleaned)
-
-    # Check credential type and create appropriate credentials
-    cred_type = service_account_info.get('type')
-    if cred_type == 'service_account':
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        storage_client = storage.Client(credentials=credentials)
-    else:
-        # For authorized_user or other types, use default credentials from file
-        # The google-credentials.json file was already created by entrypoint or _client.py
-        storage_client = storage.Client()
+    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    credentials = service_account.Credentials.from_service_account_info(service_account_info)
+    storage_client = storage.Client(credentials=credentials)
 else:
     storage_client = storage.Client()
 
@@ -102,7 +91,7 @@ def delete_additional_profile_audio(uid: str, file_name: str) -> None:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
     if blob.exists():
-        print('delete_additional_profile_audio deleting', file_name)
+        logger.info(f'delete_additional_profile_audio deleting {file_name}')
         blob.delete()
 
 
@@ -144,7 +133,7 @@ def delete_speech_sample_for_people(uid: str, file_name: str) -> None:
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
     for blob in blobs:
         if file_name in blob.name:
-            print('delete_speech_sample_for_people deleting', blob.name)
+            logger.info(f'delete_speech_sample_for_people deleting {blob.name}')
             blob.delete()
 
 
@@ -269,7 +258,7 @@ def upload_conversation_recording(file_path: str, uid: str, conversation_id: str
 
 
 def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
-    print('get_conversation_recording_if_exists', uid, memory_id)
+    logger.info(f'get_conversation_recording_if_exists {uid} {memory_id}')
     bucket = storage_client.bucket(memories_recordings_bucket)
     path = f'{uid}/{memory_id}.wav'
     blob = bucket.blob(path)
@@ -460,7 +449,7 @@ def download_audio_chunks_and_merge(
                 chunk_data = bucket.blob(chunk_path_bin).download_as_bytes()
                 is_encrypted = False
             except NotFound:
-                print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+                logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
                 return (timestamp, None)
 
         # Normalize to PCM (decrypt if needed
@@ -505,7 +494,7 @@ def download_audio_chunks_and_merge(
                 gap_samples = int(gap_seconds * sample_rate)
                 silence_bytes = bytes(gap_samples * 2)  # Zero bytes for silence
                 merged_data.extend(silence_bytes)
-                print(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
+                logger.info(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
 
             merged_data.extend(pcm_data)
 
@@ -574,15 +563,15 @@ def get_or_create_merged_audio(
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 if datetime.datetime.now(datetime.timezone.utc) < expires_at:
                     # Cache is valid, return it
-                    print(f"Serving merged audio from cache: {cache_path}")
+                    logger.info(f"Serving merged audio from cache: {cache_path}")
                     return cache_blob.download_as_bytes(), True
                 else:
-                    print(f"Cache expired for: {cache_path}")
+                    logger.warning(f"Cache expired for: {cache_path}")
             except (ValueError, TypeError):
                 pass
 
     # Cache miss or expired - create new merged file
-    print(f"Cache miss, merging audio for: {cache_path}")
+    logger.info(f"Cache miss, merging audio for: {cache_path}")
 
     # Download and merge chunks
     pcm_data = download_audio_chunks_and_merge(
@@ -602,9 +591,9 @@ def get_or_create_merged_audio(
                 'audio_file_id': audio_file_id,
             }
             cache_blob.upload_from_string(wav_data, content_type='audio/wav')
-            print(f"Cached merged audio at: {cache_path}")
+            logger.info(f"Cached merged audio at: {cache_path}")
         except Exception as e:
-            print(f"Error uploading audio cache: {e}")
+            logger.error(f"Error uploading audio cache: {e}")
 
     cache_thread = threading.Thread(target=_upload_to_cache, daemon=True)
     cache_thread.start()
@@ -696,7 +685,7 @@ def precache_conversation_audio(
                     sample_rate=sample_rate,
                 )
             except Exception as e:
-                print(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
+                logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
         with ThreadPoolExecutor(max_workers=4) as executor:
             list(executor.map(_cache_single, audio_files))
@@ -797,14 +786,11 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
-    try:
-        path = img_url.rsplit('/', 1)[-1]
-        print('delete_app_logo', path)
-        bucket = storage_client.bucket(omi_apps_bucket)
-        blob = bucket.blob(path)
-        blob.delete()
-    except Exception as e:
-        print(f'delete_app_logo failed (non-critical): {e}')
+    bucket = storage_client.bucket(omi_apps_bucket)
+    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
+    logger.info(f'delete_app_logo {path}')
+    blob = bucket.blob(path)
+    blob.delete()
 
 
 def upload_app_thumbnail(file_path: str, thumbnail_id: str) -> str:
@@ -843,7 +829,7 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
     dictFiles = {}
     for name, result in zip(files_name, result):
         if isinstance(result, Exception):
-            print("Failed to upload {} due to exception: {}".format(name, result))
+            logger.error("Failed to upload {} due to exception: {}".format(name, result))
         else:
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles

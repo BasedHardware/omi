@@ -28,6 +28,10 @@ actor RewindDatabase {
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
 
+    /// Monotonic counter incremented by configure(). Used by closeIfStale() to detect
+    /// whether a new sign-in session has started since the close was requested.
+    nonisolated(unsafe) static var configureGeneration: Int = 0
+
     /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
     /// When this hits the threshold, we close the database so the next initialize() attempt
     /// goes through the full recovery path (WAL cleanup, corruption detection, fresh DB).
@@ -50,6 +54,7 @@ actor RewindDatabase {
     /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
+        guard dbQueue != nil else { return }  // DB already closed, nothing to do
         guard let dbError = error as? DatabaseError else { return }
         let code = dbError.resultCode
         let extendedCode = dbError.extendedResultCode.rawValue
@@ -82,7 +87,18 @@ actor RewindDatabase {
         let resolvedId = (userId?.isEmpty == false) ? userId! : "anonymous"
         configuredUserId = resolvedId
         RewindDatabase.currentUserId = resolvedId
-        log("RewindDatabase: Configured for user \(resolvedId)")
+        RewindDatabase.configureGeneration += 1
+        log("RewindDatabase: Configured for user \(resolvedId) (generation \(RewindDatabase.configureGeneration))")
+    }
+
+    /// Close the database only if no new session has started (configure() not called since).
+    /// Prevents a stale sign-out Task from closing a freshly opened database.
+    func closeIfStale(generation: Int) {
+        guard generation == RewindDatabase.configureGeneration else {
+            log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
+            return
+        }
+        close()
     }
 
     /// Close the database, allowing re-initialization for a different user.
@@ -378,6 +394,26 @@ actor RewindDatabase {
         let itemsToMove = [
             "omi.db", "Screenshots", "Videos", "backups",
         ]
+
+        // Checkpoint WAL at destination before deleting — preserves recent writes
+        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
+        let destDB = userDir.appendingPathComponent("omi.db")
+        if fileManager.fileExists(atPath: destDB.path) {
+            let destWAL = userDir.appendingPathComponent("omi.db-wal")
+            if fileManager.fileExists(atPath: destWAL.path) {
+                do {
+                    let config = Configuration()
+                    let pool = try DatabasePool(path: destDB.path, configuration: config)
+                    try pool.write { db in
+                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                    }
+                    try pool.close()
+                    log("RewindDatabase: Checkpointed WAL at dest before migration")
+                } catch {
+                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
+                }
+            }
+        }
 
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -1971,6 +2007,146 @@ actor RewindDatabase {
 
         migrator.registerMigration("addActionItemFromStaged") { db in
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN fromStaged BOOLEAN NOT NULL DEFAULT 0")
+        }
+
+        migrator.registerMigration("createIndexedFiles") { db in
+            try db.create(table: "indexed_files") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("path", .text).notNull()
+                t.column("filename", .text).notNull()
+                t.column("fileExtension", .text)
+                t.column("fileType", .text).notNull()
+                t.column("sizeBytes", .integer).notNull()
+                t.column("folder", .text).notNull()
+                t.column("depth", .integer).notNull()
+                t.column("createdAt", .datetime)
+                t.column("modifiedAt", .datetime)
+                t.column("indexedAt", .datetime).notNull()
+            }
+
+            try db.create(index: "idx_indexed_files_path", on: "indexed_files", columns: ["path"], unique: true)
+            try db.create(index: "idx_indexed_files_type", on: "indexed_files", columns: ["fileType"])
+            try db.create(index: "idx_indexed_files_folder", on: "indexed_files", columns: ["folder"])
+            try db.create(index: "idx_indexed_files_ext", on: "indexed_files", columns: ["fileExtension"])
+            try db.create(index: "idx_indexed_files_modified", on: "indexed_files", columns: ["modifiedAt"])
+        }
+
+        migrator.registerMigration("createTaskChatMessages") { db in
+            try db.create(table: "task_chat_messages") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("taskId", .text).notNull()          // action_items backendId
+                t.column("acpSessionId", .text)               // ACP session for resume
+                t.column("messageId", .text).notNull()        // UUID from ChatMessage.id
+                t.column("sender", .text).notNull()           // "user" or "ai"
+                t.column("messageText", .text).notNull()
+                t.column("contentBlocksJson", .text)          // JSON-encoded ChatContentBlock array
+                t.column("embedding", .blob)                  // 3072 Float32s for vector search
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.column("backendSynced", .boolean).notNull().defaults(to: false)
+                t.column("backendMessageId", .text)           // Server-side message ID
+            }
+
+            // Indexes for common queries
+            try db.create(index: "idx_task_chat_messages_taskId", on: "task_chat_messages", columns: ["taskId"])
+            try db.create(index: "idx_task_chat_messages_messageId", on: "task_chat_messages", columns: ["messageId"], unique: true)
+            try db.create(index: "idx_task_chat_messages_created", on: "task_chat_messages", columns: ["taskId", "createdAt"])
+            // Partial index for unsynced messages (future backend sync)
+            try db.execute(sql: """
+                CREATE INDEX idx_task_chat_messages_unsynced
+                ON task_chat_messages (taskId)
+                WHERE backendSynced = 0
+            """)
+            // Partial index for embedding search
+            try db.execute(sql: """
+                CREATE INDEX idx_task_chat_messages_embedding
+                ON task_chat_messages (taskId)
+                WHERE embedding IS NOT NULL
+            """)
+
+            // FTS5 for full-text search over messages
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE task_chat_messages_fts USING fts5(
+                    messageText,
+                    content='task_chat_messages',
+                    content_rowid='id'
+                )
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_ai AFTER INSERT ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(rowid, messageText)
+                    VALUES (new.id, new.messageText);
+                END
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_ad AFTER DELETE ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(task_chat_messages_fts, rowid, messageText)
+                    VALUES ('delete', old.id, old.messageText);
+                END
+            """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER task_chat_messages_au AFTER UPDATE ON task_chat_messages BEGIN
+                    INSERT INTO task_chat_messages_fts(task_chat_messages_fts, rowid, messageText)
+                    VALUES ('delete', old.id, old.messageText);
+                    INSERT INTO task_chat_messages_fts(rowid, messageText)
+                    VALUES (new.id, new.messageText);
+                END
+            """)
+        }
+
+        migrator.registerMigration("addActionItemRecurrence") { db in
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceRule TEXT")
+            try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
+        }
+
+        // Clean up orphan screenshot records that have no valid storage path.
+        // These were created when VideoChunkEncoder dropped frames (e.g. aspect ratio debounce)
+        // but processFrame still inserted a DB record with imagePath="" and no videoChunkPath.
+        migrator.registerMigration("deleteOrphanScreenshots") { db in
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM screenshots
+                WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                AND (imagePath IS NULL OR imagePath = '')
+            """) ?? 0
+            if count > 0 {
+                try db.execute(sql: """
+                    DELETE FROM screenshots
+                    WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                    AND (imagePath IS NULL OR imagePath = '')
+                """)
+                log("RewindDatabase: Cleaned up \(count) orphan screenshot records with no storage path")
+            }
+        }
+
+        migrator.registerMigration("addMemoryHeadline") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "headline", .text)
+            }
+        }
+
+        migrator.registerMigration("createLocalKnowledgeGraph") { db in
+            try db.create(table: "local_kg_nodes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("nodeId", .text).notNull().unique()
+                t.column("label", .text).notNull()
+                t.column("nodeType", .text).notNull()
+                t.column("aliasesJson", .text)
+                t.column("sourceFileIds", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "local_kg_edges") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("edgeId", .text).notNull().unique()
+                t.column("sourceNodeId", .text).notNull()
+                t.column("targetNodeId", .text).notNull()
+                t.column("label", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
         }
 
         try migrator.migrate(queue)

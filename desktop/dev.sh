@@ -113,8 +113,22 @@ cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 # Create PkgInfo
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
-# Sign app (using Developer ID for distribution-style signing)
-codesign --force --sign "Developer ID Application: Matthew Diakonov (S6DP5HF77G)" "$APP_BUNDLE"
+# Sign app with a stable identity so TCC permissions persist across rebuilds.
+# Auto-detect: Developer ID > Apple Development > ad-hoc fallback.
+SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    if [ -z "$SIGN_IDENTITY" ]; then
+        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+    fi
+fi
+if [ -n "$SIGN_IDENTITY" ]; then
+    echo "Signing with: $SIGN_IDENTITY"
+    codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+    echo "Warning: No signing identity found. Using ad-hoc (permissions will reset each build)."
+    codesign --force --deep --sign - "$APP_BUNDLE"
+fi
 
 echo "Dev build complete: $APP_BUNDLE"
 echo ""

@@ -7,6 +7,9 @@ from google.api_core.retry import Retry
 from models.conversation import Conversation
 from models.trend import Trend, valid_items
 from ._client import db, document_id_from_seed
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_trends_data() -> List[Dict]:
@@ -39,7 +42,7 @@ def get_trends_data() -> List[Dict]:
             category_data['topics'] = cleaned_topics
             trends_data.append(category_data)
         except Exception as e:
-            print(e)
+            logger.error(e)
             continue
 
     return trends_data
