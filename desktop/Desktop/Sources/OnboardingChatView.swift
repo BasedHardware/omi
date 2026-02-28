@@ -12,6 +12,7 @@ enum OnboardingChatPersistence {
     private static let midOnboardingKey = "onboardingMidOnboarding"
     private static let explorationTextKey = "onboardingExplorationText"
     private static let explorationCompletedKey = "onboardingExplorationCompleted"
+    private static let toolCompletedKey = "onboardingToolCompleted"
 
     /// Save the ACP session ID for resume after restart
     static func saveSessionId(_ sessionId: String) {
@@ -54,12 +55,25 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.bool(forKey: explorationCompletedKey)
     }
 
+    // MARK: - Tool Completion
+
+    /// Mark that `complete_onboarding` tool was called (so button shows on restart)
+    static func markToolCompleted() {
+        UserDefaults.standard.set(true, forKey: toolCompletedKey)
+    }
+
+    /// Whether `complete_onboarding` was already called in a prior session
+    static var isToolCompleted: Bool {
+        UserDefaults.standard.bool(forKey: toolCompletedKey)
+    }
+
     /// Clear all persisted onboarding data
     static func clear() {
         UserDefaults.standard.removeObject(forKey: sessionIdKey)
         UserDefaults.standard.removeObject(forKey: midOnboardingKey)
         UserDefaults.standard.removeObject(forKey: explorationTextKey)
         UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
+        UserDefaults.standard.removeObject(forKey: toolCompletedKey)
         // Clean up legacy messages key if present
         UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
     }
@@ -79,6 +93,7 @@ struct OnboardingChatView: View {
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
     @State private var isGrantingPermission: Bool = false
+    @State private var pendingPermissionType: String? = nil  // e.g. "microphone" — waiting for user to grant
     @FocusState private var isInputFocused: Bool
 
     // Parallel exploration state
@@ -282,21 +297,21 @@ struct OnboardingChatView: View {
             appState.checkAccessibilityPermission()
             appState.checkAutomationPermission()
         }
-        // Bring app to front when permissions are granted
+        // When a pending permission is granted, bring app to front and notify the AI
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("screen_recording", label: "Screen Recording") }
         }
         .onChange(of: appState.hasMicrophonePermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("microphone", label: "Microphone") }
         }
         .onChange(of: appState.hasNotificationPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("notifications", label: "Notifications") }
         }
         .onChange(of: appState.hasAccessibilityPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("accessibility", label: "Accessibility") }
         }
         .onChange(of: appState.hasAutomationPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("automation", label: "Automation") }
         }
     }
 
@@ -311,6 +326,18 @@ struct OnboardingChatView: View {
                 .frame(width: 32, height: 32)
                 .background(OmiColors.backgroundTertiary)
                 .clipShape(Circle())
+        }
+    }
+
+    /// Called when a permission is detected as granted (by the 1s timer)
+    private func handlePermissionGranted(_ type: String, label: String) {
+        bringToFront()
+        // If this was the permission we were waiting for, notify the AI
+        if pendingPermissionType == type {
+            pendingPermissionType = nil
+            Task {
+                await chatProvider.sendMessage("Grant \(label) — done!")
+            }
         }
     }
 
@@ -372,6 +399,12 @@ struct OnboardingChatView: View {
         if OnboardingChatPersistence.isMidOnboarding {
             let savedSessionId = OnboardingChatPersistence.loadSessionId()
             log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
+
+            // If complete_onboarding was already called before restart, show the button immediately
+            if OnboardingChatPersistence.isToolCompleted {
+                log("OnboardingChatView: complete_onboarding was called before restart, showing button")
+                onboardingCompleted = true
+            }
 
             Task {
                 // Start bridge eagerly so it's ready by the time we need to send
@@ -469,9 +502,15 @@ struct OnboardingChatView: View {
             Task {
                 let result = await ChatToolExecutor.execute(ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil))
                 isGrantingPermission = false
-                // Send the result as a user message so the AI knows what happened
-                let replyText = result.contains("granted") ? "\(option) — done!" : "\(option) — \(result)"
-                await chatProvider.sendMessage(replyText)
+
+                if result.contains("granted") {
+                    // Granted immediately — tell the AI
+                    await chatProvider.sendMessage("\(option) — done!")
+                } else {
+                    // Pending — wait silently for the permission check timer to detect it
+                    // The onChange handlers for appState.has*Permission will send the message
+                    pendingPermissionType = permType
+                }
             }
         } else {
             // Regular quick reply — just send as message
