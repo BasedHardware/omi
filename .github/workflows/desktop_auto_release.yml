@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute next version and push tag
+      - name: Compute next version, consolidate changelog, and push tag
         run: |
           # Get latest desktop release tag
           LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
@@ -43,7 +43,41 @@ jobs:
           echo "New version: $VERSION"
           echo "New tag    : $RELEASE_TAG"
 
+          # Consolidate unreleased changelog entries into a versioned release
+          TODAY=$(date -u +%Y-%m-%d)
+          python3 -c "
+          import json, sys
+
+          with open('desktop/CHANGELOG.json', 'r') as f:
+              data = json.load(f)
+
+          unreleased = data.get('unreleased', [])
+          if not unreleased:
+              unreleased = ['Bug fixes and improvements']
+
+          new_release = {
+              'version': '$VERSION',
+              'date': '$TODAY',
+              'changes': unreleased
+          }
+
+          data.setdefault('releases', []).insert(0, new_release)
+          data['unreleased'] = []
+
+          with open('desktop/CHANGELOG.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+
+          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
+          "
+
+          # Commit the updated CHANGELOG.json to main
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/CHANGELOG.json
+          git commit -m "Update CHANGELOG.json for v${VERSION} [skip ci]" || echo "No changelog changes to commit"
+          git push origin main
+
+          # Create and push the tag
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
