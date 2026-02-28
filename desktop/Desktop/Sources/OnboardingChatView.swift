@@ -178,6 +178,15 @@ struct OnboardingChatView: View {
                         }
                     }
                 }
+                // Scroll when content blocks change within the current AI message
+                // (e.g. tool indicator + permission image added, making the message taller)
+                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { _, _ in
+                    if let lastMessage = chatProvider.messages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
                 .onChange(of: chatProvider.isSending) { _, sending in
                     if sending {
                         withAnimation {
