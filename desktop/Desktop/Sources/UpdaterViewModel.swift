@@ -89,8 +89,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
                 logSync("Sparkle: Error info [\(key)] = \(value)")
             }
             // Build diagnostic properties for analytics
-            var errorDomain = nsError.domain
-            var errorCode = nsError.code
+            let errorDomain = nsError.domain
+            let errorCode = nsError.code
             var underlyingMessage: String? = nil
             var underlyingDomain: String? = nil
             var underlyingCode: Int? = nil
