@@ -102,6 +102,12 @@ for app in "${CONFLICTING_APPS[@]}"; do
 done
 # Also remove any "Omi Computer.app" nested inside Flutter builds (any config: Debug/Release/Release-prod/etc.)
 find "$(dirname "$0")/../app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
+# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
+find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+    substep "Removing stale clone: $stale"
+    rm -rf "$stale"
+done
 
 step "Starting Cloudflare tunnel..."
 cloudflared tunnel run omi-computer-dev &
