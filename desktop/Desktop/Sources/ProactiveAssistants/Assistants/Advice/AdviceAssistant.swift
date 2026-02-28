@@ -462,6 +462,8 @@ actor AdviceAssistant: ProactiveAssistant {
         prompt += " Time: \(timeFormatter.string(from: referenceTime))."
 
         // Add activity summary from database, anchored to the reference time
+        let elapsed = referenceTime.timeIntervalSince(lookbackStart)
+        log("Advice: Activity lookback: \(String(format: "%.0f", elapsed))s (\(lookbackStart) to \(referenceTime))")
         let activitySummary = await buildActivitySummary(from: lookbackStart, to: referenceTime)
         if !activitySummary.isEmpty {
             prompt += "\n\n" + activitySummary
@@ -518,14 +520,27 @@ actor AdviceAssistant: ProactiveAssistant {
             )
         ]
 
-        // Agentic loop (max 5 iterations)
+        // Agentic loop (max 5 iterations, 120s timeout per Gemini call)
+        let client = self.geminiClient
         for iteration in 0..<5 {
-            let result = try await geminiClient.sendImageToolLoop(
-                contents: contents,
-                systemPrompt: currentSystemPrompt,
-                tools: [tools],
-                forceToolCall: iteration == 0
-            )
+            let iterContents = contents
+            let iterSystemPrompt = currentSystemPrompt
+            let iterTools = [tools]
+            let iterForce = iteration == 0
+            let result: ToolChatResult
+            do {
+                result = try await withThrowingTimeout(seconds: 120) {
+                    try await client.sendImageToolLoop(
+                        contents: iterContents,
+                        systemPrompt: iterSystemPrompt,
+                        tools: iterTools,
+                        forceToolCall: iterForce
+                    )
+                }
+            } catch {
+                log("Advice: Gemini call failed on iteration \(iteration): \(error.localizedDescription)")
+                throw error
+            }
 
             guard let toolCall = result.toolCalls.first else {
                 log("Advice: No tool call on iteration \(iteration), breaking")
@@ -596,13 +611,11 @@ actor AdviceAssistant: ProactiveAssistant {
             return ""
         }
 
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        let startStr = dateFormatter.string(from: lookbackStart)
-        let endStr = dateFormatter.string(from: referenceTime)
-
         do {
             return try await dbQueue.read { db in
+                // Pass Date objects directly — GRDB encodes them as UTC strings
+                // matching the stored format. Manual DateFormatter uses local timezone
+                // which causes mismatches.
                 let rows = try Row.fetchAll(db, sql: """
                     SELECT appName, windowTitle, COUNT(*) as count,
                            MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
@@ -612,7 +625,7 @@ actor AdviceAssistant: ProactiveAssistant {
                     GROUP BY appName, windowTitle
                     ORDER BY count DESC
                     LIMIT 30
-                    """, arguments: [startStr, endStr])
+                    """, arguments: [lookbackStart, referenceTime])
 
                 if rows.isEmpty {
                     return ""
@@ -750,5 +763,24 @@ actor AdviceAssistant: ProactiveAssistant {
             contextSummary: contextSummary,
             currentActivity: currentActivity
         )
+    }
+}
+
+// MARK: - Timeout Helper
+
+/// Run an async operation with a timeout. Throws `CancellationError` if the timeout expires.
+private func withThrowingTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask {
+            try await operation()
+        }
+        group.addTask {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            throw CancellationError()
+        }
+        // First task to complete wins; cancel the other
+        let result = try await group.next()!
+        group.cancelAll()
+        return result
     }
 }
