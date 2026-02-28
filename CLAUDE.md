@@ -198,23 +198,6 @@ When you finish implementing a task, **commit and push your changes** before end
 - The pre-commit hook auto-formats staged code — no need to format manually before committing
 - If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
 
-### Desktop Changelog
-When completing a task that changes `desktop/**` with user-visible impact, append a one-liner to the `unreleased` array in `desktop/CHANGELOG.json`:
-
-```bash
-python3 -c "
-import json
-with open('desktop/CHANGELOG.json', 'r') as f:
-    data = json.load(f)
-data.setdefault('unreleased', []).append('Your user-facing change description')
-with open('desktop/CHANGELOG.json', 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-"
-```
-
-Write from the user's perspective ("Fixed X", "Added Y", "Improved Z"). One sentence, no period. Skip internal-only changes (refactors, CI, cleanup). Commit CHANGELOG.json with your other changes.
-
 ### RELEASE command
 When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
