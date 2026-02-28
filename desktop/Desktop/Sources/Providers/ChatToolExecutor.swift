@@ -44,28 +44,49 @@ class ChatToolExecutor {
 
         // Onboarding tools
         case "request_permission":
-            return await executeRequestPermission(toolCall.arguments)
+            let result = await executeRequestPermission(toolCall.arguments)
+            let permType = toolCall.arguments["type"] as? String ?? "unknown"
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "request_permission", properties: ["permission": permType, "result": result.contains("granted") ? "granted" : "pending"])
+            return result
 
         case "check_permission_status":
-            return await executeCheckPermissionStatus(toolCall.arguments)
+            let result = await executeCheckPermissionStatus(toolCall.arguments)
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "check_permission_status")
+            return result
 
         case "scan_files", "start_file_scan":
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "scan_files")
             return await executeScanFiles(toolCall.arguments)
 
         case "get_file_scan_results":
             return await executeScanFiles(toolCall.arguments)
 
         case "set_user_preferences":
-            return await executeSetUserPreferences(toolCall.arguments)
+            let result = await executeSetUserPreferences(toolCall.arguments)
+            var props: [String: Any] = [:]
+            if let name = toolCall.arguments["name"] as? String { props["name_changed"] = true; props["name"] = name }
+            if let lang = toolCall.arguments["language"] as? String { props["language"] = lang }
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "set_user_preferences", properties: props)
+            return result
 
         case "ask_followup":
-            return await executeAskFollowup(toolCall.arguments)
+            let result = await executeAskFollowup(toolCall.arguments)
+            let question = toolCall.arguments["question"] as? String ?? ""
+            let optionCount = (toolCall.arguments["options"] as? [String])?.count ?? 0
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "ask_followup", properties: ["question_length": question.count, "option_count": optionCount])
+            return result
 
         case "complete_onboarding":
-            return await executeCompleteOnboarding(toolCall.arguments)
+            let result = await executeCompleteOnboarding(toolCall.arguments)
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "complete_onboarding")
+            return result
 
         case "save_knowledge_graph":
-            return await executeSaveKnowledgeGraph(toolCall.arguments)
+            let result = await executeSaveKnowledgeGraph(toolCall.arguments)
+            let nodeCount = (toolCall.arguments["nodes"] as? [[String: Any]])?.count ?? 0
+            let edgeCount = (toolCall.arguments["edges"] as? [[String: Any]])?.count ?? 0
+            AnalyticsManager.shared.onboardingChatToolUsed(tool: "save_knowledge_graph", properties: ["nodes": nodeCount, "edges": edgeCount])
+            return result
 
         default:
             return "Unknown tool: \(toolCall.name)"
