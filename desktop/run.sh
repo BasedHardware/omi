@@ -85,10 +85,12 @@ step "Cleaning up conflicting app bundles..."
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
 CONFLICTING_APPS=(
     "/Applications/Omi Computer.app"
-    "/Applications/Omi Dev.app"
     "/Applications/Omi.app/Contents/MacOS/Omi Computer.app"
+    "/Applications/Omi.app"
     "$HOME/Desktop/Omi.app"
+    "$HOME/Desktop/Omi Dev.app"
     "$HOME/Downloads/Omi.app"
+    "$HOME/Downloads/Omi Dev.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
 )
@@ -293,6 +295,12 @@ fi
 step "Removing quarantine attributes..."
 xattr -cr "$APP_BUNDLE"
 
+step "Installing to /Applications/..."
+# Install to /Applications/ so "Quit & Reopen" (after granting screen recording
+# permission) launches the correct binary instead of a stale copy elsewhere.
+ditto "$APP_BUNDLE" "$APP_PATH"
+substep "Installed to $APP_PATH"
+
 step "Clearing stale LaunchServices registration..."
 # Unregister first to clear any launch-disabled flag from stale entries,
 # then let `open` re-register the app fresh. Without this, notifications
@@ -300,13 +308,15 @@ step "Clearing stale LaunchServices registration..."
 # the launch-disabled flag prevents notification center registration.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 $LSREGISTER -u "$APP_BUNDLE" 2>/dev/null || true
+$LSREGISTER -u "$APP_PATH" 2>/dev/null || true
 # Purge stale registrations from old DMG staging dirs and unmounted volumes
 # These create ghost entries that can cause notification icons to show a
 # generic folder instead of the app icon
 for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
     [ -d "$stale" ] || $LSREGISTER -u "$stale" 2>/dev/null || true
 done
-$LSREGISTER -f "$APP_BUNDLE" 2>/dev/null || true
+# Register the /Applications/ copy as the canonical bundle for this bundle ID
+$LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
 step "Starting app..."
 
@@ -318,13 +328,13 @@ echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
-echo "App:      $APP_BUNDLE"
+echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
 echo "Using backend: $TUNNEL_URL"
 echo "========================================"
 echo ""
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-open "$APP_BUNDLE" || "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" &
+open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 
 # Wait for backend process (keeps script running and shows logs)
 echo "Press Ctrl+C to stop all services..."
