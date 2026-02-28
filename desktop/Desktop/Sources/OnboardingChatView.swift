@@ -170,44 +170,28 @@ struct OnboardingChatView: View {
                         Spacer().frame(height: 20)
                     }
                     .padding(20)
+
+                    // Invisible anchor at the very bottom — always scroll to this
+                    // (same pattern as ChatMessagesView)
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottom-anchor")
                 }
                 .onChange(of: chatProvider.messages.count) { _, _ in
-                    if let lastMessage = chatProvider.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                        }
-                    }
+                    scrollToBottom(proxy: proxy)
                 }
-                // Scroll when content blocks change within the current AI message
-                // (e.g. tool indicator + permission image added, making the message taller)
+                .onChange(of: chatProvider.messages.last?.text) { _, _ in
+                    scrollToBottom(proxy: proxy)
+                }
                 .onChange(of: chatProvider.messages.last?.contentBlocks.count) { _, _ in
-                    if let lastMessage = chatProvider.messages.last {
-                        withAnimation {
-                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                        }
-                    }
+                    // Delayed scroll to let SwiftUI lay out images/tool indicators
+                    scrollToBottom(proxy: proxy, delay: 0.15)
                 }
-                .onChange(of: chatProvider.isSending) { _, sending in
-                    if sending {
-                        withAnimation {
-                            proxy.scrollTo("typing", anchor: .bottom)
-                        }
-                    } else {
-                        if !quickReplyOptions.isEmpty {
-                            withAnimation {
-                                proxy.scrollTo("quick-replies", anchor: .bottom)
-                            }
-                        }
-                    }
+                .onChange(of: chatProvider.isSending) { _, _ in
+                    scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: quickReplyOptions) { _, options in
-                    if !options.isEmpty {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            withAnimation {
-                                proxy.scrollTo("quick-replies", anchor: .bottom)
-                            }
-                        }
-                    }
+                .onChange(of: quickReplyOptions) { _, _ in
+                    scrollToBottom(proxy: proxy, delay: 0.1)
                 }
             }
 
@@ -298,6 +282,18 @@ struct OnboardingChatView: View {
 
     private var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !chatProvider.isSending
+    }
+
+    // MARK: - Scroll
+
+    private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0) {
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
+            }
+        } else {
+            withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
+        }
     }
 
     // MARK: - Actions
