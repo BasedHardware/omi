@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - NSHostingView sizingOptions access
+
+/// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
+/// NSHostingView is generic so we can't cast to it without knowing Content.
+/// This protocol + extension lets us access sizingOptions through existential dispatch.
+@MainActor
+private protocol HostingSizingConfigurable: AnyObject {
+    var sizingOptions: NSHostingSizingOptions { get set }
+}
+extension NSHostingView: HostingSizingConfigurable {}
+
 struct DesktopHomeView: View {
     @StateObject private var appState = AppState()
     @StateObject private var viewModelContainer = ViewModelContainer()
@@ -19,8 +30,6 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
-    // File indexing sheet for existing users
-    @State private var showFileIndexingSheet = false
 
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
@@ -69,6 +78,16 @@ struct DesktopHomeView: View {
             } else {
                 // State 3: Signed in and onboarded - show main content
                 ZStack {
+                    // After onboarding completes, navigate to Chat page so the conversation continues
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .onAppear {
+                            if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
+                                UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
+                                log("DesktopHomeView: Onboarding just completed — navigating to Chat page")
+                                selectedIndex = SidebarNavItem.chat.rawValue
+                            }
+                        }
                     mainContent
                         .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
                         .onAppear {
@@ -76,9 +95,13 @@ struct DesktopHomeView: View {
                             // Check all permissions on launch
                             appState.checkAllPermissions()
 
-                            // Show file indexing sheet for existing users who haven't done it
+                            // For existing users who haven't indexed files yet, run a background scan
                             if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
-                                showFileIndexingSheet = true
+                                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+                                Task {
+                                    log("DesktopHomeView: Running background file scan for existing user")
+                                    await FileIndexerService.shared.backgroundRescan()
+                                }
                             }
 
                             let settings = AssistantSettings.shared
@@ -91,18 +114,28 @@ struct DesktopHomeView: View {
                                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
                             }
 
+                            // Migration: one-time reset for users whose screenAnalysisEnabled
+                            // was incorrectly set to false by a bug in syncMonitoringState() that
+                            // persisted false whenever monitoring stopped for any reason.
+                            // v2: re-run because the root cause (syncMonitoringState disabling the
+                            // setting) was only fixed in this release, so v1 users got re-broken.
+                            let migrationKey = "screenAnalysisAutoStartFixed_v2"
+                            if !UserDefaults.standard.bool(forKey: migrationKey) {
+                                UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
+                                AssistantSettings.shared.screenAnalysisEnabled = true
+                                UserDefaults.standard.set(true, forKey: migrationKey)
+                                log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
+                                // Push true to server so syncFromServer() doesn't revert it
+                                Task { await SettingsSyncManager.shared.syncToServer() }
+                            }
+
                             // Start proactive assistants monitoring if enabled in settings
                             if settings.screenAnalysisEnabled {
                                 ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
                                     if success {
                                         log("DesktopHomeView: Screen analysis started")
                                     } else {
-                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown")")
-                                        // Revert persistent setting so UI reflects actual state
-                                        DispatchQueue.main.async {
-                                            AssistantSettings.shared.screenAnalysisEnabled = false
-                                            UserDefaults.standard.set(false, forKey: "screenAnalysisEnabled")
-                                        }
+                                        log("DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch")
                                     }
                                 }
                             } else {
@@ -137,6 +170,17 @@ struct DesktopHomeView: View {
                         // Refresh conversations when app becomes active (e.g. switching back from another app)
                         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                             Task { await appState.refreshConversations() }
+                            // Auto-start monitoring when returning to app if screen analysis is enabled
+                            // but monitoring is not running. Handles the case where the user granted
+                            // screen recording permission in System Settings and switched back.
+                            let plugin = ProactiveAssistantsPlugin.shared
+                            if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
+                                plugin.refreshScreenRecordingPermission()
+                                if plugin.hasScreenRecordingPermission {
+                                    log("DesktopHomeView: Permission available on app active — starting monitoring")
+                                    plugin.startMonitoring { _, _ in }
+                                }
+                            }
                         }
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
@@ -152,6 +196,17 @@ struct DesktopHomeView: View {
                             appState.hasCompletedOnboarding = false
                             appState.stopTranscription()
                         }
+                        // Handle transcription toggle from menu bar
+                        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) { notification in
+                            if let enabled = notification.userInfo?["enabled"] as? Bool {
+                                log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+                                if enabled {
+                                    appState.startTranscription()
+                                } else {
+                                    appState.stopTranscription()
+                                }
+                            }
+                        }
                         // Periodic file re-scan (every 3 hours)
                         .task {
                             while !Task.isCancelled {
@@ -163,16 +218,11 @@ struct DesktopHomeView: View {
                             }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-                            showFileIndexingSheet = true
-                        }
-                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
-                            FileIndexingView(
-                                chatProvider: viewModelContainer.chatProvider,
-                                onComplete: { fileCount in
-                                    showFileIndexingSheet = false
-                                }
-                            )
-                            .frame(width: 600, height: 650)
+                            // Background rescan — no loading screen needed
+                            Task {
+                                log("DesktopHomeView: File indexing triggered from settings, running background rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -213,11 +263,20 @@ struct DesktopHomeView: View {
         .tint(OmiColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
-            // Force dark appearance on the window
+            // Force dark appearance and disable minSize computation on NSHostingView.
+            // By default, every @Published change triggers
+            // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
+            // which traverses the ENTIRE view tree (~200 samples per window per trigger).
+            // Removing .minSize from sizingOptions prevents this full-tree traversal.
+            // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title == "Omi" {
+                    if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
+                        window.minSize = NSSize(width: 900, height: 600)
+                        // Remove .minSize from hosting view's sizingOptions.
+                        // Search contentView itself + all descendants.
+                        Self.disableMinSizeComputation(in: window)
                     }
                 }
             }
@@ -226,6 +285,36 @@ struct DesktopHomeView: View {
         }
         .onChange(of: currentTierLevel) { _, _ in
             redirectIfPageHidden()
+        }
+    }
+
+    /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
+    /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
+    /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
+    /// NOTE: ClickThroughHostingView is excluded because it wraps the sidebar and needs
+    /// intrinsicContentSize for SwiftUI's .fixedSize() layout to compute the correct width.
+    private static func disableMinSizeComputation(in window: NSWindow) {
+        func visit(_ view: NSView) {
+            if let hosting = view as? any HostingSizingConfigurable {
+                // Skip ClickThroughHostingView — it's an NSViewRepresentable boundary
+                // that needs intrinsicContentSize for the sidebar's .fixedSize() to work.
+                let typeName = String(describing: type(of: view))
+                guard !typeName.contains("ClickThroughHostingView") else {
+                    log("DesktopHomeView: Skipping sizingOptions on \(typeName) (needs intrinsic size)")
+                    // Still visit children
+                    for subview in view.subviews { visit(subview) }
+                    return
+                }
+                let before = hosting.sizingOptions
+                hosting.sizingOptions = []
+                log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+            }
+            for subview in view.subviews {
+                visit(subview)
+            }
+        }
+        if let contentView = window.contentView {
+            visit(contentView)
         }
     }
 
@@ -253,6 +342,24 @@ struct DesktopHomeView: View {
     }
 
     /// Update store auto-refresh based on which page is visible
+    /// On launch, if the user quit with the task chat panel open, macOS restores the
+    /// expanded window frame but the chat panel itself is not shown. Shrink the window
+    /// back to its pre-chat width so the layout isn't unexpectedly wide.
+    private func restorePreChatWindowWidth() {
+        let key = "tasksPreChatWindowWidth"
+        let saved = UserDefaults.standard.double(forKey: key)
+        guard saved > 0 else { return }
+        // Reset the persisted value immediately so TasksPage won't double-shrink
+        UserDefaults.standard.set(Double(0), forKey: key)
+        // Delay slightly so the window is fully visible
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+            var frame = window.frame
+            frame.size.width = saved
+            window.setFrame(frame, display: true)
+        }
+    }
+
     private func updateStoreActivity(for index: Int) {
         viewModelContainer.tasksStore.isActive =
             index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
@@ -274,7 +381,7 @@ struct DesktopHomeView: View {
                         isCollapsed: $isSidebarCollapsed,
                         appState: appState
                     )
-                    .clickThrough()
+                    .clickThrough(enabled: !isInSettings)
                     .opacity(isInSettings ? 0 : 1)
                     .allowsHitTesting(!isInSettings)
                 }
@@ -293,6 +400,7 @@ struct DesktopHomeView: View {
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
+            .clipped()
 
             // Main content area with rounded container
             ZStack {
@@ -390,6 +498,10 @@ struct DesktopHomeView: View {
         }
         .onAppear {
             updateStoreActivity(for: selectedIndex)
+            // Restore window width if the user quit with task chat panel open.
+            // The chat panel is never open on startup (showChatPanel defaults to false),
+            // but macOS restores the expanded window frame from the previous session.
+            restorePreChatWindowWidth()
         }
     }
 }
@@ -419,7 +531,7 @@ private struct PageContentView: View {
             case 3:
                 MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
             case 4:
-                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatProvider: viewModelContainer.chatProvider)
+                TasksPage(viewModel: viewModelContainer.tasksViewModel, chatCoordinator: viewModelContainer.taskChatCoordinator, chatProvider: viewModelContainer.chatProvider)
             case 5:
                 FocusPage()
             case 6:

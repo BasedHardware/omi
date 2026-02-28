@@ -11,22 +11,40 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
+    /// Minimum window height when AI response first appears.
+    private static let minResponseHeight: CGFloat = 250
+    /// Base height used as the reference for 2× cap (same as current default response height).
+    private static let defaultBaseResponseHeight: CGFloat = 430
+    /// Overhead (px) added to measured scroll content to account for control bar, header, follow-up input, and padding.
+    private static let responseViewOverhead: CGFloat = 190
 
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
     private var isResizingProgrammatically = false
     private var isUserDragging = false
+    /// Set by ResizeHandleNSView while the user is manually dragging the corner.
+    /// Prevents the response-height observer from fighting manual resize.
+    var isUserResizing = false
     /// Suppresses hover resizes during close animation to prevent position drift.
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
+    private var responseHeightCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
     private var preChatCenter: NSPoint?
+    /// Token incremented each time a windowDidResignKey dismiss animation starts.
+    /// Checked in the completion block so a new PTT query can cancel a stale close.
+    private var resignKeyAnimationToken: Int = 0
+    /// The target origin of an in-progress close/restore animation, set in
+    /// closeAIConversation() and cleared when the animation settles.
+    /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
+    /// if a new PTT query fires while the restore animation is still running.
+    private var pendingRestoreOrigin: NSPoint?
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
     var onHide: (() -> Void)?
-    var onSendQuery: ((String, URL?) -> Void)?
+    var onSendQuery: ((String) -> Void)?
 
     override init(
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
@@ -89,7 +107,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             onPlayPause: { [weak self] in self?.onPlayPause?() },
             onAskAI: { [weak self] in self?.handleAskAI() },
             onHide: { [weak self] in self?.hideBar() },
-            onSendQuery: { [weak self] message, screenshotURL in self?.onSendQuery?(message, screenshotURL) },
+            onSendQuery: { [weak self] message in self?.onSendQuery?(message) },
             onCloseAI: { [weak self] in self?.closeAIConversation() }
         ).environmentObject(state)
 
@@ -170,35 +188,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    func captureScreenshot(thenFocusInput: Bool = false) {
-        // Temporarily hide the bar to avoid capturing it in the screenshot
-        let wasVisible = isVisible
-        if wasVisible { orderOut(nil) }
-
-        // Small delay to let the window disappear before capture
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            // Capture screenshot off main thread — PNG encoding + file write can block
-            Task.detached {
-                let url = ScreenCaptureManager.captureScreen()
-                await MainActor.run {
-                    self?.state.screenshotURL = url
-                }
-            }
-
-            if wasVisible {
-                self?.orderFront(nil)
-                self?.makeKeyAndOrderFront(nil)
-            }
-
-            if thenFocusInput {
-                // Focus after a short delay to let SwiftUI create the text view
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self?.focusInputField()
-                }
-            }
-        }
-    }
-
     /// Focus the text input field by finding the NSTextView in the view hierarchy.
     /// Returns `true` if the text view was found and focused.
     @discardableResult
@@ -226,6 +215,11 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // Cancel any in-flight chat streaming to prevent re-expansion
         FloatingControlBarManager.shared.cancelChat()
 
+        // Cancel dynamic response-height observer and reset its state
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        state.responseContentHeight = 0
+
         // Cancel PTT if in follow-up mode
         if state.isVoiceFollowUp {
             PushToTalkManager.shared.cancelListening()
@@ -236,7 +230,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             state.showingAIResponse = false
             state.aiInputText = ""
             state.currentAIMessage = nil
-            state.screenshotURL = nil
             state.chatHistory = []
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
@@ -245,33 +238,48 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
         // fires mid-animation, reads an intermediate frame, and causes position drift.
         suppressHoverResize = true
 
-        // Restore to saved center so hover expand/collapse stays consistent (no drift).
-        if let center = preChatCenter {
-            let size = FloatingControlBarWindow.minBarSize
-            let restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
-            resizeWorkItem?.cancel()
-            resizeWorkItem = nil
-            styleMask.remove(.resizable)
-            isResizingProgrammatically = true
-            NSAnimationContext.beginGrouping()
-            NSAnimationContext.current.duration = 0.3
-            NSAnimationContext.current.allowsImplicitAnimation = false
-            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
-            NSAnimationContext.endGrouping()
-            // Keep isResizingProgrammatically true until animation finishes to prevent
-            // intermediate frames from triggering unwanted side effects.
-            let targetFrame = NSRect(origin: restoreOrigin, size: size)
-            preChatCenter = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                self?.isResizingProgrammatically = false
-                // Safety net: if the frame drifted during animation, snap to the correct position.
-                if let self = self, self.frame != targetFrame {
-                    self.setFrame(targetFrame, display: true, animate: false)
-                }
-            }
+        // Determine the target origin for the collapsed pill.
+        // Non-draggable: always use the fixed default position so the pill never drifts,
+        // regardless of where the expanded window ended up (anchorTop grows downward,
+        // so the window center shifts — anchoring from center would land in the wrong spot).
+        // Draggable + preChatCenter set: restore to where the bar was before chat opened.
+        // Draggable + no preChatCenter: fall back to current center-anchor (best effort).
+        let size = FloatingControlBarWindow.minBarSize
+        let restoreOrigin: NSPoint
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            restoreOrigin = defaultPillOrigin()
+        } else if let center = preChatCenter {
+            restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
         } else {
-            resizeAnchored(to: FloatingControlBarWindow.minBarSize, makeResizable: false, animated: true)
+            restoreOrigin = NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2)
+        }
+
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+        styleMask.remove(.resizable)
+        isResizingProgrammatically = true
+        // Record the animation target so savePreChatCenterIfNeeded() can snap to it
+        // if a new PTT query fires while this restore animation is still running.
+        pendingRestoreOrigin = restoreOrigin
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0.3
+        NSAnimationContext.current.allowsImplicitAnimation = false
+        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
+        NSAnimationContext.endGrouping()
+        let targetFrame = NSRect(origin: restoreOrigin, size: size)
+        preChatCenter = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self = self else { return }
+            self.isResizingProgrammatically = false
+            self.pendingRestoreOrigin = nil
+            // Safety net: only snap if no new AI session was opened while the animation ran.
+            // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
+            // back to the pill position by this stale completion block.
+            guard !self.state.showingAIConversation else { return }
+            if self.frame != targetFrame {
+                self.setFrame(targetFrame, display: true, animate: false)
+            }
         }
 
         // Allow hover resizes again after the animation settles.
@@ -328,14 +336,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             self?.focusInputField()
         }
 
-        // Capture screenshot in background without hiding the bar
-        Task.detached { [weak self] in
-            let url = ScreenCaptureManager.captureScreen()
-            let capturedSelf = self
-            await MainActor.run {
-                capturedSelf?.state.screenshotURL = url
-            }
-        }
     }
 
     private func setupInputHeightObserver() {
@@ -500,17 +500,56 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
+        // Determine the 2× cap from the user's saved (or default) preferred height.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
             .map(NSSizeFromString)
+        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
+        let maxHeight = baseHeight * 2
 
-        let targetSize = savedSize.map {
-            NSSize(
-                width: max($0.width, FloatingControlBarWindow.minBarSize.width),
-                height: max($0.height, 430)
-            )
-        } ?? NSSize(width: 430, height: 430)
+        // Start at the larger of minResponseHeight or current frame height so we never
+        // shrink the window (e.g. during follow-up exchanges where it's already expanded).
+        let startHeight = max(Self.minResponseHeight, frame.height)
+        let initialSize = NSSize(width: Self.expandedWidth, height: startHeight)
+        resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
+        setupResponseHeightObserver(maxHeight: maxHeight)
+    }
 
-        resizeAnchored(to: targetSize, makeResizable: true, animated: animated, anchorTop: true)
+    /// Observes `state.responseContentHeight` and expands the window to fit content,
+    /// capped at `maxHeight`. Never shrinks automatically.
+    private func setupResponseHeightObserver(maxHeight: CGFloat) {
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = state.$responseContentHeight
+            .removeDuplicates()
+            .debounce(for: .milliseconds(80), scheduler: DispatchQueue.main)
+            .sink { [weak self] contentHeight in
+                guard let self = self,
+                      self.state.showingAIResponse,
+                      !self.isUserResizing,
+                      contentHeight > 0
+                else { return }
+                let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
+                let clampedHeight = min(max(targetHeight, Self.minResponseHeight), maxHeight)
+                // Only expand, never auto-shrink.
+                guard clampedHeight > self.frame.height + 2 else { return }
+                self.resizeAnchored(
+                    to: NSSize(width: Self.expandedWidth, height: clampedHeight),
+                    makeResizable: true,
+                    animated: true,
+                    anchorTop: true
+                )
+            }
+    }
+
+    /// Compute the default origin for the collapsed pill (top-center of the key screen).
+    /// Used by closeAIConversation in non-draggable mode and centerOnMainScreen.
+    private func defaultPillOrigin() -> NSPoint {
+        let size = FloatingControlBarWindow.minBarSize
+        let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen = targetScreen else { return .zero }
+        let visibleFrame = screen.visibleFrame
+        let x = visibleFrame.midX - size.width / 2
+        let y = visibleFrame.maxY - size.height - 20
+        return NSPoint(x: x, y: y)
     }
 
     /// Center the bar near the top of the main screen.
@@ -556,6 +595,41 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
 
     // MARK: - NSWindowDelegate
 
+    func windowDidResignKey(_ notification: Notification) {
+        guard state.showingAIConversation else { return }
+
+        // Only dismiss when the user physically clicks away.
+        // Programmatic focus changes — e.g. the AI agent activating a browser
+        // window for automation — do NOT produce a mouse-down event, so we
+        // leave the conversation open in those cases.
+        let eventType = NSApp.currentEvent?.type
+        let isMouseClick = eventType == .leftMouseDown
+            || eventType == .rightMouseDown
+            || eventType == .otherMouseDown
+        guard isMouseClick else { return }
+
+        // Stamp a token so a new PTT query can cancel this in-flight dismiss.
+        resignKeyAnimationToken += 1
+        let token = resignKeyAnimationToken
+
+        // Phase 1: fade out (easeIn — accelerates to gone, feels intentional).
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            self.animator().alphaValue = 0
+        }) { [weak self] in
+            guard let self, self.resignKeyAnimationToken == token else { return }
+            // Phase 2: collapse while invisible (no jarring resize flash).
+            self.closeAIConversation()
+            // Phase 3: fade the collapsed pill back in (easeOut — decelerates into place).
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.animator().alphaValue = 1
+            })
+        }
+    }
+
     @objc func windowDidMove(_ notification: Notification) {
         // Only persist position when the user is physically dragging the bar.
         // Programmatic moves (resize animations, chat open/close) should not
@@ -574,7 +648,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        if !isResizingProgrammatically && state.showingAIResponse {
+        if !isResizingProgrammatically && !isUserResizing && state.showingAIResponse {
             UserDefaults.standard.set(
                 NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
             )
@@ -649,10 +723,10 @@ class FloatingControlBarManager {
         // Reuse the sidebar's ChatProvider (bridge is already warm from app startup)
         self.chatProvider = chatProvider
 
-        barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message, screenshotURL in
+        barWindow.onSendQuery = { [weak self, weak barWindow, weak chatProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = chatProvider else { return }
             Task { @MainActor in
-                await self.sendAIQuery(message, screenshotURL: screenshotURL, barWindow: barWindow, provider: provider)
+                await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
             }
         }
 
@@ -752,7 +826,7 @@ class FloatingControlBarManager {
     }
 
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
-    func openAIInputWithQuery(_ query: String, screenshot: URL?) {
+    func openAIInputWithQuery(_ query: String) {
         guard let window = window else { return }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
@@ -765,7 +839,6 @@ class FloatingControlBarManager {
         window.state.showingAIResponse = false
         window.state.aiInputText = ""
         window.state.currentAIMessage = nil
-        window.state.screenshotURL = nil
         window.state.chatHistory = []
         window.state.isVoiceFollowUp = false
         window.state.voiceFollowUpTranscript = ""
@@ -773,16 +846,21 @@ class FloatingControlBarManager {
         guard let provider = self.chatProvider else { return }
 
         // Re-wire the onSendQuery to use the shared provider
-        window.onSendQuery = { [weak self, weak window, weak provider] message, screenshotURL in
+        window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.sendAIQuery(message, screenshotURL: screenshotURL, barWindow: window, provider: provider)
+                await self.sendAIQuery(message, barWindow: window, provider: provider)
             }
         }
 
         if !window.isVisible {
             show()
         }
+
+        // Cancel any in-flight windowDidResignKey dismiss animation before saving the
+        // pre-chat center. Without this, the stale completion block fires after the new
+        // query opens and immediately closes it.
+        window.cancelPendingDismiss()
 
         // Save pre-chat center so closeAIConversation can restore the original position.
         // Without this, Escape after a PTT query places the bar at the response window's
@@ -801,7 +879,7 @@ class FloatingControlBarManager {
 
         // Auto-send the query
         Task { @MainActor in
-            await self.sendAIQuery(query, screenshotURL: screenshot, barWindow: window, provider: provider)
+            await self.sendAIQuery(query, barWindow: window, provider: provider)
         }
     }
 
@@ -809,7 +887,7 @@ class FloatingControlBarManager {
     func sendFollowUpQuery(_ query: String) {
         guard let window = window, window.state.showingAIResponse else {
             // No active conversation — fall back to new conversation
-            openAIInputWithQuery(query, screenshot: nil)
+            openAIInputWithQuery(query)
             return
         }
 
@@ -828,8 +906,7 @@ class FloatingControlBarManager {
         window.state.currentAIMessage = nil
         window.state.isAILoading = true
 
-        let screenshot = window.state.screenshotURL
-        window.onSendQuery?(query, screenshot)
+        window.onSendQuery?(query)
     }
 
     /// Access the bar state for PTT updates.
@@ -844,8 +921,17 @@ class FloatingControlBarManager {
 
     // MARK: - AI Query
 
-    private func sendAIQuery(_ message: String, screenshotURL: URL?, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotURL != nil)
+    private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Hide the bar, capture a clean screenshot, then restore — same path for both typed and PTT
+        barWindow.orderOut(nil)
+        try? await Task.sleep(nanoseconds: 150_000_000) // 150ms for window to disappear
+        let screenshotData = await Task.detached { () -> Data? in
+            guard let url = ScreenCaptureManager.captureScreen() else { return nil }
+            return try? Data(contentsOf: url)
+        }.value
+        barWindow.makeKeyAndOrderFront(nil)
+
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 
         // Provider is already initialized by ViewModelContainer at app launch
 
@@ -857,6 +943,7 @@ class FloatingControlBarManager {
         chatCancellable?.cancel()
         barWindow.state.currentAIMessage = nil
         barWindow.state.isAILoading = true
+        var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak barWindow] messages in
@@ -870,9 +957,12 @@ class FloatingControlBarManager {
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
-                    if let barWindow = barWindow, !barWindow.state.showingAIResponse {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                            barWindow.state.showingAIResponse = true
+                    if let barWindow = barWindow, !hasSetUpResponseHeight {
+                        hasSetUpResponseHeight = true
+                        if !barWindow.state.showingAIResponse {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                barWindow.state.showingAIResponse = true
+                            }
                         }
                         barWindow.resizeToResponseHeightPublic(animated: true)
                     }
@@ -881,13 +971,7 @@ class FloatingControlBarManager {
                 }
             }
 
-        // Build prompt with screenshot context if available
-        var fullMessage = message
-        if let url = screenshotURL {
-            fullMessage = "[Screenshot of user's screen attached: \(url.path)]\n\n\(message)"
-        }
-
-        await provider.sendMessage(fullMessage, model: ShortcutSettings.shared.selectedModel)
+        await provider.sendMessage(message, model: ShortcutSettings.shared.selectedModel, systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix, sessionKey: "floating", imageData: screenshotData)
 
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
@@ -924,8 +1008,37 @@ extension FloatingControlBarWindow {
 
     /// Save the current center point so closeAIConversation can restore position.
     /// Only saves if preChatCenter is not already set (avoids overwriting during follow-ups).
+    /// If a close/restore animation is in flight (pendingRestoreOrigin is set), snaps the
+    /// window to that target first so the saved center reflects the true pill position,
+    /// not an intermediate animation frame.
+    /// In non-draggable mode, always snaps to the fixed default position so the saved
+    /// center is always the canonical top-center default, never a drifted value.
     func savePreChatCenterIfNeeded() {
         guard preChatCenter == nil else { return }
+        let size = FloatingControlBarWindow.minBarSize
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            // Non-draggable: always snap to the default pill position before saving.
+            // This ensures preChatCenter is always the canonical default, not a
+            // mid-animation frame or drifted position from a previous session.
+            let origin = defaultPillOrigin()
+            isResizingProgrammatically = true
+            setFrame(NSRect(origin: origin, size: size), display: true, animate: false)
+            isResizingProgrammatically = false
+            pendingRestoreOrigin = nil
+        } else if let restoreOrigin = pendingRestoreOrigin {
+            // Draggable: if a restore animation is running, snap to its target immediately
+            // so we record the correct pill position rather than a mid-animation frame.
+            isResizingProgrammatically = true
+            setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: false)
+            isResizingProgrammatically = false
+            pendingRestoreOrigin = nil
+        }
         preChatCenter = NSPoint(x: frame.midX, y: frame.midY)
+    }
+
+    /// Invalidates any in-flight windowDidResignKey dismiss animation so a new PTT
+    /// query won't be immediately closed by a stale completion block.
+    func cancelPendingDismiss() {
+        resignKeyAnimationToken += 1
     }
 }

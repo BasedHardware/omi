@@ -33,6 +33,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var contextSummary: String?
     var currentActivity: String?
     var inputDeviceName: String?
+    var headline: String?
 
     // Status flags
     var isRead: Bool
@@ -69,6 +70,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         contextSummary: String? = nil,
         currentActivity: String? = nil,
         inputDeviceName: String? = nil,
+        headline: String? = nil,
         isRead: Bool = false,
         isDismissed: Bool = false,
         deleted: Bool = false,
@@ -96,6 +98,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.contextSummary = contextSummary
         self.currentActivity = currentActivity
         self.inputDeviceName = inputDeviceName
+        self.headline = headline
         self.isRead = isRead
         self.isDismissed = isDismissed
         self.deleted = deleted
@@ -194,6 +197,7 @@ extension MemoryRecord {
             contextSummary: memory.contextSummary,
             currentActivity: memory.currentActivity,
             inputDeviceName: memory.inputDeviceName,
+            headline: memory.headline,
             isRead: memory.isRead,
             isDismissed: memory.isDismissed,
             deleted: false,
@@ -250,6 +254,9 @@ extension MemoryRecord {
         if let windowTitle = memory.windowTitle {
             self.windowTitle = windowTitle
         }
+        if let headline = memory.headline {
+            self.headline = headline
+        }
 
         // Update status
         self.isRead = memory.isRead
@@ -290,7 +297,8 @@ extension MemoryRecord {
             reasoning: reasoning,
             currentActivity: currentActivity,
             inputDeviceName: inputDeviceName,
-            windowTitle: windowTitle
+            windowTitle: windowTitle,
+            headline: headline
         )
     }
 }
@@ -321,7 +329,8 @@ extension ServerMemory {
         reasoning: String?,
         currentActivity: String?,
         inputDeviceName: String?,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        headline: String? = nil
     ) {
         self.id = id
         self.content = content
@@ -345,7 +354,15 @@ extension ServerMemory {
         self.currentActivity = currentActivity
         self.inputDeviceName = inputDeviceName
         self.windowTitle = windowTitle
+        self.headline = headline
     }
+}
+
+// MARK: - TableDocumented
+
+extension MemoryRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["memories"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["memories"] ?? [:] }
 }
 
 // MARK: - Memory Storage Error

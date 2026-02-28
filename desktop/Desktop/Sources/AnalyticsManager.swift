@@ -645,9 +645,9 @@ class AnalyticsManager {
         PostHogManager.shared.updateNotFound()
     }
 
-    func updateCheckFailed(error: String) {
-        MixpanelManager.shared.updateCheckFailed(error: error)
-        PostHogManager.shared.updateCheckFailed(error: error)
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        MixpanelManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
+        PostHogManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
     }
 
     // MARK: - Notification Events
@@ -696,6 +696,11 @@ class AnalyticsManager {
     func tierChanged(tier: Int, reason: String) {
         MixpanelManager.shared.tierChanged(tier: tier, reason: reason)
         PostHogManager.shared.tierChanged(tier: tier, reason: reason)
+    }
+
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        MixpanelManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+        PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
     }
 
     // MARK: - Settings State
@@ -802,6 +807,9 @@ class AnalyticsManager {
         props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
         props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
 
+        // -- AI Chat Mode --
+        props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
+
         // -- UI Preferences --
         props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
         props["conversations_compact_view"] = ud.object(forKey: "conversationsCompactView") as? Bool ?? true
@@ -818,6 +826,9 @@ class AnalyticsManager {
         // -- Floating Bar (AskOmi) --
         props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
         props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
+
+        // -- Dev Mode --
+        props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
 
         return props
     }
@@ -873,6 +884,41 @@ class AnalyticsManager {
         ]
         MixpanelManager.shared.track("Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
         PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
+    }
+
+    // MARK: - Knowledge Graph Events
+
+    /// Track when knowledge graph generation starts during onboarding
+    func knowledgeGraphBuildStarted(filesIndexed: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "files_indexed": filesIndexed,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Started", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_started", properties: props)
+    }
+
+    /// Track when knowledge graph generation completes (successfully loaded with data)
+    func knowledgeGraphBuildCompleted(nodeCount: Int, edgeCount: Int, pollAttempts: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "node_count": nodeCount,
+            "edge_count": edgeCount,
+            "poll_attempts": pollAttempts,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Completed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_completed", properties: props)
+    }
+
+    /// Track when knowledge graph generation fails or times out empty
+    func knowledgeGraphBuildFailed(reason: String, pollAttempts: Int, filesIndexed: Int) {
+        let props: [String: Any] = [
+            "reason": reason,
+            "poll_attempts": pollAttempts,
+            "files_indexed": filesIndexed
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Failed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
     }
 
     // MARK: - Display Info

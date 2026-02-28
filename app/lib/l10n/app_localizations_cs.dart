@@ -1013,7 +1013,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Připojit';
 
   @override
   String get comingSoon => 'Již brzy';
@@ -2268,7 +2268,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get folderName => 'Název složky';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Popis (volitelný)';
 
   @override
   String get failedToDeleteFolder => 'Odstranění složky selhalo';
@@ -5933,7 +5933,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processAudio => 'Zpracovat zvuk';
 
   @override
-  String get start => 'Start';
+  String get start => 'Spustit';
 
   @override
   String get noRecordings => 'Žádné nahrávky';
@@ -7994,27 +7994,27 @@ class AppLocalizationsCs extends AppLocalizations {
   String get addTask => 'Přidat úkol';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Přidat MCP server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Připojit externí AI nástroje';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Úspěšně připojeno $count nástrojů';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nepodařilo se připojit k MCP serveru';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizace...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Jak jste nás našli?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8032,19 +8032,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Přítel';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Jiné';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Upřesněte prosím';
 
   @override
-  String get event => 'Event';
+  String get event => 'Událost';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kolega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8215,4 +8215,43 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Toto o vás vím';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Tato mapa se aktualizuje, jak se Omi učí z vašich konverzací.';
+
+  @override
+  String get apiEnvironment => 'Prostředí API';
+
+  @override
+  String get apiEnvironmentDescription => 'Vyberte, ke kterému serveru se připojit';
+
+  @override
+  String get production => 'Produkce';
+
+  @override
+  String get staging => 'Testovací prostředí';
+
+  @override
+  String get switchRequiresRestart => 'Přepnutí vyžaduje restart aplikace';
+
+  @override
+  String get switchApiConfirmTitle => 'Přepnout prostředí API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Přepnout na $environment? Budete muset zavřít a znovu otevřít aplikaci, aby se změny projevily.';
+  }
+
+  @override
+  String get switchAndRestart => 'Přepnout';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testovací prostředí může být nestabilní, mít nekonzistentní výkon a data mohou být ztracena. Pouze pro testování.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Uloženo. Zavřete a znovu otevřete aplikaci pro použití změn.';
 }

@@ -8,7 +8,7 @@ struct FloatingControlBarView: View {
     var onPlayPause: () -> Void
     var onAskAI: () -> Void
     var onHide: () -> Void
-    var onSendQuery: (String, URL?) -> Void
+    var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
 
     @State private var isHovering = false
@@ -36,6 +36,22 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if state.showingAIConversation {
+                Button {
+                    onCloseAI()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {
@@ -51,6 +67,19 @@ struct FloatingControlBarView: View {
                 .buttonStyle(.plain)
                 .padding(6)
                 .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
             }
         }
         .clipped()
@@ -206,13 +235,12 @@ struct FloatingControlBarView: View {
             ),
             onSend: { message in
                 state.displayedQuery = message
-                let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
                     state.currentAIMessage = nil
                 }
-                onSendQuery(message, screenshot)
+                onSendQuery(message)
             },
             onCancel: onCloseAI,
             onHeightChange: { [weak state] height in
@@ -254,12 +282,11 @@ struct FloatingControlBarView: View {
                 }
 
                 state.displayedQuery = message
-                let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil
                 }
-                onSendQuery(message, screenshot)
+                onSendQuery(message)
             }
         )
         .transition(

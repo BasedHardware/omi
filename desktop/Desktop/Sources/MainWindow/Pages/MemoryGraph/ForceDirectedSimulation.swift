@@ -327,6 +327,65 @@ class ForceDirectedSimulation {
         }
     }
 
+    /// Add new nodes and edges incrementally without clearing existing ones
+    func addNodesAndEdges(graphResponse: KnowledgeGraphResponse, userNodeLabel: String?) {
+        // Skip nodes that already exist (by id)
+        for node in graphResponse.nodes {
+            guard nodeMap[node.id] == nil else { continue }
+            let node3D = GraphNode3D(id: node.id, label: node.label, nodeType: node.nodeType)
+            // Position near connected existing nodes, or random
+            if let connectedEdge = graphResponse.edges.first(where: { $0.sourceId == node.id || $0.targetId == node.id }),
+               let existingNode = nodeMap[connectedEdge.sourceId == node.id ? connectedEdge.targetId : connectedEdge.sourceId] {
+                let offset = SIMD3<Float>.random(in: -150...150)
+                node3D.position = existingNode.position + offset
+            }
+            // Check if this is the user node
+            if let userName = userNodeLabel, node.label.lowercased() == userName.lowercased() {
+                node3D.position = .zero
+                node3D.isFixed = true
+            }
+            nodes.append(node3D)
+            nodeMap[node.id] = node3D
+        }
+
+        // Add new edges (skip duplicates)
+        let existingEdgeIds = Set(edges.map { $0.id })
+        for edge in graphResponse.edges {
+            guard !existingEdgeIds.contains(edge.id),
+                  nodeMap[edge.sourceId] != nil,
+                  nodeMap[edge.targetId] != nil else { continue }
+            edges.append(GraphEdge3D(id: edge.id, sourceId: edge.sourceId, targetId: edge.targetId, label: edge.label))
+        }
+
+        // Ensure user center node exists
+        if !nodes.contains(where: { $0.isFixed }) {
+            let meNode = GraphNode3D(id: "__user_center__", label: userNodeLabel ?? "Me", nodeType: .person)
+            meNode.position = .zero
+            meNode.isFixed = true
+            nodes.insert(meNode, at: 0)
+            nodeMap[meNode.id] = meNode
+        }
+
+        // Re-count connections
+        for node in nodes { node.connectionCount = 0 }
+        for edge in edges {
+            nodeMap[edge.sourceId]?.connectionCount += 1
+            nodeMap[edge.targetId]?.connectionCount += 1
+        }
+
+        // Re-tune physics for new graph size
+        let nodeCount = nodes.count
+        if nodeCount <= 15 {
+            restLength = 300; repulsion = 50_000; centerGravity = 0.002; attraction = 0.005
+        } else if nodeCount <= 40 {
+            restLength = 450; repulsion = 65_000; centerGravity = 0.001; attraction = 0.004
+        } else {
+            restLength = 600; repulsion = 80_000; centerGravity = 0.0008; attraction = 0.003
+        }
+
+        wake()
+    }
+
     /// Wake up the simulation (reset stability counter)
     func wake() {
         stableFrameCount = 0

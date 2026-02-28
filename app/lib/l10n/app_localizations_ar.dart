@@ -885,7 +885,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get useMcpApiKey => 'استخدم مفتاح MCP API الخاص بك';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'ويب هوكس';
 
   @override
   String get conversationEvents => 'أحداث المحادثة';
@@ -1006,7 +1006,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get vocabularyHint => 'Omi، Callie، OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'اتصال';
 
   @override
   String get comingSoon => 'قريباً';
@@ -2249,7 +2249,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get folderName => 'اسم المجلد';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'الوصف (اختياري)';
 
   @override
   String get failedToDeleteFolder => 'فشل حذف المجلد';
@@ -7943,27 +7943,27 @@ class AppLocalizationsAr extends AppLocalizations {
   String get addTask => 'إضافة مهمة';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'إضافة خادم MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'ربط أدوات الذكاء الاصطناعي الخارجية';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'تم توصيل $count أدوات بنجاح';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'فشل الاتصال بخادم MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'جارٍ التصريح...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'كيف وجدتنا؟';
 
   @override
   String get tiktok => 'TikTok';
@@ -7981,19 +7981,19 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'صديق';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'أخرى';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'يرجى التحديد';
 
   @override
-  String get event => 'Event';
+  String get event => 'حدث';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'زميل عمل';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8161,4 +8161,43 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'هذا ما أعرفه عنك';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'تتحدث هذه الخريطة كلما تعلم Omi من محادثاتك.';
+
+  @override
+  String get apiEnvironment => 'بيئة API';
+
+  @override
+  String get apiEnvironmentDescription => 'اختر الخادم الخلفي للاتصال به';
+
+  @override
+  String get production => 'إنتاج';
+
+  @override
+  String get staging => 'تجريبي';
+
+  @override
+  String get switchRequiresRestart => 'يتطلب التبديل إعادة تشغيل التطبيق';
+
+  @override
+  String get switchApiConfirmTitle => 'تبديل بيئة API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'التبديل إلى $environment؟ ستحتاج إلى إغلاق التطبيق وإعادة فتحه لتطبيق التغييرات.';
+  }
+
+  @override
+  String get switchAndRestart => 'تبديل';
+
+  @override
+  String get stagingDisclaimer =>
+      'قد تكون البيئة التجريبية غير مستقرة وذات أداء متقلب، وقد تُفقد البيانات. للاختبار فقط.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'تم الحفظ. أغلق التطبيق وأعد فتحه لتطبيق التغييرات.';
 }

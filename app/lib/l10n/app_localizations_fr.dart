@@ -31,7 +31,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get confirm => 'Confirmer';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Annuler';
 
   @override
   String get ok => 'OK';
@@ -422,7 +422,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get planAndUsage => 'Forfait et utilisation';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Synchronisation hors ligne';
 
   @override
   String get deviceSettings => 'Paramètres de l\'appareil';
@@ -1018,7 +1018,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Connecter';
 
   @override
   String get comingSoon => 'Bientôt disponible';
@@ -1156,7 +1156,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get yes => 'Oui';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Modifier le nom';
 
   @override
   String get howShouldOmiCallYou => 'Comment Omi devrait-il vous appeler ?';
@@ -2161,7 +2161,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get saveMemory => 'Enregistrer la mémoire';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Réessayer';
 
   @override
   String get createActionItem => 'Créer une tâche';
@@ -2286,7 +2286,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get folderName => 'Nom du dossier';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Description (facultatif)';
 
   @override
   String get failedToDeleteFolder => 'Échec de la suppression du dossier';
@@ -2413,7 +2413,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get unpairAndForgetDevice => 'Dissocier et oublier l\'appareil';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Inconnu';
 
   @override
   String get unknown => 'Inconnu';
@@ -3291,7 +3291,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get upgradeToPro => 'Passer à Pro';
 
   @override
-  String get getOmiDevice => 'Get Omi Device';
+  String get getOmiDevice => 'Obtenir un appareil Omi';
 
   @override
   String get wearableAiCompanion => 'Compagnon IA portable';
@@ -5290,7 +5290,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get testConversationPrompt => 'Tester un prompt de conversation';
 
   @override
-  String get prompt => 'Prompt';
+  String get prompt => 'Invite';
 
   @override
   String get result => 'Résultat :';
@@ -5466,7 +5466,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get wrappedWinLabel => 'VICTOIRE';
 
   @override
-  String get wrappedTopPhrasesLabel => 'TOP PHRASES';
+  String get wrappedTopPhrasesLabel => 'EXPRESSIONS FAVORITES';
 
   @override
   String get wrappedLetsHitRewind => 'Rembobinons ton';
@@ -5628,7 +5628,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get wrappedWinLabelUpper => 'VICTOIRE';
 
   @override
-  String get wrappedTopPhrasesLabelUpper => 'TOP PHRASES';
+  String get wrappedTopPhrasesLabelUpper => 'EXPRESSIONS FAVORITES';
 
   @override
   String get wrappedYourHeader => 'Tes';
@@ -5643,7 +5643,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get wrappedBestHeader => 'Meilleurs';
 
   @override
-  String get wrappedMomentsHeader => 'Moments';
+  String get wrappedMomentsHeader => 'Moments forts';
 
   @override
   String get wrappedBestMomentsBadge => 'Meilleurs moments';
@@ -5891,7 +5891,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get sdCard => 'SD Card';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'Depuis SD';
 
   @override
   String get limitless => 'Limitless';
@@ -5900,10 +5900,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get fastTransfer => 'Transfert rapide';
 
   @override
-  String get syncingStatus => 'Syncing';
+  String get syncingStatus => 'Synchronisation';
 
   @override
-  String get failedStatus => 'Failed';
+  String get failedStatus => 'Échoué';
 
   @override
   String etaLabel(String time) {
@@ -5914,22 +5914,22 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transferMethod => 'Méthode de transfert';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Rapide';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Téléphone';
 
   @override
-  String get cancelSync => 'Cancel Sync';
+  String get cancelSync => 'Annuler la synchronisation';
 
   @override
   String get cancelSyncMessage => 'Les données déjà téléchargées seront sauvegardées. Vous pouvez reprendre plus tard.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Synchronisation annulée';
 
   @override
   String get deleteProcessedFiles => 'Supprimer les fichiers traités';
@@ -5968,7 +5968,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Traiter';
 
   @override
   String get wifiSyncFailed => 'Échec de la synchronisation WiFi';
@@ -5993,13 +5993,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get internetRequired => 'Connexion Internet requise';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Traiter l\'audio';
 
   @override
-  String get start => 'Start';
+  String get start => 'Démarrer';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Aucun enregistrement';
 
   @override
   String get audioFromOmiWillAppearHere => 'L\'audio de votre appareil Omi apparaîtra ici';
@@ -6011,7 +6011,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tryDifferentFilter => 'Essayez un filtre différent';
 
   @override
-  String get recordings => 'Recordings';
+  String get recordings => 'Enregistrements';
 
   @override
   String get enableRemindersAccess =>
@@ -6314,7 +6314,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Appareil';
 
   @override
   String get chatAssistantsTitle => 'Assistants de chat';
@@ -6593,7 +6593,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get connectedKnowledgeData => 'Données de connaissances connectées';
 
   @override
-  String get enterName => 'Enter name';
+  String get enterName => 'Saisir le nom';
 
   @override
   String get disconnectTwitter => 'Déconnecter Twitter';
@@ -6606,7 +6606,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get getOmiDeviceDescription => 'Créez un clone plus précis avec vos conversations personnelles';
 
   @override
-  String get getOmi => 'Get Omi';
+  String get getOmi => 'Obtenir Omi';
 
   @override
   String get iHaveOmiDevice => 'J\'ai un appareil Omi';
@@ -6697,7 +6697,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get enterPersonsName => 'Entrez le nom de la personne';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Ajouter une personne';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
@@ -6708,7 +6708,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tagOtherSegments => 'Identifier d\'autres segments';
 
   @override
-  String get managePeople => 'Manage People';
+  String get managePeople => 'Gérer les personnes';
 
   @override
   String get shareViaSms => 'Partager par SMS';
@@ -6800,16 +6800,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get recordingDetails => 'Détails de l\'enregistrement';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'Carte SD';
 
   @override
   String get storageLocationLimitlessPendant => 'Pendentif Limitless';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Téléphone';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Téléphone (mémoire)';
 
   @override
   String storedOnDevice(String deviceName) {
@@ -6817,7 +6817,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get transferring => 'Transferring...';
+  String get transferring => 'Transfert...';
 
   @override
   String get transferRequired => 'Transfert requis';
@@ -6839,7 +6839,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get privateAndSecureOnDevice => 'Privé et sécurisé sur votre appareil';
 
   @override
-  String get recordingInfo => 'Recording Info';
+  String get recordingInfo => 'Info d\'enregistrement';
 
   @override
   String get transferInProgress => 'Transfert en cours...';
@@ -6852,37 +6852,37 @@ class AppLocalizationsFr extends AppLocalizations {
       'Êtes-vous sûr de vouloir supprimer définitivement cet enregistrement ? Cette action est irréversible.';
 
   @override
-  String get recordingIdLabel => 'Recording ID';
+  String get recordingIdLabel => 'ID d\'enregistrement';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Date et heure';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Durée';
 
   @override
-  String get audioFormatLabel => 'Audio Format';
+  String get audioFormatLabel => 'Format audio';
 
   @override
   String get storageLocationLabel => 'Emplacement de stockage';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Taille estimée';
 
   @override
-  String get deviceModelLabel => 'Device Model';
+  String get deviceModelLabel => 'Modèle d\'appareil';
 
   @override
-  String get deviceIdLabel => 'Device ID';
+  String get deviceIdLabel => 'ID d\'appareil';
 
   @override
   String get statusLabel => 'Statut';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Traité';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Non traité';
 
   @override
   String get switchedToFastTransfer => 'Passé au transfert rapide';
@@ -6985,7 +6985,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Une erreur s\'est produite lors de la mise à jour du statut de l\'application.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Calcul en cours...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6996,7 +6996,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Environ une minute restante';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Presque terminé...';
 
   @override
   String get omiSays => 'omi says';
@@ -7032,16 +7032,16 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'discussions';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'données';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Aïe';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Êtes-vous tombé ?';
 
   @override
   String get importantConversationTitle => 'Conversation importante';
@@ -7301,7 +7301,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get xHandlePleaseEnterValid => 'Veuillez entrer un identifiant X valide';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Suivant';
 
   @override
   String get connectOmiDevice => 'Connecter un appareil Omi';
@@ -7333,7 +7333,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get couldNotLaunchUpgradePage => 'Impossible d\'ouvrir la page de mise à niveau. Veuillez réessayer.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'Paste your JSON configuration here...';
+  String get transcriptionJsonPlaceholder => 'Collez votre configuration JSON ici...';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7729,7 +7729,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String timeSecsPlural(int count) {
-    return '$count secs';
+    return '$count sec';
   }
 
   @override
@@ -7739,12 +7739,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String timeMinsPlural(int count) {
-    return '$count mins';
+    return '$count min';
   }
 
   @override
   String timeMinsAndSecs(int mins, int secs) {
-    return '$mins mins $secs secs';
+    return '$mins min $secs sec';
   }
 
   @override
@@ -7946,7 +7946,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get categorySafety => 'Sécurité';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Achats';
 
   @override
   String get categorySocial => 'Social';
@@ -7961,7 +7961,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get categoryOther => 'Autres';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Discussion';
 
   @override
   String get capabilityConversations => 'Conversations';
@@ -8072,27 +8072,27 @@ class AppLocalizationsFr extends AppLocalizations {
   String get addTask => 'Ajouter une tâche';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Ajouter un serveur MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Connecter des outils IA externes';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count outils connectés avec succès';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Échec de la connexion au serveur MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorisation...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Comment nous avez-vous trouvés ?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8110,19 +8110,19 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Ami';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Autre';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Veuillez préciser';
 
   @override
-  String get event => 'Event';
+  String get event => 'Événement';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Collègue';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8296,4 +8296,44 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Ce que je sais de vous';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Voici un résumé de ce que je sais de vous d\'après nos conversations. Vous pouvez modifier tout ce qui n\'est pas correct.';
+
+  @override
+  String get apiEnvironment => 'Environnement API';
+
+  @override
+  String get apiEnvironmentDescription => 'Basculer entre les environnements de production et de staging';
+
+  @override
+  String get production => 'Production';
+
+  @override
+  String get staging => 'Staging';
+
+  @override
+  String get switchRequiresRestart => 'Le changement d\'environnement nécessite un redémarrage de l\'application';
+
+  @override
+  String get switchApiConfirmTitle => 'Changer d\'environnement API ?';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Passer à $environment ? Vous devrez fermer et rouvrir l\'application pour que les changements prennent effet.';
+  }
+
+  @override
+  String get switchAndRestart => 'Changer';
+
+  @override
+  String get stagingDisclaimer =>
+      'L\'environnement staging peut être instable, avoir des performances incohérentes et les données peuvent être perdues. Utilisez-le uniquement pour les tests.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Enregistré. Fermez et rouvrez l\'application pour appliquer.';
 }

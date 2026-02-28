@@ -105,38 +105,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
-  auto_updater:
-    dependency: "direct main"
-    description:
-      name: auto_updater
-      sha256: "74fd008b021d15e4fc50fb5f1923870e6374ae831bb1168241c23bc35a4e898b"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
-  auto_updater_macos:
-    dependency: transitive
-    description:
-      name: auto_updater_macos
-      sha256: ef9de0daf38d782d2243fe131503a9404d62df762f5386e5360020e43c01867f
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
-  auto_updater_platform_interface:
-    dependency: transitive
-    description:
-      name: auto_updater_platform_interface
-      sha256: ed5dff8cea18c58bc5ac787ff9122fedd1644272e02015d28c9b592f8078c5dc
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
-  auto_updater_windows:
-    dependency: transitive
-    description:
-      name: auto_updater_windows
-      sha256: "2bba20a71eee072f49b7267fedd5c4f1406c4b1b1e5b83932c634dbab75b80c9"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
   awesome_notifications:
     dependency: "direct main"
     description:
@@ -417,14 +385,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.11"
-  desktop_drop:
-    dependency: "direct main"
-    description:
-      name: desktop_drop
-      sha256: e70b46b2d61f1af7a81a40d1f79b43c28a879e30a4ef31e87e9c27bea4d784e8
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.7.0"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -1469,6 +1429,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.5.0"
+  marionette_flutter:
+    dependency: "direct main"
+    description:
+      name: marionette_flutter
+      sha256: "0077073f62a8031879a91be41aa91629f741a7f1348b18feacd53443dae3819f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   markdown:
     dependency: transitive
     description:
@@ -1962,14 +1930,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.27.7"
-  screen_retriever:
-    dependency: transitive
-    description:
-      name: screen_retriever
-      sha256: "6ee02c8a1158e6dae7ca430da79436e3b1c9563c8cf02f524af997c201ac2b90"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.9"
   share_plus:
     dependency: "direct main"
     description:
@@ -2319,14 +2279,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.1"
-  universal_platform:
-    dependency: transitive
-    description:
-      name: universal_platform
-      sha256: "64e16458a0ea9b99260ceb5467a214c1f298d647c659af1bff6d3bf82536b1ec"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.0"
   upgrader:
     dependency: "direct main"
     description:
@@ -2624,14 +2576,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
-  window_manager:
-    dependency: "direct main"
-    description:
-      name: window_manager
-      sha256: dcc865277f26a7dad263a47d0e405d77e21f12cb71f30333a52710a408690bd7
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.3.7"
   wkt_parser:
     dependency: transitive
     description:

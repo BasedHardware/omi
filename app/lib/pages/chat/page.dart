@@ -94,6 +94,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
+      // Pre-connect agent WebSocket so it's ready when the user sends a message
+      provider.preConnectAgent();
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
       // Auto-focus the text field only on initial load, not on app switches
@@ -278,6 +280,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     final child = AIMessage(
                                                       showTypingIndicator: provider.showTypingIndicator &&
                                                           chatIndex == provider.messages.length - 1,
+                                                      showThinkingAfterText: provider.agentThinkingAfterText,
                                                       message: message,
                                                       sendMessage: _sendMessageUtil,
                                                       onAskOmi: (text) {

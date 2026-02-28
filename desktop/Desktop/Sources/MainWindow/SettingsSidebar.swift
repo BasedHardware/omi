@@ -37,6 +37,8 @@ struct SettingsSearchItem: Identifiable {
 
         // Rewind
         SettingsSearchItem(name: "Rewind", subtitle: "Browse your screen history", keywords: ["screen history", "screenshots", "recording"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath", settingId: "rewind.rewind"),
+        SettingsSearchItem(name: "Screen Capture", subtitle: "Toggle screen capture on or off", keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"], section: .rewind, advancedSubsection: nil, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
+        SettingsSearchItem(name: "Audio Recording", subtitle: "Toggle audio recording and transcription", keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind, advancedSubsection: nil, icon: "mic.fill", settingId: "rewind.audiorecording"),
         SettingsSearchItem(name: "Storage", subtitle: "View frame count and disk usage", keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath", settingId: "rewind.storage"),
         SettingsSearchItem(name: "Excluded Apps", subtitle: "Screen capture is paused when these apps are active", keywords: ["exclude", "ignore", "block apps", "blocklist", "reset to defaults"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath", settingId: "rewind.excludedapps"),
         SettingsSearchItem(name: "Battery Optimization", subtitle: "Pause text recognition on battery to save energy", keywords: ["battery", "power", "energy", "low power"], section: .rewind, advancedSubsection: nil, icon: "clock.arrow.circlepath", settingId: "rewind.battery"),
@@ -46,6 +48,7 @@ struct SettingsSearchItem: Identifiable {
         SettingsSearchItem(name: "Transcription Settings", subtitle: "Configure speech-to-text options", keywords: ["language", "vocabulary", "speech"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.settings"),
         SettingsSearchItem(name: "Language Mode", subtitle: "Choose single or multi-language transcription", keywords: ["language", "multilingual", "single language"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.languagemode"),
         SettingsSearchItem(name: "Custom Vocabulary", subtitle: "Improve recognition of names, brands, and technical terms", keywords: ["vocabulary", "words", "custom words", "dictionary"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.vocabulary"),
+        SettingsSearchItem(name: "Local VAD Gate", subtitle: "Skip silence to reduce transcription cost", keywords: ["vad", "silence", "gate", "cost", "deepgram"], section: .transcription, advancedSubsection: nil, icon: "waveform", settingId: "transcription.vadgate"),
 
         // Notifications
         SettingsSearchItem(name: "Notification Settings", subtitle: "Control how often you receive notifications", keywords: ["daily summary", "frequency", "alerts"], section: .notifications, advancedSubsection: nil, icon: "bell", settingId: "notifications.settings"),
@@ -304,27 +307,27 @@ struct SettingsSidebar: View {
     }
 
     private var backButton: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "chevron.left")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+        Button(action: onBack) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.left")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundColor(OmiColors.textSecondary)
 
-            Text("Back")
-                .scaledFont(size: 14, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
+                Text("Back")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textSecondary)
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-        )
-        .onTapGesture {
-            onBack()
-        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isBackHovered = hovering
         }
@@ -357,30 +360,30 @@ struct SettingsSidebarItem: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .scaledFont(size: 17)
-                .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-                .frame(width: iconWidth)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .scaledFont(size: 17)
+                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+                    .frame(width: iconWidth)
 
-            Text(section.rawValue)
-                .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
-                .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+                Text(section.rawValue)
+                    .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected
+                          ? OmiColors.backgroundTertiary.opacity(0.8)
+                          : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isSelected
-                      ? OmiColors.backgroundTertiary.opacity(0.8)
-                      : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
-        )
-        .onTapGesture {
-            onTap()
-        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
         }
@@ -397,34 +400,34 @@ struct SettingsSubsectionItem: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            // Indentation spacer
-            Spacer()
-                .frame(width: iconWidth + 12)
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                // Indentation spacer
+                Spacer()
+                    .frame(width: iconWidth + 12)
 
-            Image(systemName: subsection.icon)
-                .scaledFont(size: 14)
-                .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-                .frame(width: 16)
+                Image(systemName: subsection.icon)
+                    .scaledFont(size: 14)
+                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+                    .frame(width: 16)
 
-            Text(subsection.rawValue)
-                .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
-                .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+                Text(subsection.rawValue)
+                    .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
+                    .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected
+                          ? OmiColors.backgroundTertiary.opacity(0.6)
+                          : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected
-                      ? OmiColors.backgroundTertiary.opacity(0.6)
-                      : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
-        )
-        .onTapGesture {
-            onTap()
-        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
         }
@@ -439,34 +442,34 @@ struct SettingsSearchResultRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: item.icon)
-                .scaledFont(size: 14)
-                .foregroundColor(OmiColors.textTertiary)
-                .frame(width: 20)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .scaledFont(size: 13, weight: .medium)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                Text(item.breadcrumb)
-                    .scaledFont(size: 11)
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                Image(systemName: item.icon)
+                    .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textTertiary)
-            }
+                    .frame(width: 20)
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name)
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text(item.breadcrumb)
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
-        )
-        .onTapGesture {
-            onTap()
-        }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
         }

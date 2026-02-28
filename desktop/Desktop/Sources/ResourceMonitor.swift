@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Sentry
 
@@ -23,6 +24,12 @@ class ResourceMonitor {
     /// Memory growth rate threshold (MB/min) - detect leaks
     private let memoryGrowthRateThreshold: Double = 50
 
+    /// Extreme memory threshold - auto-restart to prevent system from becoming unusable.
+    /// Keep this well below the point where free RAM is exhausted — at 4GB the system
+    /// has ~120MB free and the new instance fails to launch, leaving the user stuck.
+    /// At 3GB there is still ~10-13GB free on typical 16GB machines.
+    private let memoryAutoRestartThreshold: UInt64 = 3000 // 3GB
+
     // MARK: - State
 
     private var monitorTimer: Timer?
@@ -32,6 +39,7 @@ class ResourceMonitor {
     private var lastWarningTime: Date?
     private var lastCriticalTime: Date?
     private var peakMemoryObserved: UInt64 = 0 // Track peak memory manually
+    private var autoRestartTriggered = false // Only auto-restart once per session
 
     // Minimum time between warnings (prevent spam)
     private let warningCooldown: TimeInterval = 300 // 5 minutes
@@ -192,12 +200,43 @@ class ResourceMonitor {
     private func checkMemoryThresholds(_ snapshot: ResourceSnapshot) {
         let now = Date()
 
+        // Extreme threshold - auto-restart to prevent the system from becoming unresponsive.
+        // Without this, memory can climb to 7GB+, causing SQLite I/O failures and making
+        // the app impossible to reopen without a full computer restart.
+        if snapshot.memoryFootprintMB >= memoryAutoRestartThreshold && !autoRestartTriggered && !isDevBuild {
+            autoRestartTriggered = true
+            log("ResourceMonitor: EXTREME memory \(snapshot.memoryFootprintMB)MB — auto-restarting to prevent system degradation")
+
+            SentrySDK.capture(message: "App Auto-Restarting Due to Extreme Memory") { scope in
+                scope.setLevel(.fatal)
+                scope.setTag(value: "auto_restart", key: "resource_alert")
+                scope.setContext(value: snapshot.asDictionary(), key: "resources")
+            }
+
+            // Give Sentry 3 seconds to flush, then relaunch and terminate.
+            // Only terminate if the relaunch succeeds — otherwise the user would be
+            // left with no running app and would need a full computer restart.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                let task = Process()
+                task.launchPath = "/usr/bin/open"
+                task.arguments = ["-n", Bundle.main.bundleURL.path]
+                do {
+                    try task.run()
+                    NSApp.terminate(nil)
+                } catch {
+                    logError("ResourceMonitor: Failed to relaunch app during auto-restart, aborting terminate to avoid leaving user stuck", error: error)
+                    self.autoRestartTriggered = false  // Allow retry on next threshold check
+                }
+            }
+            return
+        }
+
         // Critical threshold
         if snapshot.memoryFootprintMB >= memoryCriticalThreshold {
             if lastCriticalTime == nil || now.timeIntervalSince(lastCriticalTime!) > warningCooldown {
                 lastCriticalTime = now
 
-                logError("ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold")
+                log("ResourceMonitor: CRITICAL - Memory usage \(snapshot.memoryFootprintMB)MB exceeds \(memoryCriticalThreshold)MB threshold")
 
                 // Collect component diagnostics immediately at critical threshold
                 Task {
@@ -278,13 +317,20 @@ class ResourceMonitor {
 
     /// Attempt to free memory by flushing heavy components.
     /// Called at most once per warningCooldown (5 min) when critical threshold is exceeded.
+    /// Closure called during memory remediation to trim transcript state.
+    /// Set by AppState on init to avoid tight coupling.
+    var onMemoryPressureTrimTranscript: (() -> Void)?
+
     private func triggerMemoryRemediation() {
-        log("ResourceMonitor: Triggering memory remediation — flushing video encoder, clearing assistant pending work, pausing AgentSync")
+        log("ResourceMonitor: Triggering memory remediation — flushing video encoder, clearing assistant pending work, trimming transcript, pausing AgentSync")
 
         let memoryBefore = getMemoryFootprintMB()
 
         // Clear queued frames in assistant coordinator
         AssistantCoordinator.shared.clearAllPendingWork()
+
+        // Trim in-memory transcript segments (already persisted in SQLite)
+        onMemoryPressureTrimTranscript?()
 
         Task {
             // Flush VideoChunkEncoder and await completion

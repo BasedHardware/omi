@@ -188,10 +188,23 @@ struct ChatPage: View {
                     chatProvider.isClaudeAuthRequired = false
                     // Switch back to Mode A if auth cancelled
                     Task {
-                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.agentSDK)
+                        await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.omiAI)
                     }
                 }
             )
+        }
+        .alert("Free Usage Limit Reached", isPresented: $chatProvider.showOmiThresholdAlert) {
+            Button("Connect Claude Account") {
+                chatProvider.showOmiThresholdAlert = false
+                if !chatProvider.isClaudeConnected {
+                    chatProvider.isClaudeAuthRequired = true
+                }
+            }
+            Button("Later", role: .cancel) {
+                chatProvider.showOmiThresholdAlert = false
+            }
+        } message: {
+            Text("Please connect your Claude account to continue chatting.")
         }
         .overlay {
             // Loading overlay when fetching citation
@@ -488,8 +501,9 @@ struct ChatPage: View {
                     .padding(.horizontal, 40)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
         .padding()
+        .padding(.vertical, 80)
     }
 
     // MARK: - Input Area
@@ -571,6 +585,19 @@ struct ChatBubble: View {
     @State private var isHovering = false
     @State private var isExpanded = false
     @State private var showCopied = false
+    /// Cached grouped content blocks — pre-computed on init to avoid recreating
+    /// `[ContentBlockGroup]` on every SwiftUI layout pass.
+    @State private var cachedGroupedBlocks: [ContentBlockGroup]
+
+    init(message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
+         onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false) {
+        self.message = message
+        self.app = app
+        self.onRate = onRate
+        self.onCitationTap = onCitationTap
+        self.isDuplicate = isDuplicate
+        self._cachedGroupedBlocks = State(initialValue: ContentBlockGroup.group(message.contentBlocks))
+    }
 
     /// Messages longer than this are truncated with a "Show more" button
     private static let truncationThreshold = 500
@@ -626,8 +653,7 @@ struct ChatBubble: View {
                     TypingIndicator()
                 } else if message.sender == .ai && !message.contentBlocks.isEmpty {
                     // Render structured content blocks, grouping consecutive tool calls
-                    let groupedBlocks = ContentBlockGroup.group(message.contentBlocks)
-                    ForEach(groupedBlocks) { group in
+                    ForEach(cachedGroupedBlocks) { group in
                         switch group {
                         case .text(_, let text):
                             if !text.isEmpty {
@@ -641,12 +667,14 @@ struct ChatBubble: View {
                             ToolCallsGroup(calls: calls)
                         case .thinking(_, let text):
                             ThinkingBlock(text: text)
+                        case .discoveryCard(_, let title, let summary, let fullText):
+                            DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         }
                     }
                     // Show typing indicator at end if still streaming
                     // (skip only when last group is tool calls with a running tool — it already has a spinner)
                     if message.isStreaming {
-                        if case .toolCalls(_, let calls) = groupedBlocks.last,
+                        if case .toolCalls(_, let calls) = cachedGroupedBlocks.last,
                            calls.contains(where: { block in
                                if case .toolCall(_, _, .running, _, _, _) = block { return true }
                                return false
@@ -740,6 +768,15 @@ struct ChatBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         .onHover { isHovering = $0 }
+        .onChange(of: message.contentBlocks.count) {
+            // Refresh grouped blocks when new blocks are added (e.g. tool calls)
+            cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+        }
+        .onChange(of: message.text) {
+            // Refresh grouped blocks when text content changes within existing blocks
+            // (streaming appends to the last text block without changing count)
+            cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+        }
     }
 
     @ViewBuilder
@@ -792,6 +829,19 @@ struct ChatBubble: View {
     }
 }
 
+extension ChatBubble: Equatable {
+    static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
+        // Streaming messages always re-render so SwiftUI sees live updates
+        guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }
+        // Completed messages are equal when visible content hasn't changed
+        return lhs.message.id == rhs.message.id
+            && lhs.message.text == rhs.message.text
+            && lhs.message.rating == rhs.message.rating
+            && lhs.app?.id == rhs.app?.id
+            && lhs.isDuplicate == rhs.isDuplicate
+    }
+}
+
 // MARK: - Content Block Grouping
 
 /// Groups consecutive tool call blocks into a single collapsible group
@@ -799,16 +849,18 @@ enum ContentBlockGroup: Identifiable {
     case text(id: String, text: String)
     case toolCalls(id: String, calls: [ChatContentBlock])
     case thinking(id: String, text: String)
+    case discoveryCard(id: String, title: String, summary: String, fullText: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
         case .toolCalls(let id, _): return id
         case .thinking(let id, _): return id
+        case .discoveryCard(let id, _, _, _): return id
         }
     }
 
-    /// Groups consecutive `.toolCall` blocks together; passes `.text` and `.thinking` through
+    /// Groups consecutive `.toolCall` blocks together; passes `.text`, `.thinking`, `.discoveryCard` through
     static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
         var groups: [ContentBlockGroup] = []
         var pendingToolCalls: [ChatContentBlock] = []
@@ -830,6 +882,9 @@ enum ContentBlockGroup: Identifiable {
             case .thinking(let id, let text):
                 flushToolCalls()
                 groups.append(.thinking(id: id, text: text))
+            case .discoveryCard(let id, let title, let summary, let fullText):
+                flushToolCalls()
+                groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
             }
         }
         flushToolCalls()
@@ -1102,6 +1157,73 @@ struct ThinkingBlock: View {
         }
         .background(OmiColors.backgroundTertiary.opacity(0.3))
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Discovery Card
+
+/// Collapsible card that shows a brief summary with expandable full profile text
+struct DiscoveryCard: View {
+    let title: String
+    let summary: String
+    let fullText: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header — always visible
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(summary)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 10)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    SelectableMarkdown(text: fullText, sender: .ai)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
 

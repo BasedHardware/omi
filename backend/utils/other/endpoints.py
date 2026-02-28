@@ -6,6 +6,9 @@ from fastapi import Header, HTTPException
 from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_user(uid: str):
@@ -52,7 +55,7 @@ def get_current_user_uid(authorization: str = Header(None)):
         token = authorization.split(' ')[1]
         return verify_token(token)
     except InvalidIdTokenError as e:
-        print(e)
+        logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
 
@@ -143,7 +146,7 @@ def timeit(func):
     def measure_time(*args, **kw):
         start_time = time.time()
         result = func(*args, **kw)
-        print("Processing time of %s(): %.2f seconds." % (func.__qualname__, time.time() - start_time))
+        logger.info("Processing time of %s(): %.2f seconds." % (func.__qualname__, time.time() - start_time))
         return result
 
     return measure_time

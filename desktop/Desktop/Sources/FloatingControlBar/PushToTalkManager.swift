@@ -48,9 +48,6 @@ class PushToTalkManager: ObservableObject {
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
 
-  // Screenshot
-  private var capturedScreenshotURL: URL?
-
   private init() {}
 
   // MARK: - Setup / Teardown
@@ -217,17 +214,6 @@ class PushToTalkManager: ObservableObject {
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
     updateBarState()
 
-    // Only capture screenshot if not in follow-up mode (conversation already has context)
-    if !isFollowUp {
-      Task.detached { [weak self] in
-        let url = ScreenCaptureManager.captureScreen()
-        guard let self else { return }
-        await MainActor.run {
-          self.capturedScreenshotURL = url
-          log("PushToTalkManager: screenshot captured: \(url?.lastPathComponent ?? "nil")")
-        }
-      }
-    }
 
     startAudioTranscription()
     log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
@@ -260,16 +246,6 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       lastInterimText = ""
 
-      // Only capture screenshot if not in follow-up mode
-      if !isFollowUp {
-        Task.detached { [weak self] in
-          let url = ScreenCaptureManager.captureScreen()
-          guard let self else { return }
-          await MainActor.run {
-            self.capturedScreenshotURL = url
-          }
-        }
-      }
 
       startAudioTranscription()
     }
@@ -285,7 +261,6 @@ class PushToTalkManager: ObservableObject {
     liveFinalizationTimeout = nil
     stopAudioTranscription()
     state = .idle
-    capturedScreenshotURL = nil
     transcriptSegments = []
     lastInterimText = ""
     batchAudioLock.lock()
@@ -387,7 +362,6 @@ class PushToTalkManager: ObservableObject {
     if query.isEmpty {
       query = lastInterimText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    let screenshot = capturedScreenshotURL
     let hasQuery = !query.isEmpty
     let wasFollowUp = barState?.isVoiceFollowUp == true
 
@@ -407,7 +381,6 @@ class PushToTalkManager: ObservableObject {
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
-    capturedScreenshotURL = nil
     updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
@@ -420,7 +393,7 @@ class PushToTalkManager: ObservableObject {
       FloatingControlBarManager.shared.sendFollowUpQuery(query)
     } else {
       log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.openAIInputWithQuery(query, screenshot: screenshot)
+      FloatingControlBarManager.shared.openAIInputWithQuery(query)
     }
   }
 
@@ -494,26 +467,29 @@ class PushToTalkManager: ObservableObject {
     }
     guard let capture = audioCaptureService else { return }
 
-    do {
-      try capture.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if batchMode {
-            // Batch mode: accumulate audio in buffer
-            self.batchAudioLock.lock()
-            self.batchAudioBuffer.append(audioData)
-            self.batchAudioLock.unlock()
-          } else {
-            // Live mode: stream to Deepgram
-            self.transcriptionService?.sendAudio(audioData)
-          }
-        },
-        onAudioLevel: { _ in }
-      )
-      log("PushToTalkManager: mic capture started (batch=\(batchMode))")
-    } catch {
-      logError("PushToTalkManager: mic capture failed", error: error)
-      stopListening()
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await capture.startCapture(
+          onAudioChunk: { [weak self] audioData in
+            guard let self else { return }
+            if batchMode {
+              // Batch mode: accumulate audio in buffer
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
+            } else {
+              // Live mode: stream to Deepgram
+              self.transcriptionService?.sendAudio(audioData)
+            }
+          },
+          onAudioLevel: { _ in }
+        )
+        log("PushToTalkManager: mic capture started (batch=\(batchMode))")
+      } catch {
+        logError("PushToTalkManager: mic capture failed", error: error)
+        self.stopListening()
+      }
     }
   }
 

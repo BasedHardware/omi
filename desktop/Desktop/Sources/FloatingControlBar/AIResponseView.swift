@@ -45,6 +45,15 @@ struct AIResponseView: View {
                         // Anchor for auto-scroll
                         Color.clear.frame(height: 1).id("bottom")
                     }
+                    .background(
+                        GeometryReader { geo -> Color in
+                            let h = geo.size.height
+                            DispatchQueue.main.async {
+                                state.responseContentHeight = h
+                            }
+                            return Color.clear
+                        }
+                    )
                 }
                 .onChange(of: currentMessage?.text) {
                     withAnimation(.easeOut(duration: 0.15)) {
@@ -108,15 +117,6 @@ struct AIResponseView: View {
             Spacer()
 
             // modelPicker — moved to Settings > Ask Omi Floating Bar
-
-            Button(action: { onClose?() }) {
-                Image(systemName: "xmark")
-                    .scaledFont(size: 8)
-                    .foregroundColor(.secondary)
-                    .frame(width: 16, height: 16)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -139,6 +139,9 @@ struct AIResponseView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .discoveryCard(_, let title, let summary, let fullText):
+                    DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

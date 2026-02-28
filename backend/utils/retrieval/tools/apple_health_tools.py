@@ -20,6 +20,9 @@ from utils.retrieval.tools.integration_base import (
     resolve_config_uid,
     get_integration_checked,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import the context variable from agentic module
 try:
@@ -140,7 +143,7 @@ def get_apple_health_steps_tool(
         return result.strip()
 
     except Exception as e:
-        print(f"Error in get_apple_health_steps_tool: {e}")
+        logger.error(f"Error in get_apple_health_steps_tool: {e}")
         return f"Error retrieving step data: {str(e)}"
 
 
@@ -207,7 +210,7 @@ def get_apple_health_sleep_tool(
         return result.strip()
 
     except Exception as e:
-        print(f"Error in get_apple_health_sleep_tool: {e}")
+        logger.error(f"Error in get_apple_health_sleep_tool: {e}")
         return f"Error retrieving sleep data: {str(e)}"
 
 
@@ -266,7 +269,7 @@ def get_apple_health_heart_rate_tool(
         return result.strip()
 
     except Exception as e:
-        print(f"Error in get_apple_health_heart_rate_tool: {e}")
+        logger.error(f"Error in get_apple_health_heart_rate_tool: {e}")
         return f"Error retrieving heart rate data: {str(e)}"
 
 
@@ -346,7 +349,7 @@ def get_apple_health_workouts_tool(
         return result.strip()
 
     except Exception as e:
-        print(f"Error in get_apple_health_workouts_tool: {e}")
+        logger.error(f"Error in get_apple_health_workouts_tool: {e}")
         return f"Error retrieving workout data: {str(e)}"
 
 
@@ -462,5 +465,5 @@ def get_apple_health_summary_tool(
         return result.strip()
 
     except Exception as e:
-        print(f"Error in get_apple_health_summary_tool: {e}")
+        logger.error(f"Error in get_apple_health_summary_tool: {e}")
         return f"Error retrieving health summary: {str(e)}"

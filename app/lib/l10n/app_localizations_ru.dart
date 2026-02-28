@@ -1016,7 +1016,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Подключить';
 
   @override
   String get comingSoon => 'Скоро';
@@ -2274,7 +2274,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get folderName => 'Имя папки';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Описание (необязательно)';
 
   @override
   String get failedToDeleteFolder => 'Не удалось удалить папку';
@@ -8024,27 +8024,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get addTask => 'Добавить задачу';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Добавить сервер MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Подключить внешние инструменты ИИ';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Успешно подключено инструментов: $count';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Не удалось подключиться к серверу MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Авторизация...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Как вы о нас узнали?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8062,19 +8062,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Друг';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Другое';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Уточните, пожалуйста';
 
   @override
-  String get event => 'Event';
+  String get event => 'Мероприятие';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Коллега';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8245,4 +8245,45 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Вот что я знаю о тебе';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Эта карта обновляется по мере того, как Omi учится на ваших разговорах.';
+
+  @override
+  String get apiEnvironment => 'Среда API';
+
+  @override
+  String get apiEnvironmentDescription => 'Выберите сервер для подключения';
+
+  @override
+  String get production => 'Продакшн';
+
+  @override
+  String get staging => 'Тестовая среда';
+
+  @override
+  String get switchRequiresRestart => 'Переключение требует перезапуска приложения';
+
+  @override
+  String get switchApiConfirmTitle => 'Переключение среды API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Переключиться на $environment? Вам нужно будет закрыть и снова открыть приложение, чтобы изменения вступили в силу.';
+  }
+
+  @override
+  String get switchAndRestart => 'Переключить';
+
+  @override
+  String get stagingDisclaimer =>
+      'Тестовая среда может быть нестабильной, с непостоянной производительностью, и данные могут быть потеряны. Только для тестирования.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Сохранено. Закройте и снова откройте приложение, чтобы применить изменения.';
 }

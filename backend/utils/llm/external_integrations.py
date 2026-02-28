@@ -8,6 +8,9 @@ from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_message_structure(
@@ -26,7 +29,9 @@ def get_message_structure(
     Message Content: ```{text}```
     Message Source: {text_source_spec}
 
-    {format_instructions}'''.replace('    ', '').strip()
+    {format_instructions}'''.replace(
+        '    ', ''
+    ).strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | llm_mini | parser
@@ -65,7 +70,9 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       For Calendar Events, include any events or meetings mentioned in the content.
 
       Text: ```{text}```
-      '''.replace('    ', '').strip()
+      '''.replace(
+        '    ', ''
+    ).strip()
 
     response = llm_mini.with_structured_output(Structured).invoke(prompt)
 
@@ -105,7 +112,9 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     ```
     ${conversation_history}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
         return llm_mini.invoke(prompt).content
@@ -328,8 +337,8 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except json.JSONDecodeError as e:
-        print(f"Failed to parse LLM response as JSON: {e}")
-        print(f"Response was: {response}")
+        logger.error(f"Failed to parse LLM response as JSON: {e}")
+        logger.info(f"Response was: {response}")
         # Return a basic summary on parse failure
         return {
             "id": str(uuid.uuid4()),

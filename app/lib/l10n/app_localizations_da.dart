@@ -1014,7 +1014,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get vocabularyHint => 'Ordforråd';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Forbind';
 
   @override
   String get comingSoon => 'Kommer snart';
@@ -2248,7 +2248,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get folderName => 'Mappenavn';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beskrivelse (valgfri)';
 
   @override
   String get failedToDeleteFolder => 'Kunne ikke slette mappe';
@@ -6955,7 +6955,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'samtaler';
 
   @override
   String get dataLowercase => 'data';
@@ -7983,27 +7983,27 @@ class AppLocalizationsDa extends AppLocalizations {
   String get addTask => 'Tilføj opgave';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Tilføj MCP-server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Forbind eksterne AI-værktøjer';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count værktøjer forbundet';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kunne ikke oprette forbindelse til MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoriserer...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hvordan fandt du os?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8021,19 +8021,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Ven';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Andet';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Angiv venligst';
 
   @override
-  String get event => 'Event';
+  String get event => 'Begivenhed';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kollega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8202,4 +8202,44 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Her er hvad jeg ved om dig';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Dette kort opdateres, efterhånden som Omi lærer fra dine samtaler.';
+
+  @override
+  String get apiEnvironment => 'API-miljø';
+
+  @override
+  String get apiEnvironmentDescription => 'Vælg hvilken server der skal forbindes til';
+
+  @override
+  String get production => 'Produktion';
+
+  @override
+  String get staging => 'Testmiljø';
+
+  @override
+  String get switchRequiresRestart => 'Skift kræver genstart af appen';
+
+  @override
+  String get switchApiConfirmTitle => 'Skift API-miljø';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Skift til $environment? Du skal lukke og genåbne appen for at ændringerne træder i kraft.';
+  }
+
+  @override
+  String get switchAndRestart => 'Skift';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testmiljøet kan være ustabilt, have inkonsistent ydeevne, og data kan gå tabt. Kun til test.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Gemt. Luk og genåbn appen for at anvende ændringerne.';
 }

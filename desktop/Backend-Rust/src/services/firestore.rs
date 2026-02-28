@@ -61,10 +61,12 @@ pub const MESSAGES_SUBCOLLECTION: &str = "messages";
 pub const FOLDERS_SUBCOLLECTION: &str = "folders";
 pub const CHAT_SESSIONS_SUBCOLLECTION: &str = "chat_sessions";
 pub const GOALS_SUBCOLLECTION: &str = "goals";
-pub const KG_NODES_SUBCOLLECTION: &str = "kg_nodes";
-pub const KG_EDGES_SUBCOLLECTION: &str = "kg_edges";
+pub const KG_NODES_SUBCOLLECTION: &str = "knowledge_nodes";
+pub const KG_EDGES_SUBCOLLECTION: &str = "knowledge_edges";
 pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
+pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
+pub const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
@@ -293,6 +295,100 @@ impl FirestoreService {
     /// Build authenticated request for GCE Compute Engine API (public for agent routes)
     pub async fn build_compute_request(&self, method: reqwest::Method, url: &str) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
         self.build_request(method, url).await
+    }
+
+    // =========================================================================
+    // LLM USAGE
+
+    /// Atomically increment LLM usage counters for a user on a given date.
+    /// Uses Firestore REST commit with FieldTransforms (server-side atomic increments).
+    pub async fn record_llm_usage(
+        &self,
+        uid: &str,
+        input: i64,
+        output: i64,
+        cache_read: i64,
+        cache_write: i64,
+        total: i64,
+        cost: f64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let date_key = Utc::now().format("%Y-%m-%d").to_string();
+        let doc_path = format!(
+            "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+            self.project_id, USERS_COLLECTION, uid, LLM_USAGE_SUBCOLLECTION, date_key
+        );
+        let commit_url = format!(
+            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            self.project_id
+        );
+        let body = json!({
+            "writes": [{
+                "transform": {
+                    "document": doc_path,
+                    "fieldTransforms": [
+                        { "fieldPath": "desktop_chat.input_tokens",       "increment": { "integerValue": input.to_string() } },
+                        { "fieldPath": "desktop_chat.output_tokens",      "increment": { "integerValue": output.to_string() } },
+                        { "fieldPath": "desktop_chat.cache_read_tokens",  "increment": { "integerValue": cache_read.to_string() } },
+                        { "fieldPath": "desktop_chat.cache_write_tokens", "increment": { "integerValue": cache_write.to_string() } },
+                        { "fieldPath": "desktop_chat.total_tokens",       "increment": { "integerValue": total.to_string() } },
+                        { "fieldPath": "desktop_chat.cost_usd",           "increment": { "doubleValue": cost } },
+                        { "fieldPath": "desktop_chat.call_count",         "increment": { "integerValue": "1" } },
+                    ]
+                }
+            }]
+        });
+        let resp = self
+            .build_request(reqwest::Method::POST, &commit_url)
+            .await?
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(resp.text().await?.into());
+        }
+        Ok(())
+    }
+
+    /// Sum all daily desktop_chat.cost_usd values for a user across all llm_usage documents.
+    pub async fn get_total_llm_cost(
+        &self,
+        uid: &str,
+    ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+        let query = json!({
+            "structuredQuery": {
+                "from": [{"collectionId": LLM_USAGE_SUBCOLLECTION}]
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .await?
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Firestore query failed: {}", error_text).into());
+        }
+
+        let results: Vec<Value> = response.json().await?;
+        let total: f64 = results.iter().filter_map(|entry| {
+            let cost = entry
+                .get("document")?
+                .get("fields")?
+                .get("desktop_chat")?
+                .get("mapValue")?
+                .get("fields")?
+                .get("cost_usd")?;
+            // Firestore stores doubles as doubleValue, but may also be integerValue
+            cost.get("doubleValue")
+                .and_then(|v| v.as_f64())
+                .or_else(|| cost.get("integerValue").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()))
+        }).sum();
+
+        Ok(total)
     }
 
     // =========================================================================
@@ -4788,12 +4884,16 @@ impl FirestoreService {
             excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
         });
 
+        // Read top-level update_channel from user doc (not from assistant_settings sub-map)
+        let update_channel = self.parse_string(fields, "update_channel");
+
         Ok(AssistantSettingsData {
             shared,
             focus,
             task,
             advice,
             memory,
+            update_channel,
         })
     }
 
@@ -4925,6 +5025,16 @@ impl FirestoreService {
             self.update_user_fields(uid, fields, &["assistant_settings"]).await?;
         }
 
+        // Write update_channel as top-level field on user doc (not inside assistant_settings)
+        if let Some(ref channel) = data.update_channel {
+            let fields = json!({
+                "update_channel": {
+                    "stringValue": channel
+                }
+            });
+            self.update_user_fields(uid, fields, &["update_channel"]).await?;
+        }
+
         // Return merged state
         self.get_assistant_settings(uid).await
     }
@@ -4953,16 +5063,36 @@ impl FirestoreService {
     }
 
     /// Update user language preference
+    /// Languages supported by Deepgram Nova-3 multi-language auto-detection.
+    const MULTI_LANGUAGE_SUPPORTED: &[&str] = &[
+        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
+        "es", "es-419",
+        "fr", "fr-CA",
+        "de",
+        "hi",
+        "ru",
+        "pt", "pt-BR", "pt-PT",
+        "ja",
+        "it",
+        "nl",
+    ];
+
     pub async fn update_user_language(
         &self,
         uid: &str,
         language: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let fields = json!({
+        // Set language field
+        let lang_fields = json!({
             "language": {"stringValue": language}
         });
+        self.update_user_fields(uid, lang_fields, &["language"]).await?;
 
-        self.update_user_fields(uid, fields, &["language"]).await
+        // Auto-set single_language_mode based on whether the language supports multi-language
+        let single_language_mode = !Self::MULTI_LANGUAGE_SUPPORTED.contains(&language);
+        self.update_transcription_preferences(uid, Some(single_language_mode), None).await?;
+
+        Ok(())
     }
 
     /// Get recording permission for a user
@@ -5078,6 +5208,7 @@ impl FirestoreService {
             use_case: self.parse_string(fields, "use_case"),
             job: self.parse_string(fields, "job"),
             company: self.parse_string(fields, "company"),
+            desktop_update_channel: self.parse_string(fields, "desktop_update_channel"),
         })
     }
 
@@ -6563,8 +6694,10 @@ impl FirestoreService {
                                 == Some(target_app)
                         }
                         None => {
-                            // Looking for main chat: plugin_id is null, absent, or empty
-                            match fields.get("plugin_id") {
+                            // Looking for main chat: both plugin_id AND app_id must be
+                            // null, absent, or empty.  Without the app_id check, task-chat
+                            // sessions (plugin_id=null, app_id="task-chat") match falsely.
+                            let plugin_id_null = match fields.get("plugin_id") {
                                 None => true,
                                 Some(val) => {
                                     val.get("nullValue").is_some()
@@ -6573,7 +6706,18 @@ impl FirestoreService {
                                             .and_then(|v| v.as_str())
                                             .map_or(false, |s| s.is_empty())
                                 }
-                            }
+                            };
+                            let app_id_null = match fields.get("app_id") {
+                                None => true,
+                                Some(val) => {
+                                    val.get("nullValue").is_some()
+                                        || val
+                                            .get("stringValue")
+                                            .and_then(|v| v.as_str())
+                                            .map_or(false, |s| s.is_empty())
+                                }
+                            };
+                            plugin_id_null && app_id_null
                         }
                     };
 
@@ -9327,6 +9471,83 @@ impl FirestoreService {
         });
 
         self.update_user_fields(uid, fields, &["agentVm"]).await
+    }
+
+    // =========================================================================
+    // SCREEN ACTIVITY
+    // =========================================================================
+
+    /// Batch write screen activity rows to Firestore users/{uid}/screen_activity/{id}.
+    /// Uses Firestore commit API for batch writes (max 500 per commit).
+    pub async fn upsert_screen_activity(
+        &self,
+        uid: &str,
+        rows: &[crate::models::screen_activity::ScreenActivityRow],
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        let mut written = 0;
+
+        for chunk in rows.chunks(500) {
+            let writes: Vec<Value> = chunk
+                .iter()
+                .map(|row| {
+                    let doc_name = format!(
+                        "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+                        self.project_id,
+                        USERS_COLLECTION,
+                        uid,
+                        SCREEN_ACTIVITY_SUBCOLLECTION,
+                        row.id
+                    );
+
+                    // Truncate OCR text to 1000 chars
+                    let ocr_truncated: String = row.ocr_text.chars().take(1000).collect();
+
+                    json!({
+                        "update": {
+                            "name": doc_name,
+                            "fields": {
+                                "timestamp": {"stringValue": &row.timestamp},
+                                "appName": {"stringValue": &row.app_name},
+                                "windowTitle": {"stringValue": &row.window_title},
+                                "ocrText": {"stringValue": ocr_truncated},
+                            }
+                        }
+                    })
+                })
+                .collect();
+
+            let commit_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+                self.project_id
+            );
+
+            let body = json!({ "writes": writes });
+
+            let response = self
+                .build_request(reqwest::Method::POST, &commit_url)
+                .await?
+                .json(&body)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore screen_activity batch commit error: {}", error_text).into());
+            }
+
+            written += chunk.len();
+        }
+
+        tracing::info!(
+            "Screen activity Firestore write uid={} count={}",
+            uid,
+            written
+        );
+        Ok(written)
     }
 }
 

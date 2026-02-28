@@ -62,6 +62,10 @@ class RewindViewModel: ObservableObject {
     /// Whether initial data has been loaded (prevents race condition with debounced search)
     private var isInitialized = false
 
+    /// Set by RewindPage when the transcript/notes panel is expanded.
+    /// Auto-refresh skips when true so the view tree stays stable and @State is preserved.
+    var isTranscriptExpanded = false
+
     // MARK: - Initialization
 
     init() {
@@ -90,7 +94,9 @@ class RewindViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    /// Refresh timeline only if viewing today and not actively searching
+    /// Refresh timeline only if viewing today and not actively searching.
+    /// Uses a silent path that never sets isLoading and only updates screenshots
+    /// when the data actually changed, preventing view-tree destruction.
     private func refreshTimelineIfViewingToday() async {
         // Skip if not initialized or currently loading
         guard isInitialized, !isLoading, !isSearching else { return }
@@ -98,12 +104,16 @@ class RewindViewModel: ObservableObject {
         // Skip if there's an active search query
         guard activeSearchQuery == nil else { return }
 
+        // Skip if transcript/notes panel is expanded — refreshing would
+        // destroy the expanded view tree and lose @State (typed notes).
+        guard !isTranscriptExpanded else { return }
+
         // Only refresh if viewing today
         let calendar = Calendar.current
         guard calendar.isDateInToday(selectedDate) else { return }
 
-        // Reload screenshots for today
-        await loadScreenshotsForDate(selectedDate)
+        // Silent refresh: don't set isLoading, and only update if data changed
+        await silentLoadScreenshotsForDate(selectedDate)
     }
 
     /// Update only the stats (for live frame count updates)
@@ -313,6 +323,44 @@ class RewindViewModel: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    /// Silent variant for auto-refresh: never touches isLoading, and only
+    /// updates `screenshots` when the fetched IDs differ from the current set.
+    /// This prevents unnecessary SwiftUI view-tree rebuilds that destroy @State.
+    private func silentLoadScreenshotsForDate(_ date: Date) async {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        do {
+            var results = try await RewindDatabase.shared.getScreenshots(
+                from: startOfDay,
+                to: endOfDay,
+                limit: 500
+            )
+
+            // Filter out frames from the active (unfinalized) video chunk
+            let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+            if let activeChunk = activeChunk {
+                results = results.filter { $0.videoChunkPath != activeChunk }
+            }
+
+            // Apply app filter if set
+            if let app = selectedApp {
+                results = results.filter { $0.appName == app }
+            }
+
+            // Only update if the data actually changed (compare by IDs)
+            let oldIds = screenshots.compactMap { $0.id }
+            let newIds = results.compactMap { $0.id }
+            if oldIds != newIds {
+                screenshots = results
+            }
+
+        } catch {
+            logError("RewindViewModel: Failed to silently refresh screenshots: \(error)")
+        }
     }
 
     // MARK: - Screenshot Selection

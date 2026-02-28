@@ -1014,7 +1014,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Ühenda';
 
   @override
   String get comingSoon => 'Tulekul';
@@ -2267,7 +2267,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get folderName => 'Kausta nimi';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Kirjeldus (valikuline)';
 
   @override
   String get failedToDeleteFolder => 'Kausta kustutamine ebaõnnestus';
@@ -7998,27 +7998,27 @@ class AppLocalizationsEt extends AppLocalizations {
   String get addTask => 'Lisa ülesanne';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Lisa MCP server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Ühenda välised AI tööriistad';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count tööriista edukalt ühendatud';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP serveriga ühendamine ebaõnnestus';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoriseerimine...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Kuidas sa meid leidsid?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8036,19 +8036,19 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Sõber';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Muu';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Palun täpsusta';
 
   @override
-  String get event => 'Event';
+  String get event => 'Sündmus';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kolleeg';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8217,4 +8217,43 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Siin on, mida ma sinust tean';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'See kaart uueneb, kui Omi õpib teie vestlustest.';
+
+  @override
+  String get apiEnvironment => 'API keskkond';
+
+  @override
+  String get apiEnvironmentDescription => 'Valige, millise serveriga ühenduda';
+
+  @override
+  String get production => 'Tootmine';
+
+  @override
+  String get staging => 'Testkeskkond';
+
+  @override
+  String get switchRequiresRestart => 'Vahetamine nõuab rakenduse taaskäivitamist';
+
+  @override
+  String get switchApiConfirmTitle => 'Vaheta API keskkonda';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Lülituda keskkonnale $environment? Peate rakenduse sulgema ja uuesti avama, et muudatused jõustuksid.';
+  }
+
+  @override
+  String get switchAndRestart => 'Lülita';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testkeskkond võib olla ebastabiilne, ebaühtlase jõudlusega ja andmed võivad kaduda. Ainult testimiseks.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Salvestatud. Sulgege ja avage rakendus uuesti, et muudatused rakenduks.';
 }

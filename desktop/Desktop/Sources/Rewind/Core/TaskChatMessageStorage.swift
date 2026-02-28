@@ -121,6 +121,8 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
                 encoded.append(dict)
             case .thinking(let id, let text):
                 encoded.append(["type": "thinking", "id": id, "text": text])
+            case .discoveryCard(let id, let title, let summary, let fullText):
+                encoded.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
             }
         }
         guard let data = try? JSONSerialization.data(withJSONObject: encoded),
@@ -158,6 +160,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
             case "thinking":
                 let text = dict["text"] as? String ?? ""
                 blocks.append(.thinking(id: id, text: text))
+            case "discoveryCard":
+                let title = dict["title"] as? String ?? ""
+                let summary = dict["summary"] as? String ?? ""
+                let fullText = dict["fullText"] as? String ?? ""
+                blocks.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
             default:
                 break
             }
@@ -341,6 +348,13 @@ actor TaskChatMessageStorage {
             )
         }
     }
+}
+
+// MARK: - TableDocumented
+
+extension TaskChatMessageRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["task_chat_messages"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["task_chat_messages"] ?? [:] }
 }
 
 // MARK: - Error

@@ -92,14 +92,25 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
             return records.map { $0.toTaskActionItem() }
         }
+    }
+
+    /// Check if a non-deleted action item with the given description exists
+    func actionItemExists(description: String) async -> Bool {
+        guard let db = try? await ensureInitialized() else { return false }
+        return (try? await db.read { database in
+            try ActionItemRecord
+                .filter(Column("description") == description)
+                .filter(Column("deleted") == false)
+                .fetchCount(database) > 0
+        }) ?? false
     }
 
     /// Get a single action item by its backend ID
@@ -234,9 +245,9 @@ actor ActionItemStorage {
                 }
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -289,9 +300,9 @@ actor ActionItemStorage {
                 query = query.filter(Column("priority") == priority)
             }
 
-            // Sort matching Python backend: due_at ASC (nulls last), created_at DESC
+            // Sort by sortOrder first (drag-and-drop), then due_at, created_at
             let records = try query
-                .order(Column("dueAt").ascNullsLast, Column("createdAt").desc)
+                .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
                 .limit(limit, offset: offset)
                 .fetchAll(database)
 
@@ -737,16 +748,21 @@ actor ActionItemStorage {
     }
 
     /// Get action items that haven't been synced to backend yet
-    func getUnsyncedActionItems() async throws -> [ActionItemRecord] {
+    /// - Parameter includeRecent: When true, skips the 30-second age filter (used when syncing
+    ///   items created via raw SQL where no API call is in-flight).
+    func getUnsyncedActionItems(includeRecent: Bool = false) async throws -> [ActionItemRecord] {
         let db = try await ensureInitialized()
         let ageThreshold = Date().addingTimeInterval(-30)
 
         return try await db.read { database in
-            try ActionItemRecord
+            var request = ActionItemRecord
                 .filter(Column("backendSynced") == false)
                 .filter(Column("backendId") == nil || Column("backendId") == "")
                 .filter(Column("deleted") == false)
-                .filter(Column("createdAt") < ageThreshold)
+            if !includeRecent {
+                request = request.filter(Column("createdAt") < ageThreshold)
+            }
+            return try request
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -1396,6 +1412,23 @@ actor ActionItemStorage {
 
             rec.chatSessionId = sessionId
             try rec.update(database)
+        }
+    }
+
+    // MARK: - Recurring Tasks
+
+    /// Get incomplete recurring tasks that are due (dueAt <= now)
+    func getDueRecurringTasks() async throws -> [TaskActionItem] {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            let records = try ActionItemRecord
+                .filter(Column("completed") == false)
+                .filter(Column("deleted") == false)
+                .filter(Column("recurrenceRule") != nil && Column("recurrenceRule") != "")
+                .filter(Column("dueAt") != nil && Column("dueAt") <= Date())
+                .fetchAll(database)
+            return records.map { $0.toTaskActionItem() }
         }
     }
 

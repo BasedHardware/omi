@@ -1,3 +1,4 @@
+import json
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -6,6 +7,7 @@ import os
 
 import pytz
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from database import (
@@ -35,6 +37,7 @@ from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
 )
+from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -63,6 +66,11 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
+from database.action_items import get_action_items as get_standalone_action_items
+from google.cloud import firestore as cloud_firestore
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -98,7 +106,7 @@ def delete_account(uid: str = Depends(auth.get_current_user_uid)):
         auth.delete_account(uid)
         return {'status': 'ok', 'message': 'Account deleted successfully'}
     except Exception as e:
-        print('delete_account', str(e))
+        logger.info(f'delete_account {str(e)}')
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -120,7 +128,7 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             cache_user_geolocation(uid, geolocation.dict())
         except Exception as e:
-            print(f"Error processing geolocation update, caching new location anyway. Error: {e}")
+            logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
             cache_user_geolocation(uid, geolocation.dict())
     else:
         # No previous location, so cache the new one
@@ -294,7 +302,7 @@ def get_single_person(
 
 @router.get('/v1/users/people', tags=['v1'], response_model=List[Person])
 def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.get_current_user_uid)):
-    print('get_all_people', include_speech_samples)
+    logger.info(f'get_all_people {include_speech_samples}')
     people = get_people(uid)
     if include_speech_samples:
         # Convert GCS paths to signed URLs for each person
@@ -451,7 +459,7 @@ def set_chat_message_analytics(
                 )
     except Exception as e:
         # Don't fail the request if LangSmith feedback fails
-        print(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
+        logger.error(f"⚠️  LangSmith feedback submission error (non-fatal): {e}")
 
     return {'status': 'ok'}
 
@@ -477,7 +485,9 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
-    return {'status': 'ok'}
+    single_language_mode = language not in deepgram_nova3_multi_languages
+    set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
+    return {'status': 'ok', 'single_language_mode': single_language_mode}
 
 
 # *************************************************
@@ -603,7 +613,7 @@ def handle_batch_migration_requests(
                 errors.append(f"Unknown object type for migration: {req_type}")
         except Exception as e:
             error_detail = f"Failed to migrate batch of type {req_type}: {e}"
-            print(error_detail)
+            logger.info(error_detail)
             errors.append(error_detail)
 
     if errors:
@@ -639,7 +649,7 @@ def set_preferred_app_for_user(
     try:
         set_user_preferred_app(uid, app_id_to_set)
     except Exception as e:
-        print(f"Failed to set preferred app in Redis for user {uid}: {e}")
+        logger.error(f"Failed to set preferred app in Redis for user {uid}: {e}")
         raise HTTPException(status_code=500, detail="Failed to store app preference.")
 
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
@@ -735,7 +745,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
                 subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
         except Exception as e:
-            print(f"Error retrieving current price ID: {e}")
+            logger.error(f"Error retrieving current price ID: {e}")
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
@@ -779,7 +789,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
             )
         except Exception as e:
-            print(f"Error retrieving monthly price from Stripe: {e}")
+            logger.error(f"Error retrieving monthly price from Stripe: {e}")
 
     if annual_price_id:
         try:
@@ -798,7 +808,7 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
                 )
             )
         except Exception as e:
-            print(f"Error retrieving annual price from Stripe: {e}")
+            logger.error(f"Error retrieving annual price from Stripe: {e}")
 
     if unlimited_plan_prices:
         available_plans.append(
@@ -1130,3 +1140,56 @@ def get_llm_top_features(
     Returns the top N features sorted by total token consumption.
     """
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
+
+
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+@router.get('/v1/users/export', tags=['v1'])
+async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+    """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
+
+    def generate():
+        profile = get_user_profile(uid)
+        memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
+        people = get_people(uid)
+        action_items = get_standalone_action_items(uid, limit=10000, offset=0)
+
+        # Stream pretty-printed JSON, yielding conversations and messages one at a time
+        yield '{\n'
+        yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
+
+        # Stream conversations via generator (batched internally, never all in memory)
+        yield '  "conversations": [\n'
+        first = True
+        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + json.dumps(conv, default=_json_default, indent=4)
+        yield '\n  ],\n'
+
+        yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
+        yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
+        yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
+
+        # Stream chat messages via generator (batched internally, never all in memory)
+        yield '  "chat_messages": [\n'
+        first = True
+        for msg in chat_db.iter_all_messages(uid):
+            if not first:
+                yield ',\n'
+            first = False
+            yield '    ' + json.dumps(msg, default=_json_default, indent=4)
+        yield '\n  ]\n'
+
+        yield '}\n'
+
+    return StreamingResponse(
+        generate(),
+        media_type='application/json',
+        headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
+    )

@@ -11,11 +11,13 @@ pub mod focus_session;
 pub mod folder;
 pub mod goal;
 pub mod knowledge_graph;
+pub mod llm_usage;
 pub mod memory;
 pub mod message;
 pub mod person;
 pub mod persona;
 pub mod request;
+pub mod screen_activity;
 pub mod user_settings;
 
 pub use action_item::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, BatchUpdateSortOrdersRequest, CreateActionItemRequest, PromoteResponse, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};
@@ -72,6 +74,7 @@ pub use persona::{
     PersonaDB, PersonaResponse, PersonaStatusResponse, UpdatePersonaRequest,
     UsernameAvailableResponse,
 };
+pub use llm_usage::{RecordLlmUsageRequest, RecordLlmUsageResponse};
 pub use knowledge_graph::{
     ExtractedKnowledge, KnowledgeGraphEdge,
     KnowledgeGraphNode, KnowledgeGraphResponse, KnowledgeGraphStatusResponse, NodeType,

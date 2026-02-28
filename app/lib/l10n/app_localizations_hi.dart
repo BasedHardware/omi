@@ -1010,7 +1010,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get vocabularyHint => 'शब्दावली (अल्पविराम से अलग)';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'कनेक्ट करें';
 
   @override
   String get comingSoon => 'जल्द आ रहा है';
@@ -2240,7 +2240,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get folderName => 'फ़ोल्डर नाम';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'विवरण (वैकल्पिक)';
 
   @override
   String get failedToDeleteFolder => 'फ़ोल्डर हटाने में विफल';
@@ -7979,27 +7979,27 @@ class AppLocalizationsHi extends AppLocalizations {
   String get addTask => 'कार्य जोड़ें';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP सर्वर जोड़ें';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'बाहरी AI टूल कनेक्ट करें';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count टूल सफलतापूर्वक कनेक्ट हुए';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP सर्वर से कनेक्ट करने में विफल';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'अधिकृत किया जा रहा है...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'आपने हमें कैसे खोजा?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8017,19 +8017,19 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'मित्र';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'अन्य';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'कृपया बताएं';
 
   @override
-  String get event => 'Event';
+  String get event => 'कार्यक्रम';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'सहकर्मी';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8200,4 +8200,43 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'मैं आपके बारे में यह जानता हूँ';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'यह मैप आपकी बातचीत से Omi सीखता है तो अपडेट होता है।';
+
+  @override
+  String get apiEnvironment => 'API वातावरण';
+
+  @override
+  String get apiEnvironmentDescription => 'कनेक्ट करने के लिए सर्वर चुनें';
+
+  @override
+  String get production => 'प्रोडक्शन';
+
+  @override
+  String get staging => 'स्टेजिंग';
+
+  @override
+  String get switchRequiresRestart => 'बदलने के लिए ऐप रीस्टार्ट आवश्यक है';
+
+  @override
+  String get switchApiConfirmTitle => 'API वातावरण बदलें';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environment पर स्विच करें? बदलाव लागू करने के लिए आपको ऐप बंद करके फिर से खोलना होगा।';
+  }
+
+  @override
+  String get switchAndRestart => 'बदलें';
+
+  @override
+  String get stagingDisclaimer =>
+      'स्टेजिंग अस्थिर हो सकता है, प्रदर्शन असंगत हो सकता है, और डेटा खो सकता है। केवल परीक्षण के लिए।';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'सहेजा गया। बदलाव लागू करने के लिए ऐप बंद करें और फिर से खोलें।';
 }

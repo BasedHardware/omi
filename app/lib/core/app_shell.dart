@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/desktop/desktop_app.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -382,16 +381,6 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Route to appropriate app tree based on screen width
-        if (constraints.maxWidth >= 1100) {
-          // DEPRECATED: Flutter desktop is deprecated. See /desktop/ for the native Swift macOS app.
-          return const DesktopApp();
-        } else {
-          return const MobileApp(); // Mobile app tree
-        }
-      },
-    );
+    return const MobileApp();
   }
 }

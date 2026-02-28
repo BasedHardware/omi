@@ -9,6 +9,9 @@ from models.app import App
 from models.chat import Message, ChatSession, MessageType
 from utils.retrieval.graph import AsyncStreamingCallback
 from openai.types.responses import ResponseTextDeltaEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 # omi_documentation: dict = get_github_docs_content()
 # omi_documentation_str = "\n\n".join(
@@ -74,7 +77,7 @@ async def execute_agent_chat_stream(
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
 ) -> AsyncGenerator[str, None]:
-    print("execute_agent_chat_stream app: ", app.id if app else "<none>")
+    logger.info(f'execute_agent_chat_stream app:  {app.id if app else "<none>"}')
     callback = AsyncStreamingCallback()
 
     async with MCPServerStdio(
@@ -125,12 +128,12 @@ async def send_single_message():
                 server,
                 "viUv7GtdoHXbK1UBCDlPuTDuPgJ2",
                 "What do you know about me?",
-                lambda x: print(x),
+                lambda x: logger.info(x),
             )
 
 
 async def interactive_chat_stream():
-    print("Starting interactive chat with Omi Agent. Type 'exit' to quit.")
+    logger.info("Starting interactive chat with Omi Agent. Type 'exit' to quit.")
     async with MCPServerStdio(
         cache_tools_list=True,
         params={"command": "uvx", "args": ["mcp-server-omi", "-v"]},
@@ -140,7 +143,7 @@ async def interactive_chat_stream():
             if user_input.lower() == "exit":
                 break
 
-            print("\nOmi: ", end="", flush=True)
+            logger.info("\nOmi: ")
 
             with trace(workflow_name="Omi Agent"):
                 await run(
@@ -193,7 +196,7 @@ if __name__ == "__main__":
     async def main():
         async for chunk in execute_agent_chat_stream(uid="viUv7GtdoHXbK1UBCDlPuTDuPgJ2", messages=messages):
             if chunk:
-                print(chunk, end="", flush=True)
-        print()  # for newline after stream ends
+                logger.info(chunk)
+        logger.info("")  # for newline after stream ends
 
     asyncio.run(main())

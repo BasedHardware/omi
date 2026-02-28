@@ -135,6 +135,9 @@ pub struct UserProfile {
     /// Onboarding: user's company
     #[serde(default)]
     pub company: Option<String>,
+    /// Desktop Sparkle update channel (staging, beta, stable)
+    #[serde(default)]
+    pub desktop_update_channel: Option<String>,
 }
 
 /// Complete user settings response (aggregated)
@@ -243,4 +246,7 @@ pub struct AssistantSettingsData {
     pub task: Option<TaskSettingsData>,
     pub advice: Option<AdviceSettingsData>,
     pub memory: Option<MemorySettingsData>,
+    /// Remote override for the Sparkle update channel (top-level field on user doc, not in assistant_settings sub-map)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_channel: Option<String>,
 }

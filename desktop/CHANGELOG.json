@@ -1,5 +1,195 @@
 {
+  "unreleased": [
+    "Interactive AI onboarding with permission guidance and file discovery"
+  ],
   "releases": [
+    {
+      "version": "0.11.34",
+      "date": "2026-02-28",
+      "changes": [
+        "Added live 3D knowledge graph visualization during onboarding that builds incrementally as AI discovers information about you",
+        "Added interaction hints to onboarding knowledge graph (drag, zoom, pan)",
+        "Fixed onboarding resuming after Quit & Reopen for screen recording permission",
+        "Parallel AI exploration during onboarding \u2014 builds your digital profile and knowledge graph while you set up permissions",
+        "Automated release notes \u2014 changes are now tracked as they happen"
+      ]
+    },
+    {
+      "version": "0.11.9",
+      "date": "2026-02-26",
+      "changes": [
+        "Fixed AI chat not working (missing module after update)"
+      ]
+    },
+    {
+      "version": "11.5",
+      "date": "2026-02-25",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Screen capture soft recovery: fixes broken permissions without wiping your grant",
+        "Fixed phantom menu bar icon that could appear invisible after policy changes",
+        "Rewind timeline auto-refresh no longer destroys expanded transcript or typed notes",
+        "Richer auto-update failure diagnostics for faster debugging"
+      ]
+    },
+    {
+      "version": "11.4",
+      "date": "2026-02-25",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Quick toggles for Screen Capture and Audio Recording in the menu bar",
+        "New 'omi' text logo in the menu bar",
+        "Screen Analysis auto-restarts after transient failures instead of turning off",
+        "Fixed memory growth during long recording sessions with sliding window for transcript segments",
+        "Fixed orphan Rewind screenshots that caused missing frames in timeline",
+        "Faster Live Notes processing with incremental segment tracking"
+      ]
+    },
+    {
+      "version": "11.3",
+      "date": "2026-02-24",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Resizable floating bar with dedicated AI session and concise single-sentence answers",
+        "Faster follow-up messages: send your next query immediately without waiting for server sync",
+        "Fixed duplicate messages from cross-platform sync race condition",
+        "Better Rewind empty states with permission guidance and auto-start after granting access",
+        "Auto-opens download page when Sparkle installer fails on macOS 26",
+        "Cloud agent: automatic database re-upload, hot-reload for agent code, keepalive ping"
+      ]
+    },
+    {
+      "version": "11.2",
+      "date": "2026-02-24",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Fixed Screen Analysis being incorrectly disabled when monitoring stops",
+        "Faster data syncing with gzip compression",
+        "Fixed OMI AI cost tracking to use server-authoritative totals",
+        "Improved Proactive Assistants reliability"
+      ]
+    },
+    {
+      "version": "11.1",
+      "date": "2026-02-24",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Fixed auto-update on macOS 26: upgraded Sparkle to 2.9.0 and added launchctl kickstart workaround for on-demand-only mode",
+        "Chat performance: cached markdown rendering, equatable chat bubbles, and session grouping moved off the render path",
+        "$50 free usage limit with prompt to connect your own Claude account",
+        "Server-controlled update channel for remote beta/stable switching"
+      ]
+    },
+    {
+      "version": "11.0",
+      "date": "2026-02-23",
+      "changes": [
+        "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
+        "Task chat session history: resume previous AI conversations about tasks across app restarts",
+        "Dedicated task chat side panel with better layout isolation and session ID display",
+        "Add task button in toolbar (\u2318N) for quick inline task creation",
+        "File graph keyboard hints: drag to rotate, right-drag to pan, scroll to zoom",
+        "Removed per-message timeouts in AI bridge \u2014 long-running tools no longer fail prematurely",
+        "Chat memory capped at 200 messages to prevent unbounded growth",
+        "Auto-restart memory threshold lowered from 4GB to 3GB for safer recovery",
+        "Fixed PostHog lifecycle capture causing 2-second XPC hangs to Spotlight",
+        "Fixed drag-and-drop task reordering with proper macOS NSItemProvider support",
+        "Fixed SwiftUI layout recursion in chat panels and task list",
+        "Fixed conversation list depth hangs during refresh",
+        "Fixed Rewind ffmpeg process burst when switching apps rapidly",
+        "Removed misleading 'End-to-end encryption (Coming Soon)' badge"
+      ]
+    },
+    {
+      "version": "0.10.9",
+      "date": "2026-02-23",
+      "changes": [
+        "<span style='color:red;font-size:16px;font-weight:bold'>\u26a0\ufe0f AUTO-UPDATE IS BROKEN \u2014 YOU MUST DOWNLOAD MANUALLY</span>",
+        "<span style='color:red'>The Install button will NOT work.</span> Please download the new version here: <a href='https://macos.omi.me' style='color:red;font-weight:bold;font-size:15px'>macos.omi.me</a>",
+        "Steps: 1) Click the link above or open <a href='https://macos.omi.me'>macos.omi.me</a> in your browser  2) Download the DMG  3) Open it and drag Omi to Applications  4) Replace the existing app when prompted",
+        "This is a one-time fix. After installing manually, all future updates will work normally.",
+        "Fixed floating control bar dismiss race: PTT query during close animation no longer gets immediately dismissed",
+        "AI chat sees new tables (goals, staged tasks, task chat messages) and hides internal columns for cleaner schema"
+      ]
+    },
+    {
+      "version": "0.10.8",
+      "date": "2026-02-22",
+      "changes": [
+        "Appcast changelog now renders HTML (clickable links, styled text) in Sparkle update dialog",
+        "Updated macos.omi.me download to serve latest DMG",
+        "Floating control bar improvements"
+      ]
+    },
+    {
+      "version": "0.10.7",
+      "date": "2026-02-22",
+      "changes": [
+        "Fixed auto-update: removed code that was breaking app code signature on every launch",
+        "Added detailed Sparkle error logging for easier debugging"
+      ]
+    },
+    {
+      "version": "0.10.6",
+      "date": "2026-02-22",
+      "changes": [
+        "Fixed auto-update failing with 'An error occurred while running the updater': app now self-heals macOS provenance xattrs that break code signature"
+      ]
+    },
+    {
+      "version": "0.10.5",
+      "date": "2026-02-22",
+      "changes": [
+        "Daily recurring tasks: create tasks that repeat every day from the dashboard widget",
+        "Live transcript panel: self-contained component that preserves transcript after recording stops",
+        "Task Agent toggle in Settings: enable/disable the Investigate button and task chat independently",
+        "Task working directory setting shared between terminal and chat agents",
+        "Token usage tracking for AI chat messages (input/output token estimates)",
+        "Smarter accessibility checks: confirms broken permissions via Finder before showing false alerts",
+        "Auto-restart on extreme memory (4GB+): prevents system from becoming unresponsive",
+        "Chat scroll fix: bottom anchor moved outside LazyVStack for reliable auto-scroll",
+        "Audio capture moved off main thread: CoreAudio setup no longer blocks UI after wake from sleep",
+        "ffmpeg watchdog: force-kills hung ffmpeg processes to prevent 7GB+ memory buildup",
+        "Fixed OAuth error handling: generic API errors no longer trigger unnecessary re-authentication",
+        "Fixed infinite retry loop when fresh AI chat sessions fail",
+        "Task chat state properly cleaned up on delete, unread indicators persist across restarts",
+        "Task editing improved: view mode shows static text, tap to edit, hover actions hidden while editing",
+        "Gemini content blocking errors now surface descriptive messages instead of generic failures",
+        "Sentry noise reduced: dev builds excluded, transient auth errors filtered",
+        "Demo: https://x.com/m13v_/status/2025370419415396366"
+      ]
+    },
+    {
+      "version": "0.10.4",
+      "date": "2026-02-21",
+      "changes": [
+        "Fixed staging channel Option+click gesture being immediately overwritten by beta",
+        "Verification script no longer kills running Dev and Production app instances"
+      ]
+    },
+    {
+      "version": "0.10.3",
+      "date": "2026-02-21",
+      "changes": [
+        "ACP bridge bundled in release builds: AI chat now works reliably without external dependencies",
+        "Update channel label shown in Settings so you can see if you're on Beta or Staging",
+        "Native binaries in ACP bridge node_modules are now properly code-signed"
+      ]
+    },
+    {
+      "version": "0.10.2",
+      "date": "2026-02-20",
+      "changes": [
+        "Recurring task scheduler: AI automatically investigates recurring tasks when they're due",
+        "Parallel task agents: multiple tasks can be investigated by AI simultaneously",
+        "Claude OAuth browser login: sign in to your Claude account via browser instead of token paste",
+        "Separate screen capture and audio recording toggles in Settings for independent control",
+        "Improved task drag-and-drop with cross-category moves and visual drop indicators",
+        "Unified AI bridge: removed legacy Agent SDK, all chat uses the faster ACP bridge",
+        "Session pre-warming for both Opus and Sonnet models for faster first responses",
+        "Fixed stale message desync that could cause AI chat to hang after interruptions"
+      ]
+    },
     {
       "version": "0.10.1",
       "date": "2026-02-20",
@@ -159,7 +349,7 @@
         "Hardware-accelerated screen recording (hevc_videotoolbox) for lower CPU usage",
         "Auto-detects video calls (Zoom, Teams, Meet) and reduces capture frequency to avoid slowdowns",
         "Floating bar shows OMI logo and no longer drifts across the screen or off-screen on monitor disconnect",
-        "AI agent turn limit removed — tasks can run as many steps as needed",
+        "AI agent turn limit removed \u2014 tasks can run as many steps as needed",
         "Capped in-memory embeddings to 5,000 entries to prevent unbounded memory growth",
         "Fixed database crashes from concurrent sync operations during memory and action item writes",
         "Reduced error noise: cleaner Sentry logs, quieter Crisp polling, slower recovery retries"
@@ -188,7 +378,7 @@
         "Accessibility permission reset: detects broken state after macOS updates and offers one-click fix",
         "Database upgraded to connection pool for better performance during concurrent reads",
         "Automation permission check now handles System Events not running (fixes -600 error)",
-        "Onboarding no longer blocks on permissions — grant them later from Settings",
+        "Onboarding no longer blocks on permissions \u2014 grant them later from Settings",
         "Hiding the floating bar now persists across app restarts",
         "Native notifications when support replies in Help chat",
         "Faster conversation sync by skipping unchanged sessions"
@@ -202,7 +392,7 @@
         "Model picker: switch between Sonnet and Opus directly from the floating bar",
         "Voice follow-up: use push-to-talk while viewing an AI response to continue the conversation",
         "Batch transcription mode: record first, transcribe after for better accuracy (Settings > Shortcuts)",
-        "Customizable Ask Omi shortcut: choose ⌘Enter, ⌘⇧Enter, ⌘J, or ⌘O (Settings > Shortcuts)",
+        "Customizable Ask Omi shortcut: choose \u2318Enter, \u2318\u21e7Enter, \u2318J, or \u2318O (Settings > Shortcuts)",
         "Push-to-talk sounds can now be toggled off in settings",
         "AI chat now includes your tasks for more context-aware responses",
         "Long chat messages are auto-truncated with Show more/less toggle",

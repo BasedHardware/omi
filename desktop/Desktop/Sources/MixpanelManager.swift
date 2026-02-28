@@ -35,8 +35,8 @@ class MixpanelManager {
 
     /// Get the MixPanel token from environment or .env file
     private func getToken() -> String? {
-        // Check environment variable first
-        if let token = ProcessInfo.processInfo.environment[tokenKey], !token.isEmpty {
+        // Check environment variable first (use getenv() to pick up setenv() from .env loading)
+        if let cString = getenv(tokenKey), let token = String(validatingUTF8: cString), !token.isEmpty {
             return token
         }
 
@@ -643,10 +643,16 @@ extension MixpanelManager {
         track("Update Not Found")
     }
 
-    func updateCheckFailed(error: String) {
-        track("Update Check Failed", properties: [
-            "error": error
-        ])
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        var props: [String: MixpanelType] = [
+            "error": error,
+            "error_domain": errorDomain,
+            "error_code": errorCode
+        ]
+        if let underlyingError { props["underlying_error"] = underlyingError }
+        if let underlyingDomain { props["underlying_domain"] = underlyingDomain }
+        if let underlyingCode { props["underlying_code"] = underlyingCode }
+        track("Update Check Failed", properties: props)
     }
 
     // MARK: - Notification Events
@@ -704,6 +710,13 @@ extension MixpanelManager {
         track("Tier Changed", properties: [
             "tier": tier,
             "reason": reason
+        ])
+    }
+
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        track("Chat Bridge Mode Changed", properties: [
+            "from": oldMode,
+            "to": newMode
         ])
     }
 
