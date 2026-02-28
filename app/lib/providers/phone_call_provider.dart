@@ -160,13 +160,22 @@ class PhoneCallProvider extends ChangeNotifier {
     _isSpeakerOn = false;
     notifyListeners();
 
+    // Request mic permission first, before any SDK initialization
+    var micStatus = await Permission.microphone.request();
+    if (!micStatus.isGranted) {
+      _callState = PhoneCallState.idle;
+      _error = 'Microphone permission is required to make calls';
+      notifyListeners();
+      return false;
+    }
+
     // Resolve contact name from device contacts
     _contactName = await _resolveContactName(phoneNumber);
 
     // Get Twilio token
     var token = await api.getPhoneCallToken();
     if (token == null) {
-      _callState = PhoneCallState.failed;
+      _callState = PhoneCallState.idle;
       _error = 'Failed to get call token. Verify your phone number first.';
       notifyListeners();
       return false;
@@ -175,16 +184,8 @@ class PhoneCallProvider extends ChangeNotifier {
     // Initialize native Twilio SDK
     var initialized = await _nativeService.initialize(token.accessToken);
     if (!initialized) {
-      _callState = PhoneCallState.failed;
+      _callState = PhoneCallState.idle;
       _error = 'Failed to initialize call service';
-      notifyListeners();
-      return false;
-    }
-
-    var micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) {
-      _callState = PhoneCallState.failed;
-      _error = 'Microphone permission is required to make calls';
       notifyListeners();
       return false;
     }
@@ -197,7 +198,7 @@ class PhoneCallProvider extends ChangeNotifier {
     );
 
     if (!callStarted) {
-      _callState = PhoneCallState.failed;
+      _callState = PhoneCallState.idle;
       _error = 'Failed to start call';
       MixpanelManager().phoneCallFailed(error: 'Failed to start call');
       _disconnectTranscriptionSocket();
@@ -382,21 +383,23 @@ class PhoneCallProvider extends ChangeNotifier {
   void _handleTranscriptionMessage(String message) {
     try {
       var data = jsonDecode(message);
-      var type = data['type'] as String?;
 
-      if (type == 'phone_transcript') {
-        var segmentJson = data['segment'] as Map<String, dynamic>;
-        var segment = PhoneTranscriptSegment.fromJson(segmentJson);
-
-        // Update existing segment in place, or append new ones at the end
-        var existingIndex = _transcriptSegments.indexWhere((s) => s.id == segment.id);
-        if (existingIndex >= 0) {
-          _transcriptSegments[existingIndex] = segment;
-        } else {
-          _transcriptSegments.add(segment);
+      // Standard segment array format: [{id, text, is_user, speaker, start, end, ...}, ...]
+      if (data is List) {
+        for (var segmentJson in data) {
+          var segment = PhoneTranscriptSegment.fromJson(segmentJson as Map<String, dynamic>);
+          var existingIndex = _transcriptSegments.indexWhere((s) => s.id == segment.id);
+          if (existingIndex >= 0) {
+            _transcriptSegments[existingIndex] = segment;
+          } else {
+            _transcriptSegments.add(segment);
+          }
         }
-        notifyListeners();
+        if (data.isNotEmpty) notifyListeners();
+        return;
       }
+
+      // Ignore non-segment messages (ping, status events, etc.)
     } catch (e) {
       Logger.error('PhoneCallProvider: failed to parse transcript message: $e');
     }
