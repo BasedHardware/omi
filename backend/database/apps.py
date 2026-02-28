@@ -8,7 +8,7 @@ from google.cloud.firestore import ArrayUnion, ArrayRemove
 from ulid import ULID
 
 from models.app import UsageHistoryType
-from ._client import db
+from ._client import db, get_prod_db
 from .redis_db import get_app_reviews
 import logging
 
@@ -248,6 +248,26 @@ def update_app_visibility_in_db(app_id: str, private: bool):
         app_ref.set(app)
     else:
         app_ref.update({'private': private})
+
+
+def promote_app_to_prod_db(app_id: str) -> dict:
+    """Copy an app from the dev Firestore to the prod Firestore.
+
+    Reads the app document from the current (dev) database and writes it
+    to the production database. If the app already exists in prod, it is
+    overwritten with the latest dev data.
+
+    Returns the app data that was promoted.
+    Raises ValueError if the app doesn't exist in dev.
+    Raises RuntimeError if PROD_SERVICE_ACCOUNT_JSON is not configured.
+    """
+    app_data = get_app_by_id_db(app_id)
+    if not app_data:
+        raise ValueError(f'App {app_id} not found in dev database')
+
+    prod_db = get_prod_db()
+    prod_db.collection(apps_collection).document(app_id).set(app_data)
+    return app_data
 
 
 def change_app_approval_status(app_id: str, approved: bool, rejection_reason: str = None):
