@@ -56,6 +56,13 @@ struct OnboardingChatView: View {
     @State private var isGrantingPermission: Bool = false
     @FocusState private var isInputFocused: Bool
 
+    // Parallel exploration state
+    @State private var explorationBridge: ACPBridge?
+    @State private var explorationRunning = false
+    @State private var explorationCompleted = false
+    @State private var explorationText = ""
+    @State private var explorationTask: Task<Void, Never>?
+
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
     // Safety timeout timer (3 minutes)
@@ -91,6 +98,18 @@ struct OnboardingChatView: View {
                         ForEach(chatProvider.messages) { message in
                             OnboardingChatBubble(message: message)
                                 .id(message.id)
+                        }
+
+                        // Parallel exploration card (appears after scan_files)
+                        if explorationRunning || (explorationCompleted && !explorationText.isEmpty) {
+                            ExplorationProfileCard(
+                                text: explorationText,
+                                isRunning: explorationRunning,
+                                isCompleted: explorationCompleted
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 44) // align with message text
+                            .id("exploration-card")
                         }
 
                         // Typing indicator (floating, no avatar)
@@ -206,6 +225,16 @@ struct OnboardingChatView: View {
                 .onChange(of: quickReplyOptions) { _, options in
                     log("OnboardingChat: quickReplyOptions changed (\(options.count) options)")
                     scrollToBottom(proxy: proxy, delay: 0.1)
+                }
+                .onChange(of: explorationRunning) { _, running in
+                    if running {
+                        scrollToBottom(proxy: proxy, delay: 0.2)
+                    }
+                }
+                .onChange(of: explorationCompleted) { _, completed in
+                    if completed {
+                        scrollToBottom(proxy: proxy, delay: 0.2)
+                    }
                 }
             }
 
@@ -330,6 +359,10 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
             guard let vm = graphViewModel else { return }
             Task { await vm.addGraphFromStorage() }
+        }
+        ChatToolExecutor.onScanFilesCompleted = { [weak graphViewModel] fileCount in
+            guard fileCount > 0 else { return }
+            startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
         }
 
         // Build onboarding system prompt
@@ -504,6 +537,14 @@ struct OnboardingChatView: View {
             )
         }
 
+        // Clean up parallel exploration
+        explorationTask?.cancel()
+        explorationTask = nil
+        if let bridge = explorationBridge {
+            Task { await bridge.stop() }
+        }
+        explorationBridge = nil
+
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
         chatProvider.modelOverride = nil
@@ -531,6 +572,105 @@ struct OnboardingChatView: View {
             lines.append("\(role): \(truncated)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Parallel Exploration
+
+    private func startExploration(fileCount: Int, graphViewModel: MemoryGraphViewModel?) {
+        guard !explorationRunning else { return }
+        explorationRunning = true
+        log("OnboardingChat: Starting parallel exploration (\(fileCount) files indexed)")
+
+        explorationTask = Task {
+            do {
+                let bridge = ACPBridge(passApiKey: true)
+                await MainActor.run { explorationBridge = bridge }
+                try await bridge.start()
+
+                let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
+                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName)
+
+                let result = try await bridge.query(
+                    prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
+                    systemPrompt: systemPrompt,
+                    model: "claude-opus-4-6",
+                    onTextDelta: { @Sendable delta in
+                        Task { @MainActor in
+                            explorationText += delta
+                        }
+                    },
+                    onToolCall: { @Sendable _, name, input in
+                        let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                        let result = await ChatToolExecutor.execute(toolCall)
+                        log("OnboardingChat: Exploration tool \(name) executed")
+                        return result
+                    },
+                    onToolActivity: { @Sendable name, status, _, _ in
+                        log("OnboardingChat: Exploration tool \(name) \(status)")
+                    }
+                )
+
+                log("OnboardingChat: Exploration completed (cost=$\(String(format: "%.4f", result.costUsd)), tokens=\(result.inputTokens)+\(result.outputTokens))")
+
+                await MainActor.run {
+                    explorationCompleted = true
+                    explorationRunning = false
+                }
+
+                // Append to user profile and inject discovery card
+                await appendExplorationToProfile()
+                await injectExplorationDiscoveryCard()
+
+                await bridge.stop()
+                await MainActor.run { explorationBridge = nil }
+            } catch {
+                log("OnboardingChat: Exploration failed (non-fatal): \(error.localizedDescription)")
+                if let bridge = await MainActor.run(body: { explorationBridge }) {
+                    await bridge.stop()
+                }
+                await MainActor.run {
+                    explorationRunning = false
+                    explorationBridge = nil
+                }
+            }
+        }
+    }
+
+    /// Append the exploration text to the user's AI profile
+    private func appendExplorationToProfile() async {
+        let text = await MainActor.run { explorationText }
+        guard !text.isEmpty else {
+            log("OnboardingChat: No exploration text to append to profile")
+            return
+        }
+
+        let service = AIUserProfileService.shared
+        let existingProfile = await service.getLatestProfile()
+
+        if let existing = existingProfile, let profileId = existing.id {
+            let updated = existing.profileText + "\n\n--- File Exploration Insights ---\n" + text
+            let success = await service.updateProfileText(id: profileId, newText: updated)
+            log("OnboardingChat: Appended exploration to AI profile (success=\(success))")
+        } else {
+            log("OnboardingChat: No existing AI profile, triggering generation")
+            _ = try? await service.generateProfile()
+        }
+    }
+
+    /// Inject a discovery card into the onboarding chat with the exploration profile
+    private func injectExplorationDiscoveryCard() async {
+        let text = await MainActor.run { explorationText }
+        guard !text.isEmpty else { return }
+
+        let summary = text.count > 120 ? String(text.prefix(120)) + "..." : text
+
+        await MainActor.run {
+            chatProvider.appendDiscoveryCard(
+                title: "Your Digital Profile",
+                summary: summary,
+                fullText: text
+            )
+        }
     }
 
     private func bringToFront() {
@@ -771,5 +911,84 @@ struct OnboardingPermissionImage: View {
                     )
             }
         }
+    }
+}
+
+// MARK: - Exploration Profile Card
+
+/// Shows streaming exploration progress during onboarding, then becomes a collapsible profile card
+struct ExplorationProfileCard: View {
+    let text: String
+    let isRunning: Bool
+    let isCompleted: Bool
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Button(action: {
+                guard !text.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    if isRunning {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRunning ? "Learning about you..." : "Your Digital Profile")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if !text.isEmpty {
+                            Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if !text.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded && !text.isEmpty {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    Markdown(text)
+                        .markdownTheme(.aiMessage())
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
