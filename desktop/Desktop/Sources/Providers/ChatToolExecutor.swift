@@ -852,6 +852,9 @@ class ChatToolExecutor {
             }
         }
 
+        // Immediately clear mid-onboarding persistence so a restart won't re-enter onboarding
+        OnboardingChatPersistence.clear()
+
         // Call the completion callback
         onCompleteOnboarding?()
 
