@@ -1,12 +1,15 @@
 import SwiftUI
 import AppKit
 import AVKit
+import SceneKit
 
 struct OnboardingView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: (() -> Void)? = nil
     @AppStorage("onboardingStep") private var currentStep = 0
+    @StateObject private var graphViewModel = MemoryGraphViewModel()
+    @State private var graphHasData = false
 
     let steps = ["Video", "Chat"]
 
@@ -76,21 +79,43 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Step 1: Interactive AI Chat
-                OnboardingChatView(
-                    appState: appState,
-                    chatProvider: chatProvider,
-                    onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
-                        if let onComplete = onComplete {
-                            onComplete()
+                // Step 1: Interactive AI Chat + Live Knowledge Graph
+                HStack(spacing: 0) {
+                    OnboardingChatView(
+                        appState: appState,
+                        chatProvider: chatProvider,
+                        graphViewModel: graphViewModel,
+                        onComplete: {
+                            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
+                            if let onComplete = onComplete {
+                                onComplete()
+                            }
+                        },
+                        onSkip: {
+                            handleSkip()
                         }
-                    },
-                    onSkip: {
-                        handleSkip()
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Right pane: Knowledge graph (dark background, graph appears when data arrives)
+                    ZStack {
+                        OmiColors.backgroundSecondary.ignoresSafeArea()
+
+                        if graphHasData {
+                            MemoryGraphSceneView(viewModel: graphViewModel)
+                                .ignoresSafeArea()
+                                .transition(.opacity)
+                        }
                     }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
+                        if !isEmpty && !graphHasData {
+                            withAnimation(.easeIn(duration: 0.5)) {
+                                graphHasData = true
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -117,8 +142,8 @@ struct OnboardingView: View {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
 
-        // Clean up onboarding session key and persisted chat data
-        chatProvider.onboardingSessionKey = nil
+        // Clean up onboarding state and persisted chat data
+        chatProvider.isOnboarding = false
         OnboardingChatPersistence.clear()
 
         if let onComplete = onComplete {
