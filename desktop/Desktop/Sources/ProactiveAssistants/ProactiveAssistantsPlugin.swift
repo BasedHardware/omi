@@ -98,6 +98,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     private static var hasAutoResetThisSession = false
     private static var hasSoftRecoveryThisSession = false
 
+    // Retain distributed notification observer tokens
+    private var testNotificationObservers: [NSObjectProtocol] = []
+
     // MARK: - Initialization
 
     private override init() {
@@ -826,19 +829,22 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     /// Listen for distributed notifications from CLI to trigger test runs
     private func setupTestNotificationListeners() {
+        // Use selector-based observer (more reliable with DistributedNotificationCenter)
         DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.omi.test.advice"),
-            object: nil,
-            queue: .main
-        ) { notification in
-            Task { @MainActor in
-                // Parse optional parameters from the notification userInfo
-                // CLI can pass: hours (lookback hours, default 1), count (max screenshots, default 10)
-                let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
-                let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
-                log("AdviceTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-                await AdviceTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
-            }
+            self,
+            selector: #selector(handleAdviceTestNotification(_:)),
+            name: NSNotification.Name("com.omi.test.advice"),
+            object: nil
+        )
+        log("AdviceTestCLI: Notification observer registered")
+    }
+
+    @objc private func handleAdviceTestNotification(_ notification: Notification) {
+        Task { @MainActor in
+            let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
+            let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
+            log("AdviceTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+            await AdviceTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
         }
     }
 
