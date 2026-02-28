@@ -52,6 +52,9 @@ post_install do |installer|
 
         # dart: PermissionGroup.bluetooth
         'PERMISSION_BLUETOOTH=1',
+
+        # dart: PermissionGroup.microphone
+        'PERMISSION_MICROPHONE=1',
         
         ## The 'PERMISSION_LOCATION' macro enables the `locationWhenInUse` and `locationAlways` permission. If
         ## the application only requires `locationWhenInUse`, only specify the `PERMISSION_LOCATION_WHENINUSE`
