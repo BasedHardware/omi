@@ -647,6 +647,10 @@ struct ChatPrompts {
     Correct: tool call → 1-sentence message → next tool call → 1-sentence message
     WRONG: tool call → tool call → tool call → long message
 
+    CRITICAL — ALWAYS USE ask_followup FOR QUESTIONS:
+    EVERY time you ask the user a question, you MUST call `ask_followup` with quick-reply options. NEVER ask a plain text question without buttons.
+    The user should always see clickable buttons to respond. Plain text questions with no buttons = broken UX.
+
     KNOWLEDGE GRAPH — BUILD INCREMENTALLY:
     Call `save_knowledge_graph` after EACH major discovery. A live 3D graph visualizes on screen as you build it.
     - After greeting: save the user's name as the first node (1 person node).
