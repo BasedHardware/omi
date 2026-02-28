@@ -16,6 +16,8 @@ class ChatToolExecutor {
     static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
     /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
     static var onKnowledgeGraphUpdated: (() -> Void)?
+    /// Called when scan_files completes — used to kick off parallel exploration
+    static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
 
     private static var fileScanStarted = false
     private static var fileScanFileCount = 0
@@ -609,6 +611,9 @@ class ChatToolExecutor {
             out += "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
         }
 
+        // Notify that scan completed — triggers parallel exploration
+        onScanFilesCompleted?(count)
+
         return out
     }
 
@@ -710,6 +715,8 @@ class ChatToolExecutor {
 
         if let language = args["language"] as? String, !language.isEmpty {
             AssistantSettings.shared.transcriptionLanguage = language
+            let supportsMulti = AssistantSettings.supportsAutoDetect(language)
+            AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
             Task {
                 _ = try? await APIClient.shared.updateUserLanguage(language)
             }
@@ -845,6 +852,9 @@ class ChatToolExecutor {
             }
         }
 
+        // Mark that the tool was called so the "Continue to App" button shows even after restart
+        OnboardingChatPersistence.markToolCompleted()
+
         // Call the completion callback
         onCompleteOnboarding?()
 
@@ -853,6 +863,7 @@ class ChatToolExecutor {
         onCompleteOnboarding = nil
         onQuickReplyOptions = nil
         onKnowledgeGraphUpdated = nil
+        onScanFilesCompleted = nil
         fileScanStarted = false
         fileScanFileCount = 0
 

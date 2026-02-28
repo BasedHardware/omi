@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import GRDB
 
 // MARK: - Onboarding Chat Persistence
 
@@ -9,6 +10,9 @@ import MarkdownUI
 enum OnboardingChatPersistence {
     private static let sessionIdKey = "onboardingACPSessionId"
     private static let midOnboardingKey = "onboardingMidOnboarding"
+    private static let explorationTextKey = "onboardingExplorationText"
+    private static let explorationCompletedKey = "onboardingExplorationCompleted"
+    private static let toolCompletedKey = "onboardingToolCompleted"
 
     /// Save the ACP session ID for resume after restart
     static func saveSessionId(_ sessionId: String) {
@@ -30,10 +34,46 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.bool(forKey: midOnboardingKey)
     }
 
+    // MARK: - Exploration Persistence
+
+    /// Save exploration state so it survives app restarts
+    static func saveExplorationState(text: String, completed: Bool) {
+        UserDefaults.standard.set(text, forKey: explorationTextKey)
+        UserDefaults.standard.set(completed, forKey: explorationCompletedKey)
+    }
+
+    /// Load saved exploration state (returns nil if no exploration was saved)
+    static func loadExplorationState() -> (text: String, completed: Bool)? {
+        let text = UserDefaults.standard.string(forKey: explorationTextKey) ?? ""
+        let completed = UserDefaults.standard.bool(forKey: explorationCompletedKey)
+        guard !text.isEmpty || completed else { return nil }
+        return (text, completed)
+    }
+
+    /// Whether exploration already completed in a prior session
+    static var isExplorationCompleted: Bool {
+        UserDefaults.standard.bool(forKey: explorationCompletedKey)
+    }
+
+    // MARK: - Tool Completion
+
+    /// Mark that `complete_onboarding` tool was called (so button shows on restart)
+    static func markToolCompleted() {
+        UserDefaults.standard.set(true, forKey: toolCompletedKey)
+    }
+
+    /// Whether `complete_onboarding` was already called in a prior session
+    static var isToolCompleted: Bool {
+        UserDefaults.standard.bool(forKey: toolCompletedKey)
+    }
+
     /// Clear all persisted onboarding data
     static func clear() {
         UserDefaults.standard.removeObject(forKey: sessionIdKey)
         UserDefaults.standard.removeObject(forKey: midOnboardingKey)
+        UserDefaults.standard.removeObject(forKey: explorationTextKey)
+        UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
+        UserDefaults.standard.removeObject(forKey: toolCompletedKey)
         // Clean up legacy messages key if present
         UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
     }
@@ -50,16 +90,21 @@ struct OnboardingChatView: View {
 
     @State private var inputText: String = ""
     @State private var hasStarted: Bool = false
-    @State private var showCompleteButton: Bool = false
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
     @State private var isGrantingPermission: Bool = false
+    @State private var pendingPermissionType: String? = nil  // e.g. "microphone" — waiting for user to grant
     @FocusState private var isInputFocused: Bool
+
+    // Parallel exploration state
+    @State private var explorationBridge: ACPBridge?
+    @State private var explorationRunning = false
+    @State private var explorationCompleted = false
+    @State private var explorationText = ""
+    @State private var explorationTask: Task<Void, Never>?
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    // Safety timeout timer (3 minutes)
-    let safetyTimer = Timer.publish(every: 180.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,6 +136,18 @@ struct OnboardingChatView: View {
                         ForEach(chatProvider.messages) { message in
                             OnboardingChatBubble(message: message)
                                 .id(message.id)
+                        }
+
+                        // Parallel exploration card (appears after scan_files)
+                        if explorationRunning || (explorationCompleted && !explorationText.isEmpty) {
+                            ExplorationProfileCard(
+                                text: explorationText,
+                                isRunning: explorationRunning,
+                                isCompleted: explorationCompleted
+                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 44) // align with message text
+                            .id("exploration-card")
                         }
 
                         // Typing indicator (floating, no avatar)
@@ -150,22 +207,6 @@ struct OnboardingChatView: View {
                             .padding(.top, 12)
                         }
 
-                        // Safety timeout button — fallback if AI never calls complete_onboarding
-                        if showCompleteButton && !onboardingCompleted && !chatProvider.isSending {
-                            Button(action: {
-                                handleOnboardingComplete()
-                            }) {
-                                Text("Complete Setup")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 10)
-                                    .background(OmiColors.purplePrimary)
-                                    .cornerRadius(12)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                        }
                         // Extra spacing so quick replies / buttons don't sit against the input field
                         Spacer().frame(height: 20)
                     }
@@ -177,8 +218,7 @@ struct OnboardingChatView: View {
                         .frame(height: 1)
                         .id("bottom-anchor")
                 }
-                .onChange(of: chatProvider.messages.count) { _, newCount in
-                    log("OnboardingChat: messages.count changed to \(newCount)")
+                .onChange(of: chatProvider.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: chatProvider.messages.last?.text) { _, _ in
@@ -186,26 +226,26 @@ struct OnboardingChatView: View {
                 }
                 .onChange(of: chatProvider.messages.last?.contentBlocks.count) { oldCount, newCount in
                     log("OnboardingChat: contentBlocks.count changed \(oldCount ?? -1) → \(newCount ?? -1)")
+                    // Multiple scroll attempts: first for the text/indicator layout,
+                    // second for images/GIFs that load asynchronously and add height
                     scrollToBottom(proxy: proxy, delay: 0.15)
+                    scrollToBottom(proxy: proxy, delay: 0.6)
                 }
-                .onChange(of: chatProvider.isSending) { _, newValue in
-                    log("OnboardingChat: isSending changed to \(newValue)")
+                .onChange(of: chatProvider.isSending) { _, _ in
                     scrollToBottom(proxy: proxy)
-
-                    // Fallback: if the AI stopped sending and we have enough conversation
-                    // but complete_onboarding was never called, show the button after 10s
-                    if !newValue && !onboardingCompleted && chatProvider.messages.count >= 6 {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                            if !onboardingCompleted && !chatProvider.isSending {
-                                log("OnboardingChat: Fallback — showing Continue button (AI didn't call complete_onboarding)")
-                                onboardingCompleted = true
-                            }
-                        }
+                }
+                .onChange(of: quickReplyOptions) { _, _ in
+                    scrollToBottom(proxy: proxy, delay: 0.1)
+                }
+                .onChange(of: explorationRunning) { _, running in
+                    if running {
+                        scrollToBottom(proxy: proxy, delay: 0.2)
                     }
                 }
-                .onChange(of: quickReplyOptions) { _, options in
-                    log("OnboardingChat: quickReplyOptions changed (\(options.count) options)")
-                    scrollToBottom(proxy: proxy, delay: 0.1)
+                .onChange(of: explorationCompleted) { _, completed in
+                    if completed {
+                        scrollToBottom(proxy: proxy, delay: 0.2)
+                    }
                 }
             }
 
@@ -257,26 +297,21 @@ struct OnboardingChatView: View {
             appState.checkAccessibilityPermission()
             appState.checkAutomationPermission()
         }
-        .onReceive(safetyTimer) { _ in
-            if !showCompleteButton {
-                showCompleteButton = true
-            }
-        }
-        // Bring app to front when permissions are granted
+        // When a pending permission is granted, bring app to front and notify the AI
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("screen_recording", label: "Screen Recording") }
         }
         .onChange(of: appState.hasMicrophonePermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("microphone", label: "Microphone") }
         }
         .onChange(of: appState.hasNotificationPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("notifications", label: "Notifications") }
         }
         .onChange(of: appState.hasAccessibilityPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("accessibility", label: "Accessibility") }
         }
         .onChange(of: appState.hasAutomationPermission) { _, granted in
-            if granted { bringToFront() }
+            if granted { handlePermissionGranted("automation", label: "Automation") }
         }
     }
 
@@ -294,6 +329,18 @@ struct OnboardingChatView: View {
         }
     }
 
+    /// Called when a permission is detected as granted (by the 1s timer)
+    private func handlePermissionGranted(_ type: String, label: String) {
+        bringToFront()
+        // If this was the permission we were waiting for, notify the AI
+        if pendingPermissionType == type {
+            pendingPermissionType = nil
+            Task {
+                await chatProvider.sendMessage("Grant \(label) — done!")
+            }
+        }
+    }
+
     private var canSend: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !chatProvider.isSending
     }
@@ -303,11 +350,9 @@ struct OnboardingChatView: View {
     private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0) {
         if delay > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                log("OnboardingChat: scrollToBottom (delayed \(delay)s)")
                 withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
             }
         } else {
-            log("OnboardingChat: scrollToBottom (immediate)")
             withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
         }
     }
@@ -331,6 +376,10 @@ struct OnboardingChatView: View {
             guard let vm = graphViewModel else { return }
             Task { await vm.addGraphFromStorage() }
         }
+        ChatToolExecutor.onScanFilesCompleted = { [weak graphViewModel] fileCount in
+            guard fileCount > 0 else { return }
+            startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
+        }
 
         // Build onboarding system prompt
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
@@ -345,12 +394,17 @@ struct OnboardingChatView: View {
 
         // Mark as onboarding so ACP session ID gets persisted for restart recovery
         chatProvider.isOnboarding = true
-        chatProvider.modelOverride = "claude-sonnet-4-6"
 
         // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
         if OnboardingChatPersistence.isMidOnboarding {
             let savedSessionId = OnboardingChatPersistence.loadSessionId()
             log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
+
+            // If complete_onboarding was already called before restart, show the button immediately
+            if OnboardingChatPersistence.isToolCompleted {
+                log("OnboardingChatView: complete_onboarding was called before restart, showing button")
+                onboardingCompleted = true
+            }
 
             Task {
                 // Start bridge eagerly so it's ready by the time we need to send
@@ -363,6 +417,9 @@ struct OnboardingChatView: View {
                 if let vm = graphViewModel {
                     await vm.addGraphFromStorage()
                 }
+
+                // If files are already indexed from prior run, kick off exploration immediately
+                await checkAndStartExploration(graphViewModel: graphViewModel)
 
                 // Build a conversation summary so the AI has context even if session/resume fails
                 let conversationContext = buildConversationContext(from: chatProvider.messages)
@@ -445,9 +502,15 @@ struct OnboardingChatView: View {
             Task {
                 let result = await ChatToolExecutor.execute(ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil))
                 isGrantingPermission = false
-                // Send the result as a user message so the AI knows what happened
-                let replyText = result.contains("granted") ? "\(option) — done!" : "\(option) — \(result)"
-                await chatProvider.sendMessage(replyText)
+
+                if result.contains("granted") {
+                    // Granted immediately — tell the AI
+                    await chatProvider.sendMessage("\(option) — done!")
+                } else {
+                    // Pending — wait silently for the permission check timer to detect it
+                    // The onChange handlers for appState.has*Permission will send the message
+                    pendingPermissionType = permType
+                }
             }
         } else {
             // Regular quick reply — just send as message
@@ -504,9 +567,16 @@ struct OnboardingChatView: View {
             )
         }
 
+        // Clean up parallel exploration
+        explorationTask?.cancel()
+        explorationTask = nil
+        if let bridge = explorationBridge {
+            Task { await bridge.stop() }
+        }
+        explorationBridge = nil
+
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
-        chatProvider.modelOverride = nil
         OnboardingChatPersistence.clear()
 
         // Log analytics
@@ -533,6 +603,141 @@ struct OnboardingChatView: View {
         return lines.joined(separator: "\n")
     }
 
+    // MARK: - Parallel Exploration
+
+    /// Check if files are already indexed and start/restore exploration (for resume path)
+    private func checkAndStartExploration(graphViewModel: MemoryGraphViewModel?) async {
+        guard !explorationRunning && !explorationCompleted else { return }
+
+        // If exploration already completed in a prior session, restore from saved state
+        if let saved = OnboardingChatPersistence.loadExplorationState(), saved.completed {
+            log("OnboardingChat: Restoring completed exploration from saved state (\(saved.text.count) chars)")
+            explorationText = saved.text
+            explorationCompleted = true
+            // Re-inject the discovery card (UI state was lost on restart)
+            if !saved.text.isEmpty {
+                await injectExplorationDiscoveryCard()
+            }
+            return
+        }
+
+        // Otherwise check if files are indexed and run exploration fresh
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
+        let fileCount = (try? await dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files")
+        }) ?? 0
+
+        if fileCount > 0 {
+            log("OnboardingChat: Files already indexed (\(fileCount)), starting exploration on resume")
+            startExploration(fileCount: fileCount, graphViewModel: graphViewModel)
+        }
+    }
+
+    private func startExploration(fileCount: Int, graphViewModel: MemoryGraphViewModel?) {
+        guard !explorationRunning else { return }
+        explorationRunning = true
+        log("OnboardingChat: Starting parallel exploration (\(fileCount) files indexed)")
+
+        explorationTask = Task {
+            do {
+                let bridge = ACPBridge(passApiKey: true)
+                await MainActor.run { explorationBridge = bridge }
+                try await bridge.start()
+
+                let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
+                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName)
+
+                let result = try await bridge.query(
+                    prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
+                    systemPrompt: systemPrompt,
+                    model: "claude-opus-4-6",
+                    onTextDelta: { @Sendable delta in
+                        Task { @MainActor in
+                            explorationText += delta
+                            // Persist partial text periodically (every ~500 chars) so it survives crashes
+                            if explorationText.count % 500 < delta.count {
+                                OnboardingChatPersistence.saveExplorationState(text: explorationText, completed: false)
+                            }
+                        }
+                    },
+                    onToolCall: { @Sendable _, name, input in
+                        let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                        let result = await ChatToolExecutor.execute(toolCall)
+                        log("OnboardingChat: Exploration tool \(name) executed")
+                        return result
+                    },
+                    onToolActivity: { @Sendable name, status, _, _ in
+                        log("OnboardingChat: Exploration tool \(name) \(status)")
+                    }
+                )
+
+                log("OnboardingChat: Exploration completed (cost=$\(String(format: "%.4f", result.costUsd)), tokens=\(result.inputTokens)+\(result.outputTokens))")
+
+                let finalText = await MainActor.run {
+                    explorationCompleted = true
+                    explorationRunning = false
+                    return explorationText
+                }
+
+                // Persist so it survives app restarts
+                OnboardingChatPersistence.saveExplorationState(text: finalText, completed: true)
+
+                // Append to user profile and inject discovery card
+                await appendExplorationToProfile()
+                await injectExplorationDiscoveryCard()
+
+                await bridge.stop()
+                await MainActor.run { explorationBridge = nil }
+            } catch {
+                log("OnboardingChat: Exploration failed (non-fatal): \(error.localizedDescription)")
+                if let bridge = await MainActor.run(body: { explorationBridge }) {
+                    await bridge.stop()
+                }
+                await MainActor.run {
+                    explorationRunning = false
+                    explorationBridge = nil
+                }
+            }
+        }
+    }
+
+    /// Append the exploration text to the user's AI profile
+    private func appendExplorationToProfile() async {
+        let text = await MainActor.run { explorationText }
+        guard !text.isEmpty else {
+            log("OnboardingChat: No exploration text to append to profile")
+            return
+        }
+
+        let service = AIUserProfileService.shared
+        let existingProfile = await service.getLatestProfile()
+
+        if let existing = existingProfile, let profileId = existing.id {
+            let updated = existing.profileText + "\n\n--- File Exploration Insights ---\n" + text
+            let success = await service.updateProfileText(id: profileId, newText: updated)
+            log("OnboardingChat: Appended exploration to AI profile (success=\(success))")
+        } else {
+            log("OnboardingChat: No existing AI profile, triggering generation")
+            _ = try? await service.generateProfile()
+        }
+    }
+
+    /// Inject a discovery card into the onboarding chat with the exploration profile
+    private func injectExplorationDiscoveryCard() async {
+        let text = await MainActor.run { explorationText }
+        guard !text.isEmpty else { return }
+
+        let summary = text.count > 120 ? String(text.prefix(120)) + "..." : text
+
+        await MainActor.run {
+            chatProvider.appendDiscoveryCard(
+                title: "Your Digital Profile",
+                summary: summary,
+                fullText: text
+            )
+        }
+    }
+
     private func bringToFront() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             NSApp.activate(ignoringOtherApps: true)
@@ -554,6 +759,10 @@ struct OnboardingChatBubble: View {
     /// Whether this AI message has any visible content (non-empty text or visible tool calls)
     private var hasVisibleContent: Bool {
         if message.sender != .ai { return true }
+        // Messages loaded from backend have empty contentBlocks but non-empty text
+        if message.contentBlocks.isEmpty {
+            return !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         return message.contentBlocks.contains { block in
             switch block {
             case .toolCall(_, let name, _, _, _, _):
@@ -587,28 +796,41 @@ struct OnboardingChatBubble: View {
 
                 VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
                     if message.sender == .ai {
-                        // Render content blocks in order — interleaving tool indicators with text
-                        ForEach(message.contentBlocks) { block in
-                            switch block {
-                            case .toolCall(_, let name, let status, _, let input, _):
-                                let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
-                                if !indicator.isHidden {
-                                    indicator
+                        if message.contentBlocks.isEmpty {
+                            // Fallback for messages loaded from backend (no contentBlocks, only flat text)
+                            if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Markdown(message.text)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+                        } else {
+                            // Render content blocks in order — interleaving tool indicators with text
+                            ForEach(message.contentBlocks) { block in
+                                switch block {
+                                case .toolCall(_, let name, let status, _, let input, _):
+                                    let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
+                                    if !indicator.isHidden {
+                                        indicator
+                                    }
+                                case .text(_, let text):
+                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Markdown(text)
+                                            .markdownTheme(.aiMessage())
+                                            .textSelection(.enabled)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(OmiColors.backgroundSecondary)
+                                            .cornerRadius(18)
+                                    }
+                                case .thinking:
+                                    EmptyView()
+                                case .discoveryCard(_, let title, let summary, let fullText):
+                                    DiscoveryCard(title: title, summary: summary, fullText: fullText)
                                 }
-                            case .text(_, let text):
-                                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Markdown(text)
-                                        .markdownTheme(.aiMessage())
-                                        .textSelection(.enabled)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 10)
-                                        .background(OmiColors.backgroundSecondary)
-                                        .cornerRadius(18)
-                                }
-                            case .thinking:
-                                EmptyView()
-                            case .discoveryCard(_, let title, let summary, let fullText):
-                                DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             }
                         }
                     } else {
@@ -771,5 +993,84 @@ struct OnboardingPermissionImage: View {
                     )
             }
         }
+    }
+}
+
+// MARK: - Exploration Profile Card
+
+/// Shows streaming exploration progress during onboarding, then becomes a collapsible profile card
+struct ExplorationProfileCard: View {
+    let text: String
+    let isRunning: Bool
+    let isCompleted: Bool
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Button(action: {
+                guard !text.isEmpty else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 8) {
+                    if isRunning {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 12))
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRunning ? "Learning about you..." : "Your Digital Profile")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        if !text.isEmpty {
+                            Text(String(text.prefix(100)).replacingOccurrences(of: "\n", with: " "))
+                                .font(.system(size: 12))
+                                .foregroundColor(OmiColors.textSecondary)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if !text.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded && !text.isEmpty {
+                Divider()
+                    .padding(.horizontal, 10)
+
+                ScrollView {
+                    Markdown(text)
+                        .markdownTheme(.aiMessage())
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                }
+                .frame(maxHeight: 300)
+            }
+        }
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+        )
     }
 }
