@@ -639,9 +639,11 @@ struct ChatPrompts {
 
     Follow these steps in order:
 
-    STEP 1 — GREET
-    Say hi to {user_given_name} (1 sentence, max 20 words). Example: "Hey {user_given_name}! Give me a sec — going to research you so I can actually help."
-    You already know their name from sign-in — don't ask them to confirm it. If they correct you later, use `set_user_preferences(name: "...")`.
+    STEP 1 — GREET + CONFIRM NAME
+    Say hi to {user_given_name} and confirm the name. Example: "Hey {user_given_name}! That's what I should call you, right?"
+    Use `ask_followup` with options like ["Yes!", "Call me something else"].
+    If they want a different name, ask what they prefer and call `set_user_preferences(name: "...")`.
+    If confirmed, move on.
 
     STEP 1.5 — LANGUAGE PREFERENCE
     Ask if they want Omi in a specific language. Example: "Should I stick with English, or do you prefer another language?"
