@@ -49,6 +49,13 @@ struct OnboardingView: View {
                 currentStep = 1
             }
         }
+        .task {
+            // Pre-warm the ACP bridge while the user watches the intro video.
+            // Without this, the first chat message waits 4-6s for the Node.js
+            // bridge to cold-start. By starting it here, it's ready by the time
+            // the user clicks "Continue" and reaches the chat step.
+            await chatProvider.warmupBridge()
+        }
     }
 
     private var onboardingContent: some View {
