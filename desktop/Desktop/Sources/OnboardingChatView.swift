@@ -51,7 +51,6 @@ struct OnboardingChatView: View {
 
     @State private var inputText: String = ""
     @State private var hasStarted: Bool = false
-    @State private var showCompleteButton: Bool = false
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
     @State private var isGrantingPermission: Bool = false
@@ -66,8 +65,6 @@ struct OnboardingChatView: View {
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
-    // Safety timeout timer (3 minutes)
-    let safetyTimer = Timer.publish(every: 180.0, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -170,22 +167,6 @@ struct OnboardingChatView: View {
                             .padding(.top, 12)
                         }
 
-                        // Safety timeout button — fallback if AI never calls complete_onboarding
-                        if showCompleteButton && !onboardingCompleted && !chatProvider.isSending {
-                            Button(action: {
-                                handleOnboardingComplete()
-                            }) {
-                                Text("Complete Setup")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 10)
-                                    .background(OmiColors.purplePrimary)
-                                    .cornerRadius(12)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 8)
-                        }
                         // Extra spacing so quick replies / buttons don't sit against the input field
                         Spacer().frame(height: 20)
                     }
@@ -210,19 +191,8 @@ struct OnboardingChatView: View {
                     scrollToBottom(proxy: proxy, delay: 0.15)
                     scrollToBottom(proxy: proxy, delay: 0.6)
                 }
-                .onChange(of: chatProvider.isSending) { _, newValue in
+                .onChange(of: chatProvider.isSending) { _, _ in
                     scrollToBottom(proxy: proxy)
-
-                    // Fallback: if the AI stopped sending and we have enough conversation
-                    // but complete_onboarding was never called, show the button after 10s
-                    if !newValue && !onboardingCompleted && chatProvider.messages.count >= 6 {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                            if !onboardingCompleted && !chatProvider.isSending {
-                                log("OnboardingChat: Fallback — showing Continue button (AI didn't call complete_onboarding)")
-                                onboardingCompleted = true
-                            }
-                        }
-                    }
                 }
                 .onChange(of: quickReplyOptions) { _, _ in
                     scrollToBottom(proxy: proxy, delay: 0.1)
@@ -286,11 +256,6 @@ struct OnboardingChatView: View {
             appState.checkMicrophonePermission()
             appState.checkAccessibilityPermission()
             appState.checkAutomationPermission()
-        }
-        .onReceive(safetyTimer) { _ in
-            if !showCompleteButton {
-                showCompleteButton = true
-            }
         }
         // Bring app to front when permissions are granted
         .onChange(of: appState.hasScreenRecordingPermission) { _, granted in
@@ -377,7 +342,6 @@ struct OnboardingChatView: View {
 
         // Mark as onboarding so ACP session ID gets persisted for restart recovery
         chatProvider.isOnboarding = true
-        chatProvider.modelOverride = "claude-sonnet-4-6"
 
         // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
         if OnboardingChatPersistence.isMidOnboarding {
@@ -549,7 +513,6 @@ struct OnboardingChatView: View {
 
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
-        chatProvider.modelOverride = nil
         OnboardingChatPersistence.clear()
 
         // Log analytics
@@ -711,6 +674,10 @@ struct OnboardingChatBubble: View {
     /// Whether this AI message has any visible content (non-empty text or visible tool calls)
     private var hasVisibleContent: Bool {
         if message.sender != .ai { return true }
+        // Messages loaded from backend have empty contentBlocks but non-empty text
+        if message.contentBlocks.isEmpty {
+            return !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         return message.contentBlocks.contains { block in
             switch block {
             case .toolCall(_, let name, _, _, _, _):
@@ -744,28 +711,41 @@ struct OnboardingChatBubble: View {
 
                 VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
                     if message.sender == .ai {
-                        // Render content blocks in order — interleaving tool indicators with text
-                        ForEach(message.contentBlocks) { block in
-                            switch block {
-                            case .toolCall(_, let name, let status, _, let input, _):
-                                let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
-                                if !indicator.isHidden {
-                                    indicator
+                        if message.contentBlocks.isEmpty {
+                            // Fallback for messages loaded from backend (no contentBlocks, only flat text)
+                            if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Markdown(message.text)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+                        } else {
+                            // Render content blocks in order — interleaving tool indicators with text
+                            ForEach(message.contentBlocks) { block in
+                                switch block {
+                                case .toolCall(_, let name, let status, _, let input, _):
+                                    let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
+                                    if !indicator.isHidden {
+                                        indicator
+                                    }
+                                case .text(_, let text):
+                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Markdown(text)
+                                            .markdownTheme(.aiMessage())
+                                            .textSelection(.enabled)
+                                            .padding(.horizontal, 14)
+                                            .padding(.vertical, 10)
+                                            .background(OmiColors.backgroundSecondary)
+                                            .cornerRadius(18)
+                                    }
+                                case .thinking:
+                                    EmptyView()
+                                case .discoveryCard(_, let title, let summary, let fullText):
+                                    DiscoveryCard(title: title, summary: summary, fullText: fullText)
                                 }
-                            case .text(_, let text):
-                                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Markdown(text)
-                                        .markdownTheme(.aiMessage())
-                                        .textSelection(.enabled)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 10)
-                                        .background(OmiColors.backgroundSecondary)
-                                        .cornerRadius(18)
-                                }
-                            case .thinking:
-                                EmptyView()
-                            case .discoveryCard(_, let title, let summary, let fullText):
-                                DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             }
                         }
                     } else {
