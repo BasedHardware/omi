@@ -98,7 +98,9 @@ struct DesktopHomeView: View {
                             appState.checkAllPermissions()
 
                             // Show file indexing sheet for existing users who haven't done it
-                            if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+                            // Skip if onboarding just completed (it handles file indexing inline)
+                            if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
+                                && !UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                                 showFileIndexingSheet = true
                             }
 
