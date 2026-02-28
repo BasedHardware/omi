@@ -645,7 +645,8 @@ struct OnboardingChatView: View {
                 try await bridge.start()
 
                 let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
-                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName)
+                let schema = await Self.loadDatabaseSchema()
+                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName, databaseSchema: schema)
 
                 let result = try await bridge.query(
                     prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
@@ -703,6 +704,77 @@ struct OnboardingChatView: View {
                     explorationBridge = nil
                 }
             }
+        }
+    }
+
+    /// Load a compact database schema string from sqlite_master for the exploration prompt.
+    /// This gives the AI the actual table/column names so it doesn't hallucinate them.
+    private static func loadDatabaseSchema() async -> String {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+            return ""
+        }
+
+        do {
+            let tables = try await dbQueue.read { db -> [(name: String, sql: String)] in
+                let rows = try Row.fetchAll(db, sql: """
+                    SELECT name, sql FROM sqlite_master
+                    WHERE type='table' AND sql IS NOT NULL
+                    ORDER BY name
+                """)
+                return rows.compactMap { row -> (name: String, sql: String)? in
+                    guard let name: String = row["name"],
+                          let sql: String = row["sql"] else { return nil }
+                    return (name: name, sql: sql)
+                }
+            }
+
+            var lines: [String] = ["**Database schema (omi.db):**", ""]
+            for (name, sql) in tables {
+                if ChatPrompts.excludedTables.contains(name) { continue }
+                if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
+                if name.contains("_fts") { continue }
+
+                // Extract column names from CREATE TABLE DDL
+                guard let openParen = sql.firstIndex(of: "("),
+                      let closeParen = sql.lastIndex(of: ")") else { continue }
+                let body = String(sql[sql.index(after: openParen)..<closeParen])
+                var columnDefs: [String] = []
+                var current = ""
+                var depth = 0
+                for char in body {
+                    if char == "(" { depth += 1 } else if char == ")" { depth -= 1 }
+                    if char == "," && depth == 0 {
+                        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty { columnDefs.append(trimmed) }
+                        current = ""
+                    } else { current.append(char) }
+                }
+                let last = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !last.isEmpty { columnDefs.append(last) }
+
+                let columnNames = columnDefs.filter { col in
+                    let upper = col.uppercased().trimmingCharacters(in: .whitespaces)
+                    return !upper.hasPrefix("UNIQUE") && !upper.hasPrefix("CHECK") &&
+                           !upper.hasPrefix("FOREIGN") && !upper.hasPrefix("CONSTRAINT") &&
+                           !upper.hasPrefix("PRIMARY KEY")
+                }.compactMap { col -> String? in
+                    let colName = col.components(separatedBy: .whitespaces).first?
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`")) ?? ""
+                    return ChatPrompts.excludedColumns.contains(colName) || colName.isEmpty ? nil : colName
+                }
+                guard !columnNames.isEmpty else { continue }
+
+                let annotation = ChatPrompts.tableAnnotations[name] ?? ""
+                let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
+                lines.append(header)
+                lines.append("  \(columnNames.joined(separator: ", "))")
+                lines.append("")
+            }
+            lines.append(ChatPrompts.schemaFooter)
+            return lines.joined(separator: "\n")
+        } catch {
+            logError("Failed to load schema for exploration", error: error)
+            return ""
         }
     }
 
