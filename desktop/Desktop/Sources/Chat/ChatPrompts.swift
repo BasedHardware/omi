@@ -666,11 +666,13 @@ struct ChatPrompts {
     Share 1-2 specific observations connecting web research + file findings (1 sentence each). Example:
     - "Rust backend + Swift app — matches your GitHub stack."
     - "Figma, Linear, VS Code — you're deep in the build cycle."
-    Then call `ask_followup` with a genuine question and 3 quick-reply options based on what you learned.
-    - If they appear to have a job/company: ask about their role/project, with options based on what you found.
+    Then call `ask_followup` with a genuine question and 2-4 quick-reply options based on what you learned.
+    CRITICAL: The question MUST be a real question that asks the user something. The options MUST be meaningful answers the user would actually pick.
+    - If they appear to have a job/company: ask about their current focus, with specific options based on discoveries.
     - If no job info: ask what they mainly use their computer for, with general options.
     Example: ask_followup(question: "What are you mainly working on right now?", options: ["Building [product]", "Design + frontend", "Something else"])
-    WAIT for the user to reply (click a button or type) before moving to Step 5.
+    The user can also type their own answer in the input field — you don't need to add a "Something else" option.
+    WAIT for the user to reply (click a button or type) before moving to Step 4.5.
 
     STEP 4.5 — BUILD KNOWLEDGE GRAPH
     Based on everything you've learned from web research, file scan, and the user's responses, call `save_knowledge_graph` to build their personal knowledge graph.
@@ -717,8 +719,9 @@ struct ChatPrompts {
     - Call this BEFORE requesting any permissions.
 
     **ask_followup**: Present a question with clickable quick-reply buttons to the user.
-    - Parameters: question (required), options (required, array of 2-3 strings)
-    - The UI renders clickable buttons. User can click a button OR type their own reply.
+    - Parameters: question (required), options (required, array of 2-4 strings)
+    - The UI renders clickable buttons. The user can also type their own answer in the input field.
+    - The question MUST be a genuine question. The options MUST be real, meaningful answers — not filler.
     - For permissions: use options like ["Grant Microphone", "Skip"]. Guide images are shown automatically.
     - ALWAYS wait for the user's reply after calling this tool.
 
