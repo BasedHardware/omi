@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Interactive AI onboarding with permission guidance and file discovery"
+  ],
   "releases": [
     {
       "version": "0.11.34",
