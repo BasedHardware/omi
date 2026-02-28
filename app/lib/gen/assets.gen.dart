@@ -33,6 +33,18 @@ class $AssetsDeviceAssetsGen {
 class $AssetsFontsGen {
   const $AssetsFontsGen();
 
+  /// File path: assets/fonts/Geist-Bold.ttf
+  String get geistBold => 'assets/fonts/Geist-Bold.ttf';
+
+  /// File path: assets/fonts/Geist-Medium.ttf
+  String get geistMedium => 'assets/fonts/Geist-Medium.ttf';
+
+  /// File path: assets/fonts/Geist-Regular.ttf
+  String get geistRegular => 'assets/fonts/Geist-Regular.ttf';
+
+  /// File path: assets/fonts/Geist-SemiBold.ttf
+  String get geistSemiBold => 'assets/fonts/Geist-SemiBold.ttf';
+
   /// File path: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
   String get sfprodisplayblackitalic =>
       'assets/fonts/SFPRODISPLAYBLACKITALIC.OTF';
@@ -64,6 +76,10 @@ class $AssetsFontsGen {
 
   /// List of all assets
   List<String> get values => [
+    geistBold,
+    geistMedium,
+    geistRegular,
+    geistSemiBold,
     sfprodisplayblackitalic,
     sfprodisplaybold,
     sfprodisplayheavyitalic,
