@@ -347,6 +347,11 @@ struct OnboardingChatView: View {
                 // Load previous messages from backend (same default chat, sessionId=nil)
                 await chatProvider.loadDefaultChatMessages()
 
+                // Restore the knowledge graph from local storage (saved before restart)
+                if let vm = graphViewModel {
+                    await vm.addGraphFromStorage()
+                }
+
                 // Build a conversation summary so the AI has context even if session/resume fails
                 let conversationContext = buildConversationContext(from: chatProvider.messages)
                 let resumeSystemPrompt: String
