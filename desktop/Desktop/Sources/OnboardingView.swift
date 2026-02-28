@@ -115,34 +115,32 @@ struct OnboardingView: View {
                                 .ignoresSafeArea()
                                 .transition(.opacity)
                         }
-
-                        // Interaction hints overlay — always in the tree, visibility via opacity
-                        VStack {
-                            Spacer()
-                            HStack(spacing: 20) {
-                                graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
-                                graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
-                                graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.black.opacity(0), Color.black.opacity(0.4)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Use .overlay so hints composite above the NSViewRepresentable SCNView
+                    .overlay(alignment: .bottom) {
+                        HStack(spacing: 20) {
+                            graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+                            graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+                            graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
-                            .onHover { hovering in
-                                hintsHovered = hovering
-                            }
+                        )
+                        .onHover { hovering in
+                            hintsHovered = hovering
                         }
                         .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
                         .animation(.easeInOut(duration: 0.3), value: showGraphHints)
                         .animation(.easeInOut(duration: 0.3), value: hintsHovered)
                         .animation(.easeInOut(duration: 0.3), value: graphHasData)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onAppear {
                         // Handle case where graph already has data on appear
                         if !graphViewModel.isEmpty && !graphHasData {
