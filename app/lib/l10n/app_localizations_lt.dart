@@ -8266,4 +8266,7 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Išsaugota. Uždarykite ir vėl atidarykite programėlę, kad pritaikytumėte pakeitimus.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

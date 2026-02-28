@@ -8256,4 +8256,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvestatud. Sulgege ja avage rakendus uuesti, et muudatused rakenduks.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

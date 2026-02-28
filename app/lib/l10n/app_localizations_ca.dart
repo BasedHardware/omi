@@ -8309,4 +8309,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Desat. Tanca i torna a obrir l\'aplicació per aplicar els canvis.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

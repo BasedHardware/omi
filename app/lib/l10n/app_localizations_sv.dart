@@ -8262,4 +8262,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Sparat. Stäng och öppna appen igen för att tillämpa ändringarna.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

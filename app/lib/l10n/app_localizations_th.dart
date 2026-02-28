@@ -8215,4 +8215,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'บันทึกแล้ว ปิดและเปิดแอปใหม่เพื่อใช้งานการเปลี่ยนแปลง';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

@@ -8254,4 +8254,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Uloženo. Zavřete a znovu otevřete aplikaci pro použití změn.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

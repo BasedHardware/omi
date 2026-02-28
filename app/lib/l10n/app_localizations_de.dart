@@ -8329,4 +8329,7 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Gespeichert. Schließen und öffnen Sie die App erneut, um die Änderungen anzuwenden.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

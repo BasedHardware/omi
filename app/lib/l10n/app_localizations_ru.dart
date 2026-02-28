@@ -8286,4 +8286,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Сохранено. Закройте и снова откройте приложение, чтобы применить изменения.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

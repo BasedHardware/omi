@@ -8248,4 +8248,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Uložené. Zatvorte a znova otvorte aplikáciu na použitie zmien.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

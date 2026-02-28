@@ -8296,4 +8296,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Mentve. Zárd be és nyisd újra az alkalmazást a módosítások alkalmazásához.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

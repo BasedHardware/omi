@@ -8239,4 +8239,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'सहेजा गया। बदलाव लागू करने के लिए ऐप बंद करें और फिर से खोलें।';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

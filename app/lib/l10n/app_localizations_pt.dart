@@ -8261,4 +8261,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvo. Feche e reabra o aplicativo para aplicar as alterações.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

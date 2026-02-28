@@ -8200,4 +8200,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'تم الحفظ. أغلق التطبيق وأعد فتحه لتطبيق التغييرات.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

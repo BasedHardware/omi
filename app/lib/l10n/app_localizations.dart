@@ -15422,6 +15422,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved. Close and reopen the app to apply.'**
   String get apiEnvSavedRestartRequired;
+
+  /// No description provided for @officialTeamName.
+  ///
+  /// In en, this message translates to:
+  /// **'Nooto Team'**
+  String get officialTeamName;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

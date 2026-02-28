@@ -8271,4 +8271,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Kaydedildi. Değişiklikleri uygulamak için uygulamayı kapatıp yeniden açın.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

@@ -8293,4 +8293,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Запазено. Затворете и отворете отново приложението, за да приложите промените.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

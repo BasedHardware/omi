@@ -8283,4 +8283,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Disimpan. Tutup dan buka semula aplikasi untuk menggunakan perubahan.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

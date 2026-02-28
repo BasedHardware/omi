@@ -8300,4 +8300,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvat. Închideți și redeschideți aplicația pentru a aplica modificările.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

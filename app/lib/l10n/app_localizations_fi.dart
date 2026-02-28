@@ -8257,4 +8257,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Tallennettu. Sulje ja avaa sovellus uudelleen, jotta muutokset tulevat voimaan.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

@@ -8108,4 +8108,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => '已保存。请关闭并重新打开应用以应用更改。';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }

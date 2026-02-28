@@ -8120,4 +8120,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => '저장되었습니다. 변경 사항을 적용하려면 앱을 닫고 다시 여세요.';
+
+  @override
+  String get officialTeamName => 'Nooto Team';
 }
