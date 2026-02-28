@@ -67,6 +67,34 @@ actor KnowledgeGraphStorage {
         log("KnowledgeGraphStorage: Saved \(nodes.count) nodes, \(edges.count) edges")
     }
 
+    /// Merge nodes and edges into existing data (upsert, no delete)
+    func mergeGraph(nodes: [LocalKGNodeRecord], edges: [LocalKGEdgeRecord]) async throws {
+        let db = try await ensureDB()
+
+        try await db.write { database in
+            for node in nodes {
+                try database.execute(
+                    sql: """
+                        INSERT OR REPLACE INTO local_kg_nodes (nodeId, label, nodeType, aliasesJson, sourceFileIds, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                    arguments: [node.nodeId, node.label, node.nodeType, node.aliasesJson, node.sourceFileIds, node.createdAt, node.updatedAt]
+                )
+            }
+            for edge in edges {
+                try database.execute(
+                    sql: """
+                        INSERT OR REPLACE INTO local_kg_edges (edgeId, sourceNodeId, targetNodeId, label, createdAt)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                    arguments: [edge.edgeId, edge.sourceNodeId, edge.targetNodeId, edge.label, edge.createdAt]
+                )
+            }
+        }
+
+        log("KnowledgeGraphStorage: Merged \(nodes.count) nodes, \(edges.count) edges")
+    }
+
     /// Check if the local graph has any data
     func isEmpty() async -> Bool {
         guard let db = try? await ensureDB() else { return true }
