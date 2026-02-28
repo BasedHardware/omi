@@ -16,7 +16,11 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
-from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
+from database.conversations import (
+    get_closest_conversation_to_timestamps,
+    update_conversation_segments,
+    create_audio_files_from_chunks,
+)
 from models.conversation import CreateConversation, ConversationSource, Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -27,6 +31,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    upload_audio_chunk,
 )
 
 # Audio constants
@@ -618,7 +623,70 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
-def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
+def upload_wav_as_audio_chunks(
+    wav_path: str,
+    uid: str,
+    conversation_id: str,
+    start_timestamp: float,
+    chunk_duration: float = 5.0,
+):
+    """
+    Convert a WAV file to PCM chunks and upload them to cloud storage.
+    This makes local sync audio storage consistent with realtime websocket.
+
+    Args:
+        wav_path: Path to the WAV file
+        uid: User ID
+        conversation_id: Conversation ID
+        start_timestamp: Unix timestamp when the audio started
+        chunk_duration: Duration of each chunk in seconds (default 5.0, same as websocket)
+    """
+    try:
+        with wave.open(wav_path, 'rb') as wav_file:
+            n_channels = wav_file.getnchannels()
+            sampwidth = wav_file.getsampwidth()
+            framerate = wav_file.getframerate()
+            n_frames = wav_file.getnframes()
+
+            # Validate WAV format matches expected PCM16 mono
+            if n_channels != 1 or sampwidth != 2:
+                print(
+                    f"Warning: WAV format mismatch for {wav_path} - expected mono PCM16, got {n_channels}ch {sampwidth*8}bit"
+                )
+
+            pcm_data = wav_file.readframes(n_frames)
+
+        # Calculate chunk size in bytes using actual WAV parameters
+        # PCM16 mono: 2 bytes per sample
+        bytes_per_second = framerate * n_channels * sampwidth
+        chunk_size = int(chunk_duration * bytes_per_second)
+
+        # Split into chunks and upload
+        offset = 0
+        chunk_index = 0
+        while offset < len(pcm_data):
+            chunk_data = pcm_data[offset : offset + chunk_size]
+            chunk_timestamp = start_timestamp + (chunk_index * chunk_duration)
+
+            upload_audio_chunk(chunk_data, uid, conversation_id, chunk_timestamp)
+
+            offset += chunk_size
+            chunk_index += 1
+
+        # Free memory
+        del pcm_data
+
+    except Exception as e:
+        print(f"Error uploading audio chunks for conversation {conversation_id}: {e}")
+
+
+def process_segment(
+    path: str,
+    uid: str,
+    response: dict,
+    source: ConversationSource = ConversationSource.omi,
+    private_cloud_sync_enabled: bool = False,
+):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -648,6 +716,9 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         )
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
+
+        if private_cloud_sync_enabled:
+            upload_wav_as_audio_chunks(path, uid, created.id, timestamp)
     else:
 
         transcript_segments = [s.dict() for s in transcript_segments]
@@ -685,6 +756,8 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         # save with updated finished_at
         response['updated_memories'].add(closest_memory['id'])
         update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
+        if private_cloud_sync_enabled:
+            upload_wav_as_audio_chunks(path, uid, closest_memory['id'], timestamp)
 
         # If the conversation was previously discarded, reprocess it with the new segments
         if closest_memory.get('discarded', False):
@@ -711,6 +784,8 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         if f.filename and 'limitless' in f.filename.lower():
             source = ConversationSource.limitless
             break
+
+    private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
 
     paths = []
     wav_paths = []
@@ -755,11 +830,24 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                     uid,
                     response,
                     source,
+                    private_cloud_sync_enabled,
                 ),
             )
             for path in segmented_paths
         ]
         chunk_threads(threads)
+
+        if private_cloud_sync_enabled:
+            affected_conversation_ids = response['new_memories'] | response['updated_memories']
+            for conversation_id in affected_conversation_ids:
+                try:
+                    audio_files = create_audio_files_from_chunks(uid, conversation_id)
+                    if audio_files:
+                        conversations_db.update_conversation(
+                            uid, conversation_id, {'audio_files': [af.dict() for af in audio_files]}
+                        )
+                except Exception as e:
+                    print(f"Error updating audio_files for conversation {conversation_id}: {e}")
 
         # notify through FCM too ?
         return response
