@@ -19,7 +19,6 @@ class ChatToolExecutor {
     /// Called when scan_files completes — used to kick off parallel exploration
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
 
-    private static var fileScanStarted = false
     private static var fileScanFileCount = 0
 
     /// Execute a tool call and return the result as a string
@@ -885,7 +884,6 @@ class ChatToolExecutor {
         onQuickReplyOptions = nil
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
-        fileScanStarted = false
         fileScanFileCount = 0
 
         return "Onboarding completed successfully! The app is now set up."
