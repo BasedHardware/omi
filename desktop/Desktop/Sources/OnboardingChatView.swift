@@ -197,8 +197,7 @@ struct OnboardingChatView: View {
                         .frame(height: 1)
                         .id("bottom-anchor")
                 }
-                .onChange(of: chatProvider.messages.count) { _, newCount in
-                    log("OnboardingChat: messages.count changed to \(newCount)")
+                .onChange(of: chatProvider.messages.count) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: chatProvider.messages.last?.text) { _, _ in
@@ -206,10 +205,12 @@ struct OnboardingChatView: View {
                 }
                 .onChange(of: chatProvider.messages.last?.contentBlocks.count) { oldCount, newCount in
                     log("OnboardingChat: contentBlocks.count changed \(oldCount ?? -1) → \(newCount ?? -1)")
+                    // Multiple scroll attempts: first for the text/indicator layout,
+                    // second for images/GIFs that load asynchronously and add height
                     scrollToBottom(proxy: proxy, delay: 0.15)
+                    scrollToBottom(proxy: proxy, delay: 0.6)
                 }
                 .onChange(of: chatProvider.isSending) { _, newValue in
-                    log("OnboardingChat: isSending changed to \(newValue)")
                     scrollToBottom(proxy: proxy)
 
                     // Fallback: if the AI stopped sending and we have enough conversation
@@ -223,8 +224,7 @@ struct OnboardingChatView: View {
                         }
                     }
                 }
-                .onChange(of: quickReplyOptions) { _, options in
-                    log("OnboardingChat: quickReplyOptions changed (\(options.count) options)")
+                .onChange(of: quickReplyOptions) { _, _ in
                     scrollToBottom(proxy: proxy, delay: 0.1)
                 }
                 .onChange(of: explorationRunning) { _, running in
@@ -333,11 +333,9 @@ struct OnboardingChatView: View {
     private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0) {
         if delay > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                log("OnboardingChat: scrollToBottom (delayed \(delay)s)")
                 withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
             }
         } else {
-            log("OnboardingChat: scrollToBottom (immediate)")
             withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
         }
     }
