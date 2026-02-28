@@ -432,18 +432,26 @@ struct AdviceTestRunnerView: View {
             let periodStart = periodFrom
             let periodEnd = periodTo
 
-            // Get AdviceAssistant from coordinator
-            let assistant = await MainActor.run(body: {
+            // Try coordinator first, fall back to creating a fresh instance
+            let coordAssistant = await MainActor.run(body: {
                 AssistantCoordinator.shared.assistant(withIdentifier: "advice")
             })
-
-            guard let adviceAssistant = assistant as? AdviceAssistant else {
-                log("AdviceTestRunner: ERROR - Advice Assistant not available")
-                await MainActor.run {
-                    statusMessage = "Advice Assistant not available"
-                    isRunning = false
+            let adviceAssistant: AdviceAssistant
+            if let existing = coordAssistant as? AdviceAssistant {
+                adviceAssistant = existing
+                log("AdviceTestRunner: Using existing AdviceAssistant from coordinator")
+            } else {
+                do {
+                    adviceAssistant = try AdviceAssistant()
+                    log("AdviceTestRunner: Created fresh AdviceAssistant instance")
+                } catch {
+                    log("AdviceTestRunner: ERROR - Failed to create AdviceAssistant: \(error)")
+                    await MainActor.run {
+                        statusMessage = "Failed to create Advice Assistant: \(error.localizedDescription)"
+                        isRunning = false
+                    }
+                    return
                 }
-                return
             }
 
             // Get excluded apps
