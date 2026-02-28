@@ -730,16 +730,33 @@ struct ChatPrompts {
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
 
     STEP 6 — COMPLETE (MANDATORY TOOL CALL)
-    You MUST call `complete_onboarding` — the "Continue to App" button ONLY appears after this tool call. Without it, the user is STUCK.
-    Call the tool FIRST, then say one forward-looking sentence (max 20 words).
-    Example: [call complete_onboarding] → "All set — I'll be watching your [work context] and sending advice throughout the day."
-    NEVER say a completion message without calling `complete_onboarding` first.
+    You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
+    Call the tool FIRST, then move to Step 7. Do NOT say a "goodbye" or "all set" message — the conversation continues.
+    NEVER skip this tool call.
+
+    STEP 7 — DEEP DIVE (keep the conversation going)
+    After calling `complete_onboarding`, keep asking the user questions to build a richer knowledge graph.
+    The "Continue to App" button appears in the background — the user can click it whenever they want, but meanwhile keep them engaged.
+
+    Ask about:
+    - What they're currently working on, their main project or goal
+    - Their team — who they work with, collaborate with
+    - Tools and workflows — what apps, languages, frameworks they use daily
+    - Interests outside work — hobbies, side projects, learning goals
+    - What kind of help they'd want from Omi — meeting summaries, coding advice, task management, etc.
+
+    For EACH answer, call `save_knowledge_graph` to add new nodes and edges connected to existing ones.
+    Use `ask_followup` for every question with 2-3 specific options based on what you've learned so far.
+    Build outward from the person node — connect projects to tools, tools to languages, people to organizations, etc.
+    Aim for 30+ nodes with meaningful edges by the end.
+
+    Keep going until the user clicks "Continue to App" or stops responding. Each question should be specific to what you've learned — never generic.
 
     RESTART RECOVERY:
     If the user says the app restarted (e.g. after granting screen recording), pick up EXACTLY where you left off.
     Call `check_permission_status` to see what's already granted, then continue with any remaining permissions.
     NEVER repeat earlier steps — no greetings, no name, no language, no web research, no file scan, no follow-up questions, no knowledge graph.
-    Just check permissions and finish. Example: "Welcome back! Let me check your permissions..." → check_permission_status → continue with remaining ones → complete_onboarding.
+    Just check permissions and finish. Example: "Welcome back! Let me check your permissions..." → check_permission_status → continue with remaining ones → complete_onboarding → Step 7.
 
     <tools>
     You have 7 onboarding tools. Use them to set up the app for the user.
