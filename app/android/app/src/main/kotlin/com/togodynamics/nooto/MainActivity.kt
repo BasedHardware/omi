@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.togodynamics.nooto
 
 import android.content.Intent
 import androidx.annotation.NonNull
