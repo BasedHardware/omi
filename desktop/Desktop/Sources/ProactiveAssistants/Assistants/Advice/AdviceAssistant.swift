@@ -139,6 +139,126 @@ actor AdviceAssistant: ProactiveAssistant {
         log("Advice assistant stopped")
     }
 
+    // MARK: - Test Analysis (for test runner)
+
+    /// Run the extraction pipeline on arbitrary JPEG data without side effects (no saving, no events).
+    /// Used by the test runner to replay past screenshots.
+    /// Returns (result, sqlQueryCount) where sqlQueryCount is the number of execute_sql tool calls made.
+    func testAnalyze(jpegData: Data, appName: String, windowTitle: String? = nil) async throws -> (AdviceExtractionResult?, Int) {
+        let frame = CapturedFrame(
+            jpegData: jpegData,
+            appName: appName,
+            windowTitle: windowTitle,
+            frameNumber: 0
+        )
+        var sqlCount = 0
+        let result = try await extractAdviceForTest(from: frame, sqlQueryCount: &sqlCount)
+        return (result, sqlCount)
+    }
+
+    /// Variant of extractAdvice that tracks SQL query count for test reporting.
+    private func extractAdviceForTest(from frame: CapturedFrame, sqlQueryCount: inout Int) async throws -> AdviceExtractionResult? {
+        let appName = frame.appName
+
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "h:mm a, EEEE"
+        var prompt = "LATEST SCREENSHOT from \(appName)."
+        if let windowTitle = frame.windowTitle, !windowTitle.isEmpty {
+            prompt += " Window: \"\(windowTitle)\"."
+        }
+        prompt += " Time: \(timeFormatter.string(from: Date()))."
+
+        let activitySummary = await buildActivitySummary()
+        if !activitySummary.isEmpty {
+            prompt += "\n\n" + activitySummary
+        }
+
+        if let profile = await AIUserProfileService.shared.getLatestProfile() {
+            prompt += "\n\nUSER PROFILE (who this user is):\n"
+            prompt += profile.profileText + "\n"
+        }
+
+        if !previousAdvice.isEmpty {
+            prompt += "\n\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
+            let adviceToInclude = previousAdvice.prefix(maxAdviceInPrompt)
+            for (index, advice) in adviceToInclude.enumerated() {
+                prompt += "\(index + 1). \(advice.advice)"
+                if let reasoning = advice.reasoning {
+                    prompt += " (Reasoning: \(reasoning))"
+                }
+                prompt += "\n"
+            }
+            prompt += "\nOnly provide advice if there's a genuinely NEW non-obvious insight not covered above."
+        } else {
+            prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
+        }
+
+        prompt += "\n\nAnalyze the activity summary and screenshot. Use execute_sql to investigate OCR text from interesting windows if needed. Then call provide_advice or no_advice."
+
+        var currentSystemPrompt = await systemPrompt
+        if let language = await getUserLanguage(), language != "en" {
+            currentSystemPrompt += "\n\nIMPORTANT: Respond in the user's preferred language: \(language)"
+        }
+        currentSystemPrompt += "\n\nDATABASE SCHEMA for execute_sql:\nscreenshots table columns: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT"
+
+        let tools = buildAdviceTools()
+
+        let base64Data = frame.jpegData.base64EncodedString()
+        var contents: [GeminiImageToolRequest.Content] = [
+            GeminiImageToolRequest.Content(
+                role: "user",
+                parts: [
+                    GeminiImageToolRequest.Part(text: prompt),
+                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
+                ]
+            )
+        ]
+
+        for iteration in 0..<5 {
+            let result = try await geminiClient.sendImageToolLoop(
+                contents: contents,
+                systemPrompt: currentSystemPrompt,
+                tools: [tools],
+                forceToolCall: iteration == 0
+            )
+
+            guard let toolCall = result.toolCalls.first else { break }
+
+            switch toolCall.name {
+            case "provide_advice":
+                return parseProvideAdvice(toolCall)
+            case "no_advice":
+                let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
+                let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
+                return AdviceExtractionResult(hasAdvice: false, advice: nil, contextSummary: contextSummary, currentActivity: currentActivity)
+            case "execute_sql":
+                let query = toolCall.arguments["query"] as? String ?? ""
+                sqlQueryCount += 1
+                let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+                let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["query": query]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: resultStr)
+                    ))]
+                ))
+                continue
+            default:
+                break
+            }
+        }
+
+        return nil
+    }
+
     // MARK: - ProactiveAssistant Protocol Methods
 
     func shouldAnalyze(frameNumber: Int, timeSinceLastAnalysis: TimeInterval) -> Bool {
