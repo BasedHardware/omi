@@ -224,8 +224,7 @@ struct OnboardingChatView: View {
                 .onChange(of: chatProvider.messages.last?.text) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { oldCount, newCount in
-                    log("OnboardingChat: contentBlocks.count changed \(oldCount ?? -1) → \(newCount ?? -1)")
+                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { _, _ in
                     // Multiple scroll attempts: first for the text/indicator layout,
                     // second for images/GIFs that load asynchronously and add height
                     scrollToBottom(proxy: proxy, delay: 0.15)
