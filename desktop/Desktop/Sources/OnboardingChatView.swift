@@ -191,7 +191,7 @@ struct OnboardingChatView: View {
                         }
 
                         // "Continue to App" button — shown after AI calls complete_onboarding
-                        if onboardingCompleted && !chatProvider.isSending {
+                        if onboardingCompleted && !chatProvider.isSending && !explorationRunning {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
