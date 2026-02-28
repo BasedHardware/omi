@@ -300,9 +300,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     @Published var isClearing = false
     @Published var errorMessage: String?
 
-    /// When set, sendMessage uses this as the session key instead of "main".
-    /// Used by OnboardingChatView to isolate onboarding messages in a dedicated session.
-    var onboardingSessionKey: String?
+    /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
+    var isOnboarding = false
     @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
     @Published var hasMoreMessages = false
@@ -522,8 +521,8 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            Task { @MainActor [bridge = self.acpBridge] in
-                await bridge.stop()
+            Task { @MainActor in
+                await self.acpBridge.stop()
             }
         }
     }
@@ -1619,7 +1618,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     /// Load messages for the default chat (no session filter - compatible with Flutter)
     /// Retries up to 3 times on failure.
-    private func loadDefaultChatMessages() async {
+    func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
@@ -1977,7 +1976,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let queryResult = try await acpBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: onboardingSessionKey ?? sessionKey ?? "main",
+                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
@@ -2074,7 +2073,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             log("Chat response complete")
 
             // Persist the ACP session ID during onboarding so we can resume after app restart
-            if onboardingSessionKey != nil && !queryResult.sessionId.isEmpty {
+            if isOnboarding && !queryResult.sessionId.isEmpty {
                 OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
             }
 
