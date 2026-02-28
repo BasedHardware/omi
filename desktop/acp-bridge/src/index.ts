@@ -702,9 +702,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
         });
         sessionId = msg.resume;
-        sessions.set(requestedModel, { sessionId, cwd: requestedCwd });
+        sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
         isNewSession = false;
-        logErr(`ACP session resumed: ${sessionId}`);
+        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey})`);
       } catch (resumeErr) {
         logErr(`ACP session resume failed (will create new session): ${resumeErr}`);
         // Fall through to session/new below
