@@ -413,12 +413,17 @@ struct OnboardingChatView: View {
             log("OnboardingChatView: Restoring \(savedMessages.count) messages from previous session")
             chatProvider.messages = savedMessages
 
+            // Resume the ACP session if we have a saved session ID (conversation history preserved server-side)
+            let savedSessionId = OnboardingChatPersistence.loadSessionId()
+            log("OnboardingChatView: Resuming ACP session: \(savedSessionId ?? "none")")
+
             // Resume the conversation — tell the AI the app was restarted
             Task {
                 await chatProvider.sendMessage(
                     "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
                     systemPromptPrefix: systemPrompt,
-                    sessionKey: "onboarding"
+                    sessionKey: "onboarding",
+                    resume: savedSessionId
                 )
             }
         } else {
