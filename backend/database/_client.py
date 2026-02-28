@@ -4,6 +4,7 @@ import os
 import uuid
 
 from google.cloud import firestore
+from google.oauth2 import service_account
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     json_str = os.environ["SERVICE_ACCOUNT_JSON"]
@@ -35,6 +36,35 @@ if project_id:
     db = firestore.Client(project=project_id)
 else:
     db = firestore.Client()
+
+
+_prod_db = None
+
+
+def get_prod_db():
+    """Get a Firestore client connected to the production project.
+
+    Uses PROD_SERVICE_ACCOUNT_JSON env var for credentials.
+    Raises RuntimeError if not configured.
+    """
+    global _prod_db
+    if _prod_db is not None:
+        return _prod_db
+
+    prod_sa_json = os.environ.get('PROD_SERVICE_ACCOUNT_JSON')
+    if not prod_sa_json:
+        raise RuntimeError('PROD_SERVICE_ACCOUNT_JSON environment variable is not set')
+
+    try:
+        prod_creds_info = json.loads(prod_sa_json)
+    except json.JSONDecodeError:
+        cleaned = prod_sa_json.replace('\\', '')
+        prod_creds_info = json.loads(cleaned)
+
+    credentials = service_account.Credentials.from_service_account_info(prod_creds_info)
+    prod_project_id = prod_creds_info.get('project_id')
+    _prod_db = firestore.Client(project=prod_project_id, credentials=credentials)
+    return _prod_db
 
 
 def get_users_uid():
