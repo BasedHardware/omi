@@ -247,6 +247,8 @@ struct OnboardingChatView: View {
                             .buttonStyle(.plain)
                             .padding(.top, 8)
                         }
+                        // Extra spacing so quick replies / buttons don't sit against the input field
+                        Spacer().frame(height: 20)
                     }
                     .padding(20)
                 }
@@ -289,7 +291,7 @@ struct OnboardingChatView: View {
 
             // Input area
             HStack(spacing: 12) {
-                TextField("Type your message...", text: $inputText, axis: .vertical)
+                TextField(quickReplyOptions.isEmpty ? "Type your message..." : "Or type your own answer...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundColor(OmiColors.textPrimary)
@@ -411,12 +413,17 @@ struct OnboardingChatView: View {
             log("OnboardingChatView: Restoring \(savedMessages.count) messages from previous session")
             chatProvider.messages = savedMessages
 
+            // Resume the ACP session if we have a saved session ID (conversation history preserved server-side)
+            let savedSessionId = OnboardingChatPersistence.loadSessionId()
+            log("OnboardingChatView: Resuming ACP session: \(savedSessionId ?? "none")")
+
             // Resume the conversation — tell the AI the app was restarted
             Task {
                 await chatProvider.sendMessage(
                     "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
                     systemPromptPrefix: systemPrompt,
-                    sessionKey: "onboarding"
+                    sessionKey: "onboarding",
+                    resume: savedSessionId
                 )
             }
         } else {
@@ -688,12 +695,20 @@ struct OnboardingToolIndicator: View {
 
     /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
     var isHidden: Bool {
-        toolName == "ask_followup"
+        cleanToolName == "ask_followup"
+    }
+
+    /// Strip MCP prefix from tool name (e.g. "mcp__omi-tools__scan_files" → "scan_files")
+    private var cleanToolName: String {
+        if toolName.hasPrefix("mcp__") {
+            return String(toolName.split(separator: "__").last ?? Substring(toolName))
+        }
+        return toolName
     }
 
     /// Determines which permission image to show based on the tool name and input
     private var permissionImageType: String? {
-        switch toolName {
+        switch cleanToolName {
         case "scan_files", "start_file_scan":
             return "folder_access"
         case "request_permission":
@@ -704,7 +719,7 @@ struct OnboardingToolIndicator: View {
     }
 
     private var displayText: String {
-        switch toolName {
+        switch cleanToolName {
         case "scan_files", "start_file_scan":
             return status == .running ? "Scanning your files..." : "Files scanned"
         case "check_permission_status":

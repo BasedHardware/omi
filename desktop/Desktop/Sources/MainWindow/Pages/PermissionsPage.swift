@@ -512,30 +512,82 @@ struct ScreenRecordingPermissionSection: View {
                 .foregroundColor(OmiColors.textPrimary)
 
             VStack(alignment: .leading, spacing: 12) {
-                instructionStep(number: 1, text: "Click \"Open Settings\" below")
+                // Step 1 — Open Settings button inline
+                HStack(alignment: .top, spacing: 12) {
+                    Text("1")
+                        .scaledFont(size: 12, weight: .bold)
+                        .foregroundColor(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(OmiColors.purplePrimary))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Open Screen Recording settings")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+
+                        Button(action: {
+                            ScreenCaptureService.openScreenRecordingPreferences()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gear")
+                                    .scaledFont(size: 12)
+                                Text("Open Settings")
+                                    .scaledFont(size: 12, weight: .semibold)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(OmiColors.purplePrimary)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
                 instructionStep(number: 2, text: "Find \"\(appName)\" in the Screen Recording list")
                 instructionStep(number: 3, text: "Click on \"\(appName)\", then click the minus (−) button to remove it")
-                instructionStep(number: 4, text: "Come back to Omi and click \"Grant\" — it will be re-added with the correct permissions")
-            }
 
-            Button(action: {
-                ScreenCaptureService.openScreenRecordingPreferences()
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "gear")
-                        .scaledFont(size: 14)
-                    Text("Open Settings")
-                        .scaledFont(size: 14, weight: .semibold)
+                // Step 4 — Grant button inline
+                HStack(alignment: .top, spacing: 12) {
+                    Text("4")
+                        .scaledFont(size: 12, weight: .bold)
+                        .foregroundColor(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(OmiColors.purplePrimary))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Come back to Omi and grant the permission")
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textSecondary)
+
+                        Button(action: {
+                            // Reset stale state so Grant flow works fresh
+                            appState.isScreenRecordingStale = false
+                            appState.screenRecordingGrantAttempts = 0
+                            // Request permission (triggers system prompt + adds to list)
+                            ScreenCaptureService.requestAllScreenCapturePermissions()
+                            ScreenCaptureService.openScreenRecordingPreferences()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.shield")
+                                    .scaledFont(size: 12)
+                                Text("Grant")
+                                    .scaledFont(size: 12, weight: .semibold)
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.green)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(OmiColors.purplePrimary)
-                )
             }
-            .buttonStyle(.plain)
         }
     }
 

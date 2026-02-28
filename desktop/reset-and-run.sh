@@ -107,7 +107,16 @@ BUNDLE_ID="com.omi.desktop-dev"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-SIGN_IDENTITY="Developer ID Application: Matthew Diakonov (S6DP5HF77G)"
+# Auto-detect signing identity: prefer Apple Development (doesn't require notarization),
+# fall back to Developer ID Application
+SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
+    echo "ERROR: No signing identity found"
+    exit 1
+fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
@@ -426,6 +435,12 @@ echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH"
 echo "========================"
 echo ""
+
+# Re-register with LaunchServices (clear stale launch-disabled flags)
+echo "Re-registering with LaunchServices..."
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$APP_PATH" 2>/dev/null || true
+$LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
 # Remove quarantine and start app from /Applications
 echo "Starting app..."

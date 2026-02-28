@@ -3247,18 +3247,33 @@ struct SettingsContentView: View {
                     }
 
                     settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
-                        Button(action: {
-                            AdvicePromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                AdviceTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                AdvicePromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -3746,7 +3761,6 @@ struct SettingsContentView: View {
             .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Rescan") {
-                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
                     NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
                 }
             } message: {

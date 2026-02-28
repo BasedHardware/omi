@@ -30,8 +30,6 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
-    // File indexing sheet for existing users
-    @State private var showFileIndexingSheet = false
 
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
@@ -97,9 +95,13 @@ struct DesktopHomeView: View {
                             // Check all permissions on launch
                             appState.checkAllPermissions()
 
-                            // Show file indexing sheet for existing users who haven't done it
+                            // For existing users who haven't indexed files yet, run a background scan
                             if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
-                                showFileIndexingSheet = true
+                                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+                                Task {
+                                    log("DesktopHomeView: Running background file scan for existing user")
+                                    await FileIndexerService.shared.backgroundRescan()
+                                }
                             }
 
                             let settings = AssistantSettings.shared
@@ -216,16 +218,11 @@ struct DesktopHomeView: View {
                             }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-                            showFileIndexingSheet = true
-                        }
-                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
-                            FileIndexingView(
-                                chatProvider: viewModelContainer.chatProvider,
-                                onComplete: { fileCount in
-                                    showFileIndexingSheet = false
-                                }
-                            )
-                            .frame(width: 600, height: 650)
+                            // Background rescan — no loading screen needed
+                            Task {
+                                log("DesktopHomeView: File indexing triggered from settings, running background rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {

@@ -55,17 +55,30 @@ struct FileIndexingView: View {
                 .padding(.bottom, 20)
 
             // Title
-            Text("Let me access files to learn about you")
+            Text(statusText)
                 .scaledFont(size: 16, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 6)
 
-            // Subtitle
-            Text("All data is secure and belongs to you. Open-source verified.")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
-                .multilineTextAlignment(.center)
+            // Subtitle — folder being scanned or general message
+            if !scanningFolder.isEmpty {
+                Text("Scanning ~/\(scanningFolder)" + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : ""))
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .animation(.easeInOut(duration: 0.2), value: scanningFolder)
+            } else if totalFilesScanned > 0 {
+                Text("\(totalFilesScanned.formatted()) files indexed")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("All data is secure and belongs to you. Open-source verified.")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
 
             // Progress bar
             VStack(spacing: 6) {
@@ -281,6 +294,18 @@ struct FileIndexingView: View {
 
     /// Stage 1: Scan folders, progress 0% → 60%
     private func runFileScanning() async {
+        // Check if files were already indexed (e.g., during onboarding chat via scan_files tool)
+        let existingCount = await FileIndexerService.shared.getIndexedFileCount()
+        if existingCount > 0 {
+            log("FileIndexingView: Skipping file scan — \(existingCount) files already indexed")
+            await MainActor.run {
+                totalFilesScanned = existingCount
+                progress = 0.6
+                statusText = "Analyzing your files..."
+            }
+            return
+        }
+
         await MainActor.run {
             statusText = "Scanning your files..."
         }
@@ -366,7 +391,8 @@ struct FileIndexingView: View {
     /// We poll the local SQLite briefly, then fall back to API if needed.
     private func runKnowledgeGraphBuild() async {
         await MainActor.run {
-            statusText = "Loading your knowledge graph..."
+            statusText = "Building your knowledge graph..."
+            scanningFolder = ""
             progress = 0.92
         }
 
