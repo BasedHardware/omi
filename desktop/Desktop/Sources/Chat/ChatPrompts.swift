@@ -730,16 +730,33 @@ struct ChatPrompts {
     ask_followup(question: "Mic access lets me transcribe your conversations and give real-time advice.", options: ["Grant Microphone", "Why?", "Skip"])
 
     STEP 6 — COMPLETE (MANDATORY TOOL CALL)
-    You MUST call `complete_onboarding` — the "Continue to App" button ONLY appears after this tool call. Without it, the user is STUCK.
-    Call the tool FIRST, then say one forward-looking sentence (max 20 words).
-    Example: [call complete_onboarding] → "All set — I'll be watching your [work context] and sending advice throughout the day."
-    NEVER say a completion message without calling `complete_onboarding` first.
+    You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
+    Call the tool FIRST, then move to Step 7. Do NOT say a "goodbye" or "all set" message — the conversation continues.
+    NEVER skip this tool call.
+
+    STEP 7 — DEEP DIVE (keep the conversation going)
+    After calling `complete_onboarding`, keep asking the user questions to build a richer knowledge graph.
+    The "Continue to App" button appears in the background — the user can click it whenever they want, but meanwhile keep them engaged.
+
+    Ask about:
+    - What they're currently working on, their main project or goal
+    - Their team — who they work with, collaborate with
+    - Tools and workflows — what apps, languages, frameworks they use daily
+    - Interests outside work — hobbies, side projects, learning goals
+    - What kind of help they'd want from Omi — meeting summaries, coding advice, task management, etc.
+
+    For EACH answer, call `save_knowledge_graph` to add new nodes and edges connected to existing ones.
+    Use `ask_followup` for every question with 2-3 specific options based on what you've learned so far.
+    Build outward from the person node — connect projects to tools, tools to languages, people to organizations, etc.
+    Aim for 30+ nodes with meaningful edges by the end.
+
+    Keep going until the user clicks "Continue to App" or stops responding. Each question should be specific to what you've learned — never generic.
 
     RESTART RECOVERY:
     If the user says the app restarted (e.g. after granting screen recording), pick up EXACTLY where you left off.
     Call `check_permission_status` to see what's already granted, then continue with any remaining permissions.
     NEVER repeat earlier steps — no greetings, no name, no language, no web research, no file scan, no follow-up questions, no knowledge graph.
-    Just check permissions and finish. Example: "Welcome back! Let me check your permissions..." → check_permission_status → continue with remaining ones → complete_onboarding.
+    Just check permissions and finish. Example: "Welcome back! Let me check your permissions..." → check_permission_status → continue with remaining ones → complete_onboarding → Step 7.
 
     <tools>
     You have 7 onboarding tools. Use them to set up the app for the user.
@@ -812,17 +829,26 @@ struct ChatPrompts {
 
     The user's name is {user_name}.
 
-    STEP 1 — SQL EXPLORATION (5-8 queries)
-    Use `execute_sql` to query the `indexed_files` table. Run these queries one at a time:
+    {database_schema}
 
+    IMPORTANT: Only use table and column names from the schema above. Do NOT guess column names — if a column isn't listed, it doesn't exist.
+
+    STEP 1 — SQL EXPLORATION (5-12 queries)
+    Use `execute_sql` to run these queries one at a time:
+
+    **File index queries (indexed_files table):**
     1. File type distribution: SELECT fileType, COUNT(*) as count FROM indexed_files GROUP BY fileType ORDER BY count DESC LIMIT 15
     2. Programming languages (by extension): SELECT fileExtension, COUNT(*) as count FROM indexed_files WHERE fileType = 'code' GROUP BY fileExtension ORDER BY count DESC LIMIT 20
     3. Project indicators: SELECT filename, path FROM indexed_files WHERE filename IN ('package.json', 'Cargo.toml', 'Podfile', 'go.mod', 'requirements.txt', 'pyproject.toml', 'build.gradle', 'pom.xml', 'CMakeLists.txt', 'Package.swift', 'pubspec.yaml', 'Gemfile', 'composer.json', 'mix.exs', 'Makefile', 'docker-compose.yml', 'Dockerfile') LIMIT 40
     4. Recently modified files: SELECT filename, path, fileType, modifiedAt FROM indexed_files ORDER BY modifiedAt DESC LIMIT 20
     5. Installed applications: SELECT filename FROM indexed_files WHERE folder = '/Applications' AND fileExtension = 'app' ORDER BY filename LIMIT 50
     6. Document types: SELECT fileExtension, COUNT(*) as count FROM indexed_files WHERE fileType IN ('document', 'spreadsheet', 'presentation') GROUP BY fileExtension ORDER BY count DESC LIMIT 15
-    7. Folder depth analysis: SELECT folder, COUNT(*) as count FROM indexed_files GROUP BY folder ORDER BY count DESC LIMIT 15
-    8. Large/notable files: SELECT filename, path, sizeBytes FROM indexed_files WHERE sizeBytes > 10000000 ORDER BY sizeBytes DESC LIMIT 10
+
+    **Activity data queries (may be empty for new users — skip if no results):**
+    7. Recent screen activity: SELECT appName, COUNT(*) as count FROM screenshots GROUP BY appName ORDER BY count DESC LIMIT 15
+    8. Recent observations: SELECT appName, currentActivity, contextSummary FROM observations ORDER BY createdAt DESC LIMIT 10
+    9. Conversation topics: SELECT title, category FROM transcription_sessions WHERE title IS NOT NULL ORDER BY startedAt DESC LIMIT 10
+    10. Memories: SELECT content, category FROM memories WHERE deleted = 0 ORDER BY createdAt DESC LIMIT 15
 
     STEP 2 — KNOWLEDGE GRAPH (20-50 nodes)
     After gathering data, call `save_knowledge_graph` ONCE with a comprehensive graph. Include:
@@ -852,6 +878,7 @@ struct ChatPrompts {
     - Parameters: query (required, string)
     - Returns query results as formatted text
     - Only SELECT queries are allowed
+    - IMPORTANT: Only query tables and columns listed in the database schema above
 
     **save_knowledge_graph**: Save entities and relationships to the knowledge graph.
     - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
@@ -1413,10 +1440,12 @@ struct ChatPromptBuilder {
     }
 
     /// Build the onboarding exploration system prompt (parallel background session)
-    static func buildOnboardingExploration(userName: String) -> String {
-        return build(
+    static func buildOnboardingExploration(userName: String, databaseSchema: String = "") -> String {
+        var prompt = build(
             template: ChatPrompts.onboardingExploration,
             userName: userName
         )
+        prompt = prompt.replacingOccurrences(of: "{database_schema}", with: databaseSchema)
+        return prompt
     }
 }

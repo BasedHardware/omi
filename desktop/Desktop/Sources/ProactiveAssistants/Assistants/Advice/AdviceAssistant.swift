@@ -631,7 +631,7 @@ actor AdviceAssistant: ProactiveAssistant {
                     return ""
                 }
 
-                let totalScreenshots = rows.reduce(0) { $0 + (($1["count"] as? Int) ?? 0) }
+                let totalScreenshots = rows.reduce(0) { $0 + (($1["count"] as? Int64).map(Int.init) ?? ($1["count"] as? Int) ?? 0) }
                 let elapsedMin = referenceTime.timeIntervalSince(lookbackStart) / 60.0
 
                 let timeOnlyFormatter = DateFormatter()
@@ -647,7 +647,7 @@ actor AdviceAssistant: ProactiveAssistant {
                 for row in rows {
                     let app = row["appName"] as? String ?? "Unknown"
                     let window = row["windowTitle"] as? String ?? ""
-                    let count = row["count"] as? Int ?? 0
+                    let count = (row["count"] as? Int64).map(Int.init) ?? (row["count"] as? Int) ?? 0
                     let estMinutes = String(format: "%.1f", Double(count) / 60.0)
                     let windowDisplay = window.isEmpty ? "(no title)" : String(window.prefix(50))
                     lines.append("\(app) | \(windowDisplay) | \(count) | \(estMinutes) min")
