@@ -153,7 +153,7 @@ curl -s https://desktop-backend-hhibjajaja-uc.a.run.app/health
 ### URL Configuration
 
 - **Production builds** (`release.sh`): Use URL from `.env.app`
-- **Development builds** (`run.sh`): Override with local tunnel (`omi-dev.m13v.com`)
+- **Development builds** (`run.sh`): Override with local tunnel (see `scripts/test-accounts.md` for URL)
 
 ## Release Integration
 

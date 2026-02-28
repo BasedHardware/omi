@@ -1014,7 +1014,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Koble til';
 
   @override
   String get comingSoon => 'Kommer snart';
@@ -1519,7 +1519,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get provider => 'Leverandør';
 
   @override
-  String get live => 'Live';
+  String get live => 'Direkte';
 
   @override
   String get onDevice => 'På enhet';
@@ -2264,7 +2264,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get folderName => 'Mappenavn';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beskrivelse (valgfritt)';
 
   @override
   String get failedToDeleteFolder => 'Kunne ikke slette mappe';
@@ -2391,7 +2391,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get unpairAndForgetDevice => 'Opphev sammenkobling og glem enheten';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Ukjent';
 
   @override
   String get unknown => 'Ukjent';
@@ -5239,7 +5239,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get testConversationPrompt => 'Test en samtaleprompt';
 
   @override
-  String get prompt => 'Prompt';
+  String get prompt => 'Ledetekst';
 
   @override
   String get result => 'Resultat:';
@@ -5859,7 +5859,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transferMethod => 'Overføringsmetode';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Rask';
 
   @override
   String get ble => 'BLE';
@@ -5874,13 +5874,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get cancelSyncMessage => 'Data som allerede er lastet ned vil bli lagret. Du kan fortsette senere.';
 
   @override
-  String get syncCancelled => 'Sync cancelled';
+  String get syncCancelled => 'Synkronisering avbrutt';
 
   @override
   String get deleteProcessedFiles => 'Slett behandlede filer';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Behandlede filer slettet';
 
   @override
   String get wifiEnableFailed => 'Kunne ikke aktivere WiFi på enheten. Prøv igjen.';
@@ -5912,7 +5912,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Behandle';
 
   @override
   String get wifiSyncFailed => 'WiFi-synkronisering mislyktes';
@@ -5930,20 +5930,20 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count samtaler opprettet';
   }
 
   @override
   String get internetRequired => 'Internet required';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Behandle lyd';
 
   @override
   String get start => 'Start';
 
   @override
-  String get noRecordings => 'No Recordings';
+  String get noRecordings => 'Ingen opptak';
 
   @override
   String get audioFromOmiWillAppearHere => 'Lyd fra Omi-enheten din vil vises her';
@@ -5952,7 +5952,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deleteProcessed => 'Slett behandlet';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Prøv et annet filter';
 
   @override
   String get recordings => 'Opptak';
@@ -6325,40 +6325,40 @@ class AppLocalizationsNo extends AppLocalizations {
   String get setupAnswerAllQuestions => 'Du har ikke svart på alle spørsmålene ennå\\! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Hopp over, jeg vil ikke hjelpe :C';
 
   @override
-  String get professionEntrepreneur => 'Entrepreneur';
+  String get professionEntrepreneur => 'Gründer';
 
   @override
-  String get professionSoftwareEngineer => 'Software Engineer';
+  String get professionSoftwareEngineer => 'Programvareutvikler';
 
   @override
   String get professionProductManager => 'Product Manager';
 
   @override
-  String get professionExecutive => 'Executive';
+  String get professionExecutive => 'Leder';
 
   @override
-  String get professionSales => 'Sales';
+  String get professionSales => 'Salg';
 
   @override
   String get professionStudent => 'Student';
 
   @override
-  String get usageAtWork => 'At work';
+  String get usageAtWork => 'På jobb';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Fysiske arrangementer';
 
   @override
   String get usageOnline => 'Tilkoblet';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'I sosiale sammenhenger';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Overalt';
 
   @override
   String get customBackendUrlTitle => 'Egendefinert backend-URL';
@@ -6526,7 +6526,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get sharePublicLink => 'Del offentlig lenke';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Gjør persona offentlig';
 
   @override
   String get connectedKnowledgeData => 'Tilkoblet kunnskapsdata';
@@ -6644,7 +6644,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get tagOtherSegments => 'Tag other segments';
+  String get tagOtherSegments => 'Merk andre segmenter';
 
   @override
   String get managePeople => 'Administrer personer';
@@ -6738,7 +6738,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get recordingDetails => 'Opptaksdetaljer';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD-kort';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
@@ -6751,7 +6751,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String storedOnDevice(String deviceName) {
-    return 'Stored on $deviceName';
+    return 'Lagret på $deviceName';
   }
 
   @override
@@ -6793,19 +6793,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String get recordingIdLabel => 'Opptaks-ID';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Dato og tid';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Varighet';
 
   @override
   String get audioFormatLabel => 'Lydformat';
 
   @override
-  String get storageLocationLabel => 'Storage Location';
+  String get storageLocationLabel => 'Lagringsplassering';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Estimert størrelse';
 
   @override
   String get deviceModelLabel => 'Enhetsmodell';
@@ -6817,13 +6817,13 @@ class AppLocalizationsNo extends AppLocalizations {
   String get statusLabel => 'Status';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Behandlet';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Ubehandlet';
 
   @override
-  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+  String get switchedToFastTransfer => 'Byttet til hurtigoverføring';
 
   @override
   String get transferCompleteMessage => 'Overføring fullført! Du kan nå spille av dette opptaket.';
@@ -6922,7 +6922,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Det oppstod en feil under oppdatering av app-statusen.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Beregner...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6933,7 +6933,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get aboutAMinuteRemaining => 'Omtrent ett minutt gjenstår';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Nesten ferdig...';
 
   @override
   String get omiSays => 'omi says';
@@ -6943,11 +6943,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Migrerer til $level-beskyttelse...';
   }
 
   @override
-  String get noDataToMigrateFinalizing => 'No data to migrate. Finalizing...';
+  String get noDataToMigrateFinalizing => 'Ingen data å migrere. Fullfører...';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
@@ -6969,13 +6969,13 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'samtaler';
 
   @override
   String get dataLowercase => 'data';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Au';
 
   @override
   String get fallNotificationBody => 'Falt du?';
@@ -7230,7 +7230,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get xHandlePleaseEnterValid => 'Vennligst skriv inn et gyldig X-håndtak';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Neste';
 
   @override
   String get connectOmiDevice => 'Koble til Omi-enhet';
@@ -7868,7 +7868,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get categorySafety => 'Sikkerhet';
 
   @override
-  String get categoryShopping => 'Shopping';
+  String get categoryShopping => 'Handel';
 
   @override
   String get categorySocial => 'Sosialt';
@@ -7994,27 +7994,27 @@ class AppLocalizationsNo extends AppLocalizations {
   String get addTask => 'Legg til oppgave';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Legg til MCP-server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Koble til eksterne AI-verktøy';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count verktøy koblet til';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kunne ikke koble til MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoriserer...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hvordan fant du oss?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8032,19 +8032,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Venn';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Annet';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Vennligst spesifiser';
 
   @override
-  String get event => 'Event';
+  String get event => 'Arrangement';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kollega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8215,8 +8215,42 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Her er hva jeg vet om deg';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Dette kartet oppdateres etter hvert som Omi lærer fra samtalene dine.';
+
+  @override
+  String get apiEnvironment => 'API-miljø';
+
+  @override
+  String get apiEnvironmentDescription => 'Velg hvilken server du vil koble til';
+
+  @override
+  String get production => 'Produksjon';
+
+  @override
+  String get staging => 'Testmiljø';
+
+  @override
+  String get switchRequiresRestart => 'Bytting krever omstart av appen';
+
+  @override
+  String get switchApiConfirmTitle => 'Bytt API-miljø';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Bytte til $environment? Du må lukke og åpne appen på nytt for at endringene skal tre i kraft.';
+  }
+
+  @override
+  String get switchAndRestart => 'Bytt';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testmiljøet kan være ustabilt, ha inkonsistent ytelse, og data kan gå tapt. Kun for testing.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Lagret. Lukk og åpne appen på nytt for å bruke endringene.';
 }

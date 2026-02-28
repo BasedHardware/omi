@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - NSHostingView sizingOptions access
+
+/// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
+/// NSHostingView is generic so we can't cast to it without knowing Content.
+/// This protocol + extension lets us access sizingOptions through existential dispatch.
+@MainActor
+private protocol HostingSizingConfigurable: AnyObject {
+    var sizingOptions: NSHostingSizingOptions { get set }
+}
+extension NSHostingView: HostingSizingConfigurable {}
+
 struct DesktopHomeView: View {
     @StateObject private var appState = AppState()
     @StateObject private var viewModelContainer = ViewModelContainer()
@@ -92,13 +103,16 @@ struct DesktopHomeView: View {
                             }
 
                             // Migration: one-time reset for users whose screenAnalysisEnabled
-                            // was incorrectly set to false by a bug in stopMonitoring() that
-                            // persisted false on every automatic stop (failures, sign-out, etc.).
-                            let migrationKey = "screenAnalysisAutoStartFixed_v1"
+                            // was incorrectly set to false by a bug in syncMonitoringState() that
+                            // persisted false whenever monitoring stopped for any reason.
+                            // v2: re-run because the root cause (syncMonitoringState disabling the
+                            // setting) was only fixed in this release, so v1 users got re-broken.
+                            let migrationKey = "screenAnalysisAutoStartFixed_v2"
                             if !UserDefaults.standard.bool(forKey: migrationKey) {
                                 UserDefaults.standard.set(true, forKey: "screenAnalysisEnabled")
+                                AssistantSettings.shared.screenAnalysisEnabled = true
                                 UserDefaults.standard.set(true, forKey: migrationKey)
-                                log("DesktopHomeView: Applied screenAnalysisAutoStart migration — reset to enabled")
+                                log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
                                 // Push true to server so syncFromServer() doesn't revert it
                                 Task { await SettingsSyncManager.shared.syncToServer() }
                             }
@@ -144,6 +158,17 @@ struct DesktopHomeView: View {
                         // Refresh conversations when app becomes active (e.g. switching back from another app)
                         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                             Task { await appState.refreshConversations() }
+                            // Auto-start monitoring when returning to app if screen analysis is enabled
+                            // but monitoring is not running. Handles the case where the user granted
+                            // screen recording permission in System Settings and switched back.
+                            let plugin = ProactiveAssistantsPlugin.shared
+                            if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
+                                plugin.refreshScreenRecordingPermission()
+                                if plugin.hasScreenRecordingPermission {
+                                    log("DesktopHomeView: Permission available on app active — starting monitoring")
+                                    plugin.startMonitoring { _, _ in }
+                                }
+                            }
                         }
                         // Periodic refresh every 30s to pick up conversations from other devices (e.g. Omi Glass)
                         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
@@ -158,6 +183,17 @@ struct DesktopHomeView: View {
                             log("DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription")
                             appState.hasCompletedOnboarding = false
                             appState.stopTranscription()
+                        }
+                        // Handle transcription toggle from menu bar
+                        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) { notification in
+                            if let enabled = notification.userInfo?["enabled"] as? Bool {
+                                log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+                                if enabled {
+                                    appState.startTranscription()
+                                } else {
+                                    appState.stopTranscription()
+                                }
+                            }
                         }
                         // Periodic file re-scan (every 3 hours)
                         .task {
@@ -220,11 +256,20 @@ struct DesktopHomeView: View {
         .tint(OmiColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
-            // Force dark appearance on the window
+            // Force dark appearance and disable minSize computation on NSHostingView.
+            // By default, every @Published change triggers
+            // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
+            // which traverses the ENTIRE view tree (~200 samples per window per trigger).
+            // Removing .minSize from sizingOptions prevents this full-tree traversal.
+            // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title == "Omi" {
+                    if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
+                        window.minSize = NSSize(width: 900, height: 600)
+                        // Remove .minSize from hosting view's sizingOptions.
+                        // Search contentView itself + all descendants.
+                        Self.disableMinSizeComputation(in: window)
                     }
                 }
             }
@@ -233,6 +278,25 @@ struct DesktopHomeView: View {
         }
         .onChange(of: currentTierLevel) { _, _ in
             redirectIfPageHidden()
+        }
+    }
+
+    /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
+    /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
+    /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
+    private static func disableMinSizeComputation(in window: NSWindow) {
+        func visit(_ view: NSView) {
+            if let hosting = view as? any HostingSizingConfigurable {
+                let before = hosting.sizingOptions
+                hosting.sizingOptions = []
+                log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+            }
+            for subview in view.subviews {
+                visit(subview)
+            }
+        }
+        if let contentView = window.contentView {
+            visit(contentView)
         }
     }
 

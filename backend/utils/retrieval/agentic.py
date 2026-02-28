@@ -50,6 +50,8 @@ from utils.retrieval.tools import (
     search_files_tool,
     manage_daily_summary_tool,
     create_chart_tool,
+    get_screen_activity_tool,
+    search_screen_activity_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -88,6 +90,8 @@ CORE_TOOLS = [
     search_files_tool,
     manage_daily_summary_tool,
     create_chart_tool,
+    get_screen_activity_tool,
+    search_screen_activity_tool,
 ]
 
 
@@ -128,6 +132,8 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_omi_product_info_tool': 'Looking up product info',
         'manage_daily_summary_tool': 'Updating notification settings',
         'create_chart_tool': 'Creating chart',
+        'get_screen_activity_tool': 'Checking screen activity',
+        'search_screen_activity_tool': 'Searching screen activity',
     }
 
     # Try exact match first

@@ -1000,7 +1000,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '연결';
 
   @override
   String get comingSoon => '곧 출시';
@@ -2225,7 +2225,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get folderName => '폴더 이름';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '설명 (선택 사항)';
 
   @override
   String get failedToDeleteFolder => '폴더 삭제 실패';
@@ -7867,27 +7867,27 @@ class AppLocalizationsKo extends AppLocalizations {
   String get addTask => '작업 추가';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP 서버 추가';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '외부 AI 도구 연결';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count개 도구가 성공적으로 연결되었습니다';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP 서버 연결에 실패했습니다';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '인증 중...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => '어떻게 알게 되셨나요?';
 
   @override
   String get tiktok => 'TikTok';
@@ -7905,19 +7905,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '친구';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => '기타';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '구체적으로 알려주세요';
 
   @override
-  String get event => 'Event';
+  String get event => '이벤트';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '동료';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8084,8 +8084,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => '당신에 대해 알고 있는 것';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => '이 지도는 Omi가 대화에서 배우면서 업데이트됩니다.';
+
+  @override
+  String get apiEnvironment => 'API 환경';
+
+  @override
+  String get apiEnvironmentDescription => '연결할 서버를 선택하세요';
+
+  @override
+  String get production => '프로덕션';
+
+  @override
+  String get staging => '스테이징';
+
+  @override
+  String get switchRequiresRestart => '전환하려면 앱을 다시 시작해야 합니다';
+
+  @override
+  String get switchApiConfirmTitle => 'API 환경 전환';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environment(으)로 전환하시겠습니까? 변경 사항을 적용하려면 앱을 닫고 다시 열어야 합니다.';
+  }
+
+  @override
+  String get switchAndRestart => '전환';
+
+  @override
+  String get stagingDisclaimer => '스테이징 환경은 불안정하고 성능이 일정하지 않으며 데이터가 손실될 수 있습니다. 테스트 전용입니다.';
+
+  @override
+  String get apiEnvSavedRestartRequired => '저장되었습니다. 변경 사항을 적용하려면 앱을 닫고 다시 여세요.';
 }

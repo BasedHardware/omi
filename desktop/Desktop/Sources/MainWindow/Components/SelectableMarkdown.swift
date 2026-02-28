@@ -48,11 +48,11 @@ struct SelectableMarkdown: View {
                 }
             }
         }
-        .onChange(of: text) { newText in
+        .onChange(of: text) { _, newText in
             cachedSegments = Self.splitSegments(newText)
             attrCache.removeAll()
         }
-        .onChange(of: fontScale) { _ in
+        .onChange(of: fontScale) {
             // Font scale changed — cached attributed strings are stale
             attrCache.removeAll()
             cachedFontScale = 0

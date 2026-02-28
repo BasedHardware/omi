@@ -274,11 +274,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     context.read<HomeProvider>().selectedIndex = homePageIdx;
     WidgetsBinding.instance.addObserver(this);
 
-    // Pre-warm agent VM so it's ready by the time the user opens chat
+    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
     if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive');
+      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
       ensureAgentVm();
-      Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      messageProvider.startVmKeepalive();
+      messageProvider.preConnectAgent();
     } else {
       print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
     }

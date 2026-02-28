@@ -135,7 +135,7 @@ struct OnboardingView: View {
             // Bring the main window to front
             var foundWindow = false
             for window in NSApp.windows {
-                if window.title == "Omi" {
+                if window.title.hasPrefix("Omi") {
                     foundWindow = true
                     log("Found 'Omi' window, making key and ordering front")
                     window.makeKeyAndOrderFront(nil)

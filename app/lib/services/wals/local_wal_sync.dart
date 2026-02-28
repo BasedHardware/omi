@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
@@ -72,12 +73,21 @@ class LocalWalSyncImpl implements LocalWalSync {
     _wals = await WalFileManager.loadWals();
     Logger.debug("wal service start: ${_wals.length}");
 
+    final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
+    final syncedCount = _wals.where((w) => w.status == WalStatus.synced).length;
+    DebugLogManager.logEvent('wal_initialized', {
+      'totalWals': _wals.length,
+      'missing': missingCount,
+      'synced': syncedCount,
+    });
+
     // Run migrations for legacy Limitless files
     final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(_wals);
     if (migratedCount > 0) {
       // Reload WALs after migration
       _wals = await WalFileManager.loadWals();
       Logger.debug("wal service after migration: ${_wals.length}");
+      DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount, 'totalAfter': _wals.length});
     }
 
     // Fix any inconsistent WAL states from old implementations
@@ -207,12 +217,17 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   Future _flush() async {
     Logger.debug("_flushing");
+    int flushedCount = 0;
     for (var i = 0; i < _wals.length; i++) {
       final wal = _wals[i];
 
       if (wal.storage == WalStorage.mem) {
         String? filePath = await Wal.getFilePath(wal.getFileName());
         if (filePath == null) {
+          DebugLogManager.logError('LocalWalSync flush error: Flush failed: cannot get file path', null, null, {
+            'walId': wal.id,
+            'timerStart': wal.timerStart,
+          });
           throw Exception('Flushing to storage failed. Cannot get file path.');
         }
 
@@ -233,9 +248,14 @@ class LocalWalSyncImpl implements LocalWalSync {
         wal.storage = WalStorage.disk;
 
         Logger.debug("_flush file ${wal.filePath}");
+        flushedCount++;
 
         _wals[i] = wal;
       }
+    }
+
+    if (flushedCount > 0) {
+      DebugLogManager.logInfo('Flushed WALs from memory to disk', {'count': flushedCount});
     }
 
     await _saveWalsToFile();
@@ -323,16 +343,28 @@ class LocalWalSyncImpl implements LocalWalSync {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk).toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
+      DebugLogManager.logInfo('Local upload: no files to sync');
       return null;
     }
 
+    DebugLogManager.logEvent('local_upload_started', {'walCount': wals.length});
+
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     _accumulatedResponse = resp;
+
+    int batchesCompleted = 0;
+    int batchesFailed = 0;
+    int corruptedCount = 0;
 
     var steps = 3;
     for (var i = wals.length - 1; i >= 0; i -= steps) {
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
+        DebugLogManager.logWarning('Local upload cancelled', {
+          'batchesCompleted': batchesCompleted,
+          'batchesFailed': batchesFailed,
+          'walsRemaining': i + 1,
+        });
         // Clear isSyncing on all WALs that were marked for this batch
         for (final w in wals) {
           w.isSyncing = false;
@@ -356,6 +388,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         if (wal.filePath == null) {
           Logger.debug("file path is not found. wal id ${wal.id}");
           wal.status = WalStatus.corrupted;
+          corruptedCount++;
+          DebugLogManager.logWarning('WAL corrupted: file path missing', {'walId': wal.id});
           continue;
         }
 
@@ -366,6 +400,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           if (fullPath == null) {
             Logger.debug("could not construct file path for wal id ${wal.id}");
             wal.status = WalStatus.corrupted;
+            corruptedCount++;
+            DebugLogManager.logWarning('WAL corrupted: cannot construct path', {'walId': wal.id});
             continue;
           }
 
@@ -373,13 +409,20 @@ class LocalWalSyncImpl implements LocalWalSync {
           if (!file.existsSync()) {
             Logger.debug("file $fullPath does not exist");
             wal.status = WalStatus.corrupted;
+            corruptedCount++;
+            DebugLogManager.logWarning('WAL corrupted: file not found on disk', {
+              'walId': wal.id,
+              'filePath': wal.filePath ?? '',
+            });
             continue;
           }
           files.add(file);
           wal.isSyncing = true;
         } catch (e) {
           wal.status = WalStatus.corrupted;
+          corruptedCount++;
           Logger.debug(e.toString());
+          DebugLogManager.logError(e, null, 'WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
         }
       }
 
@@ -399,6 +442,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
             .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
+        batchesCompleted++;
+
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             var wal = wals[j];
@@ -412,6 +457,11 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
       } catch (e) {
         Logger.debug('Local WAL sync batch failed: $e, continuing with remaining files');
+        batchesFailed++;
+        DebugLogManager.logError(e, null, 'Local upload batch failed: ${e.toString()}', {
+          'batchIndex': (wals.length - 1 - i) ~/ steps,
+          'filesInBatch': files.length,
+        });
         for (var j = left; j <= right; j++) {
           if (j < wals.length) {
             wals[j].isSyncing = false;
@@ -424,6 +474,14 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _saveWalsToFile();
       listener.onWalUpdated();
     }
+
+    DebugLogManager.logEvent('local_upload_finished', {
+      'batchesCompleted': batchesCompleted,
+      'batchesFailed': batchesFailed,
+      'corrupted': corruptedCount,
+      'newConversations': resp.newConversationIds.length,
+      'updatedConversations': resp.updatedConversationIds.length,
+    });
 
     progress?.onWalSyncedProgress(1.0);
     return resp;
@@ -441,21 +499,30 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
+    DebugLogManager.logInfo('Single WAL upload started', {
+      'walId': wal.id,
+      'seconds': wal.seconds,
+      'codec': wal.codec.toString(),
+    });
+
     late File walFile;
     if (wal.filePath == null) {
       Logger.debug("file path is not found. wal id ${wal.id}");
       wal.status = WalStatus.corrupted;
+      DebugLogManager.logWarning('Single WAL corrupted: file path missing', {'walId': wal.id});
     }
     try {
       final fullPath = await Wal.getFilePath(wal.filePath);
       if (fullPath == null) {
         Logger.debug("could not construct file path for wal id ${wal.id}");
         wal.status = WalStatus.corrupted;
+        DebugLogManager.logWarning('Single WAL corrupted: cannot construct path', {'walId': wal.id});
       } else {
         File file = File(fullPath);
         if (!file.existsSync()) {
           Logger.debug("file $fullPath does not exist");
           wal.status = WalStatus.corrupted;
+          DebugLogManager.logWarning('Single WAL corrupted: file not found', {'walId': wal.id});
         } else {
           walFile = file;
           wal.isSyncing = true;
@@ -464,6 +531,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     } catch (e) {
       wal.status = WalStatus.corrupted;
       Logger.debug(e.toString());
+      DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {'walId': wal.id});
     }
 
     listener.onWalUpdated();
@@ -480,9 +548,11 @@ class LocalWalSyncImpl implements LocalWalSync {
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
 
+      DebugLogManager.logInfo('Single WAL upload succeeded', {'walId': wal.id});
       listener.onWalSynced(wal);
     } catch (e) {
       Logger.debug('Single WAL sync failed: $e');
+      DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;

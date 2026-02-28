@@ -182,12 +182,10 @@ CONFLICTING_APPS=(
     "$HOME/Desktop/Omi.app"
     "$HOME/Downloads/Omi.app"
     # Flutter app builds (with and without -prod suffix)
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Release/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Debug-prod/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Release-prod/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Debug-prod/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Release-prod/Omi.app"
 )
 # Xcode DerivedData can contain old builds with production bundle ID
 # These get registered in Launch Services and cause permission confusion
