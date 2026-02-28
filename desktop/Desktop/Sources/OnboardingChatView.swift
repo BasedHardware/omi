@@ -340,13 +340,28 @@ struct OnboardingChatView: View {
             log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
 
             Task {
+                // Start bridge eagerly so it's ready by the time we need to send
+                async let bridgeWarmup: () = chatProvider.warmupBridge()
+
                 // Load previous messages from backend (same default chat, sessionId=nil)
                 await chatProvider.loadDefaultChatMessages()
+
+                // Build a conversation summary so the AI has context even if session/resume fails
+                let conversationContext = buildConversationContext(from: chatProvider.messages)
+                let resumeSystemPrompt: String
+                if conversationContext.isEmpty {
+                    resumeSystemPrompt = systemPrompt
+                } else {
+                    resumeSystemPrompt = systemPrompt + "\n\n<conversation_so_far>\n" + conversationContext + "\n</conversation_so_far>\n\nThe user's app just restarted after granting a macOS permission. Continue the onboarding from where you left off — do NOT re-ask questions the user already answered above."
+                }
+
+                // Wait for bridge warmup before sending
+                await bridgeWarmup
 
                 // Resume the conversation — tell the AI the app was restarted
                 await chatProvider.sendMessage(
                     "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
-                    systemPromptPrefix: systemPrompt,
+                    systemPromptPrefix: resumeSystemPrompt,
                     resume: savedSessionId
                 )
             }
@@ -480,6 +495,23 @@ struct OnboardingChatView: View {
 
         // Notify parent
         onComplete()
+    }
+
+    /// Build a compact summary of the conversation so far for inclusion in the system prompt.
+    /// This ensures the AI has context even if ACP session/resume fails and a fresh session starts.
+    private func buildConversationContext(from messages: [ChatMessage]) -> String {
+        guard !messages.isEmpty else { return "" }
+
+        var lines: [String] = []
+        for message in messages {
+            let role = message.sender == .user ? "User" : "Assistant"
+            let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            // Truncate very long messages to keep the context compact
+            let truncated = text.count > 500 ? String(text.prefix(500)) + "..." : text
+            lines.append("\(role): \(truncated)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func bringToFront() {
