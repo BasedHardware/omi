@@ -10,6 +10,8 @@ struct OnboardingView: View {
     @AppStorage("onboardingStep") private var currentStep = 0
     @StateObject private var graphViewModel = MemoryGraphViewModel()
     @State private var graphHasData = false
+    @State private var showGraphHints = false
+    @State private var hintsHovered = false
 
     let steps = ["Video", "Chat"]
 
@@ -106,6 +108,35 @@ struct OnboardingView: View {
                                 .ignoresSafeArea()
                                 .transition(.opacity)
                         }
+
+                        // Interaction hints overlay
+                        if graphHasData {
+                            VStack {
+                                Spacer()
+                                HStack(spacing: 20) {
+                                    graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+                                    graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+                                    graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.black.opacity(0), Color.black.opacity(0.4)],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .onHover { hovering in
+                                    hintsHovered = hovering
+                                }
+                            }
+                            .allowsHitTesting(true)
+                            .opacity(showGraphHints || hintsHovered ? 1 : 0)
+                            .animation(.easeInOut(duration: 0.3), value: showGraphHints)
+                            .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+                            .transition(.opacity)
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
@@ -113,11 +144,26 @@ struct OnboardingView: View {
                             withAnimation(.easeIn(duration: 0.5)) {
                                 graphHasData = true
                             }
+                            // Show hints and auto-fade after 5 seconds
+                            showGraphHints = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                                showGraphHints = false
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func graphHintItem(icon: String, label: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+            Text(label)
+                .font(.system(size: 11))
+        }
+        .foregroundColor(.white.opacity(0.5))
     }
 
     /// Skip onboarding — complete with minimal setup
