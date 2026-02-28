@@ -116,46 +116,48 @@ struct OnboardingView: View {
                                 .transition(.opacity)
                         }
 
-                        // Interaction hints overlay
-                        if graphHasData {
-                            VStack {
-                                Spacer()
-                                HStack(spacing: 20) {
-                                    graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
-                                    graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
-                                    graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    LinearGradient(
-                                        colors: [Color.black.opacity(0), Color.black.opacity(0.4)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .onHover { hovering in
-                                    hintsHovered = hovering
-                                }
+                        // Interaction hints overlay — always in the tree, visibility via opacity
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 20) {
+                                graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+                                graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+                                graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
                             }
-                            .allowsHitTesting(true)
-                            .opacity(showGraphHints || hintsHovered ? 1 : 0)
-                            .animation(.easeInOut(duration: 0.3), value: showGraphHints)
-                            .animation(.easeInOut(duration: 0.3), value: hintsHovered)
-                            .transition(.opacity)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.black.opacity(0), Color.black.opacity(0.4)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .onHover { hovering in
+                                hintsHovered = hovering
+                            }
                         }
+                        .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.3), value: showGraphHints)
+                        .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+                        .animation(.easeInOut(duration: 0.3), value: graphHasData)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onAppear {
+                        // Handle case where graph already has data on appear
+                        if !graphViewModel.isEmpty && !graphHasData {
+                            withAnimation(.easeIn(duration: 0.5)) {
+                                graphHasData = true
+                            }
+                            flashGraphHints()
+                        }
+                    }
                     .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
                         if !isEmpty && !graphHasData {
                             withAnimation(.easeIn(duration: 0.5)) {
                                 graphHasData = true
                             }
-                            // Show hints and auto-fade after 5 seconds
-                            showGraphHints = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                                showGraphHints = false
-                            }
+                            flashGraphHints()
                         }
                     }
                 }
@@ -171,6 +173,13 @@ struct OnboardingView: View {
                 .font(.system(size: 11))
         }
         .foregroundColor(.white.opacity(0.5))
+    }
+
+    private func flashGraphHints() {
+        showGraphHints = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            showGraphHints = false
+        }
     }
 
     /// Skip onboarding — complete with minimal setup
