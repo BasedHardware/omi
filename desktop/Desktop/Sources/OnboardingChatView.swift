@@ -637,6 +637,7 @@ struct OnboardingChatView: View {
         guard !explorationRunning else { return }
         explorationRunning = true
         log("OnboardingChat: Starting parallel exploration (\(fileCount) files indexed)")
+        AnalyticsManager.shared.onboardingChatToolUsed(tool: "exploration_started", properties: ["file_count": fileCount])
 
         explorationTask = Task {
             do {
@@ -672,6 +673,11 @@ struct OnboardingChatView: View {
                 )
 
                 log("OnboardingChat: Exploration completed (cost=$\(String(format: "%.4f", result.costUsd)), tokens=\(result.inputTokens)+\(result.outputTokens))")
+                AnalyticsManager.shared.onboardingChatToolUsed(tool: "exploration_completed", properties: [
+                    "cost_usd": result.costUsd,
+                    "input_tokens": result.inputTokens,
+                    "output_tokens": result.outputTokens
+                ])
 
                 let finalText = await MainActor.run {
                     explorationCompleted = true
