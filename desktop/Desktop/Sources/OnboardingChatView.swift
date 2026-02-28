@@ -688,12 +688,20 @@ struct OnboardingToolIndicator: View {
 
     /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
     var isHidden: Bool {
-        toolName == "ask_followup"
+        cleanToolName == "ask_followup"
+    }
+
+    /// Strip MCP prefix from tool name (e.g. "mcp__omi-tools__scan_files" → "scan_files")
+    private var cleanToolName: String {
+        if toolName.hasPrefix("mcp__") {
+            return String(toolName.split(separator: "__").last ?? Substring(toolName))
+        }
+        return toolName
     }
 
     /// Determines which permission image to show based on the tool name and input
     private var permissionImageType: String? {
-        switch toolName {
+        switch cleanToolName {
         case "scan_files", "start_file_scan":
             return "folder_access"
         case "request_permission":
@@ -704,7 +712,7 @@ struct OnboardingToolIndicator: View {
     }
 
     private var displayText: String {
-        switch toolName {
+        switch cleanToolName {
         case "scan_files", "start_file_scan":
             return status == .running ? "Scanning your files..." : "Files scanned"
         case "check_permission_status":
