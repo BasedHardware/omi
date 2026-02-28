@@ -345,6 +345,7 @@ struct OnboardingChatView: View {
 
         // Mark as onboarding so ACP session ID gets persisted for restart recovery
         chatProvider.isOnboarding = true
+        chatProvider.modelOverride = "claude-sonnet-4-6"
 
         // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
         if OnboardingChatPersistence.isMidOnboarding {
@@ -505,6 +506,7 @@ struct OnboardingChatView: View {
 
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
+        chatProvider.modelOverride = nil
         OnboardingChatPersistence.clear()
 
         // Log analytics
