@@ -2,6 +2,10 @@
 
 Use this skill when the user says "test it", "try it", "run it", or similar — to build, launch, and verify the desktop app using macOS automation.
 
+## CRITICAL: Always use `run.sh` to launch
+
+**NEVER** manually copy binaries into `build/Omi Dev.app` and launch from there. **NEVER** run `open "build/Omi Dev.app"`. The app **MUST** be launched via `./run.sh` (or `./reset-and-run.sh`), which installs to `/Applications/Omi Dev.app` and launches from there. This is required because macOS "Quit & Reopen" (triggered by granting screen recording permission) uses LaunchServices to find the app — if the canonical copy is in `build/`, macOS will launch a stale binary or fail to find it.
+
 ## Quick Reference
 
 | Item | Value |
@@ -103,6 +107,8 @@ If the test reveals a bug or the feature doesn't work:
 2. Fix the code
 3. Go back to Step 2 (build only) to verify it compiles
 4. Then Step 3 (run.sh) to test again
+
+**IMPORTANT**: Always re-run `./run.sh` for each iteration. Do NOT take shortcuts like manually copying the binary into the app bundle and launching from `build/`. This breaks LaunchServices registration and causes macOS permission restarts to launch stale binaries.
 
 ### Step 8: Clean up
 
