@@ -102,5 +102,5 @@ String buildPhoneCallWebSocketUrl({
   String language = 'en',
 }) {
   var baseUrl = '${Env.apiBaseUrl}'.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://');
-  return '${baseUrl}v1/listen/multi?source=phone_call&call_id=$callId&uid=$uid&sample_rate=$sampleRate&codec=$codec&language=$language&channels=2';
+  return '${baseUrl}v4/listen?source=phone_call&call_id=$callId&uid=$uid&sample_rate=$sampleRate&codec=$codec&language=$language&channels=2';
 }
