@@ -38,7 +38,7 @@ VAD_GATE_PRE_ROLL_MS = 300
 VAD_GATE_HANGOVER_MS = 4000
 VAD_GATE_SPEECH_THRESHOLD = 0.65
 VAD_GATE_FINALIZE_SILENCE_MS = 300  # Flush DG transcript during hangover after this much silence
-VAD_GATE_KEEPALIVE_SEC = 20
+VAD_GATE_KEEPALIVE_SEC = 5
 VAD_GATE_MODEL_POOL_SIZE = 16
 
 
@@ -714,7 +714,7 @@ class GatedDeepgramSocket:
         if gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
         elif self._gate.needs_keepalive(now):
-            # Prevent DG 30s idle timeout during extended silence
+            # Prevent DG 10s idle timeout during extended silence
             try:
                 self._conn.keep_alive()
                 self._gate.record_keepalive(now)
