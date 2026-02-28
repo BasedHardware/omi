@@ -3761,7 +3761,6 @@ struct SettingsContentView: View {
             .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Rescan") {
-                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
                     NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
                 }
             } message: {
