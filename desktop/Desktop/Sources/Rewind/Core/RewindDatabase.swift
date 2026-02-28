@@ -395,6 +395,26 @@ actor RewindDatabase {
             "omi.db", "Screenshots", "Videos", "backups",
         ]
 
+        // Checkpoint WAL at destination before deleting — preserves recent writes
+        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
+        let destDB = userDir.appendingPathComponent("omi.db")
+        if fileManager.fileExists(atPath: destDB.path) {
+            let destWAL = userDir.appendingPathComponent("omi.db-wal")
+            if fileManager.fileExists(atPath: destWAL.path) {
+                do {
+                    let config = Configuration()
+                    let pool = try DatabasePool(path: destDB.path, configuration: config)
+                    try pool.write { db in
+                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                    }
+                    try pool.close()
+                    log("RewindDatabase: Checkpointed WAL at dest before migration")
+                } catch {
+                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
         // also cause SQLITE_IOERR_CORRUPTFS when SQLite opens the migrated DB.
