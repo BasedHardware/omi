@@ -396,7 +396,7 @@ struct FileIndexingView: View {
             progress = 0.92
         }
 
-        await AnalyticsManager.shared.knowledgeGraphBuildStarted(
+        AnalyticsManager.shared.knowledgeGraphBuildStarted(
             filesIndexed: totalFilesScanned,
             hadExistingGraph: false
         )
@@ -412,7 +412,7 @@ struct FileIndexingView: View {
                 log("FileIndexingView: Local graph ready after \(attempt) polls")
                 await graphViewModel.loadGraph()
 
-                await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+                AnalyticsManager.shared.knowledgeGraphBuildCompleted(
                     nodeCount: 0,
                     edgeCount: 0,
                     pollAttempts: attempt,
@@ -442,13 +442,13 @@ struct FileIndexingView: View {
             Task {
                 _ = try? await APIClient.shared.rebuildKnowledgeGraph()
             }
-            await AnalyticsManager.shared.knowledgeGraphBuildFailed(
+            AnalyticsManager.shared.knowledgeGraphBuildFailed(
                 reason: "local_empty_api_empty",
                 pollAttempts: maxAttempts,
                 filesIndexed: totalFilesScanned
             )
         } else {
-            await AnalyticsManager.shared.knowledgeGraphBuildCompleted(
+            AnalyticsManager.shared.knowledgeGraphBuildCompleted(
                 nodeCount: 0,
                 edgeCount: 0,
                 pollAttempts: maxAttempts,
