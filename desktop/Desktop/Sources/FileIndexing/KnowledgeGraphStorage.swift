@@ -55,11 +55,11 @@ actor KnowledgeGraphStorage {
             try database.execute(sql: "DELETE FROM local_kg_nodes")
 
             for node in nodes {
-                var record = node
+                let record = node
                 try record.insert(database)
             }
             for edge in edges {
-                var record = edge
+                let record = edge
                 try record.insert(database)
             }
         }
