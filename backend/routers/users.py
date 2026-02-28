@@ -37,6 +37,7 @@ from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
 )
+from utils.stt.streaming import deepgram_nova3_multi_languages
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -484,7 +485,9 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
-    return {'status': 'ok'}
+    single_language_mode = language not in deepgram_nova3_multi_languages
+    set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
+    return {'status': 'ok', 'single_language_mode': single_language_mode}
 
 
 # *************************************************

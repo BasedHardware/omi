@@ -33,3 +33,4 @@ pytest tests/unit/test_speech_profile_sharing.py -v
 pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
 pytest tests/unit/test_log_sanitizer.py -v
+pytest tests/unit/test_pusher_heartbeat.py -v

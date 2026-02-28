@@ -78,12 +78,15 @@ enum ChatContentBlock: Identifiable {
                   input: ToolCallInput? = nil,
                   output: String? = nil)
     case thinking(id: String, text: String)
+    /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
+    case discoveryCard(id: String, title: String, summary: String, fullText: String)
 
     var id: String {
         switch self {
         case .text(let id, _): return id
         case .toolCall(let id, _, _, _, _, _): return id
         case .thinking(let id, _): return id
+        case .discoveryCard(let id, _, _, _): return id
         }
     }
 
@@ -95,6 +98,16 @@ enum ChatContentBlock: Identifiable {
             cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
         } else {
             cleanName = toolName
+        }
+
+        // Handle tool names with embedded details (e.g. "WebSearch: \"query\"")
+        if cleanName.hasPrefix("WebSearch:") {
+            let query = String(cleanName.dropFirst("WebSearch: ".count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            return query.isEmpty ? "Searching the web" : "Searching: \(query)"
+        }
+        if cleanName.hasPrefix("WebFetch:") {
+            return "Fetching page"
         }
 
         switch cleanName {
@@ -151,6 +164,10 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "request_permission":
+            summary = input["type"] as? String
+        case "ask_followup":
+            summary = input["question"] as? String
         default:
             // Try common key names
             summary = (input["file_path"] ?? input["path"] ?? input["query"] ?? input["command"]) as? String
@@ -282,6 +299,9 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
+
+    /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
+    var isOnboarding = false
     @Published var sessionsLoadError: String?
     @Published var selectedAppId: String?
     @Published var hasMoreMessages = false
@@ -494,7 +514,20 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 guard let self else { return }
                 self.groupedSessions = self.computeGroupedSessions()
             }
+
+        // Kill ACP bridge subprocess on app quit to prevent orphaned Node.js processes
+        terminationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.acpBridge.stop()
+            }
+        }
     }
+
+    private var terminationObserver: NSObjectProtocol?
 
     /// Pre-start the active bridge so the first query doesn't wait for process launch
     func warmupBridge() async {
@@ -1585,7 +1618,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
 
     /// Load messages for the default chat (no session filter - compatible with Flutter)
     /// Retries up to 3 times on failure.
-    private func loadDefaultChatMessages() async {
+    func loadDefaultChatMessages() async {
         isLoading = true
         errorMessage = nil
         hasMoreMessages = false
@@ -1770,7 +1803,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, sessionKey: String? = nil, imageData: Data? = nil) async {
+    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, sessionKey: String? = nil, resume: String? = nil, imageData: Data? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -1943,10 +1976,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let queryResult = try await acpBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: sessionKey ?? "main",
+                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,
+                resume: resume,
                 imageData: imageData,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
@@ -2037,6 +2071,11 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
 
             log("Chat response complete")
+
+            // Persist the ACP session ID during onboarding so we can resume after app restart
+            if isOnboarding && !queryResult.sessionId.isEmpty {
+                OnboardingChatPersistence.saveSessionId(queryResult.sessionId)
+            }
 
             // Analytics: track query completion
             let durationMs = Int(Date().timeIntervalSince(queryStartTime) * 1000)
@@ -2245,6 +2284,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     }
 
     /// Add a tool call indicator to a streaming message
+    /// Append a discovery card block to the last AI message in the chat
+    func appendDiscoveryCard(title: String, summary: String, fullText: String) {
+        guard let index = messages.lastIndex(where: { $0.sender == .ai }) else { return }
+        messages[index].contentBlocks.append(
+            .discoveryCard(id: UUID().uuidString, title: title, summary: summary, fullText: fullText)
+        )
+    }
+
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 

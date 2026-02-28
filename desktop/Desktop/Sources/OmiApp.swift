@@ -1077,6 +1077,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.appBecameActive()
         // Sync remote assistant settings so server-side changes take effect promptly
         Task { await SettingsSyncManager.shared.syncFromServer() }
+        UpdaterViewModel.shared.syncUpdateChannelFromServer()
     }
 
     func applicationWillResignActive(_ notification: Notification) {

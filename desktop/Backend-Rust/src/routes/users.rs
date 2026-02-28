@@ -351,6 +351,7 @@ async fn get_profile(
                 use_case: None,
                 job: None,
                 company: None,
+                desktop_update_channel: None,
             }))
         }
     }

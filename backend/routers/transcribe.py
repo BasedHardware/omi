@@ -132,6 +132,7 @@ async def _stream_handler(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -734,9 +735,15 @@ async def _stream_handler(
             # so preseconds filtering uses uncompressed DG timestamps. After profile
             # completes, switch to active mode to start saving cost.
             nonlocal vad_gate
-            if is_gate_enabled() and stt_service == STTService.deepgram:
-                gate_mode = VAD_GATE_MODE
-                if speech_profile_preseconds > 0 and VAD_GATE_MODE == 'active':
+            gate_enabled_by_override = vad_gate_override == 'enabled'
+            gate_disabled_by_override = vad_gate_override == 'disabled'
+            if (
+                not gate_disabled_by_override
+                and (is_gate_enabled() or gate_enabled_by_override)
+                and stt_service == STTService.deepgram
+            ):
+                gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
+                if speech_profile_preseconds > 0 and gate_mode == 'active':
                     gate_mode = 'shadow'  # Shadow during profile, activate later
                 try:
                     vad_gate = VADStreamingGate(
@@ -1183,6 +1190,26 @@ async def _stream_handler(
         def is_connected():
             return pusher_connected
 
+        async def pusher_heartbeat():
+            """Send periodic data-frame heartbeats to reset the GKE ILB idle timer.
+
+            The GKE Internal Load Balancer counts only data frames for its idle
+            timeout (default 30 s). WebSocket control frames (ping/pong) are
+            ignored. During user silence most connections carry zero data frames,
+            causing the ILB to kill the connection. This task sends a minimal
+            4-byte data frame (header type 100) every 20 s to keep the link alive.
+            """
+            nonlocal pusher_ws, pusher_connected, websocket_active
+            while websocket_active:
+                await asyncio.sleep(20)
+                if pusher_connected and pusher_ws:
+                    try:
+                        await pusher_ws.send(struct.pack("I", 100))
+                    except ConnectionClosed:
+                        pusher_connected = False
+                    except Exception as e:
+                        logger.error(f"Pusher heartbeat send failed: {e} {uid} {session_id}")
+
         return (
             connect,
             close,
@@ -1194,6 +1221,7 @@ async def _stream_handler(
             pusher_receive,
             is_connected,
             send_speaker_sample_request,
+            pusher_heartbeat,
         )
 
     transcript_send = None
@@ -1206,6 +1234,7 @@ async def _stream_handler(
     pusher_receive = None
     pusher_is_connected = None
     send_speaker_sample_request = None
+    pusher_heartbeat = None
 
     # Transcripts
     #
@@ -1817,7 +1846,11 @@ async def _stream_handler(
                         deepgram_profile_socket = None  # Stop sending immediately
 
                         # Activate VAD gate now that speech profile phase is done
-                        if vad_gate is not None and VAD_GATE_MODE == 'active' and vad_gate.mode == 'shadow':
+                        if (
+                            vad_gate is not None
+                            and (VAD_GATE_MODE == 'active' or vad_gate_override == 'enabled')
+                            and vad_gate.mode == 'shadow'
+                        ):
                             vad_gate.activate()
                             logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
 
@@ -2033,6 +2066,7 @@ async def _stream_handler(
                 pusher_receive,
                 pusher_is_connected,
                 send_speaker_sample_request,
+                pusher_heartbeat,
             ) = create_pusher_task_handler()
 
             # Pusher connection
@@ -2049,6 +2083,7 @@ async def _stream_handler(
                 pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
             if pusher_receive is not None:
                 pusher_tasks.append(asyncio.create_task(pusher_receive()))
+            pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
 
         # Tasks
         data_process_task = asyncio.create_task(
@@ -2165,6 +2200,7 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2190,6 +2226,7 @@ async def _listen(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
     logger.info(f"_listen ended {uid}")
 
@@ -2209,10 +2246,12 @@ async def listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     speaker_auto_assign: str = 'disabled',
+    vad_gate: str = '',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
     speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
+    vad_gate_override = vad_gate if vad_gate in ('enabled', 'disabled') else None
     await _listen(
         websocket,
         uid,
@@ -2227,6 +2266,7 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
 
 

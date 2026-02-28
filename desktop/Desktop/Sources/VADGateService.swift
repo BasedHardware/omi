@@ -201,14 +201,20 @@ final class DgWallMapper {
 /// Runs Silero VAD on each channel independently (deinterleaved from stereo).
 /// Audio is gated when BOTH channels are silent.
 final class VADGateService {
-    // Constants matching backend vad_gate.py
+    // Constants
     private let preRollMs: Double = 500
     private let hangoverMs: Double = 4000       // Streaming mode: controls finalize timing
     private let batchHangoverMs: Double = 2000  // Batch mode: controls chunk boundary (user-visible latency)
-    private let speechThreshold: Float = 0.45
     private let keepaliveSec: Double = 20
     private let vadWindowSamples = 512
     private let sampleRate = 16000
+
+    // VAD thresholds with hysteresis (inspired by Screenpipe's Silero VAD)
+    // Speech onset requires higher confidence than silence onset — prevents oscillation
+    private let speechThreshold: Float = 0.5    // Probability above which a frame counts as speech
+    private let silenceThreshold: Float = 0.35  // Probability below which a frame counts as silence
+    private let frameHistorySize = 10           // Number of frames in smoothing window
+    private let minSpeechFrames = 3             // Minimum speech frames in window to declare speech
 
     // Two VAD models: one per channel (mic and system)
     private var micVAD: SileroVADModel?
@@ -217,6 +223,10 @@ final class VADGateService {
     // VAD sample buffers (accumulate until >= 512 samples)
     private var micVADBuffer: [Float] = []
     private var sysVADBuffer: [Float] = []
+
+    // Probability history for smoothing (per channel, streaming mode)
+    private var micProbHistory: [Float] = []
+    private var sysProbHistory: [Float] = []
 
     // State machine
     private var state: GateState = .silence
@@ -263,6 +273,9 @@ final class VADGateService {
     // Separate VAD models for batch mode (each model carries internal state)
     private var batchMicVAD: SileroVADModel?
     private var batchSysVAD: SileroVADModel?
+    // Probability history for smoothing (per channel, batch mode)
+    private var batchMicProbHistory: [Float] = []
+    private var batchSysProbHistory: [Float] = []
 
     // Fail-open flag
     let modelAvailable: Bool
@@ -319,18 +332,13 @@ final class VADGateService {
         micVADBuffer.append(contentsOf: micSamples)
         sysVADBuffer.append(contentsOf: sysSamples)
 
-        // Run VAD when buffers have enough samples
-        var micSpeech = false
-        var sysSpeech = false
-
+        // Run VAD when buffers have enough samples, collecting probabilities for smoothing
         if micVADBuffer.count >= vadWindowSamples, let vad = micVAD {
             while micVADBuffer.count >= vadWindowSamples {
                 let window = Array(micVADBuffer.prefix(vadWindowSamples))
                 micVADBuffer.removeFirst(vadWindowSamples)
                 let prob = vad.predict(window)
-                if prob > speechThreshold {
-                    micSpeech = true
-                }
+                appendToHistory(&micProbHistory, prob: prob)
             }
         }
 
@@ -339,9 +347,7 @@ final class VADGateService {
                 let window = Array(sysVADBuffer.prefix(vadWindowSamples))
                 sysVADBuffer.removeFirst(vadWindowSamples)
                 let prob = vad.predict(window)
-                if prob > speechThreshold {
-                    sysSpeech = true
-                }
+                appendToHistory(&sysProbHistory, prob: prob)
             }
         }
 
@@ -353,7 +359,20 @@ final class VADGateService {
             sysVADBuffer = Array(sysVADBuffer.suffix(vadWindowSamples))
         }
 
-        let isSpeech = micSpeech || sysSpeech
+        // Evaluate smoothed speech decision per channel
+        let micDecision = evaluateFrameHistory(micProbHistory)
+        let sysDecision = evaluateFrameHistory(sysProbHistory)
+
+        // Speech if either channel detects speech; silence only if both say silence
+        let isSpeech: Bool
+        if micDecision == .speech || sysDecision == .speech {
+            isSpeech = true
+        } else if micDecision == .silence && sysDecision == .silence {
+            isSpeech = false
+        } else {
+            // At least one channel is .hold — maintain previous speech state to avoid cutting
+            isSpeech = (state == .speech || state == .hangover)
+        }
 
         if isSpeech {
             lastSpeechMs = audioCursorMs
@@ -402,6 +421,39 @@ final class VADGateService {
     }
 
     // MARK: - Private
+
+    /// Evaluate speech status from probability history using smoothing and hysteresis.
+    /// Returns true if speech is detected based on frame history analysis.
+    /// - Requires `minSpeechFrames` (3) frames above `speechThreshold` (0.5) → speech
+    /// - Requires majority of frames below `silenceThreshold` (0.35) → silence
+    /// - Otherwise maintains current state (unknown/hold)
+    private enum VadDecision {
+        case speech
+        case silence
+        case hold  // Not enough evidence — maintain current state
+    }
+
+    private func evaluateFrameHistory(_ history: [Float]) -> VadDecision {
+        guard !history.isEmpty else { return .hold }
+
+        let speechFrames = history.filter { $0 > speechThreshold }.count
+        let silenceFrames = history.filter { $0 < silenceThreshold }.count
+
+        if speechFrames >= minSpeechFrames {
+            return .speech
+        } else if silenceFrames > history.count / 2 {
+            return .silence
+        }
+        return .hold
+    }
+
+    /// Append a probability to a history array, keeping it bounded to `frameHistorySize`.
+    private func appendToHistory(_ history: inout [Float], prob: Float) {
+        history.append(prob)
+        if history.count > frameHistorySize {
+            history.removeFirst(history.count - frameHistorySize)
+        }
+    }
 
     private func logMetrics() {
         let bytesSkipped = bytesReceived - bytesSent
@@ -522,14 +574,12 @@ final class VADGateService {
         batchMicVADBuffer.append(contentsOf: micSamples)
         batchSysVADBuffer.append(contentsOf: sysSamples)
 
-        var micSpeech = false
-        var sysSpeech = false
-
         if batchMicVADBuffer.count >= vadWindowSamples, let vad = batchMicVAD {
             while batchMicVADBuffer.count >= vadWindowSamples {
                 let window = Array(batchMicVADBuffer.prefix(vadWindowSamples))
                 batchMicVADBuffer.removeFirst(vadWindowSamples)
-                if vad.predict(window) > speechThreshold { micSpeech = true }
+                let prob = vad.predict(window)
+                appendToHistory(&batchMicProbHistory, prob: prob)
             }
         }
 
@@ -537,7 +587,8 @@ final class VADGateService {
             while batchSysVADBuffer.count >= vadWindowSamples {
                 let window = Array(batchSysVADBuffer.prefix(vadWindowSamples))
                 batchSysVADBuffer.removeFirst(vadWindowSamples)
-                if vad.predict(window) > speechThreshold { sysSpeech = true }
+                let prob = vad.predict(window)
+                appendToHistory(&batchSysProbHistory, prob: prob)
             }
         }
 
@@ -549,7 +600,19 @@ final class VADGateService {
             batchSysVADBuffer = Array(batchSysVADBuffer.suffix(vadWindowSamples))
         }
 
-        let isSpeech = micSpeech || sysSpeech
+        // Evaluate smoothed speech decision per channel
+        let micDecision = evaluateFrameHistory(batchMicProbHistory)
+        let sysDecision = evaluateFrameHistory(batchSysProbHistory)
+
+        let isSpeech: Bool
+        if micDecision == .speech || sysDecision == .speech {
+            isSpeech = true
+        } else if micDecision == .silence && sysDecision == .silence {
+            isSpeech = false
+        } else {
+            // .hold — maintain previous state to avoid cutting mid-speech
+            isSpeech = (batchState == .speech || batchState == .hangover)
+        }
         if isSpeech { batchLastSpeechMs = batchAudioCursorMs }
 
         // Batch state machine

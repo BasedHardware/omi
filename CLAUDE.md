@@ -175,18 +175,71 @@ clang-format -i <files>
 
 ## Git
 
-- Never squash merge PRs — use regular merge
+### After Completing Work
+When you finish implementing a task, **commit and push your changes** before ending the conversation:
+
+1. Stage only the files you modified:
+   ```bash
+   git add <file1> <file2> ...
+   ```
+2. Commit with a clear message (verb-first, max 72 chars):
+   ```bash
+   git commit -m "Fix race condition in VAD gate service"
+   ```
+3. Push to the current branch:
+   ```bash
+   git push
+   ```
+
+### Rules
+- **Always commit to the current branch** — never switch branches
+- **Never squash merge PRs** — use regular merge
 - Make individual commits per file, not bulk commits
-- **RELEASE command**: When the user says "RELEASE", perform the full release flow:
+- The pre-commit hook auto-formats staged code — no need to format manually before committing
+- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
+
+### RELEASE command
+When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
   2. Make individual commits per changed file
   3. Push and create a PR
   4. Merge the PR (no squash — regular merge)
   5. Switch back to main and pull
-- **RELEASEWITHBACKEND command**: Same as RELEASE, plus deploy the backend to production after merging:
+
+### RELEASEWITHBACKEND command
+Same as RELEASE, plus deploy the backend to production after merging:
   ```bash
   gh workflow run gcp_backend.yml -f environment=prod -f branch=main
   ```
+
+## CI/CD Auto-Deploy (push to main)
+
+### Python Backend (dev)
+- **Trigger**: push to `main` with `backend/**` changes
+- **Workflow**: GitHub Actions `gcp_backend_auto_dev.yml`
+- **Deploys to**: Cloud Run + GKE (dev environment)
+- **Check**: `gh run list --workflow=gcp_backend_auto_dev.yml --limit=3`
+
+### Python Backend (prod) — manual only
+- **Never auto-deploys.** Must trigger manually:
+  ```bash
+  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
+  ```
+
+### Mobile App (iOS TestFlight + Android) — Codemagic
+- **Trigger**: push to `main` with `app/**` changes
+- **Workflow**: `ios-internal-auto` / `android-internal-auto` in `codemagic.yaml`
+- **IMPORTANT**: Codemagic **skips** if the build number in `app/pubspec.yaml` is already on TestFlight. After merging `app/**` changes, you **must bump the build number** or no new build will be uploaded:
+  ```bash
+  # In app/pubspec.yaml, increment the +N build number:
+  # version: 1.0.525+760  →  version: 1.0.525+761
+  ```
+- **Check**: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb&limit=5"`
+
+### Desktop App (macOS) — GitHub Actions + Codemagic
+- **Trigger**: push to `main` with `desktop/**` changes
+- **Step 1**: GitHub Actions `desktop_auto_release.yml` auto-increments version, pushes `v*-macos` tag
+- **Step 2**: Codemagic `omi-desktop-swift-release` builds, signs, notarizes, publishes
 
 ## Logs
 

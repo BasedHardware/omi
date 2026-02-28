@@ -88,6 +88,8 @@ class AppState: ObservableObject {
     private var lastNotificationSoundEnabled: Bool?
     private var lastNotificationBadgeEnabled: Bool?
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
+    @Published var isScreenRecordingStale = false  // TCC says yes but capture fails (developer signing changed)
+    var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
     @Published var hasAutomationPermission = false
     @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
     private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
@@ -104,7 +106,7 @@ class AppState: ObservableObject {
     var missingPermissions: [String] {
         var missing: [String] = []
         if !hasMicrophonePermission { missing.append("Microphone") }
-        if !hasScreenRecordingPermission || isScreenCaptureKitBroken { missing.append("Screen Recording") }
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale { missing.append("Screen Recording") }
         if !hasNotificationPermission { missing.append("Notifications") }
         else if isNotificationBannerDisabled { missing.append("Notification Banners") }
         if !hasAccessibilityPermission || isAccessibilityBroken { missing.append("Accessibility") }
@@ -751,16 +753,40 @@ class AppState: ObservableObject {
         if !tccGranted {
             hasScreenRecordingPermission = false
             isScreenCaptureKitBroken = false
+            // If user already tried Grant once and permission is still not granted,
+            // the TCC entry is likely corrupted (e.g. after developer account change
+            // + tccutil reset). Show stale UI with toggle off/on instructions.
+            if screenRecordingGrantAttempts > 0 && !isScreenRecordingStale {
+                log("Screen capture: Grant attempted but permission still denied — showing recovery instructions")
+                isScreenRecordingStale = true
+            }
             return
         }
 
         // TCC says granted. If the permission alert is currently showing (permission was
-        // previously false or broken), do a real capture test to verify the stale TCC case
-        // (e.g. after Sparkle update changes code signature). This avoids spawning a
-        // screencapture process on every didBecomeActive when everything is fine.
-        if !hasScreenRecordingPermission || isScreenCaptureKitBroken {
+        // previously false or broken or stale), do a real capture test to verify the stale TCC case
+        // (e.g. after developer account change). This avoids spawning a screencapture process
+        // on every didBecomeActive when everything is fine.
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale {
             let realPermission = ScreenCaptureService.checkPermission()
             hasScreenRecordingPermission = realPermission
+
+            // Stale TCC entry from old developer signing: CGPreflight says granted but
+            // actual capture fails. The user must toggle OFF then ON in System Settings
+            // to update the code signing requirement (csreq) stored in the TCC database.
+            if !realPermission && !isScreenRecordingStale {
+                log("Screen capture: stale TCC entry detected (developer signing changed)")
+                isScreenRecordingStale = true
+                // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
+                Task.detached {
+                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
+                    _ = ScreenCaptureService.resetScreenCapturePermission()
+                }
+            } else if realPermission {
+                // Permission recovered (user toggled off/on in System Settings)
+                isScreenRecordingStale = false
+                screenRecordingGrantAttempts = 0
+            }
 
             if isScreenCaptureKitBroken {
                 // Re-check if SCK has recovered (user toggled permission in System Settings)
@@ -1155,7 +1181,12 @@ class AppState: ObservableObject {
                 }
 
                 // Initialize system audio capture if supported (macOS 14.4+)
-                if #available(macOS 14.4, *) {
+                // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
+                //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
+                let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+                if systemAudioDisabled {
+                    log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+                } else if #available(macOS 14.4, *) {
                     systemAudioCaptureService = SystemAudioCaptureService()
                     log("Transcription: System audio capture initialized (macOS 14.4+)")
                 } else {

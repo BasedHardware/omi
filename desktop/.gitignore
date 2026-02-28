@@ -16,8 +16,6 @@ DerivedData/
 # Credentials
 **/google-credentials.json
 .claude/settings.json
-.claude/skills/firebase/SKILL.md
-.claude/skills/local-backend-test/
 
 # macOS
 .DS_Store
@@ -77,9 +75,6 @@ linkedin-*.md
 
 # Runtime log files
 *.log
-
-# Skills (user-local)
-skills/
 
 # Agent configs (user-local)
 .agents/

@@ -35,6 +35,7 @@ class RecurringTaskScheduler {
 
     private func checkDueTasks() async {
         guard AuthState.shared.isSignedIn else { return }
+        guard TaskAgentSettings.shared.isChatEnabled else { return }
 
         guard let tasks = try? await ActionItemStorage.shared.getDueRecurringTasks(),
               !tasks.isEmpty else { return }

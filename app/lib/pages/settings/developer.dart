@@ -1564,6 +1564,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
+                        // VAD Gate
+                        _buildExperimentalItem(
+                          title: 'VAD Gate',
+                          description: 'Server-side voice gating to reduce STT costs',
+                          icon: FontAwesomeIcons.microphoneSlash,
+                          value: provider.vadGateEnabled,
+                          onChanged: provider.onVadGateChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
                         // Claude Agent
                         Row(
                           children: [

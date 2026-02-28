@@ -37,6 +37,9 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
+  // VAD Gate (experimental)
+  bool vadGateEnabled = false;
+
   // Claude Agent (experimental)
   bool claudeAgentEnabled = false;
   bool claudeAgentLoading = false;
@@ -113,6 +116,7 @@ class DeveloperModeProvider extends BaseProvider {
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -268,6 +272,12 @@ class DeveloperModeProvider extends BaseProvider {
       DailyReflectionNotification.cancelNotification();
     }
 
+    notifyListeners();
+  }
+
+  void onVadGateChanged(bool value) {
+    vadGateEnabled = value;
+    SharedPreferencesUtil().vadGateEnabled = value;
     notifyListeners();
   }
 
