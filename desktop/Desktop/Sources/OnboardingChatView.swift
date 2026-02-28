@@ -191,6 +191,17 @@ struct OnboardingChatView: View {
                 .onChange(of: chatProvider.isSending) { _, newValue in
                     log("OnboardingChat: isSending changed to \(newValue)")
                     scrollToBottom(proxy: proxy)
+
+                    // Fallback: if the AI stopped sending and we have enough conversation
+                    // but complete_onboarding was never called, show the button after 10s
+                    if !newValue && !onboardingCompleted && chatProvider.messages.count >= 6 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                            if !onboardingCompleted && !chatProvider.isSending {
+                                log("OnboardingChat: Fallback — showing Continue button (AI didn't call complete_onboarding)")
+                                onboardingCompleted = true
+                            }
+                        }
+                    }
                 }
                 .onChange(of: quickReplyOptions) { _, options in
                     log("OnboardingChat: quickReplyOptions changed (\(options.count) options)")
