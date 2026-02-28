@@ -10,6 +10,8 @@ import GRDB
 enum OnboardingChatPersistence {
     private static let sessionIdKey = "onboardingACPSessionId"
     private static let midOnboardingKey = "onboardingMidOnboarding"
+    private static let explorationTextKey = "onboardingExplorationText"
+    private static let explorationCompletedKey = "onboardingExplorationCompleted"
 
     /// Save the ACP session ID for resume after restart
     static func saveSessionId(_ sessionId: String) {
@@ -31,10 +33,33 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.bool(forKey: midOnboardingKey)
     }
 
+    // MARK: - Exploration Persistence
+
+    /// Save exploration state so it survives app restarts
+    static func saveExplorationState(text: String, completed: Bool) {
+        UserDefaults.standard.set(text, forKey: explorationTextKey)
+        UserDefaults.standard.set(completed, forKey: explorationCompletedKey)
+    }
+
+    /// Load saved exploration state (returns nil if no exploration was saved)
+    static func loadExplorationState() -> (text: String, completed: Bool)? {
+        let text = UserDefaults.standard.string(forKey: explorationTextKey) ?? ""
+        let completed = UserDefaults.standard.bool(forKey: explorationCompletedKey)
+        guard !text.isEmpty || completed else { return nil }
+        return (text, completed)
+    }
+
+    /// Whether exploration already completed in a prior session
+    static var isExplorationCompleted: Bool {
+        UserDefaults.standard.bool(forKey: explorationCompletedKey)
+    }
+
     /// Clear all persisted onboarding data
     static func clear() {
         UserDefaults.standard.removeObject(forKey: sessionIdKey)
         UserDefaults.standard.removeObject(forKey: midOnboardingKey)
+        UserDefaults.standard.removeObject(forKey: explorationTextKey)
+        UserDefaults.standard.removeObject(forKey: explorationCompletedKey)
         // Clean up legacy messages key if present
         UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
     }
@@ -541,10 +566,23 @@ struct OnboardingChatView: View {
 
     // MARK: - Parallel Exploration
 
-    /// Check if files are already indexed and start exploration if so (for resume path)
+    /// Check if files are already indexed and start/restore exploration (for resume path)
     private func checkAndStartExploration(graphViewModel: MemoryGraphViewModel?) async {
         guard !explorationRunning && !explorationCompleted else { return }
 
+        // If exploration already completed in a prior session, restore from saved state
+        if let saved = OnboardingChatPersistence.loadExplorationState(), saved.completed {
+            log("OnboardingChat: Restoring completed exploration from saved state (\(saved.text.count) chars)")
+            explorationText = saved.text
+            explorationCompleted = true
+            // Re-inject the discovery card (UI state was lost on restart)
+            if !saved.text.isEmpty {
+                await injectExplorationDiscoveryCard()
+            }
+            return
+        }
+
+        // Otherwise check if files are indexed and run exploration fresh
         guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
         let fileCount = (try? await dbQueue.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files")
@@ -577,6 +615,10 @@ struct OnboardingChatView: View {
                     onTextDelta: { @Sendable delta in
                         Task { @MainActor in
                             explorationText += delta
+                            // Persist partial text periodically (every ~500 chars) so it survives crashes
+                            if explorationText.count % 500 < delta.count {
+                                OnboardingChatPersistence.saveExplorationState(text: explorationText, completed: false)
+                            }
                         }
                     },
                     onToolCall: { @Sendable _, name, input in
@@ -592,10 +634,14 @@ struct OnboardingChatView: View {
 
                 log("OnboardingChat: Exploration completed (cost=$\(String(format: "%.4f", result.costUsd)), tokens=\(result.inputTokens)+\(result.outputTokens))")
 
-                await MainActor.run {
+                let finalText = await MainActor.run {
                     explorationCompleted = true
                     explorationRunning = false
+                    return explorationText
                 }
+
+                // Persist so it survives app restarts
+                OnboardingChatPersistence.saveExplorationState(text: finalText, completed: true)
 
                 // Append to user profile and inject discovery card
                 await appendExplorationToProfile()
