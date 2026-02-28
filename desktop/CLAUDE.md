@@ -114,9 +114,11 @@ See `.claude/settings.json` for connection details.
 - **Build only**: `./build.sh` — release build without running
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
+- **DO NOT** launch the app directly from `build/` — always use `./run.sh` or `./reset-and-run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
+- **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
 
 ### App Names & Build Artifacts
-- `./run.sh` builds **"Omi Dev"** → `build/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
+- `./run.sh` builds **"Omi Dev"** → installs to `/Applications/Omi Dev.app` (bundle ID: `com.omi.desktop-dev`)
 - `./build.sh` builds **"Omi Beta"** → `build/Omi Beta.app` (bundle ID: `com.omi.computer-macos`)
 - Different bundle IDs, different app names, but same source code
 - When updating resources (icons, assets, etc.) in built app bundles, update BOTH
