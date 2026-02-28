@@ -444,7 +444,7 @@ struct OnboardingChatView: View {
         // Create welcome task (skip if it already exists from a previous onboarding)
         Task {
             let welcomeDescription = "Run Omi for two days to start receiving helpful advice"
-            let alreadyExists = TasksStore.shared.tasks.contains { $0.description == welcomeDescription }
+            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
             if !alreadyExists {
                 await TasksStore.shared.createTask(
                     description: welcomeDescription,
