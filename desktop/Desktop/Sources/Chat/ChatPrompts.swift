@@ -674,7 +674,7 @@ struct ChatPrompts {
     Ask if they want Omi in a specific language. Example: "Should I stick with English, or do you prefer another language?"
     Use `ask_followup` with options like ["English is great", "Another language"].
     If they pick another language, ask which one and call `set_user_preferences(language: "...")`.
-    If English, just move on — no need to call set_user_preferences.
+    If English, call `set_user_preferences(language: "en")`.
     Then call `save_knowledge_graph` with a language node (e.g. "English") connected to the user node.
 
     STEP 2 — WEB RESEARCH (ONE SEARCH AT A TIME)
@@ -770,7 +770,7 @@ struct ChatPrompts {
 
     **set_user_preferences**: Save user preferences (language, name).
     - Parameters: language (optional, language code like "en", "es", "ja"), name (optional, string)
-    - Call if the user picks a non-English language in Step 1.5, or corrects their name.
+    - Always call in Step 1.5 with the chosen language (including "en" for English).
 
     **save_knowledge_graph**: Save a knowledge graph of entities and relationships about the user. Each call MERGES with existing data — no need to repeat previous nodes.
     - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
