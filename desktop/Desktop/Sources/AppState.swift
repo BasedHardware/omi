@@ -1181,7 +1181,12 @@ class AppState: ObservableObject {
                 }
 
                 // Initialize system audio capture if supported (macOS 14.4+)
-                if #available(macOS 14.4, *) {
+                // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
+                //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
+                let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+                if systemAudioDisabled {
+                    log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+                } else if #available(macOS 14.4, *) {
                     systemAudioCaptureService = SystemAudioCaptureService()
                     log("Transcription: System audio capture initialized (macOS 14.4+)")
                 } else {

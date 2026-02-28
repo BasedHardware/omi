@@ -465,6 +465,9 @@ actor AdviceAssistant: ProactiveAssistant {
         let activitySummary = await buildActivitySummary(from: lookbackStart, to: referenceTime)
         if !activitySummary.isEmpty {
             prompt += "\n\n" + activitySummary
+            log("Advice: --- ACTIVITY SUMMARY ---\n\(activitySummary)")
+        } else {
+            log("Advice: --- ACTIVITY SUMMARY --- (empty, no screenshots in range)")
         }
 
         // Add user profile for context
@@ -490,6 +493,8 @@ actor AdviceAssistant: ProactiveAssistant {
         }
 
         prompt += "\n\nAnalyze the activity summary and screenshot. Use execute_sql to investigate OCR text from interesting windows if needed. Then call provide_advice or no_advice."
+
+        log("Advice: --- PROMPT (text portion) ---\n\(prompt)")
 
         // Build system prompt
         var currentSystemPrompt = await systemPrompt
@@ -535,7 +540,9 @@ actor AdviceAssistant: ProactiveAssistant {
             case "no_advice":
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-                log("Advice: no_advice — \(contextSummary)")
+                log("Advice: --- NO_ADVICE ---")
+                log("Advice:   context: \(contextSummary)")
+                log("Advice:   activity: \(currentActivity)")
                 return (AdviceExtractionResult(
                     hasAdvice: false,
                     advice: nil,
@@ -549,6 +556,8 @@ actor AdviceAssistant: ProactiveAssistant {
                 log("Advice: execute_sql iteration \(iteration): \(query)")
                 let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
                 let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+                let truncatedResult = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
+                log("Advice: execute_sql result (\(resultStr.count) chars): \(truncatedResult)")
 
                 // Append model's tool call + function response
                 contents.append(GeminiImageToolRequest.Content(
@@ -726,7 +735,15 @@ actor AdviceAssistant: ProactiveAssistant {
             confidence: confidence
         )
 
-        log("Advice: provide_advice — \"\(adviceText)\" (confidence: \(confidence))")
+        log("Advice: --- PROVIDE_ADVICE ---")
+        log("Advice:   advice: \(adviceText)")
+        log("Advice:   headline: \(headline ?? "(none)")")
+        log("Advice:   reasoning: \(reasoning ?? "(none)")")
+        log("Advice:   category: \(categoryStr)")
+        log("Advice:   source_app: \(sourceApp)")
+        log("Advice:   confidence: \(confidence)")
+        log("Advice:   context: \(contextSummary)")
+        log("Advice:   activity: \(currentActivity)")
         return AdviceExtractionResult(
             hasAdvice: true,
             advice: advice,

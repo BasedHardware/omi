@@ -198,6 +198,13 @@ CONFLICTING_APPS=(
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
 )
+# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
+echo "Scanning for stale Omi Dev.app in other locations..."
+find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+    echo "  Removing stale clone: $stale"
+    rm -rf "$stale"
+done
 # Xcode DerivedData can contain old builds with production bundle ID
 # These get registered in Launch Services and cause permission confusion
 echo "Cleaning Xcode DerivedData..."
@@ -355,6 +362,15 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     echo "  Copied acp-bridge to bundle"
+fi
+
+# Embed provisioning profile (required for Apple Development signing + restricted entitlements)
+if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied dev provisioning profile"
+elif [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
 fi
 
 # Copy and fix Info.plist

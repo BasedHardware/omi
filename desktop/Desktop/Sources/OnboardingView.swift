@@ -1,12 +1,17 @@
 import SwiftUI
 import AppKit
 import AVKit
+import SceneKit
 
 struct OnboardingView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: (() -> Void)? = nil
     @AppStorage("onboardingStep") private var currentStep = 0
+    @StateObject private var graphViewModel = MemoryGraphViewModel()
+    @State private var graphHasData = false
+    @State private var showGraphHints = false
+    @State private var hintsHovered = false
 
     let steps = ["Video", "Chat"]
 
@@ -44,6 +49,13 @@ struct OnboardingView: View {
                 currentStep = 1
             }
         }
+        .task {
+            // Pre-warm the ACP bridge while the user watches the intro video.
+            // Without this, the first chat message waits 4-6s for the Node.js
+            // bridge to cold-start. By starting it here, it's ready by the time
+            // the user clicks "Continue" and reaches the chat step.
+            await chatProvider.warmupBridge()
+        }
     }
 
     private var onboardingContent: some View {
@@ -76,22 +88,95 @@ struct OnboardingView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Step 1: Interactive AI Chat
-                OnboardingChatView(
-                    appState: appState,
-                    chatProvider: chatProvider,
-                    onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
-                        if let onComplete = onComplete {
-                            onComplete()
+                // Step 1: Interactive AI Chat + Live Knowledge Graph
+                HStack(spacing: 0) {
+                    OnboardingChatView(
+                        appState: appState,
+                        chatProvider: chatProvider,
+                        graphViewModel: graphViewModel,
+                        onComplete: {
+                            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
+                            if let onComplete = onComplete {
+                                onComplete()
+                            }
+                        },
+                        onSkip: {
+                            handleSkip()
                         }
-                    },
-                    onSkip: {
-                        handleSkip()
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    // Right pane: Knowledge graph (dark background, graph appears when data arrives)
+                    ZStack {
+                        OmiColors.backgroundSecondary.ignoresSafeArea()
+
+                        if graphHasData {
+                            MemoryGraphSceneView(viewModel: graphViewModel)
+                                .ignoresSafeArea()
+                                .transition(.opacity)
+                        }
                     }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Use .overlay so hints composite above the NSViewRepresentable SCNView
+                    .overlay(alignment: .bottom) {
+                        HStack(spacing: 20) {
+                            graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
+                            graphHintItem(icon: "magnifyingglass", label: "Scroll to zoom")
+                            graphHintItem(icon: "hand.draw", label: "Two-finger to pan")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .onHover { hovering in
+                            hintsHovered = hovering
+                        }
+                        .opacity(graphHasData && (showGraphHints || hintsHovered) ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.3), value: showGraphHints)
+                        .animation(.easeInOut(duration: 0.3), value: hintsHovered)
+                        .animation(.easeInOut(duration: 0.3), value: graphHasData)
+                    }
+                    .onAppear {
+                        // Handle case where graph already has data on appear
+                        if !graphViewModel.isEmpty && !graphHasData {
+                            withAnimation(.easeIn(duration: 0.5)) {
+                                graphHasData = true
+                            }
+                            flashGraphHints()
+                        }
+                    }
+                    .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
+                        if !isEmpty && !graphHasData {
+                            withAnimation(.easeIn(duration: 0.5)) {
+                                graphHasData = true
+                            }
+                            flashGraphHints()
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    private func graphHintItem(icon: String, label: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+            Text(label)
+                .font(.system(size: 11))
+        }
+        .foregroundColor(.white.opacity(0.5))
+    }
+
+    private func flashGraphHints() {
+        showGraphHints = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            showGraphHints = false
         }
     }
 
@@ -117,8 +202,8 @@ struct OnboardingView: View {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
 
-        // Clean up onboarding session key and persisted chat data
-        chatProvider.onboardingSessionKey = nil
+        // Clean up onboarding state and persisted chat data
+        chatProvider.isOnboarding = false
         OnboardingChatPersistence.clear()
 
         if let onComplete = onComplete {

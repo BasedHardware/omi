@@ -5063,16 +5063,36 @@ impl FirestoreService {
     }
 
     /// Update user language preference
+    /// Languages supported by Deepgram Nova-3 multi-language auto-detection.
+    const MULTI_LANGUAGE_SUPPORTED: &[&str] = &[
+        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
+        "es", "es-419",
+        "fr", "fr-CA",
+        "de",
+        "hi",
+        "ru",
+        "pt", "pt-BR", "pt-PT",
+        "ja",
+        "it",
+        "nl",
+    ];
+
     pub async fn update_user_language(
         &self,
         uid: &str,
         language: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let fields = json!({
+        // Set language field
+        let lang_fields = json!({
             "language": {"stringValue": language}
         });
+        self.update_user_fields(uid, lang_fields, &["language"]).await?;
 
-        self.update_user_fields(uid, fields, &["language"]).await
+        // Auto-set single_language_mode based on whether the language supports multi-language
+        let single_language_mode = !Self::MULTI_LANGUAGE_SUPPORTED.contains(&language);
+        self.update_transcription_preferences(uid, Some(single_language_mode), None).await?;
+
+        Ok(())
     }
 
     /// Get recording permission for a user
