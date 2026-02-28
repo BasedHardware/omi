@@ -14,6 +14,8 @@ class ChatToolExecutor {
     static var onCompleteOnboarding: (() -> Void)?
     /// Called when AI invokes ask_followup — delivers quick-reply options to the UI
     static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
+    /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
+    static var onKnowledgeGraphUpdated: (() -> Void)?
 
     private static var fileScanStarted = false
     private static var fileScanFileCount = 0
@@ -798,8 +800,9 @@ class ChatToolExecutor {
         }
 
         do {
-            try await KnowledgeGraphStorage.shared.saveGraph(nodes: nodeRecords, edges: edgeRecords)
+            try await KnowledgeGraphStorage.shared.mergeGraph(nodes: nodeRecords, edges: edgeRecords)
             log("Local graph built with \(nodeRecords.count) nodes, \(edgeRecords.count) edges")
+            DispatchQueue.main.async { onKnowledgeGraphUpdated?() }
             return "OK: saved \(nodeRecords.count) nodes and \(edgeRecords.count) edges to local knowledge graph"
         } catch {
             logError("Tool save_knowledge_graph failed", error: error)
@@ -849,6 +852,7 @@ class ChatToolExecutor {
         onboardingAppState = nil
         onCompleteOnboarding = nil
         onQuickReplyOptions = nil
+        onKnowledgeGraphUpdated = nil
         fileScanStarted = false
         fileScanFileCount = 0
 
