@@ -441,13 +441,17 @@ struct OnboardingChatView: View {
         // Start transcription if microphone is available
         appState.startTranscription()
 
-        // Create welcome task
+        // Create welcome task (skip if it already exists from a previous onboarding)
         Task {
-            await TasksStore.shared.createTask(
-                description: "Run Omi for two days to start receiving helpful advice",
-                dueAt: Date(),
-                priority: "low"
-            )
+            let welcomeDescription = "Run Omi for two days to start receiving helpful advice"
+            let alreadyExists = TasksStore.shared.tasks.contains { $0.description == welcomeDescription }
+            if !alreadyExists {
+                await TasksStore.shared.createTask(
+                    description: welcomeDescription,
+                    dueAt: Date(),
+                    priority: "low"
+                )
+            }
         }
 
         // Send welcome notification
