@@ -289,7 +289,7 @@ struct OnboardingChatView: View {
 
             // Input area
             HStack(spacing: 12) {
-                TextField("Type your message...", text: $inputText, axis: .vertical)
+                TextField(quickReplyOptions.isEmpty ? "Type your message..." : "Or type your own answer...", text: $inputText, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(.system(size: 14))
                     .foregroundColor(OmiColors.textPrimary)
