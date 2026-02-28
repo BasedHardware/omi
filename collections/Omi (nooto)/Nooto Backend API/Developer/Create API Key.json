@@ -1,0 +1,27 @@
+{
+  "name": "Create API Key",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/dev/keys",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"name\": \"My API Key\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

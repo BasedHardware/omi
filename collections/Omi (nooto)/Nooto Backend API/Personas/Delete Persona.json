@@ -1,0 +1,20 @@
+{
+  "name": "Delete Persona",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/personas/:persona_id",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "DELETE",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

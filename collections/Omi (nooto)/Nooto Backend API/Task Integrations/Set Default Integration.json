@@ -1,0 +1,27 @@
+{
+  "name": "Set Default Integration",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/task-integrations/default",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PUT",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"app_key\": \"todoist\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

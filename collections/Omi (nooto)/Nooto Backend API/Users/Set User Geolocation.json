@@ -1,0 +1,27 @@
+{
+  "name": "Set User Geolocation",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/geolocation",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"latitude\": 37.7749,\n  \"longitude\": -122.4194\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

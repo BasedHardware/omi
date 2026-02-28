@@ -1,0 +1,20 @@
+{
+  "name": "Get OAuth URL",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/task-integrations/:app_key/oauth-url",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

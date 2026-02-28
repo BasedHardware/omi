@@ -1,0 +1,27 @@
+{
+  "name": "Assign Segment Speaker",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/:conversation_id/segments/:segment_idx/assign",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"assign_type\": \"person_id\",\n  \"value\": \"person-uuid\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

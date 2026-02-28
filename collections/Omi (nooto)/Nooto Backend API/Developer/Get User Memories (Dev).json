@@ -1,0 +1,20 @@
+{
+  "name": "Get User Memories (Dev)",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/dev/user/memories",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

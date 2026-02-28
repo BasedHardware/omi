@@ -1,0 +1,20 @@
+{
+  "name": "Get Plugin Categories",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/plugin-categories",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

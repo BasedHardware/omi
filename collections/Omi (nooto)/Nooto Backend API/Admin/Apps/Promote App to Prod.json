@@ -1,0 +1,27 @@
+{
+  "name": "Promote App to Prod",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps/:appId/promote",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "x-admin-key",
+        "value": "{{adminKey}}",
+        "isEnabled": true
+      }
+    ],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

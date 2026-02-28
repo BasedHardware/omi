@@ -1,0 +1,27 @@
+{
+  "name": "Setup Webhook",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/developer/webhook/:wtype",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"url\": \"https://your-webhook-url.com/hook\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

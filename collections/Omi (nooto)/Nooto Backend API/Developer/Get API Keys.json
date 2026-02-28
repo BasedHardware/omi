@@ -1,0 +1,20 @@
+{
+  "name": "Get API Keys",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/dev/keys",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

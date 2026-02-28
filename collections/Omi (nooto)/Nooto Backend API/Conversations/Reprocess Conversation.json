@@ -1,0 +1,20 @@
+{
+  "name": "Reprocess Conversation",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/:conversation_id/reprocess",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

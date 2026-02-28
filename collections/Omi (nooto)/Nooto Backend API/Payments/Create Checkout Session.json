@@ -1,0 +1,27 @@
+{
+  "name": "Create Checkout Session",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/payments/checkout-session",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"plan_id\": \"pro\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "List all Apps Unapproved",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/admin/users",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "x-admin-key",
+        "value": "{{adminKey}}",
+        "isEnabled": true
+      }
+    ],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

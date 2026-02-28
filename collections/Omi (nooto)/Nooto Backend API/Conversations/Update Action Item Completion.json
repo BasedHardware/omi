@@ -1,0 +1,27 @@
+{
+  "name": "Update Action Item Completion",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/:conversation_id/action-items",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"action_item_idx\": 0,\n  \"completed\": true\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

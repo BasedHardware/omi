@@ -1,0 +1,20 @@
+{
+  "name": "Get Webhook Details",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/developer/webhook/:wtype",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

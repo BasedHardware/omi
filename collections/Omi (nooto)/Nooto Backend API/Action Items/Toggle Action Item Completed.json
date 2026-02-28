@@ -1,0 +1,27 @@
+{
+  "name": "Toggle Action Item Completed",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/action-items/:action_item_id/completed",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"completed\": true\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

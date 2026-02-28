@@ -1,0 +1,20 @@
+{
+  "name": "Disable Webhook",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/developer/webhook/:wtype/disable",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

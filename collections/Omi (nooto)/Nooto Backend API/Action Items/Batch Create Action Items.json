@@ -1,0 +1,27 @@
+{
+  "name": "Batch Create Action Items",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/action-items/batch",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "[\n  {\n    \"description\": \"First task\",\n    \"completed\": false\n  },\n  {\n    \"description\": \"Second task\",\n    \"completed\": false\n  }\n]",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

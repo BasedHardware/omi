@@ -1,0 +1,29 @@
+{
+  "name": "local",
+  "variables": {
+    "baseUrl": {
+      "value": "http://localhost:8000",
+      "type": "string",
+      "id": "dc7eb0cd-26c7-40f7-badc-f8c35763ec16",
+      "isSecret": false
+    },
+    "authToken": {
+      "value": "",
+      "type": "string",
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "isSecret": true
+    },
+    "adminKey": {
+      "value": "",
+      "type": "string",
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "isSecret": true
+    },
+    "uid": {
+      "value": "",
+      "type": "string",
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "isSecret": false
+    }
+  }
+}

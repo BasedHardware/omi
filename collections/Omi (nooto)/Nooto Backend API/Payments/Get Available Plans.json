@@ -1,0 +1,20 @@
+{
+  "name": "Get Available Plans",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/payments/available-plans",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Get MCP Keys",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/mcp/keys",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

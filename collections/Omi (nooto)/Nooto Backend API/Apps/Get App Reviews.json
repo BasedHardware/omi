@@ -1,0 +1,20 @@
+{
+  "name": "Get App Reviews",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps/:app_id/reviews",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

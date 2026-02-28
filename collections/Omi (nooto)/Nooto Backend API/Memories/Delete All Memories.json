@@ -1,0 +1,20 @@
+{
+  "name": "Delete All Memories",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v3/memories",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "DELETE",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

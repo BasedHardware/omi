@@ -1,0 +1,27 @@
+{
+  "name": "Search Conversations",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/search",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"query\": \"search term\",\n  \"limit\": 10\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

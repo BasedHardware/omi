@@ -1,0 +1,27 @@
+{
+  "name": "Update Conversation Title",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/:conversation_id/title",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"title\": \"New Title\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

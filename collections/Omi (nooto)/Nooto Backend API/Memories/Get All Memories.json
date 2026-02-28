@@ -1,0 +1,33 @@
+{
+  "name": "Get All Memories",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v3/memories",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [
+      {
+        "id": 0,
+        "key": "limit",
+        "value": "50",
+        "isEnabled": true
+      },
+      {
+        "id": 1,
+        "key": "offset",
+        "value": "0",
+        "isEnabled": true
+      }
+    ],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

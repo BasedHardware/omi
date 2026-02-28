@@ -1,0 +1,27 @@
+{
+  "name": "Create Action Item",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/action-items",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"description\": \"Follow up on the meeting\",\n  \"completed\": false,\n  \"conversation_id\": null\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

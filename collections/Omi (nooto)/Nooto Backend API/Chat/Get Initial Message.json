@@ -1,0 +1,20 @@
+{
+  "name": "Get Initial Message",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v2/initial-message",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

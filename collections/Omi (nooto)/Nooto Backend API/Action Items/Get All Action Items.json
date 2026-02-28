@@ -1,0 +1,45 @@
+{
+  "name": "Get All Action Items",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/action-items",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [
+      {
+        "id": 0,
+        "key": "limit",
+        "value": "50",
+        "isEnabled": true
+      },
+      {
+        "id": 1,
+        "key": "offset",
+        "value": "0",
+        "isEnabled": true
+      },
+      {
+        "id": 2,
+        "key": "completed",
+        "value": "false",
+        "isEnabled": false
+      },
+      {
+        "id": 3,
+        "key": "conversation_id",
+        "value": "",
+        "isEnabled": false
+      }
+    ],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

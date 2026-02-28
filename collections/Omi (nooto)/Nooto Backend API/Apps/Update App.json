@@ -1,0 +1,27 @@
+{
+  "name": "Update App",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps/:app_id",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"name\": \"Updated App Name\",\n  \"description\": \"Updated description\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

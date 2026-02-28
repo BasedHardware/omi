@@ -1,0 +1,27 @@
+{
+  "name": "Create App Review",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps/:app_id/reviews",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"rating\": 5,\n  \"review\": \"Great app!\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

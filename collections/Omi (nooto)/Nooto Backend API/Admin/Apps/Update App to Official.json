@@ -1,0 +1,34 @@
+{
+  "name": "Update App to Official",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps/:appId/official",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "PATCH",
+    "queryParams": [
+      {
+        "id": 0,
+        "key": "value",
+        "value": "true",
+        "isEnabled": true
+      }
+    ],
+    "headers": [
+      {
+        "id": 0,
+        "key": "x-admin-key",
+        "value": "{{adminKey}}",
+        "isEnabled": true
+      }
+    ],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

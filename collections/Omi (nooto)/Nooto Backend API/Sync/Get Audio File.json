@@ -1,0 +1,20 @@
+{
+  "name": "Get Audio File",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/sync/audio/:conversation_id/:audio_file_id",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Get All People",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/people",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

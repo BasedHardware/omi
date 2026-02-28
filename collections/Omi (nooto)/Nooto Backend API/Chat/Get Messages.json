@@ -1,0 +1,20 @@
+{
+  "name": "Get Messages",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v2/messages",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

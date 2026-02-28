@@ -1,0 +1,27 @@
+{
+  "name": "Create Task in Integration",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/task-integrations/:app_key/tasks",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"title\": \"New Task\",\n  \"description\": \"Task description\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

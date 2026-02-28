@@ -1,0 +1,21 @@
+{
+  "name": "Get All Apps",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  },
+  "rank": "agetal17723213839591"
+}

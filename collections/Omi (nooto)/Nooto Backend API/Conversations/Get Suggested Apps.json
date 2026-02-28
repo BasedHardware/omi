@@ -1,0 +1,20 @@
+{
+  "name": "Get Suggested Apps",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations/:conversation_id/suggested-apps",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

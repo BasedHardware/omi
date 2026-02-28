@@ -1,0 +1,29 @@
+{
+  "name": "dev",
+  "variables": {
+    "baseUrl": {
+      "value": "https://nooto-dev.togodynamics.com",
+      "type": "string",
+      "id": "b2c3d4e5-0001-4000-8000-000000000001",
+      "isSecret": false
+    },
+    "authToken": {
+      "value": "",
+      "type": "string",
+      "id": "b2c3d4e5-0002-4000-8000-000000000002",
+      "isSecret": true
+    },
+    "adminKey": {
+      "value": "",
+      "type": "string",
+      "id": "b2c3d4e5-0003-4000-8000-000000000003",
+      "isSecret": true
+    },
+    "uid": {
+      "value": "",
+      "type": "string",
+      "id": "b2c3d4e5-0004-4000-8000-000000000004",
+      "isSecret": false
+    }
+  }
+}

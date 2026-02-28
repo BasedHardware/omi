@@ -1,0 +1,27 @@
+{
+  "name": "Create App",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/apps",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "POST",
+    "queryParams": [],
+    "headers": [
+      {
+        "id": 0,
+        "key": "Content-Type",
+        "value": "application/json",
+        "isEnabled": true
+      }
+    ],
+    "body": "{\n  \"name\": \"My App\",\n  \"description\": \"App description\",\n  \"category\": \"productivity\"\n}",
+    "contentType": "application/json",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

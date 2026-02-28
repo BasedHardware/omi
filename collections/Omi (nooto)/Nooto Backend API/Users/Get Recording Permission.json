@@ -1,0 +1,20 @@
+{
+  "name": "Get Recording Permission",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/users/store-recording-permission",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

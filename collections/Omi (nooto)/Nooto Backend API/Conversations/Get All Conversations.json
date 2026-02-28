@@ -1,0 +1,45 @@
+{
+  "name": "Get All Conversations",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/conversations",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [
+      {
+        "id": 0,
+        "key": "limit",
+        "value": "50",
+        "isEnabled": true
+      },
+      {
+        "id": 1,
+        "key": "offset",
+        "value": "0",
+        "isEnabled": true
+      },
+      {
+        "id": 2,
+        "key": "status",
+        "value": "completed",
+        "isEnabled": false
+      },
+      {
+        "id": 3,
+        "key": "include_discarded",
+        "value": "false",
+        "isEnabled": false
+      }
+    ],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}

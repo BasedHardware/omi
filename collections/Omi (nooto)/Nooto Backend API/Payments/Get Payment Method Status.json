@@ -1,0 +1,20 @@
+{
+  "name": "Get Payment Method Status",
+  "request": {
+    "type": "http",
+    "url": "{{baseUrl}}/v1/payment-methods/status",
+    "scripts": {
+      "preRequest": "",
+      "postResponse": ""
+    },
+    "method": "GET",
+    "queryParams": [],
+    "headers": [],
+    "body": null,
+    "contentType": "text/plain",
+    "auth": {
+      "currentAuthType": "INHERIT",
+      "authConfigStore": {}
+    }
+  }
+}
