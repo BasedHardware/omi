@@ -247,6 +247,8 @@ struct OnboardingChatView: View {
                             .buttonStyle(.plain)
                             .padding(.top, 8)
                         }
+                        // Extra spacing so quick replies / buttons don't sit against the input field
+                        Spacer().frame(height: 20)
                     }
                     .padding(20)
                 }
