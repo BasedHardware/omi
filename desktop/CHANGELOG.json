@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Added live 3D knowledge graph visualization during onboarding that builds incrementally as AI discovers information about you",
-    "Added interaction hints to onboarding knowledge graph (drag, zoom, pan)"
+    "Added interaction hints to onboarding knowledge graph (drag, zoom, pan)",
+    "Fixed onboarding resuming after Quit & Reopen for screen recording permission"
   ],
   "releases": [
     {
