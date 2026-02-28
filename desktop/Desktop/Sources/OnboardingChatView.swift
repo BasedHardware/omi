@@ -3,101 +3,12 @@ import MarkdownUI
 
 // MARK: - Onboarding Chat Persistence
 
-/// Persists onboarding chat messages across app restarts (e.g. screen recording permission requires restart).
-/// Stores messages as JSON in UserDefaults alongside the ACP session ID for conversation resumption.
+/// Persists onboarding state across app restarts (e.g. screen recording permission requires restart).
+/// Messages are stored on the backend via the normal chat save path — only the ACP session ID
+/// and a mid-onboarding flag are kept in UserDefaults for restart recovery.
 enum OnboardingChatPersistence {
-    private static let messagesKey = "onboardingChatMessages"
     private static let sessionIdKey = "onboardingACPSessionId"
-
-    /// Save messages to UserDefaults
-    static func saveMessages(_ messages: [ChatMessage]) {
-        var encoded: [[String: Any]] = []
-        for msg in messages {
-            var dict: [String: Any] = [
-                "id": msg.id,
-                "text": msg.text,
-                "sender": msg.sender == .user ? "user" : "ai",
-                "createdAt": msg.createdAt.timeIntervalSince1970,
-            ]
-            // Serialize content blocks for AI messages
-            if msg.sender == .ai && !msg.contentBlocks.isEmpty {
-                var blocks: [[String: Any]] = []
-                for block in msg.contentBlocks {
-                    switch block {
-                    case .text(let id, let text):
-                        blocks.append(["type": "text", "id": id, "text": text])
-                    case .toolCall(let id, let name, let status, _, let input, _):
-                        var b: [String: Any] = [
-                            "type": "toolCall", "id": id, "name": name,
-                            "status": status == .completed ? "completed" : "running",
-                        ]
-                        if let input { b["inputSummary"] = input.summary }
-                        blocks.append(b)
-                    case .thinking:
-                        break // Skip thinking blocks
-                    case .discoveryCard(let id, let title, let summary, let fullText):
-                        blocks.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
-                    }
-                }
-                dict["contentBlocks"] = blocks
-            }
-            encoded.append(dict)
-        }
-        if let data = try? JSONSerialization.data(withJSONObject: encoded) {
-            UserDefaults.standard.set(data, forKey: messagesKey)
-        }
-    }
-
-    /// Restore messages from UserDefaults
-    static func loadMessages() -> [ChatMessage]? {
-        guard let data = UserDefaults.standard.data(forKey: messagesKey),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              !array.isEmpty else { return nil }
-
-        var messages: [ChatMessage] = []
-        for dict in array {
-            guard let id = dict["id"] as? String,
-                  let text = dict["text"] as? String,
-                  let senderStr = dict["sender"] as? String,
-                  let timestamp = dict["createdAt"] as? TimeInterval else { continue }
-
-            let sender: ChatSender = senderStr == "user" ? .user : .ai
-            var contentBlocks: [ChatContentBlock] = []
-
-            if let blocks = dict["contentBlocks"] as? [[String: Any]] {
-                for block in blocks {
-                    guard let type = block["type"] as? String,
-                          let blockId = block["id"] as? String else { continue }
-                    switch type {
-                    case "text":
-                        contentBlocks.append(.text(id: blockId, text: block["text"] as? String ?? ""))
-                    case "toolCall":
-                        let name = block["name"] as? String ?? ""
-                        let status: ToolCallStatus = (block["status"] as? String) == "running" ? .running : .completed
-                        let input: ToolCallInput? = (block["inputSummary"] as? String).map { ToolCallInput(summary: $0, details: nil) }
-                        contentBlocks.append(.toolCall(id: blockId, name: name, status: status, input: input))
-                    case "discoveryCard":
-                        contentBlocks.append(.discoveryCard(
-                            id: blockId,
-                            title: block["title"] as? String ?? "",
-                            summary: block["summary"] as? String ?? "",
-                            fullText: block["fullText"] as? String ?? ""
-                        ))
-                    default:
-                        break
-                    }
-                }
-            }
-
-            messages.append(ChatMessage(
-                id: id, text: text,
-                createdAt: Date(timeIntervalSince1970: timestamp),
-                sender: sender, isStreaming: false,
-                contentBlocks: contentBlocks
-            ))
-        }
-        return messages.isEmpty ? nil : messages
-    }
+    private static let midOnboardingKey = "onboardingMidOnboarding"
 
     /// Save the ACP session ID for resume after restart
     static func saveSessionId(_ sessionId: String) {
@@ -109,15 +20,22 @@ enum OnboardingChatPersistence {
         UserDefaults.standard.string(forKey: sessionIdKey)
     }
 
-    /// Clear all persisted onboarding chat data
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: messagesKey)
-        UserDefaults.standard.removeObject(forKey: sessionIdKey)
+    /// Mark that onboarding is in progress (for restart detection)
+    static func saveMidOnboarding() {
+        UserDefaults.standard.set(true, forKey: midOnboardingKey)
     }
 
-    /// Whether there are persisted messages (i.e. app was restarted mid-onboarding)
-    static var hasSavedMessages: Bool {
-        UserDefaults.standard.data(forKey: messagesKey) != nil
+    /// Whether the app was restarted mid-onboarding
+    static var isMidOnboarding: Bool {
+        UserDefaults.standard.bool(forKey: midOnboardingKey)
+    }
+
+    /// Clear all persisted onboarding data
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: sessionIdKey)
+        UserDefaults.standard.removeObject(forKey: midOnboardingKey)
+        // Clean up legacy messages key if present
+        UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
     }
 }
 
@@ -126,6 +44,7 @@ enum OnboardingChatPersistence {
 struct OnboardingChatView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
+    var graphViewModel: MemoryGraphViewModel?
     var onComplete: () -> Void
     var onSkip: () -> Void
 
@@ -265,9 +184,6 @@ struct OnboardingChatView: View {
                             proxy.scrollTo("typing", anchor: .bottom)
                         }
                     } else {
-                        // Persist messages when AI response completes (for restart recovery)
-                        OnboardingChatPersistence.saveMessages(chatProvider.messages)
-
                         if !quickReplyOptions.isEmpty {
                             withAnimation {
                                 proxy.scrollTo("quick-replies", anchor: .bottom)
@@ -285,9 +201,6 @@ struct OnboardingChatView: View {
                     }
                 }
             }
-
-            Divider()
-                .background(OmiColors.backgroundTertiary)
 
             // Input area
             HStack(spacing: 12) {
@@ -393,6 +306,10 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onQuickReplyOptions = { options in
             quickReplyOptions = options
         }
+        ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
+            guard let vm = graphViewModel else { return }
+            Task { await vm.addGraphFromStorage() }
+        }
 
         // Build onboarding system prompt
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
@@ -405,36 +322,34 @@ struct OnboardingChatView: View {
             email: email
         )
 
-        // Set onboarding session key so messages go to a dedicated session
-        chatProvider.onboardingSessionKey = "onboarding"
+        // Mark as onboarding so ACP session ID gets persisted for restart recovery
+        chatProvider.isOnboarding = true
 
-        // Check for persisted messages from a previous session (e.g. app restart after screen recording)
-        if let savedMessages = OnboardingChatPersistence.loadMessages() {
-            log("OnboardingChatView: Restoring \(savedMessages.count) messages from previous session")
-            chatProvider.messages = savedMessages
-
-            // Resume the ACP session if we have a saved session ID (conversation history preserved server-side)
+        // Check if we're resuming after a mid-onboarding restart (e.g. screen recording permission)
+        if OnboardingChatPersistence.isMidOnboarding {
             let savedSessionId = OnboardingChatPersistence.loadSessionId()
-            log("OnboardingChatView: Resuming ACP session: \(savedSessionId ?? "none")")
+            log("OnboardingChatView: Resuming mid-onboarding, ACP session: \(savedSessionId ?? "none")")
 
-            // Resume the conversation — tell the AI the app was restarted
             Task {
+                // Load previous messages from backend (same default chat, sessionId=nil)
+                await chatProvider.loadDefaultChatMessages()
+
+                // Resume the conversation — tell the AI the app was restarted
                 await chatProvider.sendMessage(
                     "I'm back — the app just restarted after granting a permission. Let's continue where we left off.",
                     systemPromptPrefix: systemPrompt,
-                    sessionKey: "onboarding",
                     resume: savedSessionId
                 )
             }
         } else {
-            // Fresh start — clear stale messages and begin onboarding
+            // Fresh start — clear stale messages, mark mid-onboarding, begin
             chatProvider.messages.removeAll()
+            OnboardingChatPersistence.saveMidOnboarding()
 
             Task {
                 await chatProvider.sendMessage(
                     "Hi, I just installed Omi!",
-                    systemPromptPrefix: systemPrompt,
-                    sessionKey: "onboarding"
+                    systemPromptPrefix: systemPrompt
                 )
             }
         }
@@ -454,7 +369,7 @@ struct OnboardingChatView: View {
         quickReplyOptions = []
 
         Task {
-            await chatProvider.sendMessage(text, sessionKey: "onboarding")
+            await chatProvider.sendMessage(text)
         }
     }
 
@@ -480,7 +395,6 @@ struct OnboardingChatView: View {
 
     /// Handle quick reply button tap — triggers permission if applicable, then sends as user message
     private func handleQuickReply(_ option: String) {
-        let options = quickReplyOptions
         quickReplyOptions = []
 
         if let permType = permissionType(from: option) {
@@ -491,12 +405,12 @@ struct OnboardingChatView: View {
                 isGrantingPermission = false
                 // Send the result as a user message so the AI knows what happened
                 let replyText = result.contains("granted") ? "\(option) — done!" : "\(option) — \(result)"
-                await chatProvider.sendMessage(replyText, sessionKey: "onboarding")
+                await chatProvider.sendMessage(replyText)
             }
         } else {
             // Regular quick reply — just send as message
             Task {
-                await chatProvider.sendMessage(option, sessionKey: "onboarding")
+                await chatProvider.sendMessage(option)
             }
         }
     }
@@ -544,8 +458,8 @@ struct OnboardingChatView: View {
             )
         }
 
-        // Clean up onboarding session key and persisted chat data
-        chatProvider.onboardingSessionKey = nil
+        // Clean up onboarding state and persisted chat data
+        chatProvider.isOnboarding = false
         OnboardingChatPersistence.clear()
 
         // Log analytics
