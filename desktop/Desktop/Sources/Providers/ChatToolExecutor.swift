@@ -852,8 +852,8 @@ class ChatToolExecutor {
             }
         }
 
-        // Immediately clear mid-onboarding persistence so a restart won't re-enter onboarding
-        OnboardingChatPersistence.clear()
+        // Mark that the tool was called so the "Continue to App" button shows even after restart
+        OnboardingChatPersistence.markToolCompleted()
 
         // Call the completion callback
         onCompleteOnboarding?()
