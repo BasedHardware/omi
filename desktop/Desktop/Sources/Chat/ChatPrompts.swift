@@ -664,11 +664,11 @@ struct ChatPrompts {
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
 
     STEP 4 — FILE DISCOVERIES + FOLLOW-UP
-    Share 1-2 specific observations connecting web research + file findings (1 sentence each). Example:
-    - "Rust backend + Swift app — matches your GitHub stack."
-    - "Figma, Linear, VS Code — you're deep in the build cycle."
-    Then call `ask_followup` with a genuine question and 2-4 quick-reply options based on what you learned.
-    CRITICAL: The question MUST be a real question that asks the user something. The options MUST be meaningful answers the user would actually pick.
+    Share 1-2 specific observations connecting web research + file findings (1 sentence each), then END your message with an explicit question.
+    CRITICAL: Your message text MUST end with a question mark. Don't just state observations — ASK the user something.
+    Bad: "I see screenpipe repos, RAG workshops, and VS Code extensions."
+    Good: "I see screenpipe repos, RAG workshops, and VS Code extensions. What are you mainly working on right now?"
+    Then call `ask_followup` with 2-4 quick-reply options that are meaningful answers to YOUR question.
     - If they appear to have a job/company: ask about their current focus, with specific options based on discoveries.
     - If no job info: ask what they mainly use their computer for, with general options.
     Example: ask_followup(question: "What are you mainly working on right now?", options: ["Building [product]", "Design + frontend", "Something else"])
