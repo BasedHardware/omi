@@ -177,20 +177,23 @@ struct OnboardingChatView: View {
                         .frame(height: 1)
                         .id("bottom-anchor")
                 }
-                .onChange(of: chatProvider.messages.count) { _, _ in
+                .onChange(of: chatProvider.messages.count) { _, newCount in
+                    log("OnboardingChat: messages.count changed to \(newCount)")
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: chatProvider.messages.last?.text) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { _, _ in
-                    // Delayed scroll to let SwiftUI lay out images/tool indicators
+                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { oldCount, newCount in
+                    log("OnboardingChat: contentBlocks.count changed \(oldCount ?? -1) → \(newCount ?? -1)")
                     scrollToBottom(proxy: proxy, delay: 0.15)
                 }
-                .onChange(of: chatProvider.isSending) { _, _ in
+                .onChange(of: chatProvider.isSending) { _, newValue in
+                    log("OnboardingChat: isSending changed to \(newValue)")
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: quickReplyOptions) { _, _ in
+                .onChange(of: quickReplyOptions) { _, options in
+                    log("OnboardingChat: quickReplyOptions changed (\(options.count) options)")
                     scrollToBottom(proxy: proxy, delay: 0.1)
                 }
             }
@@ -289,9 +292,11 @@ struct OnboardingChatView: View {
     private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0) {
         if delay > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                log("OnboardingChat: scrollToBottom (delayed \(delay)s)")
                 withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
             }
         } else {
+            log("OnboardingChat: scrollToBottom (immediate)")
             withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
         }
     }
