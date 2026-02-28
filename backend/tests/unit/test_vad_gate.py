@@ -13,6 +13,7 @@ from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
     GatedDeepgramSocket,
+    VAD_GATE_KEEPALIVE_SEC,
     VADStreamingGate,
     is_gate_enabled,
 )
@@ -1459,14 +1460,14 @@ class TestKeepaliveBoundary:
         )
 
     def test_keepalive_exact_boundary(self):
-        """Keepalive should NOT fire at 19.99s, SHOULD fire at 20.0s."""
+        """Keepalive should fire exactly at VAD_GATE_KEEPALIVE_SEC."""
         gate = self._make_gate()
         gate._first_audio_wall_time = 1000.0
         gate._last_send_wall_time = 1000.0
-        # At 19.99s: no keepalive
-        assert not gate.needs_keepalive(1019.99)
-        # At 20.0s: keepalive
-        assert gate.needs_keepalive(1020.0)
+        # Just before boundary: no keepalive
+        assert not gate.needs_keepalive(1000.0 + VAD_GATE_KEEPALIVE_SEC - 0.01)
+        # At boundary: keepalive
+        assert gate.needs_keepalive(1000.0 + VAD_GATE_KEEPALIVE_SEC)
 
     def test_keepalive_no_spam(self):
         """After keepalive fires, next chunk should NOT trigger another immediately."""
@@ -2049,3 +2050,92 @@ class TestProcessAudioDgRemapWiring:
         assert len(received_segments) == 1
         assert received_segments[0]['start'] == 6.0
         assert received_segments[0]['end'] == 7.0
+
+
+class TestDG1011KeepaliveGap:
+    """Verify DG 1011 protection when idle timeout is 10s.
+
+    Deepgram disconnects with 1011 (NET-0001) if no audio or KeepAlive is
+    received within 10 seconds. The historical 20s keepalive left a gap
+    where DG got nothing for 10+ seconds during initial silence.
+
+    These tests verify the fix: keepalive must fire within 10s to prevent
+    DG disconnect.
+    """
+
+    DG_IDLE_TIMEOUT_SEC = 10  # Deepgram's documented idle timeout
+
+    def _make_gate(self, mode='active'):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode=mode,
+            uid='test',
+            session_id='test',
+        )
+
+    def test_reproduce_1011_gap_initial_silence(self):
+        """Regression test: DG must receive traffic within 10s during silence.
+
+        Simulates a user WITHOUT speech profile connecting in a quiet room.
+        Gate starts in active mode. All audio is silence. DG should receive
+        a keepalive within 10s.
+        """
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        _set_vad_speech(False)
+
+        # Simulate 10 seconds of silence chunks (30ms each = ~333 chunks)
+        dg_received_anything = False
+        for i in range(334):
+            chunk_time = t + i * 0.03
+            socket.send(_make_pcm(30), wall_time=chunk_time)
+            if mock_conn.send.called or mock_conn.keep_alive.called:
+                dg_received_anything = True
+                break
+
+        # With the fix, DG should have received a keepalive within 10s.
+        # Historically, this failed with a 20s keepalive interval.
+        assert dg_received_anything, (
+            f"DG received nothing for {self.DG_IDLE_TIMEOUT_SEC}s of initial silence. "
+            f"DG would disconnect with 1011 (NET-0001). "
+            f"KeepAlive must fire within {self.DG_IDLE_TIMEOUT_SEC}s."
+        )
+
+    def test_keepalive_fires_within_dg_timeout_after_speech_ends(self):
+        """After speech ends and hangover expires, keepalive must fire within 10s.
+
+        Simulates speech followed by extended silence. After hangover (4s),
+        the gate stops sending audio. Keepalive must fire within 10s of
+        the last audio sent.
+        """
+        mock_conn = MagicMock()
+        gate = self._make_gate()
+        socket = GatedDeepgramSocket(mock_conn, gate=gate)
+
+        t = 1000.0
+        # Speech phase
+        _set_vad_speech(True)
+        for i in range(10):
+            socket.send(_make_pcm(30), wall_time=t + i * 0.03)
+
+        # Silence phase — hangover (4s) then silence
+        _set_vad_speech(False)
+        for i in range(200):  # 6s of silence (past 4s hangover)
+            socket.send(_make_pcm(30), wall_time=t + 0.3 + i * 0.03)
+
+        last_send = gate._last_send_wall_time
+        assert last_send is not None
+
+        # Reset call tracking
+        mock_conn.keep_alive.reset_mock()
+
+        # Send silence at last_send + 10s (DG timeout boundary)
+        socket.send(_make_pcm(30), wall_time=last_send + self.DG_IDLE_TIMEOUT_SEC)
+        assert mock_conn.keep_alive.called, (
+            f"KeepAlive not sent within {self.DG_IDLE_TIMEOUT_SEC}s after last audio. "
+            f"DG would disconnect with 1011."
+        )

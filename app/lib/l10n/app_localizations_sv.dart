@@ -1015,7 +1015,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Anslut';
 
   @override
   String get comingSoon => 'Kommer snart';
@@ -2269,7 +2269,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get folderName => 'Mappnamn';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beskrivning (valfritt)';
 
   @override
   String get failedToDeleteFolder => 'Det gick inte att ta bort mappen';
@@ -8004,27 +8004,27 @@ class AppLocalizationsSv extends AppLocalizations {
   String get addTask => 'Lägg till uppgift';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Lägg till MCP-server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Anslut externa AI-verktyg';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count verktyg anslutna';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kunde inte ansluta till MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Auktoriserar...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hur hittade du oss?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8042,19 +8042,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Vän';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Övrigt';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Vänligen specificera';
 
   @override
-  String get event => 'Event';
+  String get event => 'Evenemang';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kollega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8225,8 +8225,41 @@ class AppLocalizationsSv extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Här är vad jag vet om dig';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Denna karta uppdateras när Omi lär sig från dina samtal.';
+
+  @override
+  String get apiEnvironment => 'API-miljö';
+
+  @override
+  String get apiEnvironmentDescription => 'Välj vilken server att ansluta till';
+
+  @override
+  String get production => 'Produktion';
+
+  @override
+  String get staging => 'Testmiljö';
+
+  @override
+  String get switchRequiresRestart => 'Byte kräver omstart av appen';
+
+  @override
+  String get switchApiConfirmTitle => 'Byt API-miljö';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Byta till $environment? Du behöver stänga och öppna appen igen för att ändringarna ska börja gälla.';
+  }
+
+  @override
+  String get switchAndRestart => 'Byt';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testmiljön kan vara instabil, ha inkonsekvent prestanda och data kan gå förlorad. Endast för testning.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Sparat. Stäng och öppna appen igen för att tillämpa ändringarna.';
 }

@@ -894,7 +894,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get useMcpApiKey => 'Sử dụng API key MCP của bạn';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => 'Sự kiện cuộc trò chuyện';
@@ -1015,7 +1015,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Kết nối';
 
   @override
   String get comingSoon => 'Sắp ra mắt';
@@ -2270,7 +2270,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get folderName => 'Tên thư mục';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Mô tả (tùy chọn)';
 
   @override
   String get failedToDeleteFolder => 'Xóa thư mục thất bại';
@@ -8001,27 +8001,27 @@ class AppLocalizationsVi extends AppLocalizations {
   String get addTask => 'Thêm nhiệm vụ';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Thêm máy chủ MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Kết nối công cụ AI bên ngoài';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Đã kết nối thành công $count công cụ';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Không thể kết nối đến máy chủ MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Đang xác thực...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bạn biết đến chúng tôi qua đâu?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8039,19 +8039,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Bạn bè';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Khác';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Vui lòng cho biết';
 
   @override
-  String get event => 'Event';
+  String get event => 'Sự kiện';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Đồng nghiệp';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8224,8 +8224,42 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Đây là những gì tôi biết về bạn';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Bản đồ này được cập nhật khi Omi học hỏi từ các cuộc trò chuyện của bạn.';
+
+  @override
+  String get apiEnvironment => 'Môi trường API';
+
+  @override
+  String get apiEnvironmentDescription => 'Chọn máy chủ để kết nối';
+
+  @override
+  String get production => 'Sản xuất';
+
+  @override
+  String get staging => 'Thử nghiệm';
+
+  @override
+  String get switchRequiresRestart => 'Chuyển đổi yêu cầu khởi động lại ứng dụng';
+
+  @override
+  String get switchApiConfirmTitle => 'Chuyển đổi môi trường API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Chuyển sang $environment? Bạn sẽ cần đóng và mở lại ứng dụng để các thay đổi có hiệu lực.';
+  }
+
+  @override
+  String get switchAndRestart => 'Chuyển';
+
+  @override
+  String get stagingDisclaimer =>
+      'Môi trường thử nghiệm có thể không ổn định, hiệu suất không nhất quán và dữ liệu có thể bị mất. Chỉ dùng để thử nghiệm.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Đã lưu. Đóng và mở lại ứng dụng để áp dụng thay đổi.';
 }

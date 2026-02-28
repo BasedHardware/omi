@@ -23,6 +23,7 @@ from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tools.app_tools import load_app_tools
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -48,53 +49,72 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
         if resp.status_code != 200:
-            logger.error(f"[gce] Failed to get instance status: {resp.status_code} {resp.text}")
+            logger.error(f"[gce] Failed to get instance status: {resp.status_code} {sanitize(resp.text)}")
             return "UNKNOWN"
         return resp.json().get("status", "UNKNOWN")
 
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and wait for it to get an IP. Returns the new IP."""
+    import time
+
+    t0 = time.monotonic()
     token = _get_gce_access_token()
     start_url = (
         f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
     )
 
     async with httpx.AsyncClient(timeout=180) as client:
-        # Start the VM
         resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
         if resp.status_code not in (200, 204):
-            raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
+            raise Exception(f"GCE start failed: {resp.status_code} {sanitize(resp.text)}")
+        t_start = time.monotonic() - t0
+        logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
 
         op_name = resp.json().get("name")
         if not op_name:
             raise Exception("Missing operation name in GCE start response")
 
-        # Poll operation until done (max ~2 minutes)
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-        for _ in range(24):
+        for i in range(24):
             await asyncio.sleep(5)
-            # Refresh token in case it expired during polling
             token = _get_gce_access_token()
             status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
             status = status_resp.json()
             if status.get("status") == "DONE":
                 if "error" in status:
                     raise Exception(f"GCE start operation failed: {status['error']}")
+                t_op = time.monotonic() - t0
+                logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
                 break
 
-        # Get the VM's (possibly new) external IP
+        # Poll for a valid external IP (may take a few seconds after operation completes)
         instance_url = (
             f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
         )
-        token = _get_gce_access_token()
-        inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-        instance = inst_resp.json()
-        ip = "unknown"
-        try:
-            ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        except (KeyError, IndexError):
-            pass
+        ip = None
+        for attempt in range(6):
+            token = _get_gce_access_token()
+            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+            instance = inst_resp.json()
+            try:
+                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                if candidate and candidate != "unknown":
+                    ip = candidate
+                    t_ip = time.monotonic() - t0
+                    logger.info(f"[vm-start] {vm_name} got IP {ip} on attempt {attempt + 1}: {t_ip:.1f}s total")
+                    break
+            except (KeyError, IndexError):
+                pass
+            if attempt < 5:
+                logger.info(f"[vm-start] {vm_name} no IP yet, retrying ({attempt + 1}/6)...")
+                await asyncio.sleep(3)
+
+        if not ip:
+            t_fail = time.monotonic() - t0
+            logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
+            ip = "unknown"
+
         return ip
 
 
@@ -126,7 +146,7 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
-    logger.info(f"[vm-status] uid={uid} vm={vm}")
+    logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
     if not vm or vm.get("status") != "ready":
         return {"has_vm": False}
     return {

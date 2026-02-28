@@ -22,6 +22,7 @@ from utils.retrieval.tools.google_utils import google_api_request
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             pass
         else:
             error_body = response.text[:200] if response.text else "No error body"
-            logger.error(f"⚠️ Google Contacts API error {response.status_code}: {error_body}")
+            logger.error(f"⚠️ Google Contacts API error {response.status_code}: {sanitize(error_body)}")
     except requests.exceptions.RequestException as e:
         logger.error(f"⚠️ Network error searching My Contacts: {e}")
     except Exception as e:
@@ -129,12 +130,12 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
                 if email_addresses:
                     email = email_addresses[0].get('value')
                     name = person.get('names', [{}])[0].get('displayName', query)
-                    logger.info(f"✅ Found contact in Other Contacts: {name} -> {email}")
+                    logger.info(f"✅ Found contact in Other Contacts: {sanitize_pii(name)} -> {sanitize_pii(email)}")
                     return email
                 else:
-                    logger.info(f"⚠️ Found contact '{query}' in Other Contacts but no email address")
+                    logger.info(f"⚠️ Found contact '{sanitize_pii(query)}' in Other Contacts but no email address")
             else:
-                logger.info(f"⚠️ No contacts found in Other Contacts for: {query}")
+                logger.info(f"⚠️ No contacts found in Other Contacts for: {sanitize_pii(query)}")
         elif response.status_code == 401:
             logger.warning(f"❌ Google Contacts API 401 - token expired")
             return None
@@ -143,13 +144,15 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             return None
         else:
             error_body = response.text[:200] if response.text else "No error body"
-            logger.error(f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {error_body}")
+            logger.error(
+                f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}"
+            )
     except requests.exceptions.RequestException as e:
         logger.error(f"⚠️ Network error searching Other Contacts: {e}")
     except Exception as e:
         logger.error(f"⚠️ Error searching Other Contacts: {e}")
 
-    logger.info(f"⚠️ No contacts found in My Contacts or Other Contacts for: {query}")
+    logger.info(f"⚠️ No contacts found in My Contacts or Other Contacts for: {sanitize_pii(query)}")
     return None
 
 
@@ -168,11 +171,11 @@ def resolve_attendee_to_email(access_token: str, attendee: str) -> Optional[str]
     # Check if it's already an email address (simple check)
     if '@' in attendee and '.' in attendee.split('@')[1]:
         # Looks like an email, return as-is
-        logger.info(f"📧 '{attendee}' appears to be an email address")
+        logger.info(f"📧 '{sanitize_pii(attendee)}' appears to be an email address")
         return attendee
 
     # It's a name, search Google Contacts
-    logger.info(f"👤 '{attendee}' appears to be a name, searching Google Contacts...")
+    logger.info(f"👤 '{sanitize_pii(attendee)}' appears to be a name, searching Google Contacts...")
     return search_google_contacts(access_token, attendee)
 
 

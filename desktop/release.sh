@@ -161,7 +161,7 @@ gcloud run deploy "$CLOUD_RUN_SERVICE" \
     --region "$GCP_REGION" \
     --platform managed \
     --allow-unauthenticated \
-    --set-env-vars "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,FIREBASE_API_KEY=$FIREBASE_API_KEY,GEMINI_API_KEY=$GEMINI_API_KEY,APPLE_CLIENT_ID=$APPLE_CLIENT_ID,APPLE_TEAM_ID=$APPLE_TEAM_ID,APPLE_KEY_ID=$APPLE_KEY_ID,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,RUST_LOG=info,RELEASE_SECRET=$RELEASE_SECRET,RESEND_API_KEY=$RESEND_API_KEY,SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN,SENTRY_ADMIN_UID=$SENTRY_ADMIN_UID,SENTRY_WEBHOOK_SECRET=$SENTRY_WEBHOOK_SECRET,REDIS_DB_HOST=$REDIS_DB_HOST,REDIS_DB_PORT=$REDIS_DB_PORT,REDIS_DB_PASSWORD=$REDIS_DB_PASSWORD" \
+    --set-env-vars "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,FIREBASE_API_KEY=$FIREBASE_API_KEY,GEMINI_API_KEY=$GEMINI_API_KEY,APPLE_CLIENT_ID=$APPLE_CLIENT_ID,APPLE_TEAM_ID=$APPLE_TEAM_ID,APPLE_KEY_ID=$APPLE_KEY_ID,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,RUST_LOG=info,RELEASE_SECRET=$RELEASE_SECRET,RESEND_API_KEY=$RESEND_API_KEY,SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN,SENTRY_ADMIN_UID=$SENTRY_ADMIN_UID,SENTRY_WEBHOOK_SECRET=$SENTRY_WEBHOOK_SECRET,REDIS_DB_HOST=$REDIS_DB_HOST,REDIS_DB_PORT=$REDIS_DB_PORT,REDIS_DB_PASSWORD=$REDIS_DB_PASSWORD,PINECONE_API_KEY=$PINECONE_API_KEY,PINECONE_HOST=$PINECONE_HOST" \
     --quiet
 
 # Add APPLE_PRIVATE_KEY separately (multiline value requires special handling)
@@ -350,7 +350,7 @@ ACP_BRIDGE_DIR="$(dirname "$0")/acp-bridge"
 if [ -d "$ACP_BRIDGE_DIR" ]; then
     cd "$ACP_BRIDGE_DIR"
     npm install --no-fund --no-audit
-    npx tsc
+    npm run build --silent
     cd - > /dev/null
     echo "  ✓ acp-bridge built"
 else
@@ -659,7 +659,12 @@ else
         "$DMG_PATH"
 fi
 
-# Clean up staging directory
+# Clean up staging directory and its stale LaunchServices registration
+# (macOS auto-registers apps it discovers; the staging copy creates a stale
+# entry pointing to /tmp/... which can cause the notification icon to show
+# a generic folder instead of the app icon)
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$STAGING_DIR/$DMG_APP_NAME.app" 2>/dev/null || true
 rm -rf "$STAGING_DIR"
 
 echo "  ✓ DMG created"
@@ -856,13 +861,6 @@ echo ""
 echo "Creating local git tag..."
 git tag "v$VERSION" 2>/dev/null && echo "  ✓ Created tag v$VERSION" || echo "  Tag v$VERSION already exists"
 
-# -----------------------------------------------------------------------------
-# Sync to monorepo (omi-desktop -> BasedHardware/omi desktop/)
-# -----------------------------------------------------------------------------
-echo ""
-echo "[Sync] Syncing release to monorepo..."
-python3 /Users/matthewdi/git-dashboard/repo_sync.py --forward
-echo "  ✓ Monorepo sync complete"
 
 # -----------------------------------------------------------------------------
 # Step 12: Trigger Installation Test
@@ -871,7 +869,7 @@ echo ""
 echo "[12/12] Triggering installation test on GitHub Actions..."
 
 # Trigger the test workflow via repository_dispatch
-TEST_REPO="m13v/omi-computer-swift"
+TEST_REPO="BasedHardware/omi"
 if command -v gh &> /dev/null; then
     gh workflow run test-install.yml \
         --repo "$TEST_REPO" \

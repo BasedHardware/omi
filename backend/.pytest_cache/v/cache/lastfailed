@@ -1,0 +1,10 @@
+{
+  "tests/unit/test_high_priority_usage_tracking.py::TestExternalIntegrationsTracking::test_get_conversation_summary_sets_context": true,
+  "tests/unit/test_kg_user_type_mismatch.py": true,
+  "tests/unit/test_realtime_integrations_usage_tracking.py": true,
+  "tests/unit/test_process_conversation_usage_context.py::test_discard_call_uses_discard_feature_tracking": true,
+  "tests/unit/test_process_conversation_usage_context.py::test_no_umbrella_conversation_processing_tracking": true,
+  "tests/unit/test_process_conversation_usage_context.py::test_action_items_tracked_separately_from_structure": true,
+  "tests/unit/test_process_conversation_usage_context.py::test_structure_and_apps_tracked_at_runtime": true,
+  "tests/unit/test_process_conversation_usage_context.py::test_action_items_skipped_on_discard": true
+}

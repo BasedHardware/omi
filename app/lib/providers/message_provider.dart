@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/agent_chat_service.dart' show agentLog, initAgentLog;
 import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
@@ -76,6 +77,14 @@ class MessageProvider extends ChangeNotifier {
     _vmKeepaliveTimer = Timer.periodic(_keepaliveInterval, (_) {
       sendAgentKeepalive();
     });
+  }
+
+  /// Pre-connect the agent WebSocket so it's ready when the user sends a message.
+  /// Call this when the chat page opens.
+  Future<void> preConnectAgent() async {
+    if (!SharedPreferencesUtil().claudeAgentEnabled) return;
+    if (_agentChatService.isConnected) return;
+    await _agentChatService.connect();
   }
 
   void stopVmKeepalive() {
@@ -589,10 +598,14 @@ class MessageProvider extends ChangeNotifier {
 
     // Route through agent VM if Claude Agent is enabled
     if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
+      agentLog('[MessageProvider] claudeAgentEnabled=true, routing through agent VM');
       await _sendMessageViaAgent(text, currentAppId);
       return;
     }
+
+    await initAgentLog();
+    agentLog(
+        '[MessageProvider] sending via /v2/messages — appId=$currentAppId, text="${text.length > 80 ? text.substring(0, 80) : text}"');
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
@@ -603,6 +616,7 @@ class MessageProvider extends ChangeNotifier {
     clearUploadedFiles();
     String textBuffer = '';
     Timer? timer;
+    int chunkCount = 0;
 
     void flushBuffer() {
       if (textBuffer.isNotEmpty) {
@@ -616,14 +630,17 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+        chunkCount++;
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
+          agentLog('[MessageProvider] think: ${chunk.text.length > 100 ? chunk.text.substring(0, 100) : chunk.text}');
           message.thinkings.add(chunk.text);
           notifyListeners();
           continue;
         }
 
         if (chunk.type == MessageChunkType.data) {
+          if (chunkCount <= 3) agentLog('[MessageProvider] first data chunk received');
           textBuffer += chunk.text;
           timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
             flushBuffer();
@@ -636,6 +653,7 @@ class MessageProvider extends ChangeNotifier {
         flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
+          agentLog('[MessageProvider] done — $chunkCount chunks, final text ${message.text.length} chars');
           message = chunk.message!;
           messages[aiIndex] = message;
           notifyListeners();
@@ -643,17 +661,20 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          agentLog('[MessageProvider] error: ${chunk.text}');
           message.text = chunk.text;
           notifyListeners();
           continue;
         }
       }
     } catch (e) {
+      agentLog('[MessageProvider] exception: $e');
       message.text = ServerMessageChunk.failedMessage().text;
       notifyListeners();
     } finally {
       timer?.cancel();
       flushBuffer();
+      agentLog('[MessageProvider] stream complete — $chunkCount chunks total');
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
@@ -685,26 +706,24 @@ class MessageProvider extends ChangeNotifier {
     int rotateIndex = 0;
 
     try {
-      // Connect to agent proxy (authenticates via Firebase token)
-      final connected = await _agentChatService.connect();
-      if (!connected) {
-        // Retry once before giving up
-        await Future.delayed(const Duration(seconds: 1));
-        final retried = await _agentChatService.connect();
-        if (!retried) {
-          message.text = 'Failed to connect to agent. Check that your desktop is running.';
-          notifyListeners();
-          setShowTypingIndicator(false);
-          setSendingMessage(false);
-          return;
+      // Reuse existing connection if available, otherwise connect
+      if (!_agentChatService.isConnected) {
+        final connected = await _agentChatService.connect();
+        if (!connected) {
+          await Future.delayed(const Duration(seconds: 1));
+          final retried = await _agentChatService.connect();
+          if (!retried) {
+            message.text = 'Failed to connect to agent. Check that your desktop is running.';
+            notifyListeners();
+            setShowTypingIndicator(false);
+            setSendingMessage(false);
+            return;
+          }
         }
       }
 
-      // Build prompt with recent conversation history so the agent has context
-      final history = messages.where((m) => m.text.isNotEmpty).toList().reversed.take(10).toList().reversed.toList();
-      final historyLines =
-          history.map((m) => '${m.sender == MessageSender.human ? "User" : "Assistant"}: ${m.text}').join('\n');
-      final prompt = historyLines.isEmpty ? text : '$historyLines\n\nUser: $text';
+      // History is injected server-side by the agent-proxy from Firestore
+      final prompt = text;
 
       const rotateMessages = [
         'Querying your data',
@@ -735,9 +754,11 @@ class MessageProvider extends ChangeNotifier {
         }
       }
 
+      bool gotContent = false;
       await for (var event in _agentChatService.sendQuery(prompt)) {
         switch (event.type) {
           case AgentChatEventType.textDelta:
+            gotContent = true;
             silenceTimer?.cancel();
             rotateTimer?.cancel();
             if (agentThinkingAfterText) {
@@ -794,6 +815,82 @@ class MessageProvider extends ChangeNotifier {
             message.text = message.text.isEmpty ? 'Agent error: ${event.text}' : message.text;
             notifyListeners();
             break;
+        }
+      }
+
+      // Auto-reconnect + retry: if we got no real content and connection died (timeout),
+      // reconnect once and retry the query
+      if (!gotContent && !_agentChatService.isConnected) {
+        agentLog('[RETRY] No content + disconnected — attempting reconnect');
+        message.text = '';
+        message.thinkings.add('Reconnecting...');
+        notifyListeners();
+        final reconnected = await _agentChatService.reconnect();
+        if (reconnected) {
+          agentLog('[RETRY] Reconnected — retrying query');
+          await for (var event in _agentChatService.sendQuery(prompt)) {
+            switch (event.type) {
+              case AgentChatEventType.textDelta:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                if (agentThinkingAfterText) {
+                  textBuffer += '\n\n';
+                  agentThinkingAfterText = false;
+                  notifyListeners();
+                }
+                textBuffer += event.text;
+                timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+                  flushBuffer();
+                });
+                startSilenceTimer();
+                break;
+              case AgentChatEventType.toolActivity:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                flushBuffer();
+                if (message.text.isNotEmpty) {
+                  agentThinkingAfterText = true;
+                }
+                if (event.text.isNotEmpty) {
+                  message.thinkings.add(event.text);
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.result:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                timer?.cancel();
+                timer = null;
+                flushBuffer();
+                if (event.text.isNotEmpty && message.text.isEmpty) {
+                  message.text = event.text;
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.status:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                flushBuffer();
+                if (event.text.isNotEmpty) {
+                  message.thinkings.add(event.text);
+                }
+                notifyListeners();
+                break;
+              case AgentChatEventType.error:
+                silenceTimer?.cancel();
+                rotateTimer?.cancel();
+                timer?.cancel();
+                timer = null;
+                flushBuffer();
+                message.text = message.text.isEmpty ? 'Agent error: ${event.text}' : message.text;
+                notifyListeners();
+                break;
+            }
+          }
+        } else {
+          agentLog('[RETRY] Reconnect failed');
+          message.text = 'Failed to reconnect to agent.';
+          notifyListeners();
         }
       }
     } catch (e) {

@@ -1014,7 +1014,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Savienot';
 
   @override
   String get comingSoon => 'Drīzumā';
@@ -2271,7 +2271,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get folderName => 'Mapes nosaukums';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Apraksts (neobligāts)';
 
   @override
   String get failedToDeleteFolder => 'Neizdevās dzēst mapi';
@@ -8016,27 +8016,27 @@ class AppLocalizationsLv extends AppLocalizations {
   String get addTask => 'Pievienot uzdevumu';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Pievienot MCP serveri';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Savienot ārējos AI rīkus';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Veiksmīgi savienoti $count rīki';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Neizdevās savienoties ar MCP serveri';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizēšana...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Kā jūs mūs atradāt?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8054,19 +8054,19 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Draugs';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Cits';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Lūdzu, precizējiet';
 
   @override
-  String get event => 'Event';
+  String get event => 'Pasākums';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kolēģis';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8239,8 +8239,41 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Lūk, ko es zinu par tevi';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Šī karte tiek atjaunināta, kad Omi mācās no jūsu sarunām.';
+
+  @override
+  String get apiEnvironment => 'API vide';
+
+  @override
+  String get apiEnvironmentDescription => 'Izvēlieties, kuram serverim pieslēgties';
+
+  @override
+  String get production => 'Produkcija';
+
+  @override
+  String get staging => 'Testa vide';
+
+  @override
+  String get switchRequiresRestart => 'Pārslēgšanai nepieciešama lietotnes pārstartēšana';
+
+  @override
+  String get switchApiConfirmTitle => 'Pārslēgt API vidi';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Pārslēgt uz $environment? Jums būs jāaizver un vēlreiz jāatver lietotne, lai izmaiņas stātos spēkā.';
+  }
+
+  @override
+  String get switchAndRestart => 'Pārslēgt';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testa vide var būt nestabila, ar nevienmērīgu veiktspēju, un dati var tikt zaudēti. Tikai testēšanai.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Saglabāts. Aizveriet un atveriet lietotni vēlreiz, lai piemērotu izmaiņas.';
 }

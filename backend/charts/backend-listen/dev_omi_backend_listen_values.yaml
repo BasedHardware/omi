@@ -76,6 +76,11 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GEMINI_API_KEY
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:

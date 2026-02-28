@@ -88,6 +88,8 @@ class AppState: ObservableObject {
     private var lastNotificationSoundEnabled: Bool?
     private var lastNotificationBadgeEnabled: Bool?
     @Published var isScreenCaptureKitBroken = false  // TCC says yes but ScreenCaptureKit says no
+    @Published var isScreenRecordingStale = false  // TCC says yes but capture fails (developer signing changed)
+    var screenRecordingGrantAttempts = 0  // Track how many times user clicked Grant without success
     @Published var hasAutomationPermission = false
     @Published var automationPermissionError: OSStatus = 0  // Non-zero when check fails unexpectedly (e.g. -600 procNotFound)
     private var isCheckingAutomationPermission = false  // Prevent concurrent checks (retry path has a 1s sleep)
@@ -104,7 +106,7 @@ class AppState: ObservableObject {
     var missingPermissions: [String] {
         var missing: [String] = []
         if !hasMicrophonePermission { missing.append("Microphone") }
-        if !hasScreenRecordingPermission || isScreenCaptureKitBroken { missing.append("Screen Recording") }
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale { missing.append("Screen Recording") }
         if !hasNotificationPermission { missing.append("Notifications") }
         else if isNotificationBannerDisabled { missing.append("Notification Banners") }
         if !hasAccessibilityPermission || isAccessibilityBroken { missing.append("Accessibility") }
@@ -136,9 +138,17 @@ class AppState: ObservableObject {
     private var transcriptionService: TranscriptionService?
     private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
     private var audioMixer: AudioMixer?
+    private var vadGateService: VADGateService?
 
-    // Speaker segments for diarized transcription
+    // Batch transcription mode
+    private var useBatchTranscription: Bool = false
+    private var recordingStartCATime: Double = 0  // CACurrentMediaTime at recording start
+
+    // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
     private var speakerSegments: [SpeakerSegment] = []
+    private let maxInMemorySegments = 200
+    private var totalSegmentCount = 0  // Total segments created this session (including trimmed)
+    private var totalWordCount = 0     // Running word count for analytics
 
     // Conversation tracking for auto-save
     private var recordingStartTime: Date?
@@ -180,6 +190,11 @@ class AppState: ObservableObject {
 
         // Setup lifecycle observers for saving conversations
         setupLifecycleObservers()
+
+        // Wire up memory pressure callback so ResourceMonitor can trim transcript state
+        ResourceMonitor.shared.onMemoryPressureTrimTranscript = { [weak self] in
+            self?.trimTranscriptStateForMemoryPressure()
+        }
 
         // Listen for screen capture permission loss notifications
         screenCapturePermissionLostObserver = NotificationCenter.default.addObserver(
@@ -409,7 +424,7 @@ class AppState: ObservableObject {
         }
 
         // Log final state of important keys
-        if ProcessInfo.processInfo.environment["DEEPGRAM_API_KEY"] != nil {
+        if getenv("DEEPGRAM_API_KEY") != nil {
             log("DEEPGRAM_API_KEY is set")
         } else {
             log("WARNING: DEEPGRAM_API_KEY is NOT set")
@@ -734,14 +749,61 @@ class AppState: ObservableObject {
     /// Check screen recording permission status
     func checkScreenRecordingPermission() {
         let tccGranted = CGPreflightScreenCaptureAccess()
-        hasScreenRecordingPermission = tccGranted
 
-        // If TCC is not granted, clear the "broken" flag
-        // (broken = TCC granted but SCK failing, not applicable if TCC not granted)
         if !tccGranted {
+            hasScreenRecordingPermission = false
             isScreenCaptureKitBroken = false
+            // If user already tried Grant once and permission is still not granted,
+            // the TCC entry is likely corrupted (e.g. after developer account change
+            // + tccutil reset). Show stale UI with toggle off/on instructions.
+            if screenRecordingGrantAttempts > 0 && !isScreenRecordingStale {
+                log("Screen capture: Grant attempted but permission still denied — showing recovery instructions")
+                isScreenRecordingStale = true
+            }
+            return
         }
-        // If TCC is granted AND broken flag is set, leave it set until reset/restart
+
+        // TCC says granted. If the permission alert is currently showing (permission was
+        // previously false or broken or stale), do a real capture test to verify the stale TCC case
+        // (e.g. after developer account change). This avoids spawning a screencapture process
+        // on every didBecomeActive when everything is fine.
+        if !hasScreenRecordingPermission || isScreenCaptureKitBroken || isScreenRecordingStale {
+            let realPermission = ScreenCaptureService.checkPermission()
+            hasScreenRecordingPermission = realPermission
+
+            // Stale TCC entry from old developer signing: CGPreflight says granted but
+            // actual capture fails. The user must toggle OFF then ON in System Settings
+            // to update the code signing requirement (csreq) stored in the TCC database.
+            if !realPermission && !isScreenRecordingStale {
+                log("Screen capture: stale TCC entry detected (developer signing changed)")
+                isScreenRecordingStale = true
+                // Try tccutil reset in case it works (it may not on macOS 15+ for system TCC)
+                Task.detached {
+                    ScreenCaptureService.ensureLaunchServicesRegistrationSync()
+                    _ = ScreenCaptureService.resetScreenCapturePermission()
+                }
+            } else if realPermission {
+                // Permission recovered (user toggled off/on in System Settings)
+                isScreenRecordingStale = false
+                screenRecordingGrantAttempts = 0
+            }
+
+            if isScreenCaptureKitBroken {
+                // Re-check if SCK has recovered (user toggled permission in System Settings)
+                if #available(macOS 14.0, *) {
+                    Task {
+                        let sckWorks = await ScreenCaptureService.testScreenCaptureKitPermission()
+                        if sckWorks {
+                            log("AppState: ScreenCaptureKit recovered — clearing broken flag")
+                            self.isScreenCaptureKitBroken = false
+                            self.hasScreenRecordingPermission = true
+                        }
+                    }
+                }
+            }
+        } else {
+            hasScreenRecordingPermission = true
+        }
     }
 
     /// Check automation permission without triggering a prompt
@@ -1073,8 +1135,15 @@ class AppState: ObservableObject {
             log("Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))")
             log("Transcription: Custom vocabulary: \(vocabulary.joined(separator: ", "))")
 
-            // Initialize transcription service with language and vocabulary
-            transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+            // Determine transcription mode
+            useBatchTranscription = AssistantSettings.shared.batchTranscriptionEnabled && effectiveSource == .microphone
+
+            if !useBatchTranscription {
+                // Streaming mode: initialize WebSocket transcription service
+                transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+            } else {
+                log("Transcription: Batch mode enabled — skipping WebSocket")
+            }
 
             // Set conversation source based on audio source
             if effectiveSource == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
@@ -1093,8 +1162,31 @@ class AppState: ObservableObject {
                 // Initialize audio mixer for combining mic and system audio
                 audioMixer = AudioMixer()
 
+                // VAD gate is always needed for batch mode (chunk boundaries),
+                // and optional for streaming mode (silence gating)
+                if useBatchTranscription || AssistantSettings.shared.vadGateEnabled {
+                    let gate = VADGateService()
+                    if useBatchTranscription && !gate.modelAvailable {
+                        // Batch mode requires working VAD — fall back to streaming
+                        log("Transcription: VAD models unavailable, falling back from batch to streaming mode")
+                        useBatchTranscription = false
+                        vadGateService = nil
+                        transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+                    } else {
+                        vadGateService = gate
+                        log("Transcription: VAD gate enabled\(useBatchTranscription ? " (batch mode)" : "")")
+                    }
+                } else {
+                    vadGateService = nil
+                }
+
                 // Initialize system audio capture if supported (macOS 14.4+)
-                if #available(macOS 14.4, *) {
+                // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
+                //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
+                let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+                if systemAudioDisabled {
+                    log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+                } else if #available(macOS 14.4, *) {
                     systemAudioCaptureService = SystemAudioCaptureService()
                     log("Transcription: System audio capture initialized (macOS 14.4+)")
                 } else {
@@ -1103,37 +1195,47 @@ class AppState: ObservableObject {
             }
             // For BLE device, BleAudioService will be used in startAudioCapture
 
-            // Start transcription service first
-            transcriptionService?.start(
-                onTranscript: { [weak self] segment in
-                    Task { @MainActor in
-                        self?.handleTranscriptSegment(segment)
-                    }
-                },
-                onError: { [weak self] error in
-                    Task { @MainActor in
-                        logError("Transcription error", error: error)
-                        AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-                        self?.stopTranscription()
-                    }
-                },
-                onConnected: { [weak self] in
-                    Task { @MainActor in
-                        log("Transcription: Connected to DeepGram")
-                        // Start audio capture once connected
-                        await self?.startAudioCapture(source: effectiveSource)
-                    }
-                },
-                onDisconnected: {
-                    log("Transcription: Disconnected from DeepGram")
+            if useBatchTranscription {
+                // Batch mode: start audio capture directly (no WebSocket to wait for)
+                recordingStartCATime = CACurrentMediaTime()
+                Task { @MainActor [weak self] in
+                    await self?.startAudioCapture(source: effectiveSource)
                 }
-            )
+            } else {
+                // Streaming mode: start transcription service first, then audio on connect
+                transcriptionService?.start(
+                    onTranscript: { [weak self] segment in
+                        Task { @MainActor in
+                            self?.handleTranscriptSegment(segment)
+                        }
+                    },
+                    onError: { [weak self] error in
+                        Task { @MainActor in
+                            logError("Transcription error", error: error)
+                            AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+                            self?.stopTranscription()
+                        }
+                    },
+                    onConnected: { [weak self] in
+                        Task { @MainActor in
+                            log("Transcription: Connected to DeepGram")
+                            // Start audio capture once connected
+                            await self?.startAudioCapture(source: effectiveSource)
+                        }
+                    },
+                    onDisconnected: {
+                        log("Transcription: Disconnected from DeepGram")
+                    }
+                )
+            }
 
             isTranscribing = true
             AssistantSettings.shared.transcriptionEnabled = true
             audioSource = effectiveSource
             currentTranscript = ""
             speakerSegments = []
+            totalSegmentCount = 0
+            totalWordCount = 0
             liveSpeakerPersonMap = [:]
             LiveTranscriptMonitor.shared.clear()
             recordingStartTime = Date()
@@ -1205,8 +1307,34 @@ class AppState: ObservableObject {
               let audioMixer = audioMixer else { return }
 
         // Start the audio mixer - it will send stereo audio to transcription service
+        // Branch on batch vs streaming mode
         audioMixer.start { [weak self] stereoData in
-            self?.transcriptionService?.sendAudio(stereoData)
+            guard let self = self else { return }
+            if self.useBatchTranscription {
+                // Batch mode: accumulate audio in VAD gate, transcribe on silence
+                guard let gate = self.vadGateService else { return }
+                let output = gate.processAudioBatch(stereoData)
+                if output.isComplete, let audioBuffer = output.audioBuffer {
+                    let wallStartTime = output.speechStartWallTime
+                    Task { @MainActor [weak self] in
+                        await self?.batchTranscribeChunk(audioBuffer: audioBuffer, wallStartTime: wallStartTime)
+                    }
+                }
+            } else if let gate = self.vadGateService {
+                // Streaming mode with VAD gate
+                let output = gate.processAudio(stereoData)
+                if !output.audioToSend.isEmpty {
+                    self.transcriptionService?.sendAudio(output.audioToSend)
+                } else if gate.needsKeepalive() {
+                    self.transcriptionService?.sendKeepalivePublic()
+                }
+                if output.shouldFinalize {
+                    self.transcriptionService?.sendFinalize()
+                }
+            } else {
+                // Streaming mode without VAD gate
+                self.transcriptionService?.sendAudio(stereoData)
+            }
         }
 
         do {
@@ -1352,7 +1480,7 @@ class AppState: ObservableObject {
 
     /// Finish the current conversation and keep recording for a new one
     func finishConversation() async -> FinishConversationResult {
-        guard !speakerSegments.isEmpty else {
+        guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
             log("Transcription: No segments to finish")
             return .discarded
         }
@@ -1363,6 +1491,8 @@ class AppState: ObservableObject {
 
         // Clear segments for the next conversation but keep recording
         speakerSegments = []
+        totalSegmentCount = 0
+        totalWordCount = 0
         liveSpeakerPersonMap = [:]
         LiveTranscriptMonitor.shared.clear()
         LiveNotesMonitor.shared.endSession()
@@ -1444,6 +1574,19 @@ class AppState: ObservableObject {
         audioMixer?.stop()
         audioMixer = nil
 
+        // Flush batch buffer before clearing VAD gate
+        if useBatchTranscription, let gate = vadGateService, let output = gate.flushBatchBuffer() {
+            if let audioBuffer = output.audioBuffer {
+                let wallStartTime = output.speechStartWallTime
+                Task { @MainActor [weak self] in
+                    await self?.batchTranscribeChunk(audioBuffer: audioBuffer, wallStartTime: wallStartTime)
+                }
+            }
+        }
+
+        // Clear VAD gate
+        vadGateService = nil
+
         // Stop transcription service
         transcriptionService?.stop()
         transcriptionService = nil
@@ -1453,9 +1596,7 @@ class AppState: ObservableObject {
 
     /// Clear transcription state after saving
     private func clearTranscriptionState() {
-        let wordCount = currentTranscript.split(separator: " ").count
-
-        log("Transcription: Final segments count: \(speakerSegments.count)")
+        log("Transcription: Final segments count: \(totalSegmentCount) (in-memory: \(speakerSegments.count)), words: \(totalWordCount)")
 
         // End live notes session
         LiveNotesMonitor.shared.endSession()
@@ -1469,9 +1610,24 @@ class AppState: ObservableObject {
         currentSessionId = nil
 
         // Track transcription stopped
-        AnalyticsManager.shared.transcriptionStopped(wordCount: wordCount)
+        AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
+        totalSegmentCount = 0
+        totalWordCount = 0
+        currentTranscript = ""
 
         log("Transcription: Stopped")
+    }
+
+    /// Aggressively trim transcript state to free memory (called by ResourceMonitor during critical memory pressure).
+    /// Segments are already persisted in SQLite, so trimming in-memory state is safe.
+    func trimTranscriptStateForMemoryPressure() {
+        let beforeCount = speakerSegments.count
+        if speakerSegments.count > 50 {
+            speakerSegments = Array(speakerSegments.suffix(50))
+        }
+        currentTranscript = ""
+        LiveTranscriptMonitor.shared.updateSegments(speakerSegments)
+        log("ResourceMonitor: Trimmed transcript state \(beforeCount) -> \(speakerSegments.count) segments")
     }
 
     // MARK: - Conversations
@@ -1994,6 +2150,51 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Batch Transcription
+
+    /// Transcribe a completed speech chunk from VAD batch mode.
+    /// Offsets word timestamps to session-relative time, then feeds through handleTranscriptSegment.
+    private func batchTranscribeChunk(audioBuffer: Data, wallStartTime: Double) async {
+        let offsetSec = wallStartTime - recordingStartCATime
+        let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let vocabulary = AssistantSettings.shared.effectiveVocabulary
+
+        do {
+            let segments = try await TranscriptionService.batchTranscribeFull(
+                audioData: audioBuffer,
+                language: effectiveLanguage,
+                vocabulary: vocabulary
+            )
+
+            for segment in segments {
+                // Offset all word timestamps by the chunk's start time relative to recording start
+                let offsetWords = segment.words.map { word in
+                    TranscriptionService.TranscriptSegment.Word(
+                        word: word.word,
+                        start: word.start + offsetSec,
+                        end: word.end + offsetSec,
+                        confidence: word.confidence,
+                        speaker: word.speaker,
+                        punctuatedWord: word.punctuatedWord
+                    )
+                }
+
+                let offsetSegment = TranscriptionService.TranscriptSegment(
+                    text: segment.text,
+                    isFinal: true,
+                    speechFinal: true,
+                    confidence: segment.confidence,
+                    words: offsetWords,
+                    channelIndex: segment.channelIndex
+                )
+
+                handleTranscriptSegment(offsetSegment)
+            }
+        } catch {
+            logError("Transcription: Batch transcribe chunk failed", error: error)
+        }
+    }
+
     /// Handle incoming transcript segment with speaker diarization
     /// Uses channel index for primary speaker attribution:
     ///   - Channel 0 = microphone = user (speaker 0)
@@ -2008,7 +2209,24 @@ class AppState: ObservableObject {
         let channelBasedSpeaker = segment.channelIndex == 0 ? 0 : 1
 
         // Process words and merge by speaker
-        let words = segment.words
+        // If VAD gate is active (streaming mode only), remap Deepgram timestamps to wall-clock time
+        // In batch mode, timestamps are already session-relative after offsetting in batchTranscribeChunk
+        let words: [TranscriptionService.TranscriptSegment.Word]
+        if !useBatchTranscription, let gate = vadGateService {
+            words = segment.words.map { word in
+                let (remappedStart, remappedEnd) = gate.remapTimestamp(start: word.start, end: word.end)
+                return TranscriptionService.TranscriptSegment.Word(
+                    word: word.word,
+                    start: remappedStart,
+                    end: remappedEnd,
+                    confidence: word.confidence,
+                    speaker: word.speaker,
+                    punctuatedWord: word.punctuatedWord
+                )
+            }
+        } else {
+            words = segment.words
+        }
         guard !words.isEmpty else {
             // Fallback: no words, just append text with channel-based speaker
             if segment.speechFinal && !segment.text.isEmpty {
@@ -2057,6 +2275,9 @@ class AppState: ObservableObject {
 
         // Gap-based merging: combine with existing segments if same speaker and gap < 3 seconds
         for newSeg in newSegments {
+            // Track word count incrementally
+            totalWordCount += newSeg.text.split(separator: " ").count
+
             if let lastIdx = speakerSegments.indices.last,
                speakerSegments[lastIdx].speaker == newSeg.speaker,
                newSeg.start - speakerSegments[lastIdx].end < 3.0 {
@@ -2074,11 +2295,18 @@ class AppState: ObservableObject {
                     log("Transcript [ADD] Speaker \(newSeg.speaker): first segment")
                 }
                 speakerSegments.append(newSeg)
+                totalSegmentCount += 1
             }
         }
 
+        // Sliding window: trim old segments from memory (they're already persisted in SQLite)
+        if speakerSegments.count > maxInMemorySegments {
+            let excess = speakerSegments.count - maxInMemorySegments
+            speakerSegments.removeFirst(excess)
+        }
+
         // Log current segments summary (only last 5 segments when count > 20 to avoid log spam)
-        log("Transcript [SEGMENTS] Total: \(speakerSegments.count) segments")
+        log("Transcript [SEGMENTS] Total: \(totalSegmentCount) segments (in-memory: \(speakerSegments.count))")
         let logSegments = speakerSegments.count > 20
             ? Array(speakerSegments.suffix(5))
             : speakerSegments
@@ -2120,12 +2348,11 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Update the display transcript from speaker segments
+    /// Update the display transcript — no-op since word count is tracked incrementally
+    /// and views use LiveTranscriptMonitor.segments directly
     private func updateTranscriptDisplay() {
-        currentTranscript = speakerSegments.map { seg in
-            let speakerLabel = seg.speaker == 0 ? "You" : "Speaker \(seg.speaker)"
-            return "\(speakerLabel): \(seg.text)"
-        }.joined(separator: "\n")
+        // Previously rebuilt currentTranscript from all speakerSegments on every incoming segment,
+        // causing O(N^2) string allocations. Word count is now tracked via totalWordCount.
     }
 
     /// Append text to transcript (fallback when no word-level data)
@@ -2601,4 +2828,6 @@ extension Notification.Name {
     static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
     /// Posted from Settings to trigger the file indexing sheet
     static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
+    /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
+    static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

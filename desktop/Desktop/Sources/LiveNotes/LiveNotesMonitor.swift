@@ -30,6 +30,9 @@ class LiveNotesMonitor: ObservableObject {
     /// Current segment order being processed
     private var currentSegmentOrder: Int = 0
 
+    /// End time of the last segment we extracted words from (cursor for incremental processing)
+    private var lastProcessedSegmentEnd: Double?
+
     /// Minimum words before triggering AI generation
     private let wordThreshold = 50
 
@@ -79,6 +82,7 @@ class LiveNotesMonitor: ObservableObject {
         wordBuffer = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
         existingNotesContext = []
 
         // Initialize Gemini client if not already done
@@ -105,6 +109,7 @@ class LiveNotesMonitor: ObservableObject {
         wordBuffer = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
     }
 
     /// Clear all notes (used when recording stops)
@@ -114,6 +119,7 @@ class LiveNotesMonitor: ObservableObject {
         existingNotesContext = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
     }
 
     // MARK: - Note Operations
@@ -210,12 +216,27 @@ class LiveNotesMonitor: ObservableObject {
         // Track segment order
         currentSegmentOrder = segments.count
 
-        // Extract new words from segments
-        let allWords = segments.flatMap { $0.text.split(separator: " ").map(String.init) }
+        // Only extract words from segments we haven't processed yet.
+        // Use the last processed segment's end time as a cursor to find new content.
+        let newSegments: ArraySlice<SpeakerSegment>
+        if let lastEnd = lastProcessedSegmentEnd {
+            // Find segments that are new or were updated (end time > last processed)
+            if let startIdx = segments.firstIndex(where: { $0.end > lastEnd }) {
+                newSegments = segments[startIdx...]
+            } else {
+                return  // No new segments
+            }
+        } else {
+            newSegments = segments[...]
+        }
 
-        // Only process new words
-        let newWords = Array(allWords.dropFirst(wordBuffer.count))
+        let newWords = newSegments.flatMap { $0.text.split(separator: " ").map(String.init) }
         guard !newWords.isEmpty else { return }
+
+        // Update cursor to the end of the last segment we processed
+        if let lastSeg = segments.last {
+            lastProcessedSegmentEnd = lastSeg.end
+        }
 
         wordBuffer.append(contentsOf: newWords)
 

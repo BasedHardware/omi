@@ -190,15 +190,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    /// Handle screen capture reset action from notification click or action button.
-    /// Opens System Settings for the user to re-enable permission instead of wiping TCC.
+    /// Handle screen capture reset action from notification click or action button
     private func handleScreenCaptureResetAction(source: String) {
-        log("Screen capture fix triggered from \(source) — opening System Settings")
+        log("Screen capture reset triggered from \(source)")
         AnalyticsManager.shared.screenCaptureResetClicked(source: source)
-        // Re-register with Launch Services so the app appears correctly in the list
-        ScreenCaptureService.ensureLaunchServicesRegistration()
-        // Open System Settings for the user to toggle the permission
-        ScreenCaptureService.openScreenRecordingPreferences()
+        ScreenCaptureService.resetScreenCapturePermissionAndRestart()
     }
 
     func sendNotification(title: String, message: String, assistantId: String = "default", sound: NotificationSound = .default) {

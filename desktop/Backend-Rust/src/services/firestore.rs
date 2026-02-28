@@ -61,11 +61,12 @@ pub const MESSAGES_SUBCOLLECTION: &str = "messages";
 pub const FOLDERS_SUBCOLLECTION: &str = "folders";
 pub const CHAT_SESSIONS_SUBCOLLECTION: &str = "chat_sessions";
 pub const GOALS_SUBCOLLECTION: &str = "goals";
-pub const KG_NODES_SUBCOLLECTION: &str = "kg_nodes";
-pub const KG_EDGES_SUBCOLLECTION: &str = "kg_edges";
+pub const KG_NODES_SUBCOLLECTION: &str = "knowledge_nodes";
+pub const KG_EDGES_SUBCOLLECTION: &str = "knowledge_edges";
 pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
 pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
+pub const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
@@ -5024,6 +5025,16 @@ impl FirestoreService {
             self.update_user_fields(uid, fields, &["assistant_settings"]).await?;
         }
 
+        // Write update_channel as top-level field on user doc (not inside assistant_settings)
+        if let Some(ref channel) = data.update_channel {
+            let fields = json!({
+                "update_channel": {
+                    "stringValue": channel
+                }
+            });
+            self.update_user_fields(uid, fields, &["update_channel"]).await?;
+        }
+
         // Return merged state
         self.get_assistant_settings(uid).await
     }
@@ -5052,16 +5063,36 @@ impl FirestoreService {
     }
 
     /// Update user language preference
+    /// Languages supported by Deepgram Nova-3 multi-language auto-detection.
+    const MULTI_LANGUAGE_SUPPORTED: &[&str] = &[
+        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
+        "es", "es-419",
+        "fr", "fr-CA",
+        "de",
+        "hi",
+        "ru",
+        "pt", "pt-BR", "pt-PT",
+        "ja",
+        "it",
+        "nl",
+    ];
+
     pub async fn update_user_language(
         &self,
         uid: &str,
         language: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let fields = json!({
+        // Set language field
+        let lang_fields = json!({
             "language": {"stringValue": language}
         });
+        self.update_user_fields(uid, lang_fields, &["language"]).await?;
 
-        self.update_user_fields(uid, fields, &["language"]).await
+        // Auto-set single_language_mode based on whether the language supports multi-language
+        let single_language_mode = !Self::MULTI_LANGUAGE_SUPPORTED.contains(&language);
+        self.update_transcription_preferences(uid, Some(single_language_mode), None).await?;
+
+        Ok(())
     }
 
     /// Get recording permission for a user
@@ -5177,6 +5208,7 @@ impl FirestoreService {
             use_case: self.parse_string(fields, "use_case"),
             job: self.parse_string(fields, "job"),
             company: self.parse_string(fields, "company"),
+            desktop_update_channel: self.parse_string(fields, "desktop_update_channel"),
         })
     }
 
@@ -9439,6 +9471,83 @@ impl FirestoreService {
         });
 
         self.update_user_fields(uid, fields, &["agentVm"]).await
+    }
+
+    // =========================================================================
+    // SCREEN ACTIVITY
+    // =========================================================================
+
+    /// Batch write screen activity rows to Firestore users/{uid}/screen_activity/{id}.
+    /// Uses Firestore commit API for batch writes (max 500 per commit).
+    pub async fn upsert_screen_activity(
+        &self,
+        uid: &str,
+        rows: &[crate::models::screen_activity::ScreenActivityRow],
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        let mut written = 0;
+
+        for chunk in rows.chunks(500) {
+            let writes: Vec<Value> = chunk
+                .iter()
+                .map(|row| {
+                    let doc_name = format!(
+                        "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
+                        self.project_id,
+                        USERS_COLLECTION,
+                        uid,
+                        SCREEN_ACTIVITY_SUBCOLLECTION,
+                        row.id
+                    );
+
+                    // Truncate OCR text to 1000 chars
+                    let ocr_truncated: String = row.ocr_text.chars().take(1000).collect();
+
+                    json!({
+                        "update": {
+                            "name": doc_name,
+                            "fields": {
+                                "timestamp": {"stringValue": &row.timestamp},
+                                "appName": {"stringValue": &row.app_name},
+                                "windowTitle": {"stringValue": &row.window_title},
+                                "ocrText": {"stringValue": ocr_truncated},
+                            }
+                        }
+                    })
+                })
+                .collect();
+
+            let commit_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+                self.project_id
+            );
+
+            let body = json!({ "writes": writes });
+
+            let response = self
+                .build_request(reqwest::Method::POST, &commit_url)
+                .await?
+                .json(&body)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore screen_activity batch commit error: {}", error_text).into());
+            }
+
+            written += chunk.len();
+        }
+
+        tracing::info!(
+            "Screen activity Firestore write uid={} count={}",
+            uid,
+            written
+        );
+        Ok(written)
     }
 }
 

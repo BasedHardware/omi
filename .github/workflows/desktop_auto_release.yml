@@ -1,0 +1,83 @@
+name: Auto Release Desktop on Main
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'desktop/**'
+
+permissions:
+  contents: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version, consolidate changelog, and push tag
+        run: |
+          # Get latest desktop release tag
+          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            VERSION="0.0.1"
+          else
+            # Strip v prefix and +build-macos suffix  e.g. v0.11.11+11011-macos -> 0.11.11
+            VER=$(echo "$LATEST" | sed -E 's/^v([0-9.]+)\+[0-9]+-macos$/\1/')
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+            PATCH=$((${PATCH:-0} + 1))
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+
+          # Build number: 0.11.12 -> 11012  (each component * 1000, summed)
+          BUILD_NUMBER=$(echo "$VERSION" | tr '.' '\n' | awk '{s=s*1000+$1}END{print s}')
+          RELEASE_TAG="v${VERSION}+${BUILD_NUMBER}-macos"
+
+          echo "Latest tag : ${LATEST:-none}"
+          echo "New version: $VERSION"
+          echo "New tag    : $RELEASE_TAG"
+
+          # Consolidate unreleased changelog entries into a versioned release
+          TODAY=$(date -u +%Y-%m-%d)
+          python3 -c "
+          import json, sys
+
+          with open('desktop/CHANGELOG.json', 'r') as f:
+              data = json.load(f)
+
+          unreleased = data.get('unreleased', [])
+          if not unreleased:
+              unreleased = ['Bug fixes and improvements']
+
+          new_release = {
+              'version': '$VERSION',
+              'date': '$TODAY',
+              'changes': unreleased
+          }
+
+          data.setdefault('releases', []).insert(0, new_release)
+          data['unreleased'] = []
+
+          with open('desktop/CHANGELOG.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+
+          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
+          "
+
+          # Commit the updated CHANGELOG.json to main
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/CHANGELOG.json
+          git commit -m "Update CHANGELOG.json for v${VERSION} [skip ci]" || echo "No changelog changes to commit"
+          git push origin main
+
+          # Create and push the tag
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"

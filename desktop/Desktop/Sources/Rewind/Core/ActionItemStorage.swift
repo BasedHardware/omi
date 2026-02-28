@@ -102,6 +102,17 @@ actor ActionItemStorage {
         }
     }
 
+    /// Check if a non-deleted action item with the given description exists
+    func actionItemExists(description: String) async -> Bool {
+        guard let db = try? await ensureInitialized() else { return false }
+        return (try? await db.read { database in
+            try ActionItemRecord
+                .filter(Column("description") == description)
+                .filter(Column("deleted") == false)
+                .fetchCount(database) > 0
+        }) ?? false
+    }
+
     /// Get a single action item by its backend ID
     func getLocalActionItem(byBackendId backendId: String) async throws -> TaskActionItem? {
         let db = try await ensureInitialized()
@@ -737,16 +748,21 @@ actor ActionItemStorage {
     }
 
     /// Get action items that haven't been synced to backend yet
-    func getUnsyncedActionItems() async throws -> [ActionItemRecord] {
+    /// - Parameter includeRecent: When true, skips the 30-second age filter (used when syncing
+    ///   items created via raw SQL where no API call is in-flight).
+    func getUnsyncedActionItems(includeRecent: Bool = false) async throws -> [ActionItemRecord] {
         let db = try await ensureInitialized()
         let ageThreshold = Date().addingTimeInterval(-30)
 
         return try await db.read { database in
-            try ActionItemRecord
+            var request = ActionItemRecord
                 .filter(Column("backendSynced") == false)
                 .filter(Column("backendId") == nil || Column("backendId") == "")
                 .filter(Column("deleted") == false)
-                .filter(Column("createdAt") < ageThreshold)
+            if !includeRecent {
+                request = request.filter(Column("createdAt") < ageThreshold)
+            }
+            return try request
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }

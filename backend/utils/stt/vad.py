@@ -1,6 +1,7 @@
 import os
 
 import requests
+import torch
 from fastapi import HTTPException
 from pydub import AudioSegment
 
@@ -8,6 +9,11 @@ from database import redis_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+torch.set_num_threads(1)
+torch.hub.set_dir('pretrained_models')
+model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad')
+get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks = utils
 
 
 def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):

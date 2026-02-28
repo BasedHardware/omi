@@ -395,6 +395,26 @@ actor RewindDatabase {
             "omi.db", "Screenshots", "Videos", "backups",
         ]
 
+        // Checkpoint WAL at destination before deleting — preserves recent writes
+        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
+        let destDB = userDir.appendingPathComponent("omi.db")
+        if fileManager.fileExists(atPath: destDB.path) {
+            let destWAL = userDir.appendingPathComponent("omi.db-wal")
+            if fileManager.fileExists(atPath: destWAL.path) {
+                do {
+                    let config = Configuration()
+                    let pool = try DatabasePool(path: destDB.path, configuration: config)
+                    try pool.write { db in
+                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                    }
+                    try pool.close()
+                    log("RewindDatabase: Checkpointed WAL at dest before migration")
+                } catch {
+                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
+                }
+            }
+        }
+
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
         // also cause SQLITE_IOERR_CORRUPTFS when SQLite opens the migrated DB.
@@ -2080,6 +2100,53 @@ actor RewindDatabase {
         migrator.registerMigration("addActionItemRecurrence") { db in
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceRule TEXT")
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
+        }
+
+        // Clean up orphan screenshot records that have no valid storage path.
+        // These were created when VideoChunkEncoder dropped frames (e.g. aspect ratio debounce)
+        // but processFrame still inserted a DB record with imagePath="" and no videoChunkPath.
+        migrator.registerMigration("deleteOrphanScreenshots") { db in
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM screenshots
+                WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                AND (imagePath IS NULL OR imagePath = '')
+            """) ?? 0
+            if count > 0 {
+                try db.execute(sql: """
+                    DELETE FROM screenshots
+                    WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                    AND (imagePath IS NULL OR imagePath = '')
+                """)
+                log("RewindDatabase: Cleaned up \(count) orphan screenshot records with no storage path")
+            }
+        }
+
+        migrator.registerMigration("addMemoryHeadline") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "headline", .text)
+            }
+        }
+
+        migrator.registerMigration("createLocalKnowledgeGraph") { db in
+            try db.create(table: "local_kg_nodes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("nodeId", .text).notNull().unique()
+                t.column("label", .text).notNull()
+                t.column("nodeType", .text).notNull()
+                t.column("aliasesJson", .text)
+                t.column("sourceFileIds", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "local_kg_edges") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("edgeId", .text).notNull().unique()
+                t.column("sourceNodeId", .text).notNull()
+                t.column("targetNodeId", .text).notNull()
+                t.column("label", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
         }
 
         try migrator.migrate(queue)
