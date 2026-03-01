@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:intl/intl.dart';
 
+import 'package:omi/theme/app_theme.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -147,11 +148,11 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
               child: ElevatedButton(
                 onPressed: _isAccepting ? null : _acceptTasks,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
+                  backgroundColor: context.primaryColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurple.withOpacity(0.5),
+                  disabledBackgroundColor: context.primaryColor.withValues(alpha: 0.5),
                 ),
                 child: _isAccepting
                     ? const SizedBox(
