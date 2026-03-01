@@ -8266,4 +8266,13 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Išsaugota. Uždarykite ir vėl atidarykite programėlę, kad pritaikytumėte pakeitimus.';
+
+  @override
+  String get shared => 'Bendrinamas';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tik jūs galite matyti šį pokalbį';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bet kas, turintis nuorodą, gali peržiūrėti';
 }

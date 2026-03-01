@@ -8322,4 +8322,13 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Αποθηκεύτηκε. Κλείστε και ανοίξτε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.';
+
+  @override
+  String get shared => 'Κοινόχρηστο';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία';
+
+  @override
+  String get anyoneWithLinkCanView => 'Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει';
 }

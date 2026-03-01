@@ -8257,4 +8257,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Tallennettu. Sulje ja avaa sovellus uudelleen, jotta muutokset tulevat voimaan.';
+
+  @override
+  String get shared => 'Jaettu';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Vain sinä voit nähdä tämän keskustelun';
+
+  @override
+  String get anyoneWithLinkCanView => 'Kuka tahansa linkin haltija voi katsella';
 }

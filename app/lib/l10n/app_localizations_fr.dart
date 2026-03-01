@@ -8336,4 +8336,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Enregistré. Fermez et rouvrez l\'application pour appliquer.';
+
+  @override
+  String get shared => 'Partagé';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Vous seul pouvez voir cette conversation';
+
+  @override
+  String get anyoneWithLinkCanView => 'Toute personne disposant du lien peut voir';
 }
