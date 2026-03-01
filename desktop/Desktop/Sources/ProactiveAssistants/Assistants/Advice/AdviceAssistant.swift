@@ -149,7 +149,7 @@ actor AdviceAssistant: ProactiveAssistant {
         let interval = await extractionInterval
         let lookbackStart = screenshotTime.addingTimeInterval(-interval)
         return try await runAdviceExtraction(
-            jpegData: jpegData,
+            jpegData: nil,
             appName: appName,
             windowTitle: windowTitle,
             referenceTime: screenshotTime,
@@ -425,7 +425,7 @@ actor AdviceAssistant: ProactiveAssistant {
         // Cap lookback: since last analysis or max 1 hour ago
         let lookbackStart = max(lastAnalysisTime, now.addingTimeInterval(-3600))
         let (result, _) = try await runAdviceExtraction(
-            jpegData: frame.jpegData,
+            jpegData: nil,
             appName: frame.appName,
             windowTitle: frame.windowTitle,
             referenceTime: now,
@@ -443,7 +443,7 @@ actor AdviceAssistant: ProactiveAssistant {
     /// - `trackSqlCount`: when true, counts SQL queries for test reporting
     /// Returns (result, sqlQueryCount).
     private func runAdviceExtraction(
-        jpegData: Data,
+        jpegData: Data?,
         appName: String,
         windowTitle: String?,
         referenceTime: Date,
@@ -452,10 +452,10 @@ actor AdviceAssistant: ProactiveAssistant {
     ) async throws -> (AdviceExtractionResult?, Int) {
         var sqlCount = 0
 
-        // Build prompt with screenshot context
+        // Build prompt with current context
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "h:mm a, EEEE"
-        var prompt = "LATEST SCREENSHOT from \(appName)."
+        var prompt = "CURRENT APP: \(appName)."
         if let windowTitle = windowTitle, !windowTitle.isEmpty {
             prompt += " Window: \"\(windowTitle)\"."
         }
@@ -494,7 +494,7 @@ actor AdviceAssistant: ProactiveAssistant {
             prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
         }
 
-        prompt += "\n\nAnalyze the activity summary and screenshot. Use execute_sql to investigate OCR text from interesting windows if needed. Then call provide_advice or no_advice."
+        prompt += "\n\nInvestigate the activity summary. Use execute_sql to read OCR text from interesting windows. Use view_screenshot to see what's actually on screen. Then call provide_advice or no_advice."
 
         log("Advice: --- PROMPT (text portion) ---\n\(prompt)")
 
@@ -508,21 +508,17 @@ actor AdviceAssistant: ProactiveAssistant {
         // Build tool definitions
         let tools = buildAdviceTools()
 
-        // Build initial contents with image
-        let base64Data = jpegData.base64EncodedString()
+        // Build initial contents — text only, no image
         var contents: [GeminiImageToolRequest.Content] = [
             GeminiImageToolRequest.Content(
                 role: "user",
-                parts: [
-                    GeminiImageToolRequest.Part(text: prompt),
-                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
-                ]
+                parts: [GeminiImageToolRequest.Part(text: prompt)]
             )
         ]
 
-        // Agentic loop (max 5 iterations, 120s timeout per Gemini call)
+        // Agentic loop (max 7 iterations, 120s timeout per Gemini call)
         let client = self.geminiClient
-        for iteration in 0..<5 {
+        for iteration in 0..<7 {
             let iterContents = contents
             let iterSystemPrompt = currentSystemPrompt
             let iterTools = [tools]
@@ -589,6 +585,70 @@ actor AdviceAssistant: ProactiveAssistant {
                         response: .init(result: resultStr)
                     ))]
                 ))
+                continue
+
+            case "view_screenshot":
+                let screenshotId: Int64
+                if let idInt = toolCall.arguments["screenshot_id"] as? Int {
+                    screenshotId = Int64(idInt)
+                } else if let idInt64 = toolCall.arguments["screenshot_id"] as? Int64 {
+                    screenshotId = idInt64
+                } else if let idStr = toolCall.arguments["screenshot_id"] as? String, let parsed = Int64(idStr) {
+                    screenshotId = parsed
+                } else if let idDouble = toolCall.arguments["screenshot_id"] as? Double {
+                    screenshotId = Int64(idDouble)
+                } else {
+                    screenshotId = 0
+                }
+                log("Advice: view_screenshot iteration \(iteration): id=\(screenshotId)")
+
+                // Append model's tool call
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["screenshot_id": String(screenshotId)]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+
+                // Load screenshot from DB + storage
+                do {
+                    guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
+                        log("Advice: view_screenshot — not found (id=\(screenshotId))")
+                        contents.append(GeminiImageToolRequest.Content(
+                            role: "user",
+                            parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                                name: toolCall.name,
+                                response: .init(result: "Screenshot not found for id \(screenshotId)")
+                            ))]
+                        ))
+                        continue
+                    }
+                    let imageData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+                    let base64 = imageData.base64EncodedString()
+                    log("Advice: view_screenshot — loaded \(imageData.count) bytes from \(screenshot.appName)")
+
+                    // Return function response + image in the same user message
+                    contents.append(GeminiImageToolRequest.Content(
+                        role: "user",
+                        parts: [
+                            GeminiImageToolRequest.Part(functionResponse: .init(
+                                name: toolCall.name,
+                                response: .init(result: "Screenshot from \(screenshot.appName) at \(screenshot.timestamp). Image attached.")
+                            )),
+                            GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64),
+                        ]
+                    ))
+                } catch {
+                    log("Advice: view_screenshot — load failed: \(error.localizedDescription)")
+                    contents.append(GeminiImageToolRequest.Content(
+                        role: "user",
+                        parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                            name: toolCall.name,
+                            response: .init(result: "Failed to load screenshot: \(error.localizedDescription)")
+                        ))]
+                    ))
+                }
                 continue
 
             default:
@@ -697,6 +757,18 @@ actor AdviceAssistant: ProactiveAssistant {
                         "current_activity": .init(type: "string", description: "High-level description of user's activity")
                     ],
                     required: ["advice", "headline", "category", "source_app", "confidence", "context_summary", "current_activity"]
+                )
+            ),
+            // view_screenshot — investigation tool (returns actual screenshot image)
+            GeminiTool.FunctionDeclaration(
+                name: "view_screenshot",
+                description: "View an actual screenshot image by its ID. Use execute_sql first to find interesting screenshot IDs (e.g. SELECT id, timestamp, appName, windowTitle FROM screenshots WHERE ... LIMIT 1), then call this to see the screen. Returns the image for visual analysis.",
+                parameters: GeminiTool.FunctionDeclaration.Parameters(
+                    type: "object",
+                    properties: [
+                        "screenshot_id": .init(type: "integer", description: "The screenshot ID from the screenshots table")
+                    ],
+                    required: ["screenshot_id"]
                 )
             ),
             // no_advice — terminal tool (nothing worth mentioning)
