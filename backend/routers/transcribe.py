@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import logging
 import os
 import struct
 import time
@@ -83,6 +84,7 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
+from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
@@ -97,7 +99,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-import logging
+from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +131,7 @@ async def _stream_handler(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -687,8 +690,11 @@ async def _stream_handler(
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
 
+    vad_gate = None
+
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
+        # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
 
     async def _process_stt():
@@ -719,6 +725,46 @@ async def _stream_handler(
             if not has_speech_profile:
                 speech_profile_complete.set()
 
+            # Initialize VAD gate for all eligible DG sessions.
+            # Guard: gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
+            # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
+            # (the "8"/"16" refers to sample rate kHz, not bit depth).
+            # DG always receives mono (channels=1), so clamp gate channels to 1.
+            # When speech profile is active (preseconds > 0), start in shadow mode
+            # so preseconds filtering uses uncompressed DG timestamps. After profile
+            # completes, switch to active mode to start saving cost.
+            nonlocal vad_gate
+            gate_enabled_by_override = vad_gate_override == 'enabled'
+            gate_disabled_by_override = vad_gate_override == 'disabled'
+            if (
+                not gate_disabled_by_override
+                and (is_gate_enabled() or gate_enabled_by_override)
+                and stt_service == STTService.deepgram
+            ):
+                gate_mode = 'active' if gate_enabled_by_override else VAD_GATE_MODE
+                if speech_profile_preseconds > 0 and gate_mode == 'active':
+                    gate_mode = 'shadow'  # Shadow during profile, activate later
+                try:
+                    vad_gate = VADStreamingGate(
+                        sample_rate=sample_rate,
+                        channels=1,  # DG always receives mono (encoding=linear16, channels=1)
+                        mode=gate_mode,
+                        uid=uid,
+                        session_id=session_id,
+                    )
+                    logger.info(
+                        'VAD gate initialized mode=%s preseconds=%s codec=%s sample_rate=%s uid=%s session=%s',
+                        gate_mode,
+                        speech_profile_preseconds,
+                        codec,
+                        sample_rate,
+                        uid,
+                        session_id,
+                    )
+                except Exception:
+                    logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
+                    vad_gate = None
+
             # DEEPGRAM
             if stt_service == STTService.deepgram:
                 deepgram_socket = await process_audio_dg(
@@ -729,6 +775,7 @@ async def _stream_handler(
                     preseconds=speech_profile_preseconds,
                     model=stt_model,
                     keywords=vocabulary[:100] if vocabulary else None,
+                    vad_gate=vad_gate,
                 )
                 if has_speech_profile:
                     deepgram_profile_socket = await process_audio_dg(
@@ -1142,6 +1189,26 @@ async def _stream_handler(
         def is_connected():
             return pusher_connected
 
+        async def pusher_heartbeat():
+            """Send periodic data-frame heartbeats to reset the GKE ILB idle timer.
+
+            The GKE Internal Load Balancer counts only data frames for its idle
+            timeout (default 30 s). WebSocket control frames (ping/pong) are
+            ignored. During user silence most connections carry zero data frames,
+            causing the ILB to kill the connection. This task sends a minimal
+            4-byte data frame (header type 100) every 20 s to keep the link alive.
+            """
+            nonlocal pusher_ws, pusher_connected, websocket_active
+            while websocket_active:
+                await asyncio.sleep(20)
+                if pusher_connected and pusher_ws:
+                    try:
+                        await pusher_ws.send(struct.pack("I", 100))
+                    except ConnectionClosed:
+                        pusher_connected = False
+                    except Exception as e:
+                        logger.error(f"Pusher heartbeat send failed: {e} {uid} {session_id}")
+
         return (
             connect,
             close,
@@ -1153,6 +1220,7 @@ async def _stream_handler(
             pusher_receive,
             is_connected,
             send_speaker_sample_request,
+            pusher_heartbeat,
         )
 
     transcript_send = None
@@ -1165,6 +1233,7 @@ async def _stream_handler(
     pusher_receive = None
     pusher_is_connected = None
     send_speaker_sample_request = None
+    pusher_heartbeat = None
 
     # Transcripts
     #
@@ -1421,7 +1490,7 @@ async def _stream_handler(
             )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
-                logger.info(f"  - {data['name']}: {distance:.4f} {uid} {session_id}")
+                logger.info(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
                 if distance < best_distance:
                     best_distance = distance
                     best_match = (person_id, data['name'])
@@ -1429,7 +1498,7 @@ async def _stream_handler(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 logger.info(
-                    f"Speaker ID: speaker {speaker_id} -> {person_name} (distance={best_distance:.3f}) {uid} {session_id}"
+                    f"Speaker ID: speaker {speaker_id} -> {sanitize_pii(person_name)} (distance={best_distance:.3f}) {uid} {session_id}"
                 )
 
                 # Store for session consistency
@@ -1684,7 +1753,7 @@ async def _stream_handler(
         data = chunk_data.get('data')
 
         if not temp_id or not isinstance(index, int) or not isinstance(total, int) or not data:
-            logger.error(f"Invalid image chunk received: {chunk_data} {uid} {session_id}")
+            logger.error(f"Invalid image chunk received: {sanitize(chunk_data)} {uid} {session_id}")
             return
 
         # Cleanup expired chunks periodically
@@ -1725,7 +1794,6 @@ async def _stream_handler(
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal soniox_profile_socket, deepgram_profile_socket, audio_ring_buffer
-
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
@@ -1755,6 +1823,15 @@ async def _stream_handler(
                         logger.info(f'Scheduling delayed close of deepgram_profile_socket {uid} {session_id}')
                         socket_to_close = deepgram_profile_socket
                         deepgram_profile_socket = None  # Stop sending immediately
+
+                        # Activate VAD gate now that speech profile phase is done
+                        if (
+                            vad_gate is not None
+                            and (VAD_GATE_MODE == 'active' or vad_gate_override == 'enabled')
+                            and vad_gate.mode == 'shadow'
+                        ):
+                            vad_gate.activate()
+                            logger.info('VAD gate activated after speech profile uid=%s session=%s', uid, session_id)
 
                         async def close_dg_profile():
                             await asyncio.sleep(5)
@@ -1847,11 +1924,12 @@ async def _stream_handler(
                             )
                             continue
 
-                    # Feed ring buffer for speaker identification
+                    # Feed ring buffer for speaker identification (always, with wall-clock time)
                     if audio_ring_buffer is not None:
                         audio_ring_buffer.write(data, last_audio_received_time)
 
                     if not use_custom_stt:
+                        # VAD gating is handled inside GatedDeepgramSocket.send()
                         stt_audio_buffer.extend(data)
                         await flush_stt_buffer()
 
@@ -1927,7 +2005,9 @@ async def _stream_handler(
                                     f"Speaker assignment ignored: missing speaker_id/person_id/person_name. {uid} {session_id}"
                                 )
                     except json.JSONDecodeError:
-                        logger.info(f"Received non-json text message: {message.get('text')} {uid} {session_id}")
+                        logger.info(
+                            f"Received non-json text message: {sanitize(message.get('text'))} {uid} {session_id}"
+                        )
 
         except WebSocketDisconnect:
             logger.error(f"WebSocket disconnected (exception) {uid} {session_id}")
@@ -1935,6 +2015,9 @@ async def _stream_handler(
             logger.error(f'Could not process data: error {e} {uid} {session_id}')
             websocket_close_code = 1011
         finally:
+            # Log VAD gate metrics before cleanup
+            if vad_gate is not None:
+                logger.info(json.dumps(vad_gate.to_json_log()))
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
@@ -1961,6 +2044,7 @@ async def _stream_handler(
                 pusher_receive,
                 pusher_is_connected,
                 send_speaker_sample_request,
+                pusher_heartbeat,
             ) = create_pusher_task_handler()
 
             # Pusher connection
@@ -1977,6 +2061,7 @@ async def _stream_handler(
                 pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
             if pusher_receive is not None:
                 pusher_tasks.append(asyncio.create_task(pusher_receive()))
+            pusher_tasks.append(asyncio.create_task(pusher_heartbeat()))
 
         # Tasks
         data_process_task = asyncio.create_task(
@@ -2021,6 +2106,7 @@ async def _stream_handler(
         # STT sockets
         try:
             if deepgram_socket:
+                # GatedDeepgramSocket.finish() handles finalize automatically
                 deepgram_socket.finish()
             if deepgram_profile_socket:
                 deepgram_profile_socket.finish()
@@ -2092,6 +2178,7 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    vad_gate_override: Optional[str] = None,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2117,6 +2204,7 @@ async def _listen(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
     logger.info(f"_listen ended {uid}")
 
@@ -2136,10 +2224,12 @@ async def listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     speaker_auto_assign: str = 'disabled',
+    vad_gate: str = '',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
     speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
+    vad_gate_override = vad_gate if vad_gate in ('enabled', 'disabled') else None
     await _listen(
         websocket,
         uid,
@@ -2154,6 +2244,7 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
 
 

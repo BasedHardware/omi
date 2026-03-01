@@ -217,7 +217,10 @@ final class AudioSourceManager: ObservableObject {
         audioMixer = AudioMixer()
 
         // Initialize system audio if supported (macOS 14.4+)
-        if #available(macOS 14.4, *) {
+        let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+        if systemAudioDisabled {
+            logger.info("System audio capture disabled by user preference")
+        } else if #available(macOS 14.4, *) {
             systemAudioCaptureService = SystemAudioCaptureService()
         }
 
@@ -234,7 +237,7 @@ final class AudioSourceManager: ObservableObject {
             onAudioLevel: { [weak self] level in
                 Task { @MainActor in
                     self?.audioLevel = level
-                    AudioLevelMonitor.shared.microphoneLevel = level
+                    AudioLevelMonitor.shared.updateMicrophoneLevel(level)
                 }
             }
         )
@@ -247,7 +250,7 @@ final class AudioSourceManager: ObservableObject {
                 },
                 onAudioLevel: { level in
                     Task { @MainActor in
-                        AudioLevelMonitor.shared.systemLevel = level
+                        AudioLevelMonitor.shared.updateSystemLevel(level)
                     }
                 }
             )

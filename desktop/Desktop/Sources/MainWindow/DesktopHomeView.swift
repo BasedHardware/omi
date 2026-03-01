@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - NSHostingView sizingOptions access
+
+/// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
+/// NSHostingView is generic so we can't cast to it without knowing Content.
+/// This protocol + extension lets us access sizingOptions through existential dispatch.
+@MainActor
+private protocol HostingSizingConfigurable: AnyObject {
+    var sizingOptions: NSHostingSizingOptions { get set }
+}
+extension NSHostingView: HostingSizingConfigurable {}
+
 struct DesktopHomeView: View {
     @StateObject private var appState = AppState()
     @StateObject private var viewModelContainer = ViewModelContainer()
@@ -19,8 +30,6 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
-    // File indexing sheet for existing users
-    @State private var showFileIndexingSheet = false
 
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
@@ -69,6 +78,16 @@ struct DesktopHomeView: View {
             } else {
                 // State 3: Signed in and onboarded - show main content
                 ZStack {
+                    // After onboarding completes, navigate to Chat page so the conversation continues
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .onAppear {
+                            if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
+                                UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
+                                log("DesktopHomeView: Onboarding just completed — navigating to Chat page")
+                                selectedIndex = SidebarNavItem.chat.rawValue
+                            }
+                        }
                     mainContent
                         .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
                         .onAppear {
@@ -76,9 +95,13 @@ struct DesktopHomeView: View {
                             // Check all permissions on launch
                             appState.checkAllPermissions()
 
-                            // Show file indexing sheet for existing users who haven't done it
+                            // For existing users who haven't indexed files yet, run a background scan
                             if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
-                                showFileIndexingSheet = true
+                                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+                                Task {
+                                    log("DesktopHomeView: Running background file scan for existing user")
+                                    await FileIndexerService.shared.backgroundRescan()
+                                }
                             }
 
                             let settings = AssistantSettings.shared
@@ -195,16 +218,11 @@ struct DesktopHomeView: View {
                             }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-                            showFileIndexingSheet = true
-                        }
-                        .dismissableSheet(isPresented: $showFileIndexingSheet) {
-                            FileIndexingView(
-                                chatProvider: viewModelContainer.chatProvider,
-                                onComplete: { fileCount in
-                                    showFileIndexingSheet = false
-                                }
-                            )
-                            .frame(width: 600, height: 650)
+                            // Background rescan — no loading screen needed
+                            Task {
+                                log("DesktopHomeView: File indexing triggered from settings, running background rescan")
+                                await FileIndexerService.shared.backgroundRescan()
+                            }
                         }
 
                     if !viewModelContainer.isInitialLoadComplete {
@@ -245,11 +263,20 @@ struct DesktopHomeView: View {
         .tint(OmiColors.purplePrimary)
         .onAppear {
             log("DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)")
-            // Force dark appearance on the window
+            // Force dark appearance and disable minSize computation on NSHostingView.
+            // By default, every @Published change triggers
+            // updateWindowContentSizeExtremaIfNecessary() → minSize() → sizeThatFits()
+            // which traverses the ENTIRE view tree (~200 samples per window per trigger).
+            // Removing .minSize from sizingOptions prevents this full-tree traversal.
+            // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
                     if window.title.hasPrefix("Omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
+                        window.minSize = NSSize(width: 900, height: 600)
+                        // Remove .minSize from hosting view's sizingOptions.
+                        // Search contentView itself + all descendants.
+                        Self.disableMinSizeComputation(in: window)
                     }
                 }
             }
@@ -258,6 +285,36 @@ struct DesktopHomeView: View {
         }
         .onChange(of: currentTierLevel) { _, _ in
             redirectIfPageHidden()
+        }
+    }
+
+    /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
+    /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
+    /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
+    /// NOTE: ClickThroughHostingView is excluded because it wraps the sidebar and needs
+    /// intrinsicContentSize for SwiftUI's .fixedSize() layout to compute the correct width.
+    private static func disableMinSizeComputation(in window: NSWindow) {
+        func visit(_ view: NSView) {
+            if let hosting = view as? any HostingSizingConfigurable {
+                // Skip ClickThroughHostingView — it's an NSViewRepresentable boundary
+                // that needs intrinsicContentSize for the sidebar's .fixedSize() to work.
+                let typeName = String(describing: type(of: view))
+                guard !typeName.contains("ClickThroughHostingView") else {
+                    log("DesktopHomeView: Skipping sizingOptions on \(typeName) (needs intrinsic size)")
+                    // Still visit children
+                    for subview in view.subviews { visit(subview) }
+                    return
+                }
+                let before = hosting.sizingOptions
+                hosting.sizingOptions = []
+                log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+            }
+            for subview in view.subviews {
+                visit(subview)
+            }
+        }
+        if let contentView = window.contentView {
+            visit(contentView)
         }
     }
 
@@ -343,6 +400,7 @@ struct DesktopHomeView: View {
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
+            .clipped()
 
             // Main content area with rounded container
             ZStack {

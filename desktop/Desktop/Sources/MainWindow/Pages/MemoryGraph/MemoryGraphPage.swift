@@ -182,7 +182,13 @@ class MemoryGraphViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let response = try await APIClient.shared.getKnowledgeGraph()
+            // Try local SQLite first (populated during file exploration)
+            var response = await KnowledgeGraphStorage.shared.loadGraph()
+            if response.nodes.isEmpty {
+                // Fall back to API (user may have graph from mobile)
+                response = try await APIClient.shared.getKnowledgeGraph()
+            }
+
             log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
             isEmpty = response.nodes.isEmpty
 
@@ -229,6 +235,121 @@ class MemoryGraphViewModel: ObservableObject {
             await loadGraph()
         } catch {
             log("Failed to rebuild knowledge graph: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Incremental Graph Update
+
+    /// Add new graph data from storage incrementally (used during onboarding)
+    func addGraphFromStorage() async {
+        let response = await KnowledgeGraphStorage.shared.loadGraph()
+        guard !response.nodes.isEmpty else { return }
+        isEmpty = false
+
+        let userName = AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.givenName
+        simulation.addNodesAndEdges(graphResponse: response, userNodeLabel: userName)
+
+        // Run a burst of physics to integrate new nodes
+        await Task.detached(priority: .userInitiated) { [simulation] in
+            simulation.runSync(ticks: 200)
+        }.value
+
+        // Create scene nodes for new entries, animate them in
+        addNewSceneNodes()
+        autoFitCamera(animated: true)
+
+        // Re-enable animation for settling
+        isAnimating = true
+        Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            await MainActor.run { isAnimating = false }
+        }
+    }
+
+    /// Create scene nodes only for simulation nodes/edges not yet in the scene
+    private func addNewSceneNodes() {
+        let billboardConstraint = SCNBillboardConstraint()
+        billboardConstraint.freeAxes = [.X, .Y]
+
+        // Add new edges
+        for edge in simulation.edges {
+            guard edgeSceneNodes[edge.id] == nil else { continue }
+            guard let source = simulation.nodeMap[edge.sourceId],
+                  let target = simulation.nodeMap[edge.targetId] else { continue }
+
+            let edgeColor = blendColors(source.nodeType.nsColor, target.nodeType.nsColor, alpha: 0.25)
+            let edgeMaterial = SCNMaterial()
+            edgeMaterial.diffuse.contents = edgeColor
+            edgeMaterial.emission.contents = edgeColor.withAlphaComponent(0.15)
+            edgeMaterial.lightingModel = .constant
+
+            let edgeNode = createEdgeNode(from: source.position, to: target.position, material: edgeMaterial)
+            edgeNode.name = edge.id
+            edgeNode.opacity = 0
+            scene.rootNode.addChildNode(edgeNode)
+            edgeSceneNodes[edge.id] = edgeNode
+
+            // Fade in
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 0.5
+            edgeNode.opacity = 1
+            SCNTransaction.commit()
+        }
+
+        // Add new node spheres
+        for node in simulation.nodes {
+            guard nodeSceneNodes[node.id] == nil else { continue }
+
+            let radius = nodeRadius(for: node)
+            let containerNode = SCNNode()
+            containerNode.position = SCNVector3(node.position)
+            containerNode.name = node.id
+            containerNode.scale = SCNVector3(0.01, 0.01, 0.01) // Start tiny for scale-in
+
+            // Core sphere
+            let sphere = SCNSphere(radius: radius)
+            sphere.segmentCount = node.isFixed ? 24 : 16
+            let mat = SCNMaterial()
+            if node.isFixed {
+                mat.diffuse.contents = NSColor.white
+                mat.emission.contents = NSColor.white.withAlphaComponent(0.8)
+            } else {
+                mat.diffuse.contents = node.nodeType.nsColor
+                mat.emission.contents = node.nodeType.nsColor.withAlphaComponent(0.5)
+            }
+            mat.lightingModel = .constant
+            sphere.materials = [mat]
+            let sphereNode = SCNNode(geometry: sphere)
+            containerNode.addChildNode(sphereNode)
+
+            // Glow halo
+            let glowRadius = radius * 2.5
+            let glowSphere = SCNSphere(radius: glowRadius)
+            glowSphere.segmentCount = 48
+            let glowMat = SCNMaterial()
+            let glowColor = node.isFixed ? NSColor.white : node.nodeType.nsColor
+            glowMat.diffuse.contents = glowColor.withAlphaComponent(0.03)
+            glowMat.emission.contents = glowColor.withAlphaComponent(0.025)
+            glowMat.lightingModel = .constant
+            glowMat.isDoubleSided = true
+            glowMat.blendMode = .add
+            glowSphere.materials = [glowMat]
+            let glowNode = SCNNode(geometry: glowSphere)
+            containerNode.addChildNode(glowNode)
+
+            // Text label
+            let labelNode = createLabelNode(text: node.label, nodeRadius: radius, isFixed: node.isFixed)
+            labelNode.constraints = [billboardConstraint]
+            containerNode.addChildNode(labelNode)
+
+            scene.rootNode.addChildNode(containerNode)
+            nodeSceneNodes[node.id] = containerNode
+
+            // Scale in from 0 with animation
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 0.5
+            containerNode.scale = SCNVector3(1, 1, 1)
+            SCNTransaction.commit()
         }
     }
 
@@ -368,7 +489,7 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     /// Auto-fit camera distance to contain all nodes
-    private func autoFitCamera() {
+    private func autoFitCamera(animated: Bool = false) {
         guard !simulation.nodes.isEmpty else { return }
 
         var maxDist: Float = 0
@@ -383,7 +504,14 @@ class MemoryGraphViewModel: ObservableObject {
         let minDistance = maxDist / tan(fovRadians / 2) * 1.3 // 30% padding
         let cameraZ = max(minDistance, 1200) // minimum distance for very small graphs
 
-        cameraNode.position = SCNVector3(0, 0, cameraZ)
+        if animated {
+            SCNTransaction.begin()
+            SCNTransaction.animationDuration = 0.8
+            cameraNode.position = SCNVector3(0, 0, cameraZ)
+            SCNTransaction.commit()
+        } else {
+            cameraNode.position = SCNVector3(0, 0, cameraZ)
+        }
     }
 
     private func createEdgeNode(from: SIMD3<Float>, to: SIMD3<Float>, material: SCNMaterial) -> SCNNode {

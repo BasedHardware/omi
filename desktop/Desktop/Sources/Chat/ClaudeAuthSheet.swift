@@ -50,7 +50,7 @@ struct ClaudeAuthSheet: View {
                         .foregroundColor(OmiColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Your browser will open to sign in with Claude. After authenticating, return to Omi.")
+                    Text("Your browser will open to sign in with Claude. After authenticating, return to omi.")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)

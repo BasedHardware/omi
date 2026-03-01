@@ -144,7 +144,9 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     {question}
     
     Is this asking about the Omi/Friend app product itself?
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
@@ -195,7 +197,9 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     {question}
     </question>
 
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
@@ -250,7 +254,9 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
@@ -281,7 +287,9 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
     {conversation_history}
 
     Answer:
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
 
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
@@ -321,7 +329,8 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    return f"""
+    return (
+        f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -380,7 +389,12 @@ def _get_qa_rag_prompt(
     </question_timezone>
 
     <answer>
-    """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
+    """.replace(
+            '    ', ''
+        )
+        .replace('\n\n\n', '\n\n')
+        .strip()
+    )
 
 
 def _get_agentic_qa_prompt(
@@ -860,7 +874,9 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
 
     Conversation:
     {transcript}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
 
     try:
         with_parser = llm_mini.with_structured_output(TopicsContext)
@@ -902,7 +918,9 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.invoke(prompt).content
 
 
@@ -1017,7 +1035,9 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     - this day
     - etc.
     </date_in_term>
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
@@ -1064,7 +1084,9 @@ def retrieve_metadata_fields_from_transcript(
     ```
     {full_context}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
@@ -1147,7 +1169,9 @@ def retrieve_metadata_from_message(
     ```
     {message_text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1181,7 +1205,9 @@ def retrieve_metadata_from_text(
     ```
     {text}
     ```
-    '''.replace('    ', '')
+    '''.replace(
+        '    ', ''
+    )
 
     return _process_extracted_metadata(uid, prompt)
 
@@ -1254,7 +1280,9 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     ```
 
     Question: {question}
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     # print(prompt)
     with_parser = llm_mini.with_structured_output(FiltersToUse)
     try:
@@ -1302,7 +1330,9 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     {TranscriptSegment.segments_as_string(segments, people=people)}
     ```
-    '''.replace('    ', '').strip()
+    '''.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
 
 
@@ -1351,5 +1381,7 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     {context}
     ```
-    """.replace('    ', '').strip()
+    """.replace(
+        '    ', ''
+    ).strip()
     return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message

@@ -81,8 +81,8 @@ struct OMIApp: App {
     /// Window title with version number (different for rewind mode)
     private var windowTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
-        let baseName = Self.launchMode == .rewind ? "Omi Rewind" : displayName
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+        let baseName = Self.launchMode == .rewind ? "omi Rewind" : displayName
         return version.isEmpty ? baseName : "\(baseName) v\(version)"
     }
 
@@ -197,7 +197,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.enableCaptureFailedRequests = false
             options.maxBreadcrumbs = 100
             options.beforeSend = { event in
-                // Never send events from dev builds — they pollute production Sentry data
+                // Allow user feedback through from all builds (dev + prod)
+                if event.message?.formatted.hasPrefix("User Report") == true { return event }
+                // Never send other events from dev builds — they pollute production Sentry data
                 if isDev { return nil }
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
@@ -330,8 +332,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
-        // Set up dock icon visibility based on window state
-        setupDockIconObservers()
+        // Ensure app always shows in dock as a regular app
+        NSApp.setActivationPolicy(.regular)
 
         // Set up menu bar icon with NSStatusBar (more reliable than SwiftUI MenuBarExtra)
         // Called synchronously on main thread to ensure status item is created before app finishes launching
@@ -371,9 +373,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     window.appearance = NSAppearance(named: .darkAqua)
                     // Ensure fullscreen always creates a dedicated Space
                     window.collectionBehavior.insert(.fullScreenPrimary)
-                    // Show dock icon when main window is visible
-                    NSApp.setActivationPolicy(.regular)
-                    log("AppDelegate: Dock icon shown on launch")
+                    log("AppDelegate: Main window shown on launch")
                 }
             }
             if !foundOmiWindow {
@@ -538,92 +538,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
     }
 
-    /// Set up observers to show/hide dock icon when main window appears/disappears
-    private func setupDockIconObservers() {
-        // Show dock icon when a window becomes visible
-        let showObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title.hasPrefix("Omi") else { return }
-            self?.showDockIcon()
-        }
-        windowObservers.append(showObserver)
-
-        // Hide dock icon when window closes (check if any Omi windows remain)
-        let closeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title.hasPrefix("Omi") else { return }
-            // Delay check to allow window to fully close
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self?.checkAndHideDockIconIfNeeded()
-            }
-        }
-        windowObservers.append(closeObserver)
-
-        // Also hide dock icon when window is minimized
-        let minimizeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didMiniaturizeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title.hasPrefix("Omi") else { return }
-            Task { @MainActor in
-                self?.checkAndHideDockIconIfNeeded()
-            }
-        }
-        windowObservers.append(minimizeObserver)
-
-        // Show dock icon when window is restored from minimize
-        let deminiaturizeObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.didDeminiaturizeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow,
-                  window.title.hasPrefix("Omi") else { return }
-            self?.showDockIcon()
-        }
-        windowObservers.append(deminiaturizeObserver)
-
-        log("AppDelegate: Dock icon observers set up")
-    }
-
-    /// Show the app icon in the Dock
-    private func showDockIcon() {
-        if NSApp.activationPolicy() != .regular {
-            NSApp.setActivationPolicy(.regular)
-            // Re-apply the custom icon — macOS can lose it when toggling activation policy
-            if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
-               let icon = NSImage(contentsOf: iconURL) {
-                NSApp.applicationIconImage = icon
-            }
-            log("AppDelegate: Dock icon shown")
-        }
-    }
-
-    /// Hide the app icon from the Dock (if no Omi windows are visible)
-    @MainActor private func checkAndHideDockIconIfNeeded() {
-        // Check if any Omi windows are still visible (not minimized, not closed)
-        let hasVisibleOmiWindow = NSApp.windows.contains { window in
-            window.title.hasPrefix("Omi") && window.isVisible && !window.isMiniaturized
-        }
-
-        if !hasVisibleOmiWindow && NSApp.activationPolicy() != .accessory {
-            NSApp.setActivationPolicy(.accessory)
-            log("AppDelegate: Dock icon hidden (no visible Omi windows)")
-            // Workaround for macOS Sequoia bug: switching to .accessory can cause
-            // NSStatusBar items to disappear. Force-refresh the status bar item.
-            refreshMenuBarIcon()
-        }
-    }
+    // Dock icon is always visible — LSUIElement=false and activation policy stays .regular
 
     /// Force-refresh the menu bar icon after activation policy changes.
     /// Works around a macOS Sequoia bug where NSStatusBar items vanish
@@ -640,7 +555,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Re-apply the icon to force the system to redraw
         if let button = item.button {
             if OMIApp.launchMode == .rewind {
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                 }
@@ -691,13 +606,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
 
         // Set up the button with icon — use "omi" text logo (not a circle)
         if let button = statusBarItem.button {
             if OMIApp.launchMode == .rewind {
                 // Rewind mode uses SF Symbol
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                     log("AppDelegate: [MENUBAR] Rewind icon set successfully")
@@ -713,13 +628,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
             } else {
                 // Fallback to SF Symbol
-                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Omi") {
+                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
                     icon.isTemplate = true
                     button.image = icon
                 }
                 log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
             }
-            button.toolTip = OMIApp.launchMode == .rewind ? "Omi Rewind" : displayName
+            button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
         } else {
             log("AppDelegate: [MENUBAR] WARNING - statusBarItem.button is nil")
         }
@@ -824,8 +739,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 window.appearance = NSAppearance(named: .darkAqua)
             }
         }
-        // Restore dock icon when opening from menu bar
-        showDockIcon()
+        // Dock icon is always visible; just activate the app
+        NSApp.activate(ignoringOtherApps: true)
         if !foundWindow {
             log("AppDelegate: [MENUBAR] WARNING - No Omi window found when opening from menu bar")
         }
@@ -961,6 +876,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         // Keep app running in menu bar when all windows are closed
         return false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // Always try to show the main Omi window when dock icon is clicked
+        for window in sender.windows where window.title.hasPrefix("Omi") {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+            sender.activate(ignoringOtherApps: true)
+            log("AppDelegate: Restored Omi window from dock click (wasVisible=\(flag))")
+            return false
+        }
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -1150,6 +1079,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.appBecameActive()
         // Sync remote assistant settings so server-side changes take effect promptly
         Task { await SettingsSyncManager.shared.syncFromServer() }
+        UpdaterViewModel.shared.syncUpdateChannelFromServer()
     }
 
     func applicationWillResignActive(_ notification: Notification) {

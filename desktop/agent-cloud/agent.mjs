@@ -33,6 +33,38 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
+// --- Async message queue for persistent session streaming input ---
+class AsyncMessageQueue {
+  constructor() {
+    this._queue = [];
+    this._resolve = null;
+    this._done = false;
+  }
+  push(msg) {
+    if (this._resolve) {
+      this._resolve({ value: msg, done: false });
+      this._resolve = null;
+    } else {
+      this._queue.push(msg);
+    }
+  }
+  end() {
+    this._done = true;
+    if (this._resolve) {
+      this._resolve({ value: undefined, done: true });
+      this._resolve = null;
+    }
+  }
+  [Symbol.asyncIterator]() { return this; }
+  next() {
+    if (this._queue.length > 0)
+      return Promise.resolve({ value: this._queue.shift(), done: false });
+    if (this._done)
+      return Promise.resolve({ value: undefined, done: true });
+    return new Promise(r => { this._resolve = r; });
+  }
+}
+
 // --- Configuration ---
 const DB_PATH = process.env.DB_PATH || join(homedir(), "omi-agent/data/omi.db");
 const GCS_BASE = "https://storage.googleapis.com/based-hardware-agent";
@@ -81,6 +113,13 @@ function openDatabase() {
   db = Database(DB_PATH);  // writable for /sync inserts; agent tool still blocks non-SELECT
   db.pragma("journal_mode = WAL");
 
+  // Ensure performance indexes exist (incremental sync doesn't transfer indexes)
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_screenshots_date_local ON screenshots(date(timestamp, 'localtime'))`);
+  } catch (e) {
+    console.log(`[db] Index creation skipped: ${e.message}`);
+  }
+
   // Rebuild schema + system prompt + MCP server
   const schema = getSchema();
   defaultSystemPrompt = `You are an AI assistant with access to the user's OMI desktop database and their connected services.
@@ -92,15 +131,17 @@ ${schema}
 TOOLS:
 - **execute_sql**: Run SQL queries on the database. SELECT auto-limits to 200 rows. Use for structured queries (app usage, time ranges, task management, aggregations).
 - **semantic_search**: Vector similarity search on screenshot OCR text. Use for fuzzy/conceptual queries where exact keywords won't work.
+- **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks) for a given time range. Use for "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
 - **Playwright browser tools**: You can navigate websites, click elements, fill forms, take screenshots, etc. Use when the user asks you to do something on the web.
 - **Backend tools** (calendar, gmail, health, conversations, memories, action items, web search, etc.): Use these when the user asks about their calendar events, emails, health data, past conversations, or wants to search the web. These tools connect to the user's real accounts.
 
 GUIDELINES:
-- Use datetime functions for time queries: datetime('now', '-1 day', 'localtime'), datetime('now', 'start of day', 'localtime')
-- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding
+- For "what did I do today/yesterday/this week" queries, use get_daily_recap — it's a single tool call that returns a formatted summary of apps, conversations, and tasks. Much faster than multiple execute_sql calls.
+- Only use get_conversations_tool when the user asks about specific conversation transcripts or content details. For activity summaries, get_daily_recap is faster.
+- For time-filtered queries on screenshots, prefer range comparisons: WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime') AND timestamp < datetime('now', 'start of day', 'localtime'). Avoid wrapping the column in date() or strftime() in WHERE clauses — it's slower on large tables.
+- Screenshots have: timestamp, appName, windowTitle, ocrText, embedding (600K+ rows — always filter by timestamp range)
 - Action items have: description, completed, deleted, priority, category, source, dueAt, createdAt
 - Transcription sessions have: title, overview, startedAt, finishedAt, source
-- For "what did I do today/yesterday" queries, use screenshots table grouped by appName
 - For task queries, use action_items table
 - For conversation queries, use transcription_sessions + transcription_segments
 - For calendar, email, health data — use the backend tools (get_calendar_events_tool, get_gmail_messages_tool, etc.)
@@ -275,6 +316,94 @@ e.g. "reading about machine learning", "working on design mockups"`,
   }
 );
 
+const getDailyRecapTool = tool(
+  "get_daily_recap",
+  `Get a pre-formatted daily activity recap from the local database.
+Use for: "what did I do today/yesterday/this week", activity summaries, daily reviews.
+Runs app usage, conversations, and action items queries in one call — much faster than multiple execute_sql calls.`,
+  {
+    days_ago: z.number().optional().default(1).describe("0=today, 1=yesterday, 7=past week"),
+  },
+  async ({ days_ago }) => {
+    if (!db) return { content: [{ type: "text", text: "Database not loaded." }] };
+
+    const n = Math.max(0, Math.floor(days_ago));
+    const dateLabel = n === 0 ? "Today" : n === 1 ? "Yesterday" : `Past ${n} days`;
+    // For today (n=0), upper bound is now; for past days, upper bound is start of today
+    const upperBound = n === 0
+      ? "datetime('now', 'localtime')"
+      : "datetime('now', 'start of day', 'localtime')";
+
+    // App usage
+    const apps = db.prepare(`
+      SELECT appName, COUNT(*) as screenshots, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
+        MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
+      FROM screenshots
+      WHERE timestamp >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND timestamp < ${upperBound}
+        AND appName IS NOT NULL AND appName != ''
+      GROUP BY appName ORDER BY screenshots DESC
+    `).all();
+
+    // Conversations
+    const convos = db.prepare(`
+      SELECT title, overview, emoji, category, startedAt, finishedAt,
+        ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
+      FROM transcription_sessions
+      WHERE startedAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND startedAt < ${upperBound}
+        AND deleted = 0 AND discarded = 0
+      ORDER BY startedAt DESC
+    `).all();
+
+    // Action items
+    const tasks = db.prepare(`
+      SELECT description, completed, priority, createdAt FROM action_items
+      WHERE createdAt >= datetime('now', 'start of day', '-${n} day', 'localtime')
+        AND createdAt < ${upperBound}
+        AND deleted = 0
+      ORDER BY createdAt DESC
+    `).all();
+
+    // Format compact markdown
+    let out = `# ${dateLabel} Recap\n\n`;
+
+    out += `## Apps (${apps.length} apps)\n`;
+    if (apps.length === 0) {
+      out += "No screen activity recorded.\n";
+    } else {
+      for (const a of apps.slice(0, 20)) {
+        out += `- **${a.appName}**: ${a.minutes} min (${a.screenshots} captures, ${a.first_seen}–${a.last_seen})\n`;
+      }
+      if (apps.length > 20) out += `- ...and ${apps.length - 20} more apps\n`;
+    }
+
+    out += `\n## Conversations (${convos.length})\n`;
+    if (convos.length === 0) {
+      out += "No conversations recorded.\n";
+    } else {
+      for (const c of convos) {
+        const dur = c.duration_min > 0 ? ` (${c.duration_min} min)` : "";
+        const emoji = c.emoji || "";
+        out += `- ${emoji} **${c.title || "Untitled"}**${dur}: ${c.overview || "No summary"}\n`;
+      }
+    }
+
+    out += `\n## Tasks (${tasks.length})\n`;
+    if (tasks.length === 0) {
+      out += "No tasks created.\n";
+    } else {
+      for (const t of tasks) {
+        const check = t.completed ? "[x]" : "[ ]";
+        const pri = t.priority ? ` (${t.priority})` : "";
+        out += `- ${check} ${t.description}${pri}\n`;
+      }
+    }
+
+    return { content: [{ type: "text", text: out }] };
+  }
+);
+
 // --- JSON Schema → Zod converter for backend tools ---
 
 function jsonSchemaToZod(schema) {
@@ -375,7 +504,7 @@ async function fetchAndRegisterBackendTools() {
 }
 
 function rebuildMcpServer() {
-  const allTools = [executeSqlTool, semanticSearchTool, ...backendTools];
+  const allTools = [executeSqlTool, semanticSearchTool, getDailyRecapTool, ...backendTools];
   omiServer = createSdkMcpServer({
     name: "omi-tools",
     tools: allTools,
@@ -508,6 +637,190 @@ async function handleQuery({ prompt, systemPrompt, cwd, send, abortController })
   }
 
   return { text: fullText, sessionId, costUsd };
+}
+
+// --- Persistent Session (streaming input mode) ---
+
+function startPersistentSession(send, log) {
+  if (!isDatabaseReady()) {
+    log("Cannot start persistent session: database not ready");
+    return null;
+  }
+
+  const sessionAbort = new AbortController();
+
+  const options = {
+    model: "claude-sonnet-4-6",
+    abortController: sessionAbort,
+    systemPrompt: defaultSystemPrompt,
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: undefined,
+    cwd: process.env.HOME || "/",
+    mcpServers: {
+      "omi-tools": omiServer,
+      "playwright": {
+        command: process.execPath,
+        args: [playwrightCli, "--user-data-dir", join(__dirname, "chrome-profile"), "--headless", "--no-sandbox"],
+      },
+    },
+  };
+
+  // Queue for all messages — used as the prompt (async iterable)
+  const messageQueue = new AsyncMessageQueue();
+
+  // Push the prewarm message to boot the Claude process
+  messageQueue.push({
+    type: "user",
+    message: { role: "user", content: "ready" },
+    parent_tool_use_id: null,
+    session_id: "",
+  });
+
+  log(`Starting persistent session with model: ${options.model}`);
+  const q = query({ prompt: messageQueue, options });
+
+  // Session state
+  let sessionId = null;
+  let sessionIdResolve = null;
+  const sessionIdReady = new Promise(r => { sessionIdResolve = r; });
+
+  // Per-turn state
+  let fullText = "";
+  let pendingTools = [];
+  let turnActive = false;
+  let isPrewarmTurn = true; // First turn is prewarm, suppress output
+  let turnStartedAt = null; // timestamp when query was pushed
+  let firstEventSent = false; // tracks if we've sent the first stream event for this turn
+
+  // Background message processing loop — runs for entire WS lifetime
+  const loopPromise = (async () => {
+    try {
+      for await (const message of q) {
+        switch (message.type) {
+          case "system":
+            if ("session_id" in message) {
+              sessionId = message.session_id;
+              sessionIdResolve?.();
+              sessionIdResolve = null;
+              log(`Persistent session started: ${sessionId}`);
+            }
+            break;
+
+          case "stream_event": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
+            const event = message.event;
+            // Emit thinking_done on first content block (text or tool_use)
+            if (!firstEventSent && event?.type === "content_block_start") {
+              firstEventSent = true;
+              const thinkingMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] thinking done in ${thinkingMs}ms, first block: ${event.content_block?.type}`);
+              send({ type: "thinking_done", thinkingMs });
+            }
+            if (event?.type === "content_block_start" && event.content_block?.type === "tool_use") {
+              const name = event.content_block.name;
+              const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] tool_use ${name} started at +${elapsed}ms`);
+              pendingTools.push(name);
+              send({ type: "tool_activity", name, status: "started" });
+            }
+            if (event?.type === "content_block_delta" && event.delta?.type === "text_delta") {
+              if (pendingTools.length > 0) {
+                for (const name of pendingTools) {
+                  const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+                  log(`[TIMING] tool ${name} completed at +${elapsed}ms`);
+                  send({ type: "tool_activity", name, status: "completed" });
+                }
+                pendingTools.length = 0;
+              }
+              fullText += event.delta.text;
+              send({ type: "text_delta", text: event.delta.text });
+            }
+            break;
+          }
+
+          case "assistant": {
+            if (isPrewarmTurn) break; // Suppress prewarm output
+            const content = message.message?.content;
+            if (Array.isArray(content)) {
+              for (const block of content) {
+                if (block.type === "tool_use") {
+                  const inputStr = JSON.stringify(block.input);
+                  log(`[TOOL_CALL] ${block.name} input=${inputStr.length > 500 ? inputStr.slice(0, 500) + '...' : inputStr}`);
+                  send({ type: "tool_activity", name: block.name, status: "started" });
+                  pendingTools.push(block.name);
+                }
+                // Text is already streamed via stream_event handler — don't send again here
+              }
+            }
+            break;
+          }
+
+          case "tool_result": {
+            if (isPrewarmTurn) break;
+            const toolName = message.tool_name || "unknown";
+            const resultStr = typeof message.content === "string" ? message.content : JSON.stringify(message.content);
+            const elapsed = turnStartedAt ? Date.now() - turnStartedAt : 0;
+            log(`[TOOL_RESULT] +${elapsed}ms ${toolName} (${resultStr.length} chars) ${resultStr.length > 300 ? resultStr.slice(0, 300) + '...' : resultStr}`);
+            break;
+          }
+
+          case "result": {
+            for (const name of pendingTools) send({ type: "tool_activity", name, status: "completed" });
+            pendingTools.length = 0;
+
+            if (isPrewarmTurn) {
+              isPrewarmTurn = false;
+              fullText = "";
+              pendingTools = [];
+              turnActive = false;
+              log("Prewarm turn completed, session ready for queries");
+              break;
+            }
+
+            if (message.subtype === "success") {
+              const costUsd = message.total_cost_usd || 0;
+              const totalMs = turnStartedAt ? Date.now() - turnStartedAt : 0;
+              log(`[TIMING] result at +${totalMs}ms, cost=$${costUsd.toFixed(4)}`);
+              if (message.result) {
+                const remaining = message.result.replace(fullText, "").trim();
+                if (remaining) {
+                  send({ type: "text_delta", text: remaining });
+                  fullText += remaining;
+                }
+              }
+              send({ type: "result", text: fullText, sessionId, costUsd });
+            } else {
+              send({ type: "error", message: `Agent error (${message.subtype}): ${(message.errors || []).join(", ")}` });
+            }
+            // Reset per-turn state
+            fullText = "";
+            pendingTools = [];
+            turnActive = false;
+            turnStartedAt = null;
+            firstEventSent = false;
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      log(`Persistent session loop error: ${err.message}`);
+    }
+    log("Persistent session ended");
+  })();
+
+  return {
+    query: q,
+    messageQueue,
+    sessionAbort,
+    sessionIdReady,
+    loopPromise,
+    getSessionId: () => sessionId,
+    isTurnActive: () => turnActive,
+    setTurnActive: (v) => { turnActive = v; },
+    startTurnTimer: () => { turnStartedAt = Date.now(); firstEventSent = false; },
+  };
 }
 
 // --- Mode: CLI ---
@@ -676,7 +989,7 @@ function startServer() {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         status: "ok",
-        uptime: process.uptime(),
+        uptime: Math.round(process.uptime()),
         databaseReady: isDatabaseReady(),
       }));
       return;
@@ -966,7 +1279,7 @@ function startServer() {
 
   wss.on("connection", (ws) => {
     log("Client connected");
-    let activeAbort = null;
+    let session = null; // persistent session for this WS connection
 
     const send = (msg) => {
       if (ws.readyState === ws.OPEN) {
@@ -984,51 +1297,78 @@ function startServer() {
       }
 
       switch (msg.type) {
-        case "query": {
-          lastActivityAt = Date.now();
-          // Cancel any prior query
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
+        case "prewarm": {
+          if (session) {
+            log("Prewarm: session already active");
+            send({ type: "prewarm_ack", success: true });
+            break;
           }
-
-          const abortController = new AbortController();
-          activeAbort = abortController;
-
-          log(`Query: ${msg.prompt?.slice(0, 100)}`);
-
-          try {
-            const result = await handleQuery({
-              prompt: msg.prompt,
-              systemPrompt: msg.systemPrompt,
-              cwd: msg.cwd,
-              send,
-              abortController,
-            });
-
-            if (!abortController.signal.aborted) {
-              send({ type: "result", text: result.text, sessionId: result.sessionId, costUsd: result.costUsd });
-            }
-          } catch (err) {
-            if (!abortController.signal.aborted) {
-              log(`Query error: ${err.message}`);
-              send({ type: "error", message: err.message });
-            }
-          } finally {
-            if (activeAbort === abortController) {
-              activeAbort = null;
-            }
+          log("Prewarm: starting persistent session...");
+          session = startPersistentSession(send, log);
+          if (!session) {
+            send({ type: "prewarm_ack", success: false });
+            break;
           }
+          session.sessionIdReady.then(() => {
+            send({ type: "prewarm_ack", success: true });
+            log("Prewarm: session ready");
+          }).catch(() => {
+            send({ type: "prewarm_ack", success: false });
+          });
           break;
         }
 
-        case "stop":
+        case "query": {
+          lastActivityAt = Date.now();
+          const prompt = msg.prompt;
+          log(`Query: ${prompt?.slice(0, 100)}`);
+
+          // Start session if not started yet
+          if (!session) {
+            log("No active session, starting on first query...");
+            session = startPersistentSession(send, log);
+            if (!session) {
+              send({ type: "error", message: "Database not available" });
+              break;
+            }
+          }
+
+          // Wait for session_id
+          await session.sessionIdReady;
+          const sid = session.getSessionId();
+          if (!sid) {
+            send({ type: "error", message: "Session failed to initialize" });
+            session = null;
+            break;
+          }
+
+          // If a turn is still active, interrupt first
+          if (session.isTurnActive()) {
+            log("Interrupting active turn for new query");
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
+          }
+
+          session.setTurnActive(true);
+          session.startTurnTimer();
+          send({ type: "status", message: "Processing..." });
+
+          // Push user message into the persistent session via streamInput
+          session.messageQueue.push({
+            type: "user",
+            message: { role: "user", content: prompt },
+            parent_tool_use_id: null,
+            session_id: sid,
+          });
+          break;
+        }
+
+        case "stop": {
           log("Stop requested");
-          if (activeAbort) {
-            activeAbort.abort();
-            activeAbort = null;
+          if (session?.isTurnActive()) {
+            try { await session.query.interrupt(); } catch (e) { log(`Interrupt error: ${e.message}`); }
           }
           break;
+        }
 
         default:
           send({ type: "error", message: `Unknown message type: ${msg.type}` });
@@ -1037,9 +1377,11 @@ function startServer() {
 
     ws.on("close", () => {
       log("Client disconnected");
-      if (activeAbort) {
-        activeAbort.abort();
-        activeAbort = null;
+      if (session) {
+        session.messageQueue.end();
+        session.query.close();
+        session.sessionAbort.abort();
+        session = null;
       }
     });
 

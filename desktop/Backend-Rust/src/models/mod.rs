@@ -17,6 +17,7 @@ pub mod message;
 pub mod person;
 pub mod persona;
 pub mod request;
+pub mod screen_activity;
 pub mod user_settings;
 
 pub use action_item::{AcceptTasksRequest, AcceptTasksResponse, ActionItemDB, ActionItemsListResponse, ActionItemStatusResponse, BatchCreateActionItemsRequest, BatchUpdateScoresRequest, BatchUpdateSortOrdersRequest, CreateActionItemRequest, PromoteResponse, ShareTasksRequest, ShareTasksResponse, SharedTaskInfo, SharedTasksResponse, UpdateActionItemRequest};

@@ -4082,7 +4082,7 @@ struct TaskRow: View {
                         }
 
                         // Chat session status (streaming indicator or unread dot)
-                        if let coordinator = chatCoordinator {
+                        if let coordinator = chatCoordinator, TaskAgentSettings.shared.isChatEnabled {
                             ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
                         }
 

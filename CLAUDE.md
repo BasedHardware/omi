@@ -56,6 +56,27 @@ from database.redis_db import r
 
 Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
+### Logging Security
+
+Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
+
+```python
+from utils.log_sanitizer import sanitize, sanitize_pii
+
+# sanitize() — for response bodies, error text, API responses
+logger.error(f"Token exchange failed: {sanitize(response.text)}")
+
+# sanitize_pii() — for known personal data (names, emails, user text)
+logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
+```
+
+Rules:
+- `sanitize()` for `response.text`, API responses, error bodies (masks token-like 8+ char strings with digits)
+- `sanitize_pii()` for names, emails, user text (always masks regardless of content)
+- Keep log levels as-is (don't downgrade to hide data)
+- Keep UIDs, IPs, status codes, and structural info visible — they're needed for debugging
+- Never put raw `response.text` in exception messages (exceptions may be logged upstream)
+
 ### Backend Service Map
 
 ```
@@ -95,6 +116,8 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 
 - All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
 
+- **Translate all locales**: When adding new l10n keys, provide real translations for all 33 non-English locales — do not leave English text in non-English ARB files. Use the `omi-add-missing-language-keys-l10n` skill to generate proper translations. Ensure `{parameter}` placeholders match the English ARB exactly.
+
 - After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
 ```bash
 cd app && flutter gen-l10n
@@ -104,8 +127,11 @@ cd app && flutter gen-l10n
 
 ```bash
 xcrun simctl list devices | grep Booted  # get device ID
-cd app && flutter run -d <device-id> --flavor prod
+cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.com)
+cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
 ```
+
+See `/local-dev mobile` skill for full setup details, env file configuration, and troubleshooting.
 
 ### Firebase Prod Config
 
@@ -149,18 +175,71 @@ clang-format -i <files>
 
 ## Git
 
-- Never squash merge PRs — use regular merge
+### After Completing Work
+When you finish implementing a task, **commit and push your changes** before ending the conversation:
+
+1. Stage only the files you modified:
+   ```bash
+   git add <file1> <file2> ...
+   ```
+2. Commit with a clear message (verb-first, max 72 chars):
+   ```bash
+   git commit -m "Fix race condition in VAD gate service"
+   ```
+3. Push to the current branch:
+   ```bash
+   git push
+   ```
+
+### Rules
+- **Always commit to the current branch** — never switch branches
+- **Never squash merge PRs** — use regular merge
 - Make individual commits per file, not bulk commits
-- **RELEASE command**: When the user says "RELEASE", perform the full release flow:
+- The pre-commit hook auto-formats staged code — no need to format manually before committing
+- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
+
+### RELEASE command
+When the user says "RELEASE", perform the full release flow:
   1. Create a new branch from main
   2. Make individual commits per changed file
   3. Push and create a PR
   4. Merge the PR (no squash — regular merge)
   5. Switch back to main and pull
-- **RELEASEWITHBACKEND command**: Same as RELEASE, plus deploy the backend to production after merging:
+
+### RELEASEWITHBACKEND command
+Same as RELEASE, plus deploy the backend to production after merging:
   ```bash
   gh workflow run gcp_backend.yml -f environment=prod -f branch=main
   ```
+
+## CI/CD Auto-Deploy (push to main)
+
+### Python Backend (dev)
+- **Trigger**: push to `main` with `backend/**` changes
+- **Workflow**: GitHub Actions `gcp_backend_auto_dev.yml`
+- **Deploys to**: Cloud Run + GKE (dev environment)
+- **Check**: `gh run list --workflow=gcp_backend_auto_dev.yml --limit=3`
+
+### Python Backend (prod) — manual only
+- **Never auto-deploys.** Must trigger manually:
+  ```bash
+  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
+  ```
+
+### Mobile App (iOS TestFlight + Android) — Codemagic
+- **Trigger**: push to `main` with `app/**` changes
+- **Workflow**: `ios-internal-auto` / `android-internal-auto` in `codemagic.yaml`
+- **IMPORTANT**: Codemagic **skips** if the build number in `app/pubspec.yaml` is already on TestFlight. After merging `app/**` changes, you **must bump the build number** or no new build will be uploaded:
+  ```bash
+  # In app/pubspec.yaml, increment the +N build number:
+  # version: 1.0.525+760  →  version: 1.0.525+761
+  ```
+- **Check**: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb&limit=5"`
+
+### Desktop App (macOS) — GitHub Actions + Codemagic
+- **Trigger**: push to `main` with `desktop/**` changes
+- **Step 1**: GitHub Actions `desktop_auto_release.yml` auto-increments version, pushes `v*-macos` tag
+- **Step 2**: Codemagic `omi-desktop-swift-release` builds, signs, notarizes, publishes
 
 ## Logs
 
@@ -177,14 +256,17 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 
 ### Agent-proxy (GKE, namespace `prod-omi-backend`)
 ```bash
-kubectl logs -n prod-omi-backend -l app=agent-proxy --tail=50 | grep -v health
+kubectl logs -n prod-omi-backend -l app=agent-proxy --timestamps --since=10m | grep "<uid>"
 ```
 
 ### Agent VM
 ```bash
-gcloud compute instances describe <vm-name> --zone=us-central1-a --project=based-hardware --format="table(status,networkInterfaces[0].accessConfigs[0].natIP)"
-curl -s http://<vm-ip>:8080/health
+gcloud compute ssh omi-agent-<id> --zone=us-central1-a --project=based-hardware \
+  --command="journalctl -u omi-agent --no-pager --since '10 minutes ago' | grep -E 'Client|Query|Prewarm|session|disconnect|error|Persistent'"
 ```
+
+### Agent Chat Debugging
+For end-to-end debugging of the mobile agent chat pipeline (phone → agent-proxy → VM), see the `ai-chat-debug` skill.
 
 ## Testing
 

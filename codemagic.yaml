@@ -92,6 +92,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -117,13 +118,17 @@ workflows:
         script: |
           xcode-project use-profiles
 
-          # Extract version name from pubspec.yaml (source of truth)
+          # Extract version from pubspec.yaml (source of truth for both name and build number)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
+          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
 
-          # Auto-increment build number based on latest TestFlight build
+          # Skip if this build number is already on TestFlight
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number $APP_ID || echo "0")
-          BUILD_NUMBER=$((LATEST_BUILD + 1))
+          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
+            echo "Build $BUILD_NUMBER already on TestFlight (latest: $LATEST_BUILD). Skipping."
+            exit 0
+          fi
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -292,6 +297,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -303,13 +309,17 @@ workflows:
 
       - name: Build AAB with Flutter
         script: |
-          # Extract version name from pubspec.yaml (source of truth)
+          # Extract version from pubspec.yaml (source of truth for both name and build number)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.525"
+          BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)  # e.g., "758"
 
-          # Get latest build number from Google Play and increment
+          # Skip if this build number is already on Google Play
           LATEST_BUILD=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal || echo "0")
-          BUILD_NUMBER=$((LATEST_BUILD + 1))
+          if [ "$BUILD_NUMBER" -le "$LATEST_BUILD" ]; then
+            echo "Build $BUILD_NUMBER already on Google Play (latest: $LATEST_BUILD). Skipping."
+            exit 0
+          fi
 
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -430,6 +440,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -532,9 +543,6 @@ workflows:
           - Internal
           - Discord Folks
         submit_to_app_store: false
-
-  macos-prod-testflight:
-    name: "[DISABLED] Flutter macOS to Testflight (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -609,6 +617,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -846,6 +855,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -985,6 +995,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
         script: |
@@ -1028,9 +1039,6 @@ workflows:
         notify:
           success: true
           failure: false
-
-  macos-desktop-release:
-    name: "[DISABLED] Flutter macOS Desktop Release (legacy - replaced by omi-desktop-swift-release)"
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -1100,6 +1108,7 @@ workflows:
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
       - name: Extract version (from tag or auto-increment)
@@ -1162,11 +1171,10 @@ workflows:
             echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
 
             # Create directory where bundle_helper.sh expects to find the app
-            # bundle_helper.sh looks at: $PROJECT_DIR/../../../omi-desktop/build/
+            # bundle_helper.sh looks at: $PROJECT_DIR/../../desktop/build/
             # PROJECT_DIR = /path/clone/app/macos
-            # ../../../omi-desktop = /path/omi-desktop (sibling to clone dir)
-            # From working_directory (app/), that's ../../omi-desktop
-            mkdir -p ../../omi-desktop/build
+            # From working_directory (app/), that's ../desktop
+            mkdir -p ../desktop/build
 
             # Download the signed app ZIP from GitHub releases
             gh release download "$LATEST_MACOS_TAG" \
@@ -1175,15 +1183,15 @@ workflows:
               --dir /tmp
 
             # Extract - the ZIP contains "Omi Computer.app"
-            unzip -o /tmp/Omi.zip -d ../../omi-desktop/build/
+            unzip -o /tmp/Omi.zip -d ../desktop/build/
 
             # Verify extraction
-            if [ -d "../../omi-desktop/build/Omi Computer.app" ]; then
+            if [ -d "../desktop/build/Omi Computer.app" ]; then
               echo "SUCCESS: Omi Computer app ready for bundling"
-              ls -la "../../omi-desktop/build/"
+              ls -la "../desktop/build/"
             else
               echo "WARNING: Extraction may have failed, checking contents..."
-              ls -la ../../omi-desktop/build/
+              ls -la ../desktop/build/
             fi
           else
             echo "WARNING: No Omi Computer release found with -macos tag"
@@ -1778,6 +1786,7 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+          echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
         script: |
@@ -1813,7 +1822,7 @@ workflows:
   # ============================================
   # OMI DESKTOP SWIFT RELEASE
   # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/.
-  # Source code is synced from the omi-desktop repo via git-dashboard.
+  # Source code lives directly in omi/desktop/ (monorepo).
   #
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
@@ -1867,6 +1876,9 @@ workflows:
         - pattern: "v*-macos"
           include: true
     working_directory: desktop
+    cache:
+      cache_paths:
+        - ~/Library/Caches/org.swift.swiftpm
     scripts:
       - name: Extract version and build number from tag
         script: |
@@ -1922,7 +1934,7 @@ workflows:
         script: |
           cd acp-bridge
           npm install --no-fund --no-audit
-          npx tsc
+          npm run build
           cd ..
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
@@ -1977,35 +1989,72 @@ workflows:
           fi
           echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
+      - name: Resolve SPM packages
+        script: |
+          # Unset TOOLCHAINS to use Xcode's default toolchain
+          unset TOOLCHAINS
+          echo "Resolving SPM packages (downloads ~673MB of binary artifacts on first run)..."
+          for attempt in 1 2 3; do
+            if xcrun swift package resolve --package-path Desktop; then
+              echo "  Packages resolved on attempt $attempt"
+              echo "  Artifacts: $(ls Desktop/.build/artifacts/ 2>/dev/null | wc -l | tr -d ' ') cached items"
+              break
+            fi
+            echo "  Resolution failed on attempt $attempt"
+            if [ $attempt -lt 3 ]; then
+              echo "  Retrying in 15 seconds..."
+              sleep 15
+            else
+              echo "ERROR: Package resolution failed after 3 attempts"
+              exit 1
+            fi
+          done
+
       - name: Build Swift app (arm64 + x86_64)
         script: |
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
+
+          # Build arm64. Use --triple (not --arch) so binary always lands in
+          # arm64-apple-macosx/release/ regardless of the machine's native arch.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --arch arm64
-          # On Codemagic mac_mini_m2 (native arm64 host), the arm64 binary lands in
-          # .build/release/ instead of .build/arm64-apple-macosx/release/.
-          # Save it now before the x86_64 build overwrites .build/release/.
-          mkdir -p "Desktop/.build/arm64-apple-macosx/release"
-          cp -R "Desktop/.build/release/." "Desktop/.build/arm64-apple-macosx/release/"
-          echo "Saved arm64 outputs to arm64-apple-macosx/release/"
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+
+          ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          if [ ! -f "$ARM64_PATH" ]; then
+            echo "ERROR: arm64 binary not found at $ARM64_PATH"
+            ls "Desktop/.build/" 2>/dev/null
+            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"
+          echo "arm64 binary: $(file "/tmp/OmiComputer-arm64" | grep -oE 'arm64|x86_64')"
+
+          # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --arch x86_64
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle
         script: |
-          # Both binaries are now in their arch-specific directories (matching release.sh)
-          ARM64_BINARY="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
+          # arm64 binary was saved to /tmp in the Build Swift step
+          ARM64_BINARY="/tmp/OmiComputer-arm64"
+          # x86_64 binary is in the explicit arch-specific dir
           X86_64_BINARY="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
 
           if [ ! -f "$ARM64_BINARY" ] || [ ! -f "$X86_64_BINARY" ]; then
             echo "ERROR: Missing built binaries"
-            ls "Desktop/.build/" 2>/dev/null
-            ls "Desktop/.build/release/" 2>/dev/null | head -10 || true
-            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | head -10 || true
+            echo "  arm64 ($ARM64_BINARY): $([ -f "$ARM64_BINARY" ] && echo EXISTS || echo MISSING)"
+            echo "  x86_64 ($X86_64_BINARY): $([ -f "$X86_64_BINARY" ] && echo EXISTS || echo MISSING)"
+            echo ".build/ contents:" && ls "Desktop/.build/" 2>/dev/null
+            ls "Desktop/.build/arm64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
+            ls "Desktop/.build/x86_64-apple-macosx/release/" 2>/dev/null | grep -E "^Omi" | head -5 || true
             exit 1
           fi
+          echo "arm64 arch: $(file "$ARM64_BINARY" | grep -oE 'arm64|x86_64')"
+          echo "x86_64 arch: $(file "$X86_64_BINARY" | grep -oE 'arm64|x86_64' | head -1)"
 
           mkdir -p "$APP_BUNDLE/Contents/MacOS"
           mkdir -p "$APP_BUNDLE/Contents/Resources"
@@ -2020,10 +2069,13 @@ workflows:
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 
-          # Copy Sparkle framework (saved from arm64 build before x86_64 overwrote .build/release/)
-          SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
+          # Sparkle: use x86_64 arch path; fallback to arm64
+          SPARKLE_FW="Desktop/.build/x86_64-apple-macosx/release/Sparkle.framework"
           if [ ! -d "$SPARKLE_FW" ]; then
-            echo "ERROR: Sparkle.framework not found at $SPARKLE_FW"
+            SPARKLE_FW="Desktop/.build/arm64-apple-macosx/release/Sparkle.framework"
+          fi
+          if [ ! -d "$SPARKLE_FW" ]; then
+            echo "ERROR: Sparkle.framework not found in either arch dir"
             exit 1
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
@@ -2039,7 +2091,11 @@ workflows:
           cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
 
           # Copy SPM resource bundle (app assets: permissions.gif, herologo.png, etc.)
-          SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
+          # Use x86_64 arch path; fallback to arm64
+          SWIFT_BUILD_DIR="Desktop/.build/x86_64-apple-macosx/release"
+          if [ ! -d "$SWIFT_BUILD_DIR" ]; then
+            SWIFT_BUILD_DIR="Desktop/.build/arm64-apple-macosx/release"
+          fi
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
@@ -2351,7 +2407,7 @@ workflows:
 
       - name: Register release in Firestore
         script: |
-          CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
+          export CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
 
           RELEASE_JSON=$(python3 - <<PYEOF
           import json, os
@@ -2434,4 +2490,62 @@ workflows:
           - i@m13v.com
         notify:
           success: true
+          failure: true
+
+  # ============================================
+  # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
+  # Triggered on push to main when desktop/agent-cloud/ changes.
+  # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
+  # ============================================
+  agent-cloud-auto-deploy:
+    name: Auto Deploy Agent Cloud to GCS
+    instance_type: linux_x2
+    max_build_duration: 10
+    environment:
+      groups:
+        - desktop_secrets
+      vars:
+        GCS_BUCKET: "gs://based-hardware-agent"
+        GCP_PROJECT: "based-hardware"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    when:
+      changeset:
+        includes:
+          - 'desktop/agent-cloud/agent.mjs'
+          - 'desktop/agent-cloud/scripts/startup.sh'
+    scripts:
+      - name: Authenticate with GCP
+        script: |
+          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
+          gcloud config set project "$GCP_PROJECT" --quiet
+          rm /tmp/gcp_key.json
+
+      - name: Deploy agent.mjs and startup.sh to GCS
+        script: |
+          VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
+          echo "Deploying version $VERSION to $GCS_BUCKET..."
+
+          gsutil cp desktop/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
+          echo "Uploaded agent.mjs"
+
+          gsutil cp desktop/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
+          echo "Uploaded startup.sh"
+
+          # Update version.txt last — triggers hot-reload on running VMs
+          echo "$VERSION" | gsutil cp - "$GCS_BUCKET/version.txt"
+          echo "Version bumped to $VERSION"
+          echo "Running VMs will hot-reload within 10 minutes."
+    publishing:
+      email:
+        recipients:
+          - i@m13v.com
+        notify:
+          success: false
           failure: true

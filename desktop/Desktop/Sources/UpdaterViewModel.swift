@@ -6,11 +6,13 @@ import Sparkle
 enum UpdateChannel: String, CaseIterable {
     case stable = "stable"
     case beta = "beta"
+    case staging = "staging"
 
     var displayName: String {
         switch self {
         case .stable: return "Stable"
         case .beta: return "Beta"
+        case .staging: return "Staging"
         }
     }
 
@@ -18,6 +20,7 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Recommended for most users"
         case .beta: return "Early access to new features"
+        case .staging: return "Internal testing builds"
         }
     }
 }
@@ -86,8 +89,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
                 logSync("Sparkle: Error info [\(key)] = \(value)")
             }
             // Build diagnostic properties for analytics
-            var errorDomain = nsError.domain
-            var errorCode = nsError.code
+            let errorDomain = nsError.domain
+            let errorCode = nsError.code
             var underlyingMessage: String? = nil
             var underlyingDomain: String? = nil
             var underlyingCode: Int? = nil
@@ -296,6 +299,28 @@ final class UpdaterViewModel: ObservableObject {
     /// Manually check for updates
     func checkForUpdates() {
         updaterController.checkForUpdates(nil)
+    }
+
+    /// Sync update channel from server.
+    /// If the backend has a `desktop_update_channel` field set on the user doc,
+    /// override the local channel preference. Triggers a Sparkle check if the channel changed.
+    func syncUpdateChannelFromServer() {
+        Task {
+            do {
+                let profile = try await APIClient.shared.getUserProfile()
+                guard let serverChannel = profile.desktopUpdateChannel,
+                      let channel = UpdateChannel(rawValue: serverChannel) else { return }
+                if updateChannel != channel {
+                    log("Sparkle: Server assigned update channel: \(serverChannel)")
+                    updateChannel = channel
+                    // Trigger an immediate update check so the new channel takes effect
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s for Sparkle to pick up new channel
+                    updaterController.updater.checkForUpdatesInBackground()
+                }
+            } catch {
+                // Non-fatal — channel sync is best-effort
+            }
+        }
     }
 
     /// Get the current app version string

@@ -64,6 +64,21 @@ class AnalyticsManager {
         PostHogManager.shared.onboardingCompleted()
     }
 
+    func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
+        var props = properties
+        props["tool"] = tool
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Tool Used", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
+    }
+
+    func onboardingChatMessage(role: String, step: String) {
+        let props: [String: Any] = ["role": role, "step": step]
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Message", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Message", properties: props)
+    }
+
     // MARK: - Authentication Events
 
     func signInStarted(provider: String) {
@@ -884,6 +899,41 @@ class AnalyticsManager {
         ]
         MixpanelManager.shared.track("Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
         PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
+    }
+
+    // MARK: - Knowledge Graph Events
+
+    /// Track when knowledge graph generation starts during onboarding
+    func knowledgeGraphBuildStarted(filesIndexed: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "files_indexed": filesIndexed,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Started", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_started", properties: props)
+    }
+
+    /// Track when knowledge graph generation completes (successfully loaded with data)
+    func knowledgeGraphBuildCompleted(nodeCount: Int, edgeCount: Int, pollAttempts: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "node_count": nodeCount,
+            "edge_count": edgeCount,
+            "poll_attempts": pollAttempts,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Completed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_completed", properties: props)
+    }
+
+    /// Track when knowledge graph generation fails or times out empty
+    func knowledgeGraphBuildFailed(reason: String, pollAttempts: Int, filesIndexed: Int) {
+        let props: [String: Any] = [
+            "reason": reason,
+            "poll_attempts": pollAttempts,
+            "files_indexed": filesIndexed
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Failed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
     }
 
     // MARK: - Display Info

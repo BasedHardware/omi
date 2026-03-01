@@ -1013,7 +1013,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Prisijungti';
 
   @override
   String get comingSoon => 'Greitai';
@@ -2265,7 +2265,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get folderName => 'Aplanko pavadinimas';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Aprašymas (nebūtinas)';
 
   @override
   String get failedToDeleteFolder => 'Nepavyko ištrinti aplanko';
@@ -6752,7 +6752,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get storageLocationPhone => 'Telefonas';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefonas (atmintis)';
 
   @override
   String storedOnDevice(String deviceName) {
@@ -6980,7 +6980,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dataLowercase => 'duomenys';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Oi';
 
   @override
   String get fallNotificationBody => 'Ar jūs nukritote?';
@@ -8004,27 +8004,27 @@ class AppLocalizationsLt extends AppLocalizations {
   String get addTask => 'Pridėti užduotį';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Pridėti MCP serverį';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Prijungti išorinius AI įrankius';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Sėkmingai prijungta $count įrankių';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nepavyko prisijungti prie MCP serverio';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizuojama...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Kaip mus radote?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8042,19 +8042,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Draugas';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Kita';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Prašome patikslinti';
 
   @override
-  String get event => 'Event';
+  String get event => 'Renginys';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Bendradarbis';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8228,8 +8228,42 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Štai ką žinau apie tave';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Šis žemėlapis atnaujinamas, kai Omi mokosi iš jūsų pokalbių.';
+
+  @override
+  String get apiEnvironment => 'API aplinka';
+
+  @override
+  String get apiEnvironmentDescription => 'Pasirinkite, prie kurio serverio prisijungti';
+
+  @override
+  String get production => 'Gamyba';
+
+  @override
+  String get staging => 'Testavimo aplinka';
+
+  @override
+  String get switchRequiresRestart => 'Perjungimui reikia iš naujo paleisti programėlę';
+
+  @override
+  String get switchApiConfirmTitle => 'Perjungti API aplinką';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Perjungti į $environment? Turėsite uždaryti ir vėl atidaryti programėlę, kad pakeitimai įsigaliotų.';
+  }
+
+  @override
+  String get switchAndRestart => 'Perjungti';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testavimo aplinka gali būti nestabili, turėti nenuoseklų veikimą ir duomenys gali būti prarasti. Tik testavimui.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Išsaugota. Uždarykite ir vėl atidarykite programėlę, kad pritaikytumėte pakeitimus.';
 }
