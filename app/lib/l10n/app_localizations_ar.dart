@@ -8200,4 +8200,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'تم الحفظ. أغلق التطبيق وأعد فتحه لتطبيق التغييرات.';
+
+  @override
+  String get shared => 'مشترك';
+
+  @override
+  String get onlyYouCanSeeConversation => 'أنت فقط من يمكنه رؤية هذه المحادثة';
+
+  @override
+  String get anyoneWithLinkCanView => 'يمكن لأي شخص لديه الرابط العرض';
 }

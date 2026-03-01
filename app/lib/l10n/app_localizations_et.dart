@@ -8256,4 +8256,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvestatud. Sulgege ja avage rakendus uuesti, et muudatused rakenduks.';
+
+  @override
+  String get shared => 'Jagatud';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Ainult teie saate seda vestlust näha';
+
+  @override
+  String get anyoneWithLinkCanView => 'Igaüks, kellel on link, saab vaadata';
 }

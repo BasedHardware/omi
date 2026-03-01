@@ -8255,4 +8255,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
+
+  @override
+  String get shared => 'Shared';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Only you can see this conversation';
+
+  @override
+  String get anyoneWithLinkCanView => 'Anyone with the link can view';
 }

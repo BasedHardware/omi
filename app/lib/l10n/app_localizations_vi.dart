@@ -8262,4 +8262,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Đã lưu. Đóng và mở lại ứng dụng để áp dụng thay đổi.';
+
+  @override
+  String get shared => 'Đã chia sẻ';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Chỉ bạn mới có thể xem cuộc trò chuyện này';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
 }

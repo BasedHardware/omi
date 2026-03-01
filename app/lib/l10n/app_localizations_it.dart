@@ -8309,4 +8309,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvato. Chiudi e riapri l\'app per applicare.';
+
+  @override
+  String get shared => 'Condiviso';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Solo tu puoi vedere questa conversazione';
+
+  @override
+  String get anyoneWithLinkCanView => 'Chiunque abbia il link può visualizzare';
 }

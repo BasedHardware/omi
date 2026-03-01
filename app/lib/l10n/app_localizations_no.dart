@@ -8253,4 +8253,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Lagret. Lukk og åpne appen på nytt for å bruke endringene.';
+
+  @override
+  String get shared => 'Delt';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bare du kan se denne samtalen';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alle med lenken kan se';
 }

@@ -15422,6 +15422,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved. Close and reopen the app to apply.'**
   String get apiEnvSavedRestartRequired;
+
+  /// No description provided for @shared.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared'**
+  String get shared;
+
+  /// No description provided for @onlyYouCanSeeConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this conversation'**
+  String get onlyYouCanSeeConversation;
+
+  /// No description provided for @anyoneWithLinkCanView.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with the link can view'**
+  String get anyoneWithLinkCanView;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -8261,4 +8261,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvo. Feche e reabra o aplicativo para aplicar as alterações.';
+
+  @override
+  String get shared => 'Partilhado';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Só você pode ver esta conversa';
+
+  @override
+  String get anyoneWithLinkCanView => 'Qualquer pessoa com o link pode visualizar';
 }
