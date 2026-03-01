@@ -657,9 +657,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   if (isRepeat) {
                                     _scrollToTop(index);
                                   } else {
-                                    home.setIndex(index);
-                                  }
-                                },
+                                      // Only reset if we are switching AWAY from Checklist
+                                      if (index != 1) { 
+                                        final actionItemsProvider = Provider.of<ActionItemsProvider>(context, listen: false);
+                                        
+                                        // Reset Edit Mode
+                                        if (actionItemsProvider.isEditMode) {
+                                          actionItemsProvider.toggleEditMode();
+                                        }
+                                        
+                                        // Reset Completed View
+                                        if (actionItemsProvider.showCompletedView) {
+                                          actionItemsProvider.toggleShowCompletedView();
+                                        }
+                                      }
+                                      home.setIndex(index);
+                                    }
+                                  },
                               ),
                               if (home.selectedIndex == 0)
                                 Positioned(
@@ -1034,6 +1048,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 builder: (context) => const TaskIntegrationsPage(),
                               ),
                             );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Edit mode toggle
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: actionItemsProvider.isEditMode
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            FontAwesomeIcons.penToSquare,
+                            size: 16,
+                            color: actionItemsProvider.isEditMode ? Colors.white : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            actionItemsProvider.toggleEditMode();
                           },
                         ),
                       ),
