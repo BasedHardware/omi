@@ -321,7 +321,7 @@ struct ChatPage: View {
                         }
                     } else {
                         // Default OMI assistant
-                        Text("Omi")
+                        Text("omi")
                             .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                     }
@@ -490,7 +490,7 @@ struct ChatPage: View {
                         .frame(width: 48, height: 48)
                 }
 
-                Text("Chat with Omi")
+                Text("Chat with omi")
                     .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -530,7 +530,7 @@ struct ChatPage: View {
     /// Copy the entire conversation to clipboard
     private func copyConversation() {
         let text: String = chatProvider.messages.map { message in
-            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "Omi")
+            let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "omi")
             return "\(sender): \(message.text)"
         }.joined(separator: "\n\n")
 
@@ -1322,7 +1322,7 @@ struct DefaultOmiRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
-                Text("Omi")
+                Text("omi")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
