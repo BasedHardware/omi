@@ -3,6 +3,7 @@ import 'package:omi/env/env.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FirmwareUpdateStep {
@@ -98,9 +99,9 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: context.appColors.cardBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
         top: false,
@@ -113,7 +114,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade600,
+                color: context.appColors.handleBar,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -132,8 +133,8 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
                   const SizedBox(width: 10),
                   Text(
                     context.l10n.beforeUpdateMakeSure,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.appColors.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -171,7 +172,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2E),
+          color: context.appColors.secondaryCardBackground,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -180,14 +181,14 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
+                color: context.appColors.cardBackground,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: FaIcon(
                   step.icon,
                   size: 18,
-                  color: Colors.white,
+                  color: context.appColors.textPrimary,
                 ),
               ),
             ),
@@ -198,9 +199,9 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
                 children: [
                   Text(
                     step.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
-                      color: Colors.white,
+                      color: context.appColors.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -209,7 +210,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
                     step.description,
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade400,
+                      color: context.appColors.textQuaternary,
                       height: 1.3,
                     ),
                   ),
@@ -279,7 +280,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
         return Container(
           height: _trackHeight,
           decoration: BoxDecoration(
-            color: _isConfirmed ? const Color(0xFF22C55E) : const Color(0xFF2A2A2E),
+            color: _isConfirmed ? const Color(0xFF22C55E) : context.appColors.secondaryCardBackground,
             borderRadius: BorderRadius.circular(_trackHeight / 2),
           ),
           child: Stack(
@@ -294,7 +295,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                     width: _dragPosition + _buttonSize + _horizontalPadding,
                     decoration: BoxDecoration(
                       color: Color.lerp(
-                        const Color(0xFF2A2A2E),
+                        context.appColors.secondaryCardBackground,
                         const Color(0xFF22C55E),
                         progress,
                       ),
@@ -324,7 +325,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                               width: 24,
                               height: 24,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: context.appColors.textPrimary.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(
@@ -340,7 +341,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                               context.l10n.release,
                               key: const ValueKey('release'),
                               style: TextStyle(
-                                color: Colors.grey.shade400,
+                                color: context.appColors.textQuaternary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -349,7 +350,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                               context.l10n.slideToUpdate,
                               key: const ValueKey('slide'),
                               style: TextStyle(
-                                color: Colors.grey.shade400,
+                                color: context.appColors.textQuaternary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
