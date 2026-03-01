@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/theme/app_color_tokens.dart';
 
 // Bold color palette - matching wrapped_2025_page.dart
 class WrappedColors {
@@ -46,13 +47,13 @@ class WrappedShareFrame extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: context.appColors.textPrimary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(30),
                   ),
-                  child: const Text(
+                  child: Text(
                     'omi.me/wrapped',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: context.appColors.textPrimary,
                       fontSize: 28,
                       fontWeight: FontWeight.w600,
                       decoration: TextDecoration.none,
@@ -150,24 +151,24 @@ class YearInNumbersShareTemplate extends StatelessWidget {
             badgeColor: WrappedColors.mint,
           ),
           const SizedBox(height: 80),
-          _buildStat(_formatNumber(totalMinutes), context.l10n.wrappedMinutes),
+          _buildStat(context, _formatNumber(totalMinutes), context.l10n.wrappedMinutes),
           const SizedBox(height: 60),
-          _buildStat(_formatNumber(totalConvs), context.l10n.wrappedConversations),
+          _buildStat(context, _formatNumber(totalConvs), context.l10n.wrappedConversations),
           const SizedBox(height: 60),
-          _buildStat(_formatNumber(daysActive), context.l10n.wrappedDaysActive),
+          _buildStat(context, _formatNumber(daysActive), context.l10n.wrappedDaysActive),
         ],
       ),
     );
   }
 
-  Widget _buildStat(String value, String label) {
+  Widget _buildStat(BuildContext context, String value, String label) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: context.appColors.textPrimary,
             fontSize: 140,
             fontWeight: FontWeight.w900,
             height: 0.9,
@@ -176,8 +177,8 @@ class YearInNumbersShareTemplate extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: context.appColors.textPrimary,
             fontSize: 48,
             fontWeight: FontWeight.w600,
             decoration: TextDecoration.none,
@@ -240,7 +241,7 @@ class TopCategoryShareTemplate extends StatelessWidget {
                     child: Text(
                       '${cat['name']} · ${cat['percentage']}%',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: context.appColors.textPrimary,
                         fontSize: isFirst ? 44 : 36,
                         fontWeight: isFirst ? FontWeight.w800 : FontWeight.w600,
                         decoration: TextDecoration.none,
@@ -328,8 +329,8 @@ class ActionsShareTemplate extends StatelessWidget {
           const SizedBox(height: 80),
           Text(
             '$totalTasks',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 180,
               fontWeight: FontWeight.w900,
               height: 0.9,
@@ -338,8 +339,8 @@ class ActionsShareTemplate extends StatelessWidget {
           ),
           Text(
             context.l10n.wrappedTasksCreated,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 48,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
@@ -348,8 +349,8 @@ class ActionsShareTemplate extends StatelessWidget {
           const SizedBox(height: 80),
           Text(
             '$completedTasks',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 140,
               fontWeight: FontWeight.w900,
               height: 0.9,
@@ -358,8 +359,8 @@ class ActionsShareTemplate extends StatelessWidget {
           ),
           Text(
             context.l10n.wrappedCompleted,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 48,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
@@ -375,8 +376,8 @@ class ActionsShareTemplate extends StatelessWidget {
             ),
             child: Text(
               context.l10n.wrappedCompletionRate(completionRate.toString()),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.appColors.textPrimary,
                 fontSize: 36,
                 fontWeight: FontWeight.w700,
                 decoration: TextDecoration.none,
@@ -420,13 +421,13 @@ class MemorableDaysShareTemplate extends StatelessWidget {
             badgeColor: badgeColor,
           ),
           const SizedBox(height: 50),
-          ...days.take(3).map((day) => _buildDayItem(day)),
+          ...days.take(3).map((day) => _buildDayItem(context, day)),
         ],
       ),
     );
   }
 
-  Widget _buildDayItem(Map<String, dynamic> day) {
+  Widget _buildDayItem(BuildContext context, Map<String, dynamic> day) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 40),
       child: Column(
@@ -442,13 +443,13 @@ class MemorableDaysShareTemplate extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: context.appColors.textPrimary.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   day['label'] ?? '',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.appColors.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
@@ -459,7 +460,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
               Text(
                 '· ${day['dateStr'] ?? ''}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: context.appColors.textTertiary,
                   fontSize: 22,
                   fontWeight: FontWeight.w500,
                   decoration: TextDecoration.none,
@@ -470,8 +471,8 @@ class MemorableDaysShareTemplate extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             day['title'] ?? '',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 36,
               fontWeight: FontWeight.w700,
               decoration: TextDecoration.none,
@@ -481,7 +482,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
           Text(
             day['description'] ?? '',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: context.appColors.textSecondary,
               fontSize: 24,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
@@ -542,13 +543,13 @@ class MyBuddiesShareTemplate extends StatelessWidget {
             emoji: '👥',
           ),
           const SizedBox(height: 50),
-          ...buddies.take(5).toList().asMap().entries.map((entry) => _buildBuddyItem(entry.key, entry.value)),
+          ...buddies.take(5).toList().asMap().entries.map((entry) => _buildBuddyItem(context, entry.key, entry.value)),
         ],
       ),
     );
   }
 
-  Widget _buildBuddyItem(int index, Map<String, dynamic> buddy) {
+  Widget _buildBuddyItem(BuildContext context, int index, Map<String, dynamic> buddy) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 32),
       child: Row(
@@ -558,14 +559,14 @@ class MyBuddiesShareTemplate extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: context.appColors.textPrimary.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.appColors.textPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
                   decoration: TextDecoration.none,
@@ -585,8 +586,8 @@ class MyBuddiesShareTemplate extends StatelessWidget {
               children: [
                 Text(
                   buddy['name'] ?? '',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: context.appColors.textPrimary,
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
                     decoration: TextDecoration.none,
@@ -595,7 +596,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
                 Text(
                   buddy['relationship'] ?? '',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: context.appColors.textTertiary,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
@@ -605,7 +606,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
                 Text(
                   buddy['context'] ?? '',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: context.appColors.textQuaternary,
                     fontSize: 22,
                     fontStyle: FontStyle.italic,
                     decoration: TextDecoration.none,
@@ -651,17 +652,17 @@ class ObsessionsShareTemplate extends StatelessWidget {
             badgeColor: WrappedColors.coral,
           ),
           const SizedBox(height: 50),
-          _buildItem('📺', context.l10n.wrappedShow, show),
-          _buildItem('🎬', context.l10n.wrappedMovie, movie),
-          _buildItem('📚', context.l10n.wrappedBook, book),
-          _buildItem('⭐', context.l10n.wrappedCelebrity, celebrity),
-          _buildItem('🍕', context.l10n.wrappedFood, food),
+          _buildItem(context, '📺', context.l10n.wrappedShow, show),
+          _buildItem(context, '🎬', context.l10n.wrappedMovie, movie),
+          _buildItem(context, '📚', context.l10n.wrappedBook, book),
+          _buildItem(context, '⭐', context.l10n.wrappedCelebrity, celebrity),
+          _buildItem(context, '🍕', context.l10n.wrappedFood, food),
         ],
       ),
     );
   }
 
-  Widget _buildItem(String emoji, String label, String value) {
+  Widget _buildItem(BuildContext context, String emoji, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 36),
       child: Column(
@@ -677,13 +678,13 @@ class ObsessionsShareTemplate extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: context.appColors.textPrimary.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: context.appColors.textSecondary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
@@ -696,8 +697,8 @@ class ObsessionsShareTemplate extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 40,
               fontWeight: FontWeight.w700,
               decoration: TextDecoration.none,
@@ -733,13 +734,13 @@ class MovieRecsShareTemplate extends StatelessWidget {
             emoji: '🎬',
           ),
           const SizedBox(height: 50),
-          ...movies.take(5).toList().asMap().entries.map((entry) => _buildMovieItem(entry.key, entry.value)),
+          ...movies.take(5).toList().asMap().entries.map((entry) => _buildMovieItem(context, entry.key, entry.value)),
         ],
       ),
     );
   }
 
-  Widget _buildMovieItem(int index, String movie) {
+  Widget _buildMovieItem(BuildContext context, int index, String movie) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 36),
       child: Row(
@@ -749,14 +750,14 @@ class MovieRecsShareTemplate extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
+              color: context.appColors.textPrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
               child: Text(
                 '#${index + 1}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: context.appColors.textSecondary,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   decoration: TextDecoration.none,
@@ -768,8 +769,8 @@ class MovieRecsShareTemplate extends StatelessWidget {
           Expanded(
             child: Text(
               movie,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.appColors.textPrimary,
                 fontSize: 36,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,
@@ -807,8 +808,8 @@ class StruggleShareTemplate extends StatelessWidget {
           const SizedBox(height: 40),
           Text(
             context.l10n.wrappedBiggest,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 48,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
@@ -816,8 +817,8 @@ class StruggleShareTemplate extends StatelessWidget {
           ),
           Text(
             context.l10n.wrappedStruggle,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 100,
               fontWeight: FontWeight.w900,
               height: 1.0,
@@ -827,8 +828,8 @@ class StruggleShareTemplate extends StatelessWidget {
           const SizedBox(height: 60),
           Text(
             '"$title"',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 44,
               fontWeight: FontWeight.w600,
               fontStyle: FontStyle.italic,
@@ -840,7 +841,7 @@ class StruggleShareTemplate extends StatelessWidget {
           Text(
             context.l10n.wrappedButYouPushedThrough,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: context.appColors.textTertiary,
               fontSize: 32,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.none,
@@ -877,8 +878,8 @@ class BiggestWinShareTemplate extends StatelessWidget {
           const SizedBox(height: 40),
           Text(
             context.l10n.wrappedBiggest,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 48,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
@@ -886,8 +887,8 @@ class BiggestWinShareTemplate extends StatelessWidget {
           ),
           Text(
             context.l10n.wrappedWin,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 100,
               fontWeight: FontWeight.w900,
               height: 1.0,
@@ -897,8 +898,8 @@ class BiggestWinShareTemplate extends StatelessWidget {
           const SizedBox(height: 60),
           Text(
             '"$title"',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 44,
               fontWeight: FontWeight.w600,
               fontStyle: FontStyle.italic,
@@ -910,7 +911,7 @@ class BiggestWinShareTemplate extends StatelessWidget {
           Text(
             context.l10n.wrappedYouDidIt,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: context.appColors.textTertiary,
               fontSize: 32,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.none,
@@ -946,13 +947,13 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             emoji: '💬',
           ),
           const SizedBox(height: 50),
-          ...phrases.take(5).toList().asMap().entries.map((entry) => _buildPhraseItem(entry.key, entry.value)),
+          ...phrases.take(5).toList().asMap().entries.map((entry) => _buildPhraseItem(context, entry.key, entry.value)),
         ],
       ),
     );
   }
 
-  Widget _buildPhraseItem(int index, String phrase) {
+  Widget _buildPhraseItem(BuildContext context, int index, String phrase) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 32),
       child: Row(
@@ -964,8 +965,8 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.white.withOpacity(0.3),
-                  Colors.white.withOpacity(0.1),
+                  context.appColors.textPrimary.withOpacity(0.3),
+                  context.appColors.textPrimary.withOpacity(0.1),
                 ],
               ),
               shape: BoxShape.circle,
@@ -973,8 +974,8 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             child: Center(
               child: Text(
                 '${index + 1}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.appColors.textPrimary,
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
                   decoration: TextDecoration.none,
@@ -986,8 +987,8 @@ class TopPhrasesShareTemplate extends StatelessWidget {
           Expanded(
             child: Text(
               '"$phrase"',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.appColors.textPrimary,
                 fontSize: 36,
                 fontWeight: FontWeight.w600,
                 fontStyle: FontStyle.italic,
@@ -1091,10 +1092,10 @@ class FinalCollageShareTemplate extends StatelessWidget {
                   shaderCallback: (bounds) => const LinearGradient(
                     colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
                   ).createShader(bounds),
-                  child: const Text(
+                  child: Text(
                     '2025',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: context.appColors.textPrimary,
                       fontSize: 80,
                       fontWeight: FontWeight.w900,
                       decoration: TextDecoration.none,
@@ -1105,13 +1106,13 @@ class FinalCollageShareTemplate extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: context.appColors.textPrimary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     context.l10n.wrappedTopPercentUser(percentile.toString()),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.appColors.textPrimary,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       decoration: TextDecoration.none,
@@ -1162,13 +1163,13 @@ class FinalCollageShareTemplate extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: context.appColors.textPrimary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(30),
                 ),
-                child: const Text(
+                child: Text(
                   'omi.me/wrapped',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.appColors.textPrimary,
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
@@ -1192,21 +1193,21 @@ class FinalCollageShareTemplate extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatItem(_formatNumber(totalMinutes), context.l10n.wrappedMins),
-          _buildStatItem(_formatNumber(totalConvs), context.l10n.wrappedConvos),
-          _buildStatItem(_formatNumber(daysActive), context.l10n.wrappedDays),
+          _buildStatItem(context, _formatNumber(totalMinutes), context.l10n.wrappedMins),
+          _buildStatItem(context, _formatNumber(totalConvs), context.l10n.wrappedConvos),
+          _buildStatItem(context, _formatNumber(daysActive), context.l10n.wrappedDays),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String value, String label) {
+  Widget _buildStatItem(BuildContext context, String value, String label) {
     return Column(
       children: [
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: context.appColors.textPrimary,
             fontSize: 52,
             fontWeight: FontWeight.w900,
             decoration: TextDecoration.none,
@@ -1215,7 +1216,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+            color: context.appColors.textSecondary,
             fontSize: 20,
             fontWeight: FontWeight.w500,
             decoration: TextDecoration.none,
@@ -1225,7 +1226,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
     );
   }
 
-  Widget _buildTile({required String title, required Color color, required Widget content}) {
+  Widget _buildTile(BuildContext context, {required String title, required Color color, required Widget content}) {
     return Container(
       padding: const EdgeInsets.all(24), // More padding
       decoration: BoxDecoration(
@@ -1237,8 +1238,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white, // White text on colored bg
+            style: TextStyle(
+              color: context.appColors.textPrimary, // White text on colored bg
               fontSize: 20, // Bigger
               fontWeight: FontWeight.w800,
               decoration: TextDecoration.none,
@@ -1253,6 +1254,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
 
   Widget _buildBuddiesTile(BuildContext context) {
     return _buildTile(
+      context,
       title: context.l10n.wrappedMyBuddiesLabel,
       color: const Color(0xFF6B5B95),
       content: Column(
@@ -1270,8 +1272,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
                 Expanded(
                   child: Text(
                     entry.value['name'] ?? '',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.appColors.textPrimary,
                       fontSize: 24,
                       fontWeight: FontWeight.w600,
                       decoration: TextDecoration.none,
@@ -1289,21 +1291,22 @@ class FinalCollageShareTemplate extends StatelessWidget {
 
   Widget _buildObsessionsTile(BuildContext context) {
     return _buildTile(
+      context,
       title: context.l10n.wrappedObsessionsLabel,
       color: WrappedColors.coral,
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildObsessionItem('📺', show),
-          _buildObsessionItem('🎬', movie),
-          _buildObsessionItem('🍕', food),
-          _buildObsessionItem('⭐', celebrity),
+          _buildObsessionItem(context, '📺', show),
+          _buildObsessionItem(context, '🎬', movie),
+          _buildObsessionItem(context, '🍕', food),
+          _buildObsessionItem(context, '⭐', celebrity),
         ],
       ),
     );
   }
 
-  Widget _buildObsessionItem(String emoji, String value) {
+  Widget _buildObsessionItem(BuildContext context, String emoji, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1316,8 +1319,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.appColors.textPrimary,
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,
@@ -1346,8 +1349,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 context.l10n.wrappedStruggleLabel,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: context.appColors.textTertiary,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   decoration: TextDecoration.none,
@@ -1358,8 +1361,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             struggle,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 22,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
@@ -1388,8 +1391,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 context.l10n.wrappedWinLabel,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.appColors.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   decoration: TextDecoration.none,
@@ -1400,8 +1403,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             biggestWin,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.appColors.textPrimary,
               fontSize: 22,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
@@ -1418,6 +1421,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: _buildTile(
+        context,
         title: context.l10n.wrappedTopPhrasesLabel,
         color: WrappedColors.orange,
         content: Column(
@@ -1427,8 +1431,8 @@ class FinalCollageShareTemplate extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 '"${entry.value}"',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: context.appColors.textPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.w600,
                   fontStyle: FontStyle.italic,
