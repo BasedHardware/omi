@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
@@ -95,11 +96,11 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) {
                                     return Container(
-                                      color: Colors.grey[900],
+                                      color: context.appColors.backgroundSecondary,
                                       child: Icon(
                                         Icons.person,
                                         size: 40,
-                                        color: Colors.white.withOpacity(0.5),
+                                        color: context.appColors.textQuaternary,
                                       ),
                                     );
                                   },
@@ -135,7 +136,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                               child: Text(
                                 tryDecodingText(provider.twitterProfile['name']),
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.74),
+                                  color: context.appColors.textSecondary,
                                   fontSize: 20,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -157,7 +158,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             width: MediaQuery.sizeOf(context).width * 0.65,
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: context.appColors.textPrimary.withOpacity(0.2),
                               borderRadius: const BorderRadius.only(
                                 topLeft: Radius.circular(18),
                                 topRight: Radius.circular(18),
@@ -193,7 +194,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(color: Colors.white.withOpacity(0.12), width: 4),
+                              side: BorderSide(color: context.appColors.textPrimary.withOpacity(0.12), width: 4),
                             ),
                           ),
                           child: const Text(
@@ -216,7 +217,7 @@ class _CloneSuccessScreenState extends State<CloneSuccessScreen> {
                             : 'Share public link',
                         style: TextStyle(
                           fontSize: 18,
-                          color: Colors.white.withOpacity(0.6),
+                          color: context.appColors.textTertiary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
