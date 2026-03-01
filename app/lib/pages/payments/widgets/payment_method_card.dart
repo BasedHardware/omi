@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/payments/models/payment_method_config.dart';
 
@@ -50,7 +51,7 @@ class PaymentMethodCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: !isConnected
               ? Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: context.appColors.textPrimary.withOpacity(0.3),
                   width: 2,
                   strokeAlign: BorderSide.strokeAlignOutside,
                   style: BorderStyle.solid,
@@ -65,7 +66,7 @@ class PaymentMethodCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: context.appColors.textPrimary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: icon,
@@ -77,8 +78,8 @@ class PaymentMethodCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.appColors.textPrimary,
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
                         ),
@@ -87,7 +88,8 @@ class PaymentMethodCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.green.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                          color:
+                              isActive ? Colors.green.withOpacity(0.2) : context.appColors.textPrimary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -103,7 +105,7 @@ class PaymentMethodCard extends StatelessWidget {
                             ] else if (isConnected && !isActive) ...[
                               Icon(
                                 Icons.circle,
-                                color: Colors.white.withOpacity(0.7),
+                                color: context.appColors.textSecondary,
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
@@ -111,7 +113,7 @@ class PaymentMethodCard extends StatelessWidget {
                             Text(
                               subtitle,
                               style: TextStyle(
-                                color: isActive ? Colors.green : Colors.white.withOpacity(0.7),
+                                color: isActive ? Colors.green : context.appColors.textSecondary,
                                 fontSize: 14,
                                 fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
                               ),
@@ -150,7 +152,7 @@ class PaymentMethodCard extends StatelessWidget {
                   PopupMenuButton<String>(
                     icon: Icon(
                       Icons.more_vert,
-                      color: Colors.white.withOpacity(0.7),
+                      color: context.appColors.textSecondary,
                     ),
                     onSelected: (value) {
                       if (value == 'update') {
