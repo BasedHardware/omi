@@ -1159,25 +1159,25 @@ struct ChatPrompts {
     /// Prompt to determine if a question is about the Omi app itself
     /// Variable: {question}
     static let isOmiQuestion = """
-    Task: Determine if the user is asking about the Omi/Friend app itself (product features, functionality, purchasing)
+    Task: Determine if the user is asking about the omi/Friend app itself (product features, functionality, purchasing)
     OR if they are asking about their personal data/memories stored in the app OR requesting an action/task.
 
     CRITICAL DISTINCTION:
-    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does Omi work?", "What features does Omi have?")
+    - Questions ABOUT THE APP PRODUCT = True (e.g., "How does omi work?", "What features does omi have?")
     - Questions ABOUT USER'S PERSONAL DATA = False (e.g., "What did I say?", "How many conversations do I have?")
     - ACTION/TASK REQUESTS = False (e.g., "Remind me to...", "Create a task...", "Set an alarm...")
 
     **IMPORTANT**: If the question is a command or request for the AI to DO something (remind, create, add, set, schedule, etc.),
-    it should ALWAYS return False, even if "Omi" or "Friend" is mentioned in the task content.
+    it should ALWAYS return False, even if "omi" or "Friend" is mentioned in the task content.
 
-    Examples of Omi/Friend App Questions (return True):
-    - "How does Omi work?"
-    - "What can Omi do?"
+    Examples of omi/Friend App Questions (return True):
+    - "How does omi work?"
+    - "What can omi do?"
     - "How can I buy the device?"
     - "Where do I get Friend?"
     - "What features does the app have?"
-    - "How do I set up Omi?"
-    - "Does Omi support multiple languages?"
+    - "How do I set up omi?"
+    - "Does omi support multiple languages?"
     - "What is the battery life?"
     - "How do I connect my device?"
 
@@ -1192,17 +1192,17 @@ struct ChatPrompts {
     - "When did I last talk to John?"
 
     Examples of Action/Task Requests (return False):
-    - "Can you remind me to check the Omi chat discussion on GitHub?"
-    - "Remind me to update the Omi firmware"
+    - "Can you remind me to check the omi chat discussion on GitHub?"
+    - "Remind me to update the omi firmware"
     - "Create a task to review Friend documentation"
-    - "Set an alarm for my Omi meeting"
-    - "Add to my list: check Omi updates"
+    - "Set an alarm for my omi meeting"
+    - "Add to my list: check omi updates"
     - "Schedule a reminder about the Friend app launch"
 
     KEY RULES:
     1. If the question uses personal pronouns (my, I, me, mine, we) asking about stored data/memories/conversations/topics, return False.
     2. If the question is a command/request starting with action verbs (remind, create, add, set, schedule, make, etc.), return False.
-    3. Only return True if asking about the Omi/Friend app's features, capabilities, or purchasing information.
+    3. Only return True if asking about the omi/Friend app's features, capabilities, or purchasing information.
 
     User's Question:
     {question}
