@@ -629,12 +629,15 @@ extension AdviceTestRunnerWindow: NSWindowDelegate {
 enum AdviceTestRunner {
 
     /// Run the advice test headlessly — triggered by distributed notification from CLI.
+    /// Simulates production cadence: divides the time range into extraction-interval
+    /// windows (from settings) and runs one analysis per window, just like production.
     /// Results are logged to the app log file.
     static func runCLITest(lookbackHours: Double, maxScreenshots: Int) async {
         let periodEnd = Date()
         let periodStart = periodEnd.addingTimeInterval(-lookbackHours * 3600)
+        let interval = await MainActor.run { AdviceAssistantSettings.shared.extractionInterval }
 
-        log("AdviceTestCLI: Starting test — range \(periodStart) to \(periodEnd), max \(maxScreenshots) screenshots")
+        log("AdviceTestCLI: Starting test — range \(periodStart) to \(periodEnd), interval \(Int(interval))s, max \(maxScreenshots) windows")
 
         // Get or create AdviceAssistant
         let coordAssistant = await MainActor.run {
@@ -664,83 +667,99 @@ enum AdviceTestRunner {
             log("AdviceTestCLI: WARNING — Storage init failed: \(error)")
         }
 
-        // Fetch screenshots
-        let allScreenshots: [Screenshot]
-        do {
-            allScreenshots = try await RewindDatabase.shared.getScreenshots(
-                from: periodStart,
-                to: periodEnd,
-                limit: 100_000
-            ).reversed()
-        } catch {
-            log("AdviceTestCLI: ERROR — Failed to load screenshots: \(error)")
-            return
+        // Build analysis windows (each covers one extraction interval)
+        // Walk backwards from periodEnd in interval-sized steps
+        var windows: [(windowEnd: Date, windowStart: Date)] = []
+        var cursor = periodEnd
+        while cursor > periodStart {
+            let windowStart = max(cursor.addingTimeInterval(-interval), periodStart)
+            windows.append((windowEnd: cursor, windowStart: windowStart))
+            cursor = windowStart
         }
+        windows.reverse() // Chronological order
 
-        let filtered = allScreenshots.filter { screenshot in
-            !screenshot.appName.isEmpty
-                && !TaskAssistantSettings.builtInExcludedApps.contains(screenshot.appName)
-                && !excludedApps.contains(screenshot.appName)
-        }
-
-        guard !filtered.isEmpty else {
-            log("AdviceTestCLI: No screenshots found in range (after filtering)")
-            return
-        }
-
-        // Sample evenly
-        let sampled: [Screenshot]
-        if filtered.count <= maxScreenshots {
-            sampled = filtered
+        // Sample evenly if too many windows
+        let sampled: [(windowEnd: Date, windowStart: Date)]
+        if windows.count <= maxScreenshots {
+            sampled = windows
         } else {
-            let step = Double(filtered.count) / Double(maxScreenshots)
+            let step = Double(windows.count) / Double(maxScreenshots)
             sampled = (0..<maxScreenshots).map { i in
-                filtered[min(Int(Double(i) * step), filtered.count - 1)]
+                windows[min(Int(Double(i) * step), windows.count - 1)]
             }
         }
 
-        log("AdviceTestCLI: Processing \(sampled.count) screenshots (from \(filtered.count) total)")
+        // For each window, find the latest non-excluded screenshot to get app context
+        log("AdviceTestCLI: Processing \(sampled.count) windows (from \(windows.count) total)")
 
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm:ss"
         var adviceCount = 0
         var errorCount = 0
+        var nilCount = 0
+        var noAdviceCount = 0
         var totalSql = 0
         let testStart = Date()
 
-        for (i, screenshot) in sampled.enumerated() {
+        for (i, window) in sampled.enumerated() {
             let label = "[\(i + 1)/\(sampled.count)]"
+
+            // Find the latest screenshot in this window for app context
+            let screenshots: [Screenshot]
             do {
-                let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+                screenshots = try await RewindDatabase.shared.getScreenshots(
+                    from: window.windowStart,
+                    to: window.windowEnd,
+                    limit: 10
+                )
+            } catch {
+                errorCount += 1
+                log("AdviceTestCLI: \(label) ERROR fetching screenshots: \(error.localizedDescription)")
+                continue
+            }
+
+            // Pick the latest non-excluded screenshot
+            guard let anchor = screenshots.first(where: { ss in
+                !ss.appName.isEmpty
+                    && !TaskAssistantSettings.builtInExcludedApps.contains(ss.appName)
+                    && !excludedApps.contains(ss.appName)
+            }) else {
+                log("AdviceTestCLI: \(label) \(timeFormatter.string(from: window.windowEnd)) — skipped (no non-excluded screenshots)")
+                continue
+            }
+
+            do {
                 let analyzeStart = Date()
                 let (result, sqlCount) = try await adviceAssistant.testAnalyze(
-                    jpegData: jpegData,
-                    appName: screenshot.appName,
-                    windowTitle: screenshot.windowTitle,
-                    screenshotTime: screenshot.timestamp
+                    jpegData: Data(),
+                    appName: anchor.appName,
+                    windowTitle: anchor.windowTitle,
+                    screenshotTime: window.windowEnd
                 )
                 let duration = Date().timeIntervalSince(analyzeStart)
                 totalSql += sqlCount
 
-                let time = timeFormatter.string(from: screenshot.timestamp)
-                let window = screenshot.windowTitle ?? "(no title)"
+                let time = timeFormatter.string(from: window.windowEnd)
+                let windowTitle = anchor.windowTitle ?? "(no title)"
 
                 if let result = result, result.hasAdvice, let advice = result.advice {
                     adviceCount += 1
                     let conf = Int(advice.confidence * 100)
-                    log("AdviceTestCLI: \(label) \(time) \(screenshot.appName) | \"\(window)\" → ADVICE [\(conf)%] \(advice.headline ?? "") — \(advice.advice) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
-                } else if let result = result {
-                    log("AdviceTestCLI: \(label) \(time) \(screenshot.appName) | \"\(window)\" → no_advice — \(result.contextSummary) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → ADVICE [\(conf)%] \(advice.headline ?? "") — \(advice.advice) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                } else if let result = result, !result.hasAdvice {
+                    noAdviceCount += 1
+                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → no_advice (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
                 } else {
-                    log("AdviceTestCLI: \(label) \(time) \(screenshot.appName) | \"\(window)\" → nil (loop exhausted) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                    nilCount += 1
+                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → nil (loop exhausted) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
                 }
             } catch {
                 errorCount += 1
-                log("AdviceTestCLI: \(label) \(screenshot.appName) → ERROR: \(error.localizedDescription)")
+                log("AdviceTestCLI: \(label) \(anchor.appName) → ERROR: \(error.localizedDescription)")
             }
         }
 
         let totalTime = Date().timeIntervalSince(testStart)
-        log("AdviceTestCLI: DONE — \(sampled.count) screenshots, \(adviceCount) advice, \(totalSql) SQL queries, \(errorCount) errors, \(String(format: "%.1fs", totalTime)) total")
+        log("AdviceTestCLI: DONE — \(sampled.count) windows, \(adviceCount) advice, \(noAdviceCount) no_advice, \(nilCount) exhausted, \(errorCount) errors, \(totalSql) SQL queries, \(String(format: "%.1fs", totalTime)) total")
     }
 }
