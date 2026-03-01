@@ -47,6 +47,7 @@ from routers import (
 )
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.text_speaker_detection import close_async_client as close_text_speaker_detection_client
 from utils.observability import log_langsmith_status
 
 # Log LangSmith tracing status at startup
@@ -60,6 +61,11 @@ else:
     firebase_admin.initialize_app()
 
 app = FastAPI()
+
+
+@app.on_event("shutdown")
+async def shutdown_async_clients() -> None:
+    await close_text_speaker_detection_client()
 
 app.include_router(transcribe.router)
 app.include_router(conversations.router)
