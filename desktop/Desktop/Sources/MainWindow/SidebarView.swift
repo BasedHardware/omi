@@ -484,7 +484,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi")
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
@@ -603,7 +603,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     // Text content
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Get Omi Device")
+                        Text("Get omi Device")
                             .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -640,7 +640,7 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(isCollapsed ? "Get Omi Device" : "")
+        .help(isCollapsed ? "Get omi Device" : "")
     }
 
     // MARK: - Update Available Widget
