@@ -391,6 +391,88 @@ async fn promote_release(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_release(version: &str, build: u32, channel: Option<&str>, is_live: bool) -> ReleaseInfo {
+        ReleaseInfo {
+            version: version.to_string(),
+            build_number: build,
+            download_url: format!("https://example.com/{}.zip", version),
+            ed_signature: "sig123".to_string(),
+            published_at: "2025-01-01T00:00:00Z".to_string(),
+            changelog: vec![],
+            is_live,
+            is_critical: false,
+            channel: channel.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_null_channel_gets_staging_tag() {
+        let releases = vec![make_release("0.1.0", 100, None, true)];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(xml.contains("<sparkle:channel>staging</sparkle:channel>"),
+            "null channel should emit staging tag, got:\n{}", xml);
+    }
+
+    #[test]
+    fn test_stable_channel_gets_no_tag() {
+        let releases = vec![make_release("0.2.0", 200, Some("stable"), true)];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(!xml.contains("<sparkle:channel>"),
+            "stable channel should emit no channel tag, got:\n{}", xml);
+    }
+
+    #[test]
+    fn test_beta_channel_gets_beta_tag() {
+        let releases = vec![make_release("0.3.0", 300, Some("beta"), true)];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(xml.contains("<sparkle:channel>beta</sparkle:channel>"),
+            "beta channel should emit beta tag, got:\n{}", xml);
+    }
+
+    #[test]
+    fn test_staging_channel_gets_staging_tag() {
+        let releases = vec![make_release("0.4.0", 400, Some("staging"), true)];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(xml.contains("<sparkle:channel>staging</sparkle:channel>"),
+            "staging channel should emit staging tag, got:\n{}", xml);
+    }
+
+    #[test]
+    fn test_dedup_null_and_staging_same_group() {
+        // null-channel and staging-channel should deduplicate together
+        let releases = vec![
+            make_release("0.5.0", 500, None, true),          // null → staging group
+            make_release("0.4.0", 400, Some("staging"), true), // explicit staging
+        ];
+        let xml = generate_appcast_xml(&releases, "macos");
+        // Only the first (higher build) should appear
+        assert!(xml.contains("0.5.0"), "first staging release should appear");
+        assert!(!xml.contains("0.4.0"), "second staging release should be deduped");
+    }
+
+    #[test]
+    fn test_stable_and_null_are_separate_groups() {
+        let releases = vec![
+            make_release("1.0.0", 1000, Some("stable"), true),
+            make_release("0.9.0", 900, None, true), // null → staging
+        ];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(xml.contains("1.0.0"), "stable release should appear");
+        assert!(xml.contains("0.9.0"), "null/staging release should also appear (different group)");
+    }
+
+    #[test]
+    fn test_not_live_releases_excluded() {
+        let releases = vec![make_release("0.1.0", 100, Some("stable"), false)];
+        let xml = generate_appcast_xml(&releases, "macos");
+        assert!(!xml.contains("0.1.0"), "non-live release should not appear");
+    }
+}
+
 pub fn updates_routes() -> Router<AppState> {
     Router::new()
         .route("/appcast.xml", get(get_appcast))
