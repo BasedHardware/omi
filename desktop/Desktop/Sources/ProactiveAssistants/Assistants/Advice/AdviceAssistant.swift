@@ -559,7 +559,7 @@ actor AdviceAssistant: ProactiveAssistant {
             let iterTools = [tools]
             let iterForce = iteration == 0
             // Use longer timeout when processing an image from view_screenshot
-            let timeout: Double = lastIterationSentImage ? 180 : 120
+            let timeout: Double = lastIterationSentImage ? 300 : 120
             lastIterationSentImage = false
             let result: ToolChatResult
             do {
