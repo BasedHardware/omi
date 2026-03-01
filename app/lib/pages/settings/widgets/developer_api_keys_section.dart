@@ -9,6 +9,7 @@ import 'package:omi/pages/settings/widgets/dev_api_key_list_item.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/theme/app_color_tokens.dart';
 
 class DeveloperApiKeysSection extends StatelessWidget {
   const DeveloperApiKeysSection({super.key});
@@ -47,7 +48,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: context.appColors.textPrimary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -57,8 +58,8 @@ class DeveloperApiKeysSection extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.appColors.textPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -84,8 +85,8 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 children: [
                   Text(
                     context.l10n.developerApi,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.appColors.textPrimary,
                       fontSize: 20,
                       fontWeight: FontWeight.w600,
                     ),
@@ -105,7 +106,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   return Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
+                      color: context.appColors.cardBackground,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Center(
@@ -117,7 +118,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   return Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
+                      color: context.appColors.cardBackground,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -132,21 +133,21 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   return Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
+                      color: context.appColors.cardBackground,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       children: [
-                        FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
+                        FaIcon(FontAwesomeIcons.key, color: context.appColors.textQuaternary, size: 28),
                         const SizedBox(height: 12),
                         Text(
                           context.l10n.noApiKeys,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+                          style: TextStyle(color: context.appColors.iconSecondary, fontSize: 15),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           context.l10n.createAKeyToGetStarted,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          style: TextStyle(color: context.appColors.textQuaternary, fontSize: 13),
                         ),
                       ],
                     ),
@@ -154,7 +155,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
                 }
                 return Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1C1C1E),
+                    color: context.appColors.cardBackground,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -164,7 +165,8 @@ class DeveloperApiKeysSection extends StatelessWidget {
                       return Column(
                         children: [
                           DevApiKeyListItem(apiKey: key),
-                          if (index < provider.keys.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43)),
+                          if (index < provider.keys.length - 1)
+                            Divider(height: 1, color: context.appColors.dividerColor),
                         ],
                       );
                     }).toList(),
