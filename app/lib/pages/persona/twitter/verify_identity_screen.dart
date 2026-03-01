@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -96,7 +97,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
             context: context,
             builder: (BuildContext context) {
               return AlertDialog(
-                backgroundColor: Colors.grey[900],
+                backgroundColor: context.appColors.backgroundSecondary,
                 title: const Text(
                   'Verification Failed',
                   style: TextStyle(color: Colors.white),
@@ -204,7 +205,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                         Text(
                           'Please verify you\'re the owner of\nthis account',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
+                            color: context.appColors.textTertiary,
                             fontSize: 16,
                           ),
                           textAlign: TextAlign.center,
@@ -216,7 +217,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
+                              color: context.appColors.textPrimary.withOpacity(0.3),
                               width: 3,
                             ),
                           ),
@@ -226,11 +227,11 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
-                                  color: Colors.grey[900],
+                                  color: context.appColors.backgroundSecondary,
                                   child: Icon(
                                     Icons.person,
                                     size: 40,
-                                    color: Colors.white.withOpacity(0.5),
+                                    color: context.appColors.textQuaternary,
                                   ),
                                 );
                               },
@@ -243,7 +244,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                             Text(
                               tryDecodingText(provider.twitterProfile['name'] ?? ""),
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.78),
+                                color: context.appColors.textSecondary,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -267,7 +268,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.12),
+                            backgroundColor: context.appColors.textPrimary.withOpacity(0.12),
                             foregroundColor: Colors.white,
                             minimumSize: const Size(double.infinity, 56),
                             shape: RoundedRectangleBorder(
@@ -300,7 +301,7 @@ class _VerifyIdentityScreenState extends State<VerifyIdentityScreen> {
                                 child: Text(
                                   "Didn't post the tweet? click here",
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.8),
+                                    color: context.appColors.textSecondary,
                                     fontSize: 14,
                                   ),
                                 ),
