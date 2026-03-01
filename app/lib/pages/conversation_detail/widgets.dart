@@ -152,6 +152,16 @@ class GetSummaryWidgets extends StatelessWidget {
               conversationId: conversation.id,
               currentFolderId: conversation.folderId,
             ),
+            // Visibility chip — needs its own Selector to detect mutation on the same object
+            Selector<ConversationDetailProvider, ConversationVisibility>(
+              selector: (_, provider) => provider.conversation.visibility,
+              builder: (context, _, __) {
+                return _buildVisibilityChip(
+                  context: context,
+                  conversation: context.read<ConversationDetailProvider>().conversation,
+                );
+              },
+            ),
           ],
         );
       },
@@ -232,6 +242,199 @@ class GetSummaryWidgets extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildVisibilityChip({
+    required BuildContext context,
+    required ServerConversation conversation,
+  }) {
+    final isPrivate = conversation.visibility == ConversationVisibility.private_;
+    final color = isPrivate ? Colors.grey.shade300 : Colors.green;
+    final label = isPrivate ? context.l10n.private : context.l10n.shared;
+    final icon = isPrivate ? Icons.lock_outline : Icons.public;
+
+    return GestureDetector(
+      onTap: () async {
+        HapticFeedback.selectionClick();
+
+        MixpanelManager().conversationVisibilityChanged(
+          conversationId: conversation.id,
+          fromVisibility: isPrivate ? 'private' : 'shared',
+          toVisibility: 'show_sheet',
+        );
+
+        _showVisibilitySheet(context, conversation);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showVisibilitySheet(BuildContext context, ServerConversation conversation) {
+    final provider = context.read<ConversationDetailProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      context.l10n.visibility,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(sheetContext),
+                      child: Icon(Icons.close, color: Colors.grey.shade500, size: 24),
+                    ),
+                  ],
+                ),
+              ),
+              // Private option
+              _buildVisibilityOption(
+                context: sheetContext,
+                icon: Icons.lock_outline,
+                label: context.l10n.private,
+                description: context.l10n.onlyYouCanSeeConversation,
+                isSelected: conversation.visibility == ConversationVisibility.private_,
+                onTap: () async {
+                  if (conversation.visibility == ConversationVisibility.private_) {
+                    Navigator.pop(sheetContext);
+                    return;
+                  }
+                  // Optimistic update first
+                  provider.updateVisibilityLocally(ConversationVisibility.private_);
+                  Navigator.pop(sheetContext);
+                  bool success = await setConversationVisibility(conversation.id, visibility: 'private');
+                  if (!success && context.mounted) {
+                    // Revert on failure
+                    provider.updateVisibilityLocally(ConversationVisibility.shared);
+                  }
+                  MixpanelManager().conversationVisibilityChanged(
+                    conversationId: conversation.id,
+                    fromVisibility: 'shared',
+                    toVisibility: 'private',
+                  );
+                },
+              ),
+              // Shared option
+              _buildVisibilityOption(
+                context: sheetContext,
+                icon: Icons.public,
+                label: context.l10n.shared,
+                description: context.l10n.anyoneWithLinkCanView,
+                isSelected: conversation.visibility == ConversationVisibility.shared,
+                onTap: () async {
+                  if (conversation.visibility == ConversationVisibility.shared) {
+                    Navigator.pop(sheetContext);
+                    return;
+                  }
+                  // Optimistic update first
+                  provider.updateVisibilityLocally(ConversationVisibility.shared);
+                  Navigator.pop(sheetContext);
+                  bool success = await setConversationVisibility(conversation.id, visibility: 'shared');
+                  if (!success && context.mounted) {
+                    // Revert on failure
+                    provider.updateVisibilityLocally(ConversationVisibility.private_);
+                    return;
+                  }
+                  MixpanelManager().conversationVisibilityChanged(
+                    conversationId: conversation.id,
+                    fromVisibility: 'private',
+                    toVisibility: 'shared',
+                  );
+                  if (context.mounted) _shareConversationLink(context, conversation);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVisibilityOption({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required String description,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.15)) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: isSelected ? Colors.green : Colors.grey.shade400),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                ],
+              ),
+            ),
+            if (isSelected) const Icon(Icons.check_circle, color: Colors.green, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _shareConversationLink(BuildContext context, ServerConversation conversation) {
+    String content = 'https://h.omi.me/memories/${conversation.id}';
+    final box = context.findRenderObject() as RenderBox?;
+    final shareOrigin = box != null
+        ? Rect.fromLTWH(
+            box.localToGlobal(Offset.zero).dx,
+            box.localToGlobal(Offset.zero).dy,
+            box.size.width,
+            box.size.height,
+          )
+        : null;
+    Share.share(content, subject: conversation.structured.title, sharePositionOrigin: shareOrigin);
   }
 
   Widget _buildChip({required String label, required IconData icon}) {
