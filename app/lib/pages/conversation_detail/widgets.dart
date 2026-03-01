@@ -328,7 +328,8 @@ class GetSummaryWidgets extends StatelessWidget {
                   final previousVisibility = conversation.visibility.value;
                   provider.updateVisibilityLocally(ConversationVisibility.private_);
                   Navigator.pop(sheetContext);
-                  bool success = await setConversationVisibility(conversation.id, visibility: 'private');
+                  bool success = await setConversationVisibility(conversation.id,
+                      visibility: ConversationVisibility.private_.value);
                   if (!success) {
                     provider.updateVisibilityLocally(ConversationVisibility.shared);
                     return;
@@ -355,7 +356,8 @@ class GetSummaryWidgets extends StatelessWidget {
                   final previousVisibility = conversation.visibility.value;
                   provider.updateVisibilityLocally(ConversationVisibility.shared);
                   Navigator.pop(sheetContext);
-                  bool success = await setConversationVisibility(conversation.id, visibility: 'shared');
+                  bool success =
+                      await setConversationVisibility(conversation.id, visibility: ConversationVisibility.shared.value);
                   if (!success) {
                     provider.updateVisibilityLocally(ConversationVisibility.private_);
                     return;

@@ -64,7 +64,7 @@ enum ConversationVisibility {
   final String value;
   const ConversationVisibility(this.value);
 
-  static ConversationVisibility fromString(String? s) => s == 'shared' ? shared : private_;
+  static ConversationVisibility fromString(String? s) => s == shared.value ? shared : private_;
 }
 
 enum ConversationPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
