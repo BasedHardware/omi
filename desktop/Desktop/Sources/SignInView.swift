@@ -23,7 +23,7 @@ struct SignInView: View {
                             .frame(width: 64, height: 64)
                     }
 
-                    Text("Omi")
+                    Text("omi")
                         .scaledFont(size: 48, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
