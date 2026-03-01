@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -49,26 +50,26 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                   height: 4,
                   margin: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.grey[600],
+                    color: context.appColors.textQuaternary,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
                 TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: context.appColors.textPrimary),
                   decoration: InputDecoration(
                     hintText: context.l10n.searchCountries,
-                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    hintStyle: TextStyle(color: context.appColors.textQuaternary),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
+                    fillColor: context.appColors.textPrimary.withOpacity(0.1),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
                     ),
-                    prefixIcon: const Icon(Icons.search, color: Colors.white),
+                    prefixIcon: Icon(Icons.search, color: context.appColors.textPrimary),
                     suffixIcon: provider.searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear, color: Colors.white),
+                            icon: Icon(Icons.clear, color: context.appColors.textPrimary),
                             onPressed: () {
                               _searchController.clear();
                               provider.updateSearchQuery('');
@@ -102,7 +103,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                             title: Text(
                               (country['name'] as String).decodeString,
                               style: TextStyle(
-                                color: isSelected ? const Color(0xFF635BFF) : Colors.white,
+                                color: isSelected ? const Color(0xFF635BFF) : context.appColors.textPrimary,
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
