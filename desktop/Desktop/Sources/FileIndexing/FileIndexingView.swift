@@ -438,10 +438,6 @@ struct FileIndexingView: View {
         await graphViewModel.loadGraph()
 
         if graphViewModel.isEmpty {
-            // Last resort: fire-and-forget backend rebuild
-            Task {
-                _ = try? await APIClient.shared.rebuildKnowledgeGraph()
-            }
             AnalyticsManager.shared.knowledgeGraphBuildFailed(
                 reason: "local_empty_api_empty",
                 pollAttempts: maxAttempts,
