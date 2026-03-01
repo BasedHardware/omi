@@ -8,9 +8,20 @@ from pydub import AudioSegment
 
 from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
-from database.users import get_person
+from database.users import (
+    get_person,
+    get_user_profile,
+    is_exists_user,
+    set_user_speaker_embedding,
+    share_speech_profile,
+    revoke_speech_profile_share,
+    remove_shared_profile_from_me,
+    get_profiles_shared_with_user_details,
+    get_users_shared_with,
+    get_users_shared_with_details,
+)
 from models.conversation import Conversation
-from models.other import UploadProfile
+from models.other import ShareSpeechProfileRequest, UploadProfile
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
@@ -25,6 +36,7 @@ from utils.other.storage import (
     delete_speech_sample_for_people,
     get_user_has_speech_profile,
 )
+from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
 import logging
 
@@ -74,6 +86,13 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 
     url = upload_profile_audio(file_path, uid)
     remove_user_soniox_speech_profile(uid)
+
+    try:
+        embedding = extract_embedding(file_path)
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+    except Exception as e:
+        logger.error(f"Failed to extract speaker embedding during profile upload: {e} {uid}")
+
     return {"url": url}
 
 
@@ -104,3 +123,59 @@ def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str =
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)
+
+
+# ******************************************************
+# ************ SPEECH PROFILE SHARING ******************
+# ******************************************************
+
+
+@router.post('/v1/speech-profile/share', tags=['v1'])
+def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Share the current user's speech profile with another user"""
+    if data.target_uid == uid:
+        raise HTTPException(status_code=400, detail="Cannot share with yourself.")
+    profile = get_user_profile(uid)
+    if not profile or not profile.get('speaker_embedding'):
+        raise HTTPException(status_code=400, detail="No speech profile recorded.")
+    if not is_exists_user(data.target_uid):
+        raise HTTPException(status_code=404, detail="Target user not found.")
+    existing = get_users_shared_with(uid)
+    if data.target_uid in existing:
+        raise HTTPException(status_code=400, detail="Already shared with this user.")
+    share_speech_profile(uid, data.target_uid)
+    return {"status": "ok"}
+
+
+@router.post('/v1/speech-profile/revoke', tags=['v1'])
+def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Revoke a previously shared speech profile"""
+    if data.target_uid == uid:
+        raise HTTPException(status_code=400, detail="Invalid target user ID.")
+    result = revoke_speech_profile_share(uid, data.target_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+
+@router.post('/v1/speech-profile/remove-shared', tags=['v1'])
+def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Allow the current user to remove a speech profile that was shared with them"""
+    result = remove_shared_profile_from_me(data.target_uid, uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="No active share found.")
+    return {"status": "ok"}
+
+
+@router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
+def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
+    """List users who have shared their speech profile with the current user"""
+    owners = get_profiles_shared_with_user_details(uid)
+    return {"shared_with_me": owners}
+
+
+@router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
+def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
+    """List users with whom the current user has shared their speech profile"""
+    shared = get_users_shared_with_details(uid)
+    return {"i_have_shared_with": shared}

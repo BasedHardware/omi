@@ -10074,5 +10074,64 @@
     "apiEnvSavedRestartRequired": "Saved. Close and reopen the app to apply.",
     "@apiEnvSavedRestartRequired": {
         "description": "Snackbar message after saving API environment preference"
+    },
+    "shareSpeechProfile": "Share Speech Profile",
+    "enterUserIdToShare": "Enter the user ID to share your speech profile with",
+    "profileSharedSuccess": "Speech profile shared successfully",
+    "profileSharedFail": "Failed to share speech profile",
+    "speechProfileSharingStatus": "Speech Profile Sharing Status",
+    "youHaveSharedWith": "You have shared with:",
+    "sharedWithYou": "Shared with you:",
+    "sharedWithSection": "You shared with",
+    "@sharedWithSection": {
+        "description": "Section header for profiles shared with others"
+    },
+    "sharedWithYouSection": "Shared with you",
+    "@sharedWithYouSection": {
+        "description": "Section header for profiles shared with the user"
+    },
+    "noSharedProfiles": "You haven't shared your speech profile with anyone yet",
+    "@noSharedProfiles": {
+        "description": "Empty state text when user has not shared their profile"
+    },
+    "noProfilesSharedWithYou": "No one has shared their speech profile with you yet",
+    "@noProfilesSharedWithYou": {
+        "description": "Empty state text when no profiles shared with user"
+    },
+    "revokeShareConfirmation": "Stop sharing your speech profile with this user?",
+    "@revokeShareConfirmation": {
+        "description": "Confirmation message for revoking speech profile sharing"
+    },
+    "sharedProfiles": "Shared Profiles",
+    "@sharedProfiles": {
+        "description": "Short menu title for speech profile sharing status page"
+    },
+    "noSpeechProfileRecorded": "You need to record your speech profile before sharing",
+    "@noSpeechProfileRecorded": {
+        "description": "Message when user tries to share without a speech profile"
+    },
+    "recordNow": "Record Now",
+    "@recordNow": {
+        "description": "Button to navigate to speech profile recording page"
+    },
+    "cannotShareWithSelf": "Omi already knows your voice!",
+    "@cannotShareWithSelf": {
+        "description": "Error when user tries to share with themselves"
+    },
+    "userNotFound": "User not found. Please check the ID and try again.",
+    "@userNotFound": {
+        "description": "Error when target user ID does not exist"
+    },
+    "removeSharedProfile": "Remove",
+    "@removeSharedProfile": {
+        "description": "Button to remove a speech profile shared with you"
+    },
+    "removeSharedProfileConfirmation": "Stop auto-identifying this person's voice in your conversations?",
+    "@removeSharedProfileConfirmation": {
+        "description": "Confirmation message for removing a shared profile"
+    },
+    "alreadySharedWithUser": "You have already shared your speech profile with this user",
+    "@alreadySharedWithUser": {
+        "description": "Error when trying to share with someone you already shared with"
     }
 }

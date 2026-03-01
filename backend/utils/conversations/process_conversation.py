@@ -631,6 +631,25 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
+        # Resolve shared profile names for LLM transcript
+        shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
+        if shared_pids:
+            from database.auth import get_user_name
+
+            for shared_pid in shared_pids:
+                owner_uid = shared_pid.split(":", 1)[1]
+                profile = users_db.get_user_profile(owner_uid)
+                if profile:
+                    name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
+                    people.append(
+                        Person(
+                            id=shared_pid,
+                            name=name,
+                            created_at=datetime.now(timezone.utc),
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                    )
+
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 

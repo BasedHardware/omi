@@ -1033,3 +1033,88 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+
+
+def set_user_speaker_embedding(uid: str, embedding: list):
+    """Store speaker embedding on the user document itself (not a person)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'speaker_embedding_updated_at': datetime.now(timezone.utc),
+        }
+    )
+
+
+def share_speech_profile(owner_uid: str, target_uid: str):
+    """Share the owner's speech profile with another user (target_uid)."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    shared_ref.set(
+        {
+            'shared_with_uid': target_uid,
+            'created_at': datetime.now(timezone.utc),
+            'revoked_at': None,
+        }
+    )
+    return True
+
+
+def revoke_speech_profile_share(owner_uid: str, target_uid: str):
+    """Revoke a previously shared speech profile."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    if shared_ref.get().exists:
+        shared_ref.update({'revoked_at': datetime.now(timezone.utc)})
+        return True
+    return False
+
+
+def get_profiles_shared_with_user(target_uid: str):
+    """Return a list of user IDs who have shared their speech profile with target_uid and not revoked."""
+
+    shares_query = (
+        db.collection_group('shared_speech_profiles')
+        .where(filter=FieldFilter('shared_with_uid', '==', target_uid))
+        .where(filter=FieldFilter('revoked_at', '==', None))
+    )
+
+    return [share.reference.parent.parent.id for share in shares_query.stream()]
+
+
+def _get_user_display_name(uid: str) -> str:
+    """Get user display name from Firebase Auth (lazy import to avoid test breakage)."""
+    from database.auth import get_user_name
+
+    return get_user_name(uid, use_default=False) or ''
+
+
+def get_profiles_shared_with_user_details(target_uid: str):
+    """Return a list of {uid, name} dicts for users who have shared their speech profile with target_uid."""
+    owner_uids = get_profiles_shared_with_user(target_uid)
+    if not owner_uids:
+        return []
+    return [{'uid': uid, 'name': _get_user_display_name(uid)} for uid in owner_uids]
+
+
+def remove_shared_profile_from_me(owner_uid: str, target_uid: str):
+    """Allow the target user to remove/reject a speech profile shared with them by owner_uid."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
+    doc = shared_ref.get()
+    if doc.exists and doc.to_dict().get('revoked_at') is None:
+        shared_ref.update({'revoked_at': datetime.now(timezone.utc)})
+        return True
+    return False
+
+
+def get_users_shared_with(owner_uid: str):
+    """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
+    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
+    shares_query = shared_ref.where(filter=FieldFilter('revoked_at', '==', None))
+    return [doc.to_dict()['shared_with_uid'] for doc in shares_query.stream()]
+
+
+def get_users_shared_with_details(owner_uid: str):
+    """Return a list of {uid, name} dicts for users with whom the owner has shared their speech profile."""
+    target_uids = get_users_shared_with(owner_uid)
+    if not target_uids:
+        return []
+    return [{'uid': uid, 'name': _get_user_display_name(uid)} for uid in target_uids]

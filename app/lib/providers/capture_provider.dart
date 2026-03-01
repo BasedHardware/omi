@@ -273,6 +273,7 @@ class CaptureProvider extends ChangeNotifier
   int _segmentsPhotosVersion = 0;
   int get segmentsPhotosVersion => _segmentsPhotosVersion;
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
+  Map<int, String> sharedSpeakerNames = {};
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -358,6 +359,7 @@ class CaptureProvider extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     suggestionsBySegmentId = {};
+    sharedSpeakerNames = {};
     _conversation = null;
     taggingSegmentIds = [];
     notifyListeners();
@@ -1628,6 +1630,11 @@ class CaptureProvider extends ChangeNotifier
         if (newPerson != null) {
           finalPersonId = newPerson.id;
         }
+      }
+
+      // Cache shared speaker names for display
+      if (finalPersonId.startsWith('shared:')) {
+        sharedSpeakerNames[speakerId] = personName;
       }
 
       // Add person to local cache if not exists (backward compatibility for old apps)
