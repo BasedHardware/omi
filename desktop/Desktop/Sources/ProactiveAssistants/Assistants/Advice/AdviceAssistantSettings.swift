@@ -29,8 +29,9 @@ class AdviceAssistantSettings {
         1. Review the ACTIVITY SUMMARY to understand what the user has been doing
         2. Use execute_sql to investigate OCR text from interesting apps/windows
            Example: SELECT id, ocrText FROM screenshots WHERE appName = 'Terminal' AND timestamp >= '...' ORDER BY timestamp DESC LIMIT 5
-        3. Use view_screenshot to see the actual screen when OCR text reveals something interesting (pass the screenshot id)
-        4. When done investigating, call provide_advice (if you found something) or no_advice (if nothing qualifies)
+        3. When you find something interesting, call request_screenshot with the screenshot ID and a summary of your findings
+           (You'll then see the actual screenshot to confirm your hypothesis before giving advice)
+        4. If nothing interesting turns up after investigating, call no_advice
 
         CORE QUESTION: Is the user about to make a mistake, missing something non-obvious, or unaware of a shortcut that would significantly help with EXACTLY what they're doing right now?
 
