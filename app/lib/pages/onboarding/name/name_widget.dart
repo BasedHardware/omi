@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class NameWidget extends StatefulWidget {
@@ -43,9 +44,9 @@ class _NameWidgetState extends State<NameWidget> {
         Container(
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(32, 26, 32, MediaQuery.of(context).padding.bottom + 8),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(
+          decoration: BoxDecoration(
+            color: context.appColors.backgroundPrimary,
+            borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(40),
               topRight: Radius.circular(40),
             ),
@@ -61,7 +62,7 @@ class _NameWidgetState extends State<NameWidget> {
                 Text(
                   hasPrefilledName ? context.l10n.wantDifferentName : context.l10n.whatsYourName,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: context.appColors.textPrimary,
                     fontSize: hasPrefilledName ? 22 : 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
@@ -89,18 +90,18 @@ class _NameWidgetState extends State<NameWidget> {
                 // Name input field
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.grey[900],
+                    color: context.appColors.cardBackground,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.grey[700]!,
+                      color: context.appColors.dividerColor,
                       width: 1,
                     ),
                   ),
                   child: TextField(
                     controller: nameController,
                     focusNode: focusNode,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.appColors.textPrimary,
                       fontSize: 18,
                       fontFamily: 'Manrope',
                       fontWeight: FontWeight.w500,
@@ -109,7 +110,7 @@ class _NameWidgetState extends State<NameWidget> {
                     decoration: InputDecoration(
                       hintText: context.l10n.enterYourName,
                       hintStyle: TextStyle(
-                        color: Colors.grey[500],
+                        color: context.appColors.textQuaternary,
                         fontSize: 18,
                         fontFamily: 'Manrope',
                       ),
