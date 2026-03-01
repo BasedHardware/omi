@@ -371,14 +371,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             else if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)
-              SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(
-                      isStarredFilterActive: convoProvider.showStarredOnly,
-                    ),
-                  ),
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyConversationsWidget(
+                  isStarredFilterActive: convoProvider.showStarredOnly,
                 ),
               )
             else if (convoProvider.groupedConversations.isEmpty &&
