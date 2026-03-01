@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import GRDB
 
@@ -378,6 +379,39 @@ actor AdviceAssistant: ProactiveAssistant {
         pendingFrame = nil
     }
 
+    // MARK: - Image Processing
+
+    /// Resize and compress an image for Gemini analysis (max 1280px wide, JPEG quality 0.4)
+    private static func compressForGemini(_ data: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+
+        let maxWidth = 1280
+        let width = cgImage.width
+        let height = cgImage.height
+        let scale = width > maxWidth ? Double(maxWidth) / Double(width) : 1.0
+        let newWidth = Int(Double(width) * scale)
+        let newHeight = Int(Double(height) * scale)
+
+        guard let context = CGContext(
+            data: nil, width: newWidth, height: newHeight,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        context.interpolationQuality = .high
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
+
+        guard let resized = context.makeImage() else { return nil }
+
+        let mutableData = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(mutableData as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, resized, [kCGImageDestinationLossyCompressionQuality: 0.4] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return mutableData as Data
+    }
+
     // MARK: - Helpers
 
     /// Get user's preferred language, cached for 1 hour
@@ -516,16 +550,20 @@ actor AdviceAssistant: ProactiveAssistant {
             )
         ]
 
-        // Agentic loop (max 7 iterations, 120s timeout per Gemini call)
+        // Agentic loop (max 7 iterations)
         let client = self.geminiClient
-        for iteration in 0..<7 {
+        var lastIterationSentImage = false
+        for iteration in 0..<10 {
             let iterContents = contents
             let iterSystemPrompt = currentSystemPrompt
             let iterTools = [tools]
             let iterForce = iteration == 0
+            // Use longer timeout when processing an image from view_screenshot
+            let timeout: Double = lastIterationSentImage ? 180 : 120
+            lastIterationSentImage = false
             let result: ToolChatResult
             do {
-                result = try await withThrowingTimeout(seconds: 120) {
+                result = try await withThrowingTimeout(seconds: timeout) {
                     try await client.sendImageToolLoop(
                         contents: iterContents,
                         systemPrompt: iterSystemPrompt,
@@ -534,7 +572,7 @@ actor AdviceAssistant: ProactiveAssistant {
                     )
                 }
             } catch {
-                log("Advice: Gemini call failed on iteration \(iteration): \(error.localizedDescription)")
+                log("Advice: Gemini call failed on iteration \(iteration) (timeout=\(Int(timeout))s): \(error.localizedDescription)")
                 throw error
             }
 
@@ -614,7 +652,7 @@ actor AdviceAssistant: ProactiveAssistant {
                 // Load screenshot from DB + storage
                 do {
                     guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
-                        log("Advice: view_screenshot — not found (id=\(screenshotId))")
+                        log("Advice: view_screenshot — not in DB (id=\(screenshotId))")
                         contents.append(GeminiImageToolRequest.Content(
                             role: "user",
                             parts: [GeminiImageToolRequest.Part(functionResponse: .init(
@@ -624,9 +662,27 @@ actor AdviceAssistant: ProactiveAssistant {
                         ))
                         continue
                     }
-                    let imageData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+                    // Check if this screenshot is from the active (still-recording) video chunk
+                    if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath {
+                        let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+                        if chunk == activeChunk {
+                            log("Advice: view_screenshot — skipping active chunk \(chunk)")
+                            contents.append(GeminiImageToolRequest.Content(
+                                role: "user",
+                                parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                                    name: toolCall.name,
+                                    response: .init(result: "This screenshot is from the active recording chunk and can't be viewed yet. Try a screenshot with a lower ID (older timestamp).")
+                                ))]
+                            ))
+                            continue
+                        }
+                    }
+                    let rawData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+                    // Resize + compress to reduce Gemini processing time
+                    let imageData = Self.compressForGemini(rawData) ?? rawData
                     let base64 = imageData.base64EncodedString()
-                    log("Advice: view_screenshot — loaded \(imageData.count) bytes from \(screenshot.appName)")
+                    log("Advice: view_screenshot — loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
+                    lastIterationSentImage = true
 
                     // Return function response + image in the same user message
                     contents.append(GeminiImageToolRequest.Content(
@@ -641,11 +697,12 @@ actor AdviceAssistant: ProactiveAssistant {
                     ))
                 } catch {
                     log("Advice: view_screenshot — load failed: \(error.localizedDescription)")
+                    let hint = "Try a screenshot with a lower ID (older timestamp)."
                     contents.append(GeminiImageToolRequest.Content(
                         role: "user",
                         parts: [GeminiImageToolRequest.Part(functionResponse: .init(
                             name: toolCall.name,
-                            response: .init(result: "Failed to load screenshot: \(error.localizedDescription)")
+                            response: .init(result: "Failed to load screenshot \(screenshotId): \(error.localizedDescription). \(hint)")
                         ))]
                     ))
                 }
