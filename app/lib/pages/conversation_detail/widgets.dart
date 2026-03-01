@@ -336,7 +336,7 @@ class GetSummaryWidgets extends StatelessWidget {
                   MixpanelManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility,
-                    toVisibility: 'private',
+                    toVisibility: ConversationVisibility.private_.value,
                   );
                 },
               ),
@@ -363,7 +363,7 @@ class GetSummaryWidgets extends StatelessWidget {
                   MixpanelManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility,
-                    toVisibility: 'shared',
+                    toVisibility: ConversationVisibility.shared.value,
                   );
                   if (context.mounted) _shareConversationLink(context, conversation);
                 },
