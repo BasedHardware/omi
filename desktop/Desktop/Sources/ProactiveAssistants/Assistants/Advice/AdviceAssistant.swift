@@ -63,8 +63,8 @@ actor AdviceAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        // Use Gemini 3 Pro for better advice quality
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-3-pro-preview")
+        // Use Gemini 3.1 Pro for better advice quality (3-pro-preview retires March 9, 2026)
+        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         self.frameSignal = stream

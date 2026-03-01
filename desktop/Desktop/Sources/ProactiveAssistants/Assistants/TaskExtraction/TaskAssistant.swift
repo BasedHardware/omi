@@ -145,7 +145,7 @@ actor TaskAssistant: ProactiveAssistant {
 
     init(apiKey: String? = nil) throws {
         // Use Gemini 3 Pro for better task extraction quality
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-3-pro-preview")
+        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
 
         let (stream, continuation) = AsyncStream.makeStream(of: TriggerEvent.self, bufferingPolicy: .bufferingNewest(1))
         self.triggerStream = stream
