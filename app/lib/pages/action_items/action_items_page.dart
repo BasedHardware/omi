@@ -387,7 +387,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     HapticFeedback.mediumImpact();
                     return provider.forceRefreshActionItems();
                   },
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   backgroundColor: Colors.white,
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
@@ -405,8 +405,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(color: Colors.deepPurple),
+    return Center(
+      child: CircularProgressIndicator(color: context.primaryColor),
     );
   }
 
@@ -419,52 +419,95 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         SliverToBoxAdapter(
           child: _buildGoalsRow(),
         ),
-        const SliverPadding(padding: EdgeInsets.only(top: 24)),
-        SliverToBoxAdapter(
+        SliverFillRemaining(
+          hasScrollBody: false,
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Subtle dotted-border container with icon
                   Container(
-                    width: 80,
-                    height: 80,
+                    width: 56,
+                    height: 56,
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 1.5,
+                      ),
+                      color: Colors.white.withValues(alpha: 0.03),
                     ),
                     child: Icon(
-                      Icons.check_circle_outline,
-                      size: 40,
-                      color: Colors.deepPurple.withOpacity(0.6),
+                      Icons.check_rounded,
+                      size: 26,
+                      color: Colors.white.withValues(alpha: 0.25),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   Text(
                     context.l10n.noTasksYet,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 17,
                       fontWeight: FontWeight.w600,
+                      letterSpacing: -0.3,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
                     context.l10n.tasksEmptyStateMessage,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 16,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 14,
                       height: 1.5,
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  // Subtle ghost CTA
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _showCreateActionItemSheet(
+                        defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          width: 1,
+                        ),
+                        color: Colors.white.withValues(alpha: 0.04),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add, size: 15, color: Colors.white.withValues(alpha: 0.5)),
+                          const SizedBox(width: 6),
+                          Text(
+                            context.l10n.addTask,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Offset so the content sits slightly above true center (accounts for nav bar)
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
           ),
         ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
     );
   }
@@ -733,7 +776,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurple : Colors.transparent,
+            color: showIndicator ? context.primaryColor : Colors.transparent,
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -826,7 +869,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -837,7 +880,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 height: 2,
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple,
+                  color: context.primaryColor,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
