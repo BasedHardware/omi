@@ -8,6 +8,12 @@ pub struct RecordLlmUsageRequest {
     pub cache_write_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
+    #[serde(default = "default_account")]
+    pub account: String,
+}
+
+fn default_account() -> String {
+    "omi".to_string()
 }
 
 #[derive(Debug, Clone, Serialize)]

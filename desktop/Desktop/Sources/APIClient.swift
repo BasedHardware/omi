@@ -4375,7 +4375,8 @@ extension APIClient {
         cacheReadTokens: Int,
         cacheWriteTokens: Int,
         totalTokens: Int,
-        costUsd: Double
+        costUsd: Double,
+        account: String = "omi"
     ) async {
         struct Req: Encodable {
             let input_tokens: Int
@@ -4384,6 +4385,7 @@ extension APIClient {
             let cache_write_tokens: Int
             let total_tokens: Int
             let cost_usd: Double
+            let account: String
         }
         struct Res: Decodable { let status: String }
         do {
@@ -4393,7 +4395,8 @@ extension APIClient {
                 cache_read_tokens: cacheReadTokens,
                 cache_write_tokens: cacheWriteTokens,
                 total_tokens: totalTokens,
-                cost_usd: costUsd
+                cost_usd: costUsd,
+                account: account
             ))
         } catch {
             log("APIClient: LLM usage record failed: \(error.localizedDescription)")

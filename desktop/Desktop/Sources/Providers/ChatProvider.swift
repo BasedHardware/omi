@@ -2096,20 +2096,23 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageLength: responseLength
             )
 
-            if bridgeMode == BridgeMode.omiAI.rawValue {
+            let isOmiMode = bridgeMode == BridgeMode.omiAI.rawValue
+            let accountType = isOmiMode ? "omi" : "personal"
+            let r = queryResult
+            Task.detached(priority: .background) {
+                await APIClient.shared.recordLlmUsage(
+                    inputTokens: r.inputTokens,
+                    outputTokens: r.outputTokens,
+                    cacheReadTokens: r.cacheReadTokens,
+                    cacheWriteTokens: r.cacheWriteTokens,
+                    totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
+                    costUsd: r.costUsd,
+                    account: accountType
+                )
+            }
+            if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
-                let r = queryResult
-                Task.detached(priority: .background) {
-                    await APIClient.shared.recordLlmUsage(
-                        inputTokens: r.inputTokens,
-                        outputTokens: r.outputTokens,
-                        cacheReadTokens: r.cacheReadTokens,
-                        cacheWriteTokens: r.cacheWriteTokens,
-                        totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
-                        costUsd: r.costUsd
-                    )
-                }
                 // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
                 if omiAICumulativeCostUsd >= 50.0 {
                     showOmiThresholdAlert = true
