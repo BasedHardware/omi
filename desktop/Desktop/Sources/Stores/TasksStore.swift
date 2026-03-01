@@ -1048,7 +1048,12 @@ class TasksStore: ObservableObject {
             return
         }
 
-        // 3. Update in-memory arrays immediately (optimistic UI)
+        // 3. Track completion analytics
+        if newCompleted {
+            AnalyticsManager.shared.taskCompleted(source: task.source)
+        }
+
+        // 4. Update in-memory arrays immediately (optimistic UI)
         if newCompleted {
             incompleteTasks.removeAll { $0.id == task.id }
             completedTasks.insert(updatedTask, at: 0)
@@ -1173,6 +1178,9 @@ class TasksStore: ObservableObject {
             let localTask = inserted.toTaskActionItem()
             let localId = inserted.id!
 
+            // Track task added analytics
+            AnalyticsManager.shared.taskAdded()
+
             // Instant UI update
             incompleteTasks.insert(localTask, at: 0)
 
@@ -1221,6 +1229,9 @@ class TasksStore: ObservableObject {
         } catch {
             logError("TasksStore: Failed to soft-delete task locally", error: error)
         }
+
+        // Track deletion analytics
+        AnalyticsManager.shared.taskDeleted(source: task.source)
 
         // Remove from in-memory arrays immediately
         if task.completed {
