@@ -6499,7 +6499,7 @@ impl FirestoreService {
             vec![]
         };
 
-        // channel: None means stable (missing field or null in Firestore)
+        // channel: None = unpromoted (staging), Some("stable") = promoted stable
         let channel = self.parse_string(fields, "channel");
 
         Ok(crate::routes::updates::ReleaseInfo {
@@ -6534,10 +6534,10 @@ impl FirestoreService {
             .map(|s| json!({"stringValue": s}))
             .collect();
 
-        // Channel field: stringValue for non-stable, nullValue for stable
+        // Channel field: always a string. None/empty → "staging" (unpromoted default)
         let channel_value = match &release.channel {
             Some(ch) if !ch.is_empty() => json!({"stringValue": ch}),
-            _ => json!({"nullValue": null}),
+            _ => json!({"stringValue": "staging"}),
         };
 
         let doc = json!({
@@ -6571,7 +6571,7 @@ impl FirestoreService {
     }
 
     /// Promote a desktop release to the next channel: staging → beta → stable
-    /// Returns (old_channel, new_channel) where empty string = stable
+    /// Returns (old_channel, new_channel)
     pub async fn promote_desktop_release(
         &self,
         doc_id: &str,
@@ -6600,16 +6600,13 @@ impl FirestoreService {
 
         // Determine next channel
         let (old_channel, new_channel_value) = match current_channel.as_str() {
-            "staging" => ("staging".to_string(), json!({"stringValue": "beta"})),
-            "beta" => ("beta".to_string(), json!({"nullValue": null})),
-            "" => return Err("Release is already on stable channel, cannot promote further".into()),
+            "staging" | "" => ("staging".to_string(), json!({"stringValue": "beta"})),
+            "beta" => ("beta".to_string(), json!({"stringValue": "stable"})),
+            "stable" => return Err("Release is already on stable channel, cannot promote further".into()),
             other => return Err(format!("Unknown channel '{}', cannot promote", other).into()),
         };
 
-        let new_channel = match new_channel_value.get("stringValue").and_then(|v| v.as_str()) {
-            Some(ch) => ch.to_string(),
-            None => String::new(), // stable
-        };
+        let new_channel = new_channel_value.get("stringValue").and_then(|v| v.as_str()).unwrap().to_string();
 
         // PATCH only the channel field
         let patch_url = format!(
@@ -6636,10 +6633,7 @@ impl FirestoreService {
             return Err(format!("Failed to update channel: {}", error_text).into());
         }
 
-        tracing::info!("Promoted release {}: {} → {}", doc_id,
-            if old_channel.is_empty() { "stable" } else { &old_channel },
-            if new_channel.is_empty() { "stable" } else { &new_channel },
-        );
+        tracing::info!("Promoted release {}: {} → {}", doc_id, old_channel, new_channel);
 
         Ok((old_channel, new_channel))
     }

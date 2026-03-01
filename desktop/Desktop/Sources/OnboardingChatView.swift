@@ -110,7 +110,7 @@ struct OnboardingChatView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Setting up Omi")
+                Text("Setting up omi")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -446,7 +446,7 @@ struct OnboardingChatView: View {
 
             Task {
                 await chatProvider.sendMessage(
-                    "Hi, I just installed Omi!",
+                    "Hi, I just installed omi!",
                     systemPromptPrefix: systemPrompt
                 )
             }
@@ -547,7 +547,7 @@ struct OnboardingChatView: View {
 
         // Create welcome task (skip if it already exists from a previous onboarding)
         Task {
-            let welcomeDescription = "Run Omi for two days to start receiving helpful advice"
+            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
             let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
             if !alreadyExists {
                 await TasksStore.shared.createTask(
