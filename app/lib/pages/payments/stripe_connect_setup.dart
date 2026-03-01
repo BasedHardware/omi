@@ -5,6 +5,7 @@ import 'package:flutter_svg/svg.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/theme/app_color_tokens.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/widgets/country_bottom_sheet.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -52,11 +53,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
           provider.stopStripePolling();
         },
         child: Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: context.appColors.backgroundPrimary,
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+              icon: Icon(Icons.arrow_back_ios_new, color: context.appColors.textPrimary),
               onPressed: () {
                 provider.stopStripePolling();
                 Navigator.pop(context);
@@ -113,10 +114,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                         if (!provider.isStripePolling && !provider.isStripeConnected) ...[
                           Text(
                             context.l10n.getPaidThroughStripe,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: context.appColors.textPrimary,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -139,7 +140,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                     const SizedBox(height: 8),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.white.withOpacity(0.1),
+                                        backgroundColor: context.appColors.textPrimary.withOpacity(0.1),
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(12),
                                         ),
@@ -150,7 +151,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                         showModalBottomSheet(
                                           context: context,
                                           isScrollControlled: true,
-                                          backgroundColor: const Color(0xFF1A1A1A),
+                                          backgroundColor: context.appColors.backgroundSecondary,
                                           shape: const RoundedRectangleBorder(
                                             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                                           ),
@@ -179,11 +180,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                                                 provider.selectedCountryId)?['name'] as String?)
                                                             ?.decodeString ??
                                                         context.l10n.selectYourCountry),
-                                                style: const TextStyle(color: Colors.white),
+                                                style: TextStyle(color: context.appColors.textPrimary),
                                               ),
                                             ],
                                           ),
-                                          const Icon(Icons.arrow_drop_down, color: Colors.white),
+                                          Icon(Icons.arrow_drop_down, color: context.appColors.textPrimary),
                                         ],
                                       ),
                                     ),
@@ -219,7 +220,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           Text(
                             context.l10n.byClickingConnectNow,
                             style: TextStyle(
-                              color: Colors.grey[400],
+                              color: context.appColors.textQuaternary,
                               fontSize: 14,
                             ),
                           ),
@@ -302,10 +303,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                           const SizedBox(height: 48),
                           Text(
                             context.l10n.connectingYourStripeAccount,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: context.appColors.textPrimary,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -314,7 +315,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             context.l10n.stripeOnboardingInstructions,
                             style: TextStyle(
                               fontSize: 16,
-                              color: Colors.grey[400],
+                              color: context.appColors.textQuaternary,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -347,7 +348,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                               },
                               child: Text(
                                 context.l10n.illDoItLater,
-                                style: TextStyle(color: Colors.grey[400]),
+                                style: TextStyle(color: context.appColors.textQuaternary),
                               )),
                         ],
                         if (!provider.isStripePolling && provider.isStripeConnected) ...[
@@ -386,10 +387,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 const SizedBox(height: 24),
                                 Text(
                                   '${context.l10n.successfullyConnected} 🎉',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: context.appColors.textPrimary,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -398,7 +399,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                   context.l10n.stripeReadyForPayments,
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.grey[400],
+                                    color: context.appColors.textQuaternary,
                                     height: 1.5,
                                   ),
                                   textAlign: TextAlign.center,
@@ -435,7 +436,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             },
                             child: Text(
                               context.l10n.goBack,
-                              style: TextStyle(color: Colors.grey[400]),
+                              style: TextStyle(color: context.appColors.textQuaternary),
                             ),
                           ),
                         ],
@@ -479,10 +480,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white,
+                  color: context.appColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -490,7 +491,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                 description,
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[400],
+                  color: context.appColors.textQuaternary,
                 ),
               ),
             ],
