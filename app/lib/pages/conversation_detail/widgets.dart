@@ -254,15 +254,8 @@ class GetSummaryWidgets extends StatelessWidget {
     final icon = isPrivate ? Icons.lock_outline : Icons.public;
 
     return GestureDetector(
-      onTap: () async {
+      onTap: () {
         HapticFeedback.selectionClick();
-
-        MixpanelManager().conversationVisibilityChanged(
-          conversationId: conversation.id,
-          fromVisibility: isPrivate ? 'private' : 'shared',
-          toVisibility: 'show_sheet',
-        );
-
         _showVisibilitySheet(context, conversation);
       },
       child: Container(
@@ -332,6 +325,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     Navigator.pop(sheetContext);
                     return;
                   }
+                  final previousVisibility = conversation.visibility.value;
                   provider.updateVisibilityLocally(ConversationVisibility.private_);
                   Navigator.pop(sheetContext);
                   bool success = await setConversationVisibility(conversation.id, visibility: 'private');
@@ -341,7 +335,7 @@ class GetSummaryWidgets extends StatelessWidget {
                   }
                   MixpanelManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
-                    fromVisibility: 'shared',
+                    fromVisibility: previousVisibility,
                     toVisibility: 'private',
                   );
                 },
@@ -358,6 +352,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     Navigator.pop(sheetContext);
                     return;
                   }
+                  final previousVisibility = conversation.visibility.value;
                   provider.updateVisibilityLocally(ConversationVisibility.shared);
                   Navigator.pop(sheetContext);
                   bool success = await setConversationVisibility(conversation.id, visibility: 'shared');
@@ -367,7 +362,7 @@ class GetSummaryWidgets extends StatelessWidget {
                   }
                   MixpanelManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
-                    fromVisibility: 'private',
+                    fromVisibility: previousVisibility,
                     toVisibility: 'shared',
                   );
                   if (context.mounted) _shareConversationLink(context, conversation);
