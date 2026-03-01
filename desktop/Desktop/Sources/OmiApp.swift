@@ -81,8 +81,8 @@ struct OMIApp: App {
     /// Window title with version number (different for rewind mode)
     private var windowTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
-        let baseName = Self.launchMode == .rewind ? "Omi Rewind" : displayName
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+        let baseName = Self.launchMode == .rewind ? "omi Rewind" : displayName
         return version.isEmpty ? baseName : "\(baseName) v\(version)"
     }
 
@@ -555,7 +555,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Re-apply the icon to force the system to redraw
         if let button = item.button {
             if OMIApp.launchMode == .rewind {
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                 }
@@ -606,13 +606,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
 
         // Set up the button with icon — use "omi" text logo (not a circle)
         if let button = statusBarItem.button {
             if OMIApp.launchMode == .rewind {
                 // Rewind mode uses SF Symbol
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                     log("AppDelegate: [MENUBAR] Rewind icon set successfully")
@@ -628,13 +628,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
             } else {
                 // Fallback to SF Symbol
-                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Omi") {
+                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
                     icon.isTemplate = true
                     button.image = icon
                 }
                 log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
             }
-            button.toolTip = OMIApp.launchMode == .rewind ? "Omi Rewind" : displayName
+            button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
         } else {
             log("AppDelegate: [MENUBAR] WARNING - statusBarItem.button is nil")
         }
