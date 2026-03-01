@@ -749,6 +749,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       });
                                       return;
                                     }
+                                    provider.updateVisibilityLocally(ConversationVisibility.shared);
                                     String content = 'https://h.omi.me/memories/${provider.conversation.id}';
                                     // Track share event
                                     MixpanelManager().conversationShared(
