@@ -198,7 +198,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.maxBreadcrumbs = 100
             options.beforeSend = { event in
                 // Allow user feedback through from all builds (dev + prod)
-                if event.message?.formatted?.hasPrefix("User Report") == true { return event }
+                if event.message?.formatted.hasPrefix("User Report") == true { return event }
                 // Never send other events from dev builds — they pollute production Sentry data
                 if isDev { return nil }
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
