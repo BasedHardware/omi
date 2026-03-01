@@ -666,7 +666,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   right: 20,
-                                  bottom: 100,
+                                  bottom: 20 + 49 + MediaQuery.of(context).padding.bottom + 12,
                                   child: GestureDetector(
                                     onTap: () {
                                       HapticFeedback.mediumImpact();
