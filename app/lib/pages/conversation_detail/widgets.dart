@@ -332,13 +332,12 @@ class GetSummaryWidgets extends StatelessWidget {
                     Navigator.pop(sheetContext);
                     return;
                   }
-                  // Optimistic update first
                   provider.updateVisibilityLocally(ConversationVisibility.private_);
                   Navigator.pop(sheetContext);
                   bool success = await setConversationVisibility(conversation.id, visibility: 'private');
-                  if (!success && context.mounted) {
-                    // Revert on failure
+                  if (!success) {
                     provider.updateVisibilityLocally(ConversationVisibility.shared);
+                    return;
                   }
                   MixpanelManager().conversationVisibilityChanged(
                     conversationId: conversation.id,
@@ -359,12 +358,10 @@ class GetSummaryWidgets extends StatelessWidget {
                     Navigator.pop(sheetContext);
                     return;
                   }
-                  // Optimistic update first
                   provider.updateVisibilityLocally(ConversationVisibility.shared);
                   Navigator.pop(sheetContext);
                   bool success = await setConversationVisibility(conversation.id, visibility: 'shared');
-                  if (!success && context.mounted) {
-                    // Revert on failure
+                  if (!success) {
                     provider.updateVisibilityLocally(ConversationVisibility.private_);
                     return;
                   }
