@@ -12,37 +12,42 @@
 		12F9316B94DF72426BF544B4 /* devProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */; };
+		2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */; };
 		29B635C199B3BDE0F2BE8EC5 /* devRelease.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 79B00761CB247C7EC7C8983B /* devRelease.xcconfig */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		422906C92E75B0A100F49E67 /* FlutterCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422906C82E75B0A100F49E67 /* FlutterCommunicator.g.swift */; };
 		4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */; };
 		426B89AD2C46919D00E24442 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
-		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		6436409A27A31CD800820AF7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6436409C27A31CD800820AF7 /* InfoPlist.strings */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */; };
+		A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */; };
+		A0A492964674B881B8E56B3E /* BatteryWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 90E45FFB3093C995950509B7 /* BatteryWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AB12345678901234567890AB /* AppleRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CD /* AppleRemindersService.swift */; };
 		AB12345678901234567890AC /* AppleHealthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD12345678901234567890CE /* AppleHealthService.swift */; };
-		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
 		B017E73914CFF7C22190E0C3 /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		C6DD8F6A334A31116A75C4EE /* devDebug.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */; };
+		CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 585D7D8307721A4D6595AA27 /* Assets.xcassets */; };
 		CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */; };
 		CF0FE6152D61FDC10072C10D /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF0FE6142D61FDC10072C10D /* Custom.xcconfig */; };
 		CF2F518D2EC08EA60025B331 /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
+		D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31D5B906D56C4FDBBCCFF403 /* Foundation.framework */; };
+		EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FG12345678901234567890FG /* WifiNetworkPlugin.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */ = {
+		96FE7F95A8A9AF1E9D2E5376 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 42A7BA332E788BD300138969;
-			remoteInfo = omiWatchApp;
+			remoteGlobalIDString = 58BC30995C676AAADF2F0F6A;
+			remoteInfo = BatteryWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -53,6 +58,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				A0A492964674B881B8E56B3E /* BatteryWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -85,6 +91,8 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		17DD34CA2CFE6F3845E13C99 /* devDebug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devDebug.xcconfig; path = Flutter/devDebug.xcconfig; sourceTree = "<group>"; };
+		2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidgetBundle.swift; sourceTree = "<group>"; };
+		31D5B906D56C4FDBBCCFF403 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		35656BCB5CBAA7C0BB162EE0 /* prodRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = prodRelease.xcconfig; path = Flutter/prodRelease.xcconfig; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		42127D962C283C250005AB40 /* OneSignalCore.xcframework */ = {isa = PBXFileReference; expectedSignature = "AppleDeveloperProgram:J3J28YJX9L:OneSignal, Inc."; lastKnownFileType = wrapper.xcframework; name = OneSignalCore.xcframework; path = Pods/OneSignalXCFramework/iOS_SDK/OneSignalSDK/OneSignal_Core/OneSignalCore.xcframework; sourceTree = "<group>"; };
@@ -99,6 +107,7 @@
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-dev.xcconfig"; sourceTree = "<group>"; };
 		556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devProfile.xcconfig; path = Flutter/devProfile.xcconfig; sourceTree = "<group>"; };
+		585D7D8307721A4D6595AA27 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5F7FD4162BF1232500923839 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		5FCEB2FA2C27586C00B17EE8 /* RunnerDebug-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerDebug-prod.entitlements"; sourceTree = "<group>"; };
 		5FCEB2FB2C27587100B17EE8 /* RunnerProfile-prod.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerProfile-prod.entitlements"; sourceTree = "<group>"; };
@@ -110,6 +119,8 @@
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedDefaults.swift; sourceTree = "<group>"; };
+		90E45FFB3093C995950509B7 /* BatteryWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BatteryWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -117,6 +128,8 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9C2BF831EA0797124264B67C /* BatteryWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
+		A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = BatteryWidget.entitlements; sourceTree = "<group>"; };
 		A3FA3FEE5E944B8E7459BC94 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
 		ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = prodLaunchScreen.storyboard; path = Runner/prodLaunchScreen.storyboard; sourceTree = "<group>"; };
 		AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -124,7 +137,6 @@
 		C84EE89ABD9CB9B1CFD8B8CB /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		CD12345678901234567890CD /* AppleRemindersService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleRemindersService.swift; sourceTree = "<group>"; };
 		CD12345678901234567890CE /* AppleHealthService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppleHealthService.swift; sourceTree = "<group>"; };
-		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
 		CF0FE6142D61FDC10072C10D /* Custom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Custom.xcconfig; path = Flutter/Custom.xcconfig; sourceTree = "<group>"; };
 		CF2F518C2EC08EA60025B331 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Base.xcconfig; path = Flutter/Base.xcconfig; sourceTree = "<group>"; };
 		D75F0E14BC0E70ACCB7823C4 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
@@ -134,6 +146,7 @@
 		E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
+		FG12345678901234567890FG /* WifiNetworkPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WifiNetworkPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -154,6 +167,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		961F0E8B6C85F918E1C22836 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D4DB62EA3B33E082C7D4E197 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -166,6 +187,19 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0C49E6672202A57A856CB534 /* BatteryWidget */ = {
+			isa = PBXGroup;
+			children = (
+				9C2BF831EA0797124264B67C /* BatteryWidget.swift */,
+				2901D39C61D71A9D821F20FE /* BatteryWidgetBundle.swift */,
+				7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */,
+				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
+				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
+			);
+			name = BatteryWidget;
+			path = BatteryWidget;
+			sourceTree = "<group>";
+		};
 		20C35A59F6DEFF5646F302D3 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -176,6 +210,7 @@
 				42127D9A2C283C310005AB40 /* OneSignalExtension.xcframework */,
 				42127D962C283C250005AB40 /* OneSignalCore.xcframework */,
 				AF506DE6C24FC5AB2AEFE6DA /* Pods_Runner.framework */,
+				866A58B811C972ED7D93998A /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -194,6 +229,14 @@
 				4B5B6E291EA70190D1771F2D /* Pods-Runner.release-dev.xcconfig */,
 			);
 			path = Pods;
+			sourceTree = "<group>";
+		};
+		866A58B811C972ED7D93998A /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				31D5B906D56C4FDBBCCFF403 /* Foundation.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
@@ -228,6 +271,7 @@
 				ACE7BEFB9654B6DF5B9E1790 /* prodLaunchScreen.storyboard */,
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
 				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
+				0C49E6672202A57A856CB534 /* BatteryWidget */,
 			);
 			sourceTree = "<group>";
 		};
@@ -236,6 +280,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				42A7BA342E788BD300138969 /* omiWatchApp.app */,
+				90E45FFB3093C995950509B7 /* BatteryWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -291,6 +336,23 @@
 			productReference = 42A7BA342E788BD300138969 /* omiWatchApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		58BC30995C676AAADF2F0F6A /* BatteryWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B7CDB3A5F465F0D4654188E3 /* Build configuration list for PBXNativeTarget "BatteryWidget" */;
+			buildPhases = (
+				D2666B4F6B22A537E4CDE664 /* Sources */,
+				961F0E8B6C85F918E1C22836 /* Frameworks */,
+				93D1B73C60C5404C3AF078EA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BatteryWidget;
+			productName = BatteryWidget;
+			productReference = 90E45FFB3093C995950509B7 /* BatteryWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -311,6 +373,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				468E5B26D379E32080A67B11 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -351,6 +414,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				42A7BA332E788BD300138969 /* omiWatchApp */,
+				58BC30995C676AAADF2F0F6A /* BatteryWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -360,6 +424,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		93D1B73C60C5404C3AF078EA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -519,14 +591,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D2666B4F6B22A537E4CDE664 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */,
+				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
+				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		42A7BA3D2E788BD400138969 /* PBXTargetDependency */ = {
+		468E5B26D379E32080A67B11 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = iphoneos;
-			target = 42A7BA332E788BD300138969 /* omiWatchApp */;
-			targetProxy = 42A7BA3C2E788BD400138969 /* PBXContainerItemProxy */;
+			name = BatteryWidget;
+			target = 58BC30995C676AAADF2F0F6A /* BatteryWidget */;
+			targetProxy = 96FE7F95A8A9AF1E9D2E5376 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -732,6 +814,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -758,11 +841,65 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Profile;
+		};
+		375326788C4D1A9A2AAC93F2 /* Debug-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Debug-prod";
+		};
+		3A2C29F5D68E46C95481FADF /* Debug-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = "Debug-dev";
 		};
 		42A7BA402E788BD400138969 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -1248,6 +1385,62 @@
 			};
 			name = "Release-dev";
 		};
+		53FA804E5E30946F398E1C03 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6603F5DD00A2EBB051A6061F /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
 		70741DA5D2AC42F2DBC488AA /* Debug-prod */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 08E3947A4217EF205E22BD44 /* prodDebug.xcconfig */;
@@ -1285,6 +1478,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1321,10 +1515,36 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 			};
 			name = "Debug-prod";
+		};
+		80B80B8193844076960AC42D /* Profile-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Profile-dev";
 		};
 		87AC190EF56E10A72B9307AD /* Release-prod */ = {
 			isa = XCBuildConfiguration;
@@ -1569,6 +1789,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_BITCODE = NO;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1595,7 +1816,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
@@ -1671,6 +1891,34 @@
 			};
 			name = "Release-dev";
 		};
+		B4A8D37446B61692C962D9FB /* Profile-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Profile-prod";
+		};
 		D1183803B1196D13F4909685 /* Profile-dev */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 556416C8748DD3DD2C06A9DB /* devProfile.xcconfig */;
@@ -1708,6 +1956,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1737,10 +1986,37 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-dev";
+		};
+		E22FF20645C7AF0B6EE6EFF2 /* Release-dev */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development.widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Release-dev";
 		};
 		E56329C6C87DAB7A22B5F87E /* Profile-prod */ = {
 			isa = XCBuildConfiguration;
@@ -1779,6 +2055,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1808,10 +2085,65 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = "Profile-prod";
+		};
+		E8148665BFB4D6CBBBB0E895 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F4833FB0589A45BF018C1E13 /* Release-prod */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = BatteryWidget/BatteryWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9536L8KLMP;
+				INFOPLIST_FILE = "BatteryWidget-Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MTL_ENABLE_DEBUG_INFO = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).widget";
+				PRODUCT_NAME = BatteryWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = "Release-prod";
 		};
 		FB104D39E26908B41978AAC4 /* Debug-dev */ = {
 			isa = XCBuildConfiguration;
@@ -1850,6 +2182,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
@@ -1886,7 +2219,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				"EXCLUDED_SOURCE_FILE_NAMES[sdk=iphonesimulator*]" = omiWatchApp.app;
 			};
 			name = "Debug-dev";
 		};
@@ -1937,6 +2269,22 @@
 				0CE614302C21F36000559F1E /* Debug-dev */,
 				0CE614312C21F36000559F1E /* Profile-dev */,
 				0CE614322C21F36000559F1E /* Release-dev */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B7CDB3A5F465F0D4654188E3 /* Build configuration list for PBXNativeTarget "BatteryWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				53FA804E5E30946F398E1C03 /* Release */,
+				E8148665BFB4D6CBBBB0E895 /* Debug */,
+				6603F5DD00A2EBB051A6061F /* Profile */,
+				375326788C4D1A9A2AAC93F2 /* Debug-prod */,
+				B4A8D37446B61692C962D9FB /* Profile-prod */,
+				F4833FB0589A45BF018C1E13 /* Release-prod */,
+				3A2C29F5D68E46C95481FADF /* Debug-dev */,
+				80B80B8193844076960AC42D /* Profile-dev */,
+				E22FF20645C7AF0B6EE6EFF2 /* Release-dev */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

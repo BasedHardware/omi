@@ -5,6 +5,7 @@ import app_links
 import WatchConnectivity
 import AVFoundation
 import Speech
+import WidgetKit
 
 extension FlutterError: Error {}
 
@@ -88,6 +89,44 @@ extension FlutterError: Error {}
 
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+
+    // Battery widget channel — writes Omi device battery to the shared App Group
+    // so the WidgetKit extension can read it.
+    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)
+    batteryWidgetChannel.setMethodCallHandler { (call, result) in
+      let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
+      guard let args = call.arguments as? [String: Any] else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      switch call.method {
+      case "updateBatteryInfo":
+        defaults?.set(args["deviceName"] as? String ?? "Omi", forKey: "widget_device_name")
+        defaults?.set(args["batteryLevel"] as? Int ?? -1, forKey: "widget_battery_level")
+        defaults?.set(args["deviceType"] as? String ?? "omi", forKey: "widget_device_type")
+        defaults?.set(args["isConnected"] as? Bool ?? false, forKey: "widget_is_connected")
+        defaults?.set(Date(), forKey: "widget_last_updated")
+        // NOTE: isMuted is intentionally NOT written here — only updateMuteState controls it
+        defaults?.synchronize()
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
+        }
+      case "updateMuteState":
+        let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
+        defaults?.set(isMuted, forKey: "widget_is_muted")
+        defaults?.synchronize()
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadAllTimelines()
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            WidgetCenter.shared.reloadAllTimelines()
+          }
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(nil)
+    }
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in

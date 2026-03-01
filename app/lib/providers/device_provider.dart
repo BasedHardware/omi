@@ -14,6 +14,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
@@ -151,6 +152,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       connectedDevice!.id,
       onBatteryLevelChange: (int value) {
         batteryLevel = value;
+        BatteryWidgetService().updateBatteryInfo(
+          deviceName: connectedDevice?.name ?? '',
+          batteryLevel: value,
+          deviceType: connectedDevice?.type.name ?? 'omi',
+          isConnected: true,
+        );
         if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
           _hasLowBatteryAlerted = true;
           final ctx = MyApp.navigatorKey.currentContext;
@@ -360,6 +367,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     });
     MixpanelManager().deviceDisconnected();
+    BatteryWidgetService().updateBatteryInfo(
+      deviceName: SharedPreferencesUtil().deviceName,
+      batteryLevel: -1,
+      deviceType: 'omi',
+      isConnected: false,
+    );
 
     // Retired 1s to prevent the race condition made by standby power of ble device
     Future.delayed(const Duration(seconds: 1), () {
@@ -402,6 +415,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     int currentLevel = await _retrieveBatteryLevel(device.id);
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
+      BatteryWidgetService().updateBatteryInfo(
+        deviceName: device.name,
+        batteryLevel: currentLevel,
+        deviceType: device.type.name,
+        isConnected: true,
+      );
     }
 
     // Then set up listener for battery changes
