@@ -162,7 +162,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                     HapticFeedback.mediumImpact();
                     await provider.init();
                   },
-                  color: Colors.deepPurpleAccent,
+                  color: context.primaryColor,
                   backgroundColor: Colors.white,
                   child: provider.loading && _isInitialLoad
                       ? CustomScrollView(
@@ -343,34 +343,97 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             ),
                             if (provider.filteredMemories.isEmpty)
                               SliverFillRemaining(
+                                hasScrollBody: false,
                                 child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
-                                      const SizedBox(height: 16),
-                                      Text(
-                                        provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                            ? context.l10n.noMemoriesYet
-                                            : provider.selectedCategories.isNotEmpty
-                                                ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
-                                                : context.l10n.noMemoriesFound,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade400,
-                                          fontSize: 18,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Icon
+                                        Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: Colors.white.withValues(alpha: 0.08),
+                                              width: 1.5,
+                                            ),
+                                            color: Colors.white.withValues(alpha: 0.03),
+                                          ),
+                                          child: Icon(
+                                            Icons.auto_awesome_outlined,
+                                            size: 26,
+                                            color: Colors.white.withValues(alpha: 0.25),
+                                          ),
                                         ),
-                                      ),
-                                      if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
+                                        const SizedBox(height: 20),
+                                        // Title
+                                        Text(
+                                          provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
+                                              ? context.l10n.noMemoriesYet
+                                              : provider.selectedCategories.isNotEmpty
+                                                  ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                          provider.selectedCategories.length == 1
+                                                      ? context.l10n.noManualMemories
+                                                      : context.l10n.noMemoriesInCategories
+                                                  : context.l10n.noMemoriesFound,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -0.3,
+                                          ),
+                                        ),
                                         const SizedBox(height: 8),
-                                        TextButton(
-                                          onPressed: () => showMemoryDialog(context, provider),
-                                          child: Text(context.l10n.addFirstMemory),
+                                        // Description
+                                        Text(
+                                          context.l10n.addFirstMemory,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.4),
+                                            fontSize: 14,
+                                            height: 1.5,
+                                          ),
                                         ),
+                                        const SizedBox(height: 24),
+                                        // Action
+                                        GestureDetector(
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            showMemoryDialog(context, provider);
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: Colors.white.withValues(alpha: 0.12),
+                                                width: 1,
+                                              ),
+                                              color: Colors.white.withValues(alpha: 0.04),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.add, size: 15, color: Colors.white.withValues(alpha: 0.5)),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  context.l10n.createMemory,
+                                                  style: TextStyle(
+                                                    color: Colors.white.withValues(alpha: 0.5),
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 80),
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               )
