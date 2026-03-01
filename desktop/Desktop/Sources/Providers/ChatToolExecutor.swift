@@ -501,7 +501,7 @@ class ChatToolExecutor {
             if appState.hasScreenRecordingPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Screen Recording for Omi in System Settings, then quit and reopen the app"
+                return "pending - user needs to toggle Screen Recording for omi in System Settings, then quit and reopen the app"
             }
 
         case "microphone":
@@ -532,7 +532,7 @@ class ChatToolExecutor {
             if appState.hasAccessibilityPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Accessibility for Omi in System Settings"
+                return "pending - user needs to toggle Accessibility for omi in System Settings"
             }
 
         case "automation":
@@ -543,7 +543,7 @@ class ChatToolExecutor {
             if appState.hasAutomationPermission {
                 return "granted"
             } else {
-                return "pending - user needs to toggle Automation for Omi in System Settings"
+                return "pending - user needs to toggle Automation for omi in System Settings"
             }
 
         default:
