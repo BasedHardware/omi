@@ -2764,6 +2764,19 @@ struct SettingsContentView: View {
                     settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
                         HStack(spacing: 8) {
                             Button(action: {
+                                FocusTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
                                 PromptEditorWindow.show()
                             }) {
                                 HStack(spacing: 4) {
@@ -2771,19 +2784,6 @@ struct SettingsContentView: View {
                                         .scaledFont(size: 12)
                                     Image(systemName: "arrow.up.right.square")
                                         .scaledFont(size: 11)
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-
-                            Button(action: {
-                                FocusTestRunnerWindow.show()
-                            }) {
-                                HStack(spacing: 4) {
-                                    Text("Test Run")
-                                        .scaledFont(size: 12)
-                                    Image(systemName: "play.fill")
-                                        .scaledFont(size: 10)
                                 }
                             }
                             .buttonStyle(.bordered)
