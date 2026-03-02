@@ -1250,6 +1250,7 @@ async def _stream_handler(
     TRANSLATION_DEBOUNCE_SECONDS = 1.0
     translation_persist_lock = asyncio.Lock()
     translation_flushing = False
+    translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
 
     async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
         """Translate a single segment and persist/notify. Used by debounce."""
@@ -1348,8 +1349,10 @@ async def _stream_handler(
                 # Same text, skip (already translating or translated)
                 continue
 
-            # Increment version for stale-write protection
-            new_version = (pending.get('version', 0) + 1) if pending else 1
+            # Monotonic version for stale-write protection (never reuses values after prune)
+            nonlocal translation_version_counter
+            translation_version_counter += 1
+            new_version = translation_version_counter
 
             # Cancel any pending debounce task for this segment
             if pending and pending.get('task') and not pending['task'].done():
