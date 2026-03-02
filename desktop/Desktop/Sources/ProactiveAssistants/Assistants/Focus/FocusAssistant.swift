@@ -517,6 +517,13 @@ actor FocusAssistant: ProactiveAssistant {
 
         var sections: [String] = []
 
+        // AI User Profile
+        do {
+            if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                sections.append("USER PROFILE (who this user is):\n\(profile.profileText)")
+            }
+        }
+
         // Time context
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
