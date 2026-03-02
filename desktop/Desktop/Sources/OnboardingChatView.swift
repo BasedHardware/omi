@@ -160,6 +160,14 @@ struct OnboardingChatView: View {
 
                         // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            // Show permission GIF when quick replies include a "Grant" button
+                            if let grantOption = quickReplyOptions.first(where: { isGrantButton($0) }),
+                               let permType = permissionType(from: grantOption) {
+                                OnboardingPermissionImage(permissionType: permType)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+                            }
+
                             HStack(spacing: 8) {
                                 ForEach(quickReplyOptions, id: \.self) { option in
                                     Button(action: {
@@ -204,6 +212,10 @@ struct OnboardingChatView: View {
                                 }
                             }()
                             if isStillPending {
+                                OnboardingPermissionImage(permissionType: pending)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+
                                 Button(action: {
                                     openSettingsForPermission(pending)
                                 }) {
