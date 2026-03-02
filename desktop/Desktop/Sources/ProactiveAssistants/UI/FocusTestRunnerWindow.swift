@@ -452,26 +452,56 @@ struct FocusTestRunnerView: View {
                 return
             }
 
-            // Cap at 50 context switches (evenly spaced if more)
-            let maxSamples = 50
-            let sampled: [Screenshot]
-            if departingFrames.count <= maxSamples {
-                sampled = departingFrames
-            } else {
-                let step = Double(departingFrames.count) / Double(maxSamples)
-                sampled = (0..<maxSamples).map { i in
-                    departingFrames[min(Int(Double(i) * step), departingFrames.count - 1)]
-                }
-            }
-
             await MainActor.run {
                 totalContextSwitches = departingFrames.count
-                statusMessage = "Found \(departingFrames.count) context switches, testing \(sampled.count)..."
+                statusMessage = "Found \(departingFrames.count) context switches, testing all..."
             }
+
+            let sampled = departingFrames
+
+            // Reset test history for a clean run
+            await focusAssistant.resetTestHistory()
+
+            // Simulate production cooldown behavior:
+            // - After "focused": skip frames with same app+window (same context)
+            // - After "distracted": skip ALL frames on same app until app changes
+            //   (simulates production cooldown — once distracted, don't re-analyze until user leaves the app)
+            var lastTestStatus: FocusStatus?
+            var lastTestApp: String?
+            var lastTestWindow: String?
+            var skippedCount = 0
 
             // Process each departing frame
             for (i, screenshot) in sampled.enumerated() {
                 if cancellationRequested { break }
+
+                if let status = lastTestStatus {
+                    if status == .distracted {
+                        // After distraction: skip until the APP changes (cooldown simulation)
+                        if screenshot.appName == lastTestApp {
+                            skippedCount += 1
+                            await MainActor.run {
+                                progress = Double(i + 1) / Double(sampled.count)
+                            }
+                            continue
+                        }
+                    } else {
+                        // After focused: skip if same app+window (same context)
+                        let contextChanged = ContextDetection.didContextChange(
+                            fromApp: lastTestApp,
+                            fromWindowTitle: lastTestWindow,
+                            toApp: screenshot.appName,
+                            toWindowTitle: screenshot.windowTitle
+                        )
+                        if !contextChanged {
+                            skippedCount += 1
+                            await MainActor.run {
+                                progress = Double(i + 1) / Double(sampled.count)
+                            }
+                            continue
+                        }
+                    }
+                }
 
                 await MainActor.run {
                     statusMessage = "Processing \(i + 1)/\(sampled.count) — \(screenshot.appName)..."
@@ -481,8 +511,13 @@ struct FocusTestRunnerView: View {
                     let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
                     let analyzeStart = Date()
-                    let result = try await focusAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
+                    let result = try await focusAssistant.testAnalyzeWithHistory(jpegData: jpegData, appName: screenshot.appName)
                     let duration = Date().timeIntervalSince(analyzeStart)
+
+                    // Update tracking state
+                    lastTestStatus = result?.status
+                    lastTestApp = screenshot.appName
+                    lastTestWindow = screenshot.windowTitle
 
                     await MainActor.run {
                         results.append(FocusTestResult(
@@ -510,6 +545,10 @@ struct FocusTestRunnerView: View {
                         progress = Double(i + 1) / Double(sampled.count)
                     }
                 }
+            }
+
+            if skippedCount > 0 {
+                log("FocusTestRunner: Skipped \(skippedCount) same-context frames")
             }
 
             let totalElapsed = Date().timeIntervalSince(startTime)
@@ -663,39 +702,68 @@ enum FocusTestRunner {
             return
         }
 
-        // Sample evenly if too many
-        let sampled: [Screenshot]
-        if departingFrames.count <= maxScreenshots {
-            sampled = departingFrames
-        } else {
-            let step = Double(departingFrames.count) / Double(maxScreenshots)
-            sampled = (0..<maxScreenshots).map { i in
-                departingFrames[min(Int(Double(i) * step), departingFrames.count - 1)]
-            }
-        }
+        log("FocusTestCLI: Processing \(departingFrames.count) context switches")
 
-        log("FocusTestCLI: Processing \(sampled.count) context switches (from \(departingFrames.count) total)")
+        let sampled = departingFrames
+
+        // Reset test history for a clean run
+        await focusAssistant.resetTestHistory()
 
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm:ss"
         var focusedCount = 0
         var distractedCount = 0
+        var skippedCount = 0
         var errorCount = 0
         let testStart = Date()
+
+        // Track last status + app to simulate production cooldown behavior
+        var lastTestStatus: FocusStatus?
+        var lastTestApp: String?
+        var lastTestWindow: String?
 
         for (i, screenshot) in sampled.enumerated() {
             let label = "[\(i + 1)/\(sampled.count)]"
             let time = timeFormatter.string(from: screenshot.timestamp)
             let windowTitle = screenshot.windowTitle ?? "(no title)"
 
+            // Simulate production cooldown:
+            // - After distracted: skip until app changes
+            // - After focused: skip if same app+window
+            if let status = lastTestStatus {
+                if status == .distracted {
+                    if screenshot.appName == lastTestApp {
+                        skippedCount += 1
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → SKIPPED (cooldown)")
+                        continue
+                    }
+                } else {
+                    let contextChanged = ContextDetection.didContextChange(
+                        fromApp: lastTestApp,
+                        fromWindowTitle: lastTestWindow,
+                        toApp: screenshot.appName,
+                        toWindowTitle: screenshot.windowTitle
+                    )
+                    if !contextChanged {
+                        skippedCount += 1
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → SKIPPED (same context)")
+                        continue
+                    }
+                }
+            }
+
             do {
                 let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
                 let analyzeStart = Date()
-                let result = try await focusAssistant.testAnalyze(jpegData: jpegData, appName: screenshot.appName)
+                let result = try await focusAssistant.testAnalyzeWithHistory(jpegData: jpegData, appName: screenshot.appName)
                 let duration = Date().timeIntervalSince(analyzeStart)
 
                 if let result = result {
+                    lastTestStatus = result.status
+                    lastTestApp = screenshot.appName
+                    lastTestWindow = screenshot.windowTitle
+
                     switch result.status {
                     case .focused:
                         focusedCount += 1
@@ -716,8 +784,8 @@ enum FocusTestRunner {
         }
 
         let totalTime = Date().timeIntervalSince(testStart)
-        let decided = focusedCount + distractedCount
-        let distractionPct = decided > 0 ? Int(round(Double(distractedCount) / Double(decided) * 100)) : 0
-        log("FocusTestCLI: DONE — \(sampled.count) switches, \(focusedCount) focused, \(distractedCount) distracted (\(distractionPct)%), \(errorCount) errors, \(String(format: "%.1fs", totalTime)) total")
+        let analyzed = focusedCount + distractedCount
+        let distractionPct = analyzed > 0 ? Int(round(Double(distractedCount) / Double(analyzed) * 100)) : 0
+        log("FocusTestCLI: DONE — \(sampled.count) switches (\(skippedCount) skipped, \(analyzed) analyzed), \(focusedCount) focused, \(distractedCount) distracted (\(distractionPct)%), \(errorCount) errors, \(String(format: "%.1fs", totalTime)) total")
     }
 }
