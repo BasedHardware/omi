@@ -836,7 +836,14 @@ public class ProactiveAssistantsPlugin: NSObject {
             name: NSNotification.Name("com.omi.test.advice"),
             object: nil
         )
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleFocusTestNotification(_:)),
+            name: NSNotification.Name("com.omi.test.focus"),
+            object: nil
+        )
         log("AdviceTestCLI: Notification observer registered")
+        log("FocusTestCLI: Notification observer registered")
     }
 
     @objc private func handleAdviceTestNotification(_ notification: Notification) {
@@ -845,6 +852,15 @@ public class ProactiveAssistantsPlugin: NSObject {
             let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
             log("AdviceTestCLI: Received test trigger (hours=\(hours), count=\(count))")
             await AdviceTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+        }
+    }
+
+    @objc private func handleFocusTestNotification(_ notification: Notification) {
+        Task { @MainActor in
+            let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
+            let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 20
+            log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+            await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
         }
     }
 
