@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -1241,69 +1242,124 @@ async def _stream_handler(
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
+    # Debounce state: segment_id -> {text_hash, task, version}
+    pending_translations = {}
+    TRANSLATION_DEBOUNCE_SECONDS = 1.0
+
+    async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
+        """Translate a single segment and persist/notify. Used by debounce."""
+        if not translation_language or not websocket_active:
+            return
+
+        try:
+            segment_text = segment.text.strip()
+            if not segment_text:
+                return
+
+            # Check if this version is still current (stale-write protection)
+            pending = pending_translations.get(segment.id)
+            if pending and pending.get('version', 0) > version:
+                return
+
+            translated_text, detected_lang = translation_service.translate_text_by_sentence(
+                translation_language, segment_text
+            )
+
+            # Update language cache from translate response (free detection)
+            if detected_lang:
+                language_cache.update_from_translate_response(segment.id, detected_lang, translation_language)
+
+            # Use detected_language_code to check if already in target language
+            if detected_lang == translation_language:
+                return
+
+            # Create/Update Translation object
+            trans = Translation(lang=translation_language, text=translated_text)
+            if segment.translations is not None:
+                existing_idx = next(
+                    (i for i, t in enumerate(segment.translations) if t.lang == translation_language), None
+                )
+                if existing_idx is not None:
+                    segment.translations[existing_idx] = trans
+                else:
+                    segment.translations.append(trans)
+
+            # Persist
+            conversation = conversations_db.get_conversation(uid, conversation_id)
+            if conversation:
+                for i, existing_segment in enumerate(conversation['transcript_segments']):
+                    if existing_segment['id'] == segment.id:
+                        conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                        conversations_db.update_conversation_segments(
+                            uid, conversation_id, conversation['transcript_segments']
+                        )
+                        break
+
+            if websocket_active:
+                _send_message_event(TranslationEvent(segments=[segment.dict()]))
+
+        except Exception as e:
+            logger.error(f"Translation error: {e} {uid} {session_id}")
+
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         if not translation_language:
             return
 
-        try:
-            translated_segments = []
-            for segment in segments:
-                if not segment or not segment.id:
-                    continue
+        for segment in segments:
+            if not segment or not segment.id:
+                continue
 
-                segment_text = segment.text.strip()
-                if not segment_text:
-                    continue
+            segment_text = segment.text.strip()
+            if not segment_text:
+                continue
 
-                # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
-                    continue
+            # Free local language detection pre-filter
+            if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
+                continue
 
-                # Translation
-                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
+            text_hash = hashlib.md5(segment_text.encode()).hexdigest()
+            pending = pending_translations.get(segment.id)
 
-                if translated_text == segment_text:
-                    # If translation is same as original, it's likely in the target language.
-                    # Delete from cache to allow re-evaluation if more text is added.
-                    language_cache.delete_cache(segment.id)
-                    continue
+            if pending and pending.get('text_hash') == text_hash:
+                # Same text, skip (already translating or translated)
+                continue
 
-                # Create/Update Translation object
-                translation = Translation(lang=translation_language, text=translated_text)
-                if segment.translations is not None:
-                    existing_translation_index = next(
-                        (i for i, t in enumerate(segment.translations) if t.lang == translation_language), None
-                    )
-                    if existing_translation_index is not None:
-                        segment.translations[existing_translation_index] = translation
-                    else:
-                        segment.translations.append(translation)
+            # Increment version for stale-write protection
+            new_version = (pending.get('version', 0) + 1) if pending else 1
 
-                translated_segments.append(segment)
+            # Cancel any pending debounce task for this segment
+            if pending and pending.get('task') and not pending['task'].done():
+                pending['task'].cancel()
 
-            if not translated_segments:
-                return
+            if not pending:
+                # First appearance — translate immediately (zero UX delay)
+                pending_translations[segment.id] = {
+                    'text_hash': text_hash,
+                    'version': new_version,
+                    'task': asyncio.ensure_future(_translate_segment(segment, conversation_id, new_version)),
+                }
+            else:
+                # Update — debounce with trailing window
+                async def _debounced_translate(seg=segment, conv_id=conversation_id, ver=new_version):
+                    await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
+                    await _translate_segment(seg, conv_id, ver)
 
-            # Persist and notify
-            conversation = conversations_db.get_conversation(uid, conversation_id)
-            if conversation:
-                should_update = False
-                for segment in translated_segments:
-                    for i, existing_segment in enumerate(conversation['transcript_segments']):
-                        if existing_segment['id'] == segment.id:
-                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
-                            should_update = True
-                            break
-                if should_update:
-                    conversations_db.update_conversation_segments(
-                        uid, conversation_id, conversation['transcript_segments']
-                    )
+                pending_translations[segment.id] = {
+                    'text_hash': text_hash,
+                    'version': new_version,
+                    'task': asyncio.ensure_future(_debounced_translate()),
+                }
 
-            if websocket_active:
-                _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
-
-        except Exception as e:
-            logger.error(f"Translation error: {e} {uid} {session_id}")
+    async def flush_pending_translations():
+        """Flush all pending debounced translations before cleanup."""
+        for seg_id, pending in list(pending_translations.items()):
+            task = pending.get('task')
+            if task and not task.done():
+                try:
+                    await asyncio.wait_for(task, timeout=5.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+        pending_translations.clear()
 
     async def conversation_lifecycle_manager():
         """Background task that checks conversation timeout and triggers processing every 5 seconds."""
@@ -2136,6 +2192,12 @@ async def _stream_handler(
         # Clean up onboarding handler
         if onboarding_handler:
             onboarding_handler.cleanup()
+
+        # Flush pending debounced translations before cleanup
+        try:
+            await flush_pending_translations()
+        except Exception as e:
+            logger.error(f"Error flushing pending translations: {e} {uid} {session_id}")
 
         # Cancel all tracked background tasks to prevent memory leaks
         # Snapshot to avoid mutation during iteration
