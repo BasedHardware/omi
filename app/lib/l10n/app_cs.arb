@@ -2623,5 +2623,8 @@
     "switchAndRestart": "Přepnout",
     "switchApiConfirmBody": "Přepnout na {environment}? Budete muset zavřít a znovu otevřít aplikaci, aby se změny projevily.",
     "switchApiConfirmTitle": "Přepnout prostředí API",
-    "switchRequiresRestart": "Přepnutí vyžaduje restart aplikace"
+    "switchRequiresRestart": "Přepnutí vyžaduje restart aplikace",
+    "shared": "Sdíleno",
+    "onlyYouCanSeeConversation": "Tuto konverzaci můžete vidět pouze vy",
+    "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit"
 }

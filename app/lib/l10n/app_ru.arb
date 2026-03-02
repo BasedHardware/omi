@@ -2689,5 +2689,8 @@
     "switchAndRestart": "Переключить",
     "switchApiConfirmBody": "Переключиться на {environment}? Вам нужно будет закрыть и снова открыть приложение, чтобы изменения вступили в силу.",
     "switchApiConfirmTitle": "Переключение среды API",
-    "switchRequiresRestart": "Переключение требует перезапуска приложения"
+    "switchRequiresRestart": "Переключение требует перезапуска приложения",
+    "shared": "Общий",
+    "onlyYouCanSeeConversation": "Только вы можете видеть этот разговор",
+    "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать"
 }

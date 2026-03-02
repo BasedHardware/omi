@@ -8296,4 +8296,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Mentve. Zárd be és nyisd újra az alkalmazást a módosítások alkalmazásához.';
+
+  @override
+  String get shared => 'Megosztott';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Csak Ön láthatja ezt a beszélgetést';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bárki megtekintheti, akinek megvan a link';
 }

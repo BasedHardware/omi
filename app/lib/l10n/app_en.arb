@@ -10133,5 +10133,8 @@
     "alreadySharedWithUser": "You have already shared your speech profile with this user",
     "@alreadySharedWithUser": {
         "description": "Error when trying to share with someone you already shared with"
-    }
+    },
+    "shared": "Shared",
+    "onlyYouCanSeeConversation": "Only you can see this conversation",
+    "anyoneWithLinkCanView": "Anyone with the link can view"
 }

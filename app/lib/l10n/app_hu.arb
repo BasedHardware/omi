@@ -2750,5 +2750,8 @@
     "switchAndRestart": "Váltás",
     "switchApiConfirmBody": "Váltás erre: {environment}? A módosítások érvényesítéséhez be kell zárnod és újra kell nyitnod az alkalmazást.",
     "switchApiConfirmTitle": "API környezet váltása",
-    "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli"
+    "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli",
+    "shared": "Megosztott",
+    "onlyYouCanSeeConversation": "Csak Ön láthatja ezt a beszélgetést",
+    "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link"
 }

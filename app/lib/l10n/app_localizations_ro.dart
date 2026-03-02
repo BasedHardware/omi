@@ -8300,4 +8300,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Salvat. Închideți și redeschideți aplicația pentru a aplica modificările.';
+
+  @override
+  String get shared => 'Partajat';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Doar tu poți vedea această conversație';
+
+  @override
+  String get anyoneWithLinkCanView => 'Oricine are linkul poate vizualiza';
 }

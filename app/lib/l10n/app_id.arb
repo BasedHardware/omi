@@ -2696,5 +2696,8 @@
     "switchAndRestart": "Ganti",
     "switchApiConfirmBody": "Beralih ke {environment}? Anda perlu menutup dan membuka kembali aplikasi agar perubahan diterapkan.",
     "switchApiConfirmTitle": "Ganti Lingkungan API",
-    "switchRequiresRestart": "Pergantian memerlukan restart aplikasi"
+    "switchRequiresRestart": "Pergantian memerlukan restart aplikasi",
+    "shared": "Dibagikan",
+    "onlyYouCanSeeConversation": "Hanya Anda yang dapat melihat percakapan ini",
+    "anyoneWithLinkCanView": "Siapa pun yang memiliki tautan dapat melihat"
 }

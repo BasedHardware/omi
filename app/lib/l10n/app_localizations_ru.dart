@@ -8286,4 +8286,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Сохранено. Закройте и снова откройте приложение, чтобы применить изменения.';
+
+  @override
+  String get shared => 'Общий';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Только вы можете видеть этот разговор';
+
+  @override
+  String get anyoneWithLinkCanView => 'Любой, у кого есть ссылка, может просматривать';
 }
