@@ -282,6 +282,7 @@ class AppState: ObservableObject {
                 if self.isTranscribing {
                     log("App terminating - finalizing conversation")
                     _ = await self.finalizeConversation()
+                    self.clearTranscriptionState()
                 }
             }
         }
@@ -2148,7 +2149,7 @@ class AppState: ObservableObject {
             return .saved
         } catch {
             logError("Transcription: Failed to save conversation", error: error)
-            AnalyticsManager.shared.recordingError(error: "Failed to save: \(error.localizedDescription)")
+            // Error event deferred to TranscriptionRetryService after all retries are exhausted
 
             // Mark session as failed in DB for later retry
             if let sessionId = sessionId {

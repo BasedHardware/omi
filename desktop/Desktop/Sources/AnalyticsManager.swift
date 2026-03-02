@@ -14,6 +14,8 @@ class AnalyticsManager {
         Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
     }
 
+    private var lastTranscriptionStartedAt: Date?
+
     private init() {}
 
     // MARK: - Initialization
@@ -126,6 +128,11 @@ class AnalyticsManager {
     // MARK: - Recording Events
 
     func transcriptionStarted() {
+        // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
+        if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
+            return
+        }
+        lastTranscriptionStartedAt = Date()
         MixpanelManager.shared.transcriptionStarted()
         PostHogManager.shared.transcriptionStarted()
     }
