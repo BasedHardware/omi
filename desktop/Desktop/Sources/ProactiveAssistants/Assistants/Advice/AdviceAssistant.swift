@@ -529,7 +529,7 @@ actor AdviceAssistant: ProactiveAssistant {
             prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
         }
 
-        prompt += "\n\nInvestigate the activity summary. Use execute_sql to read OCR text from interesting windows. When you've identified the most interesting screenshot, call request_screenshot with the ID and your findings. Or call no_advice if nothing qualifies."
+        prompt += "\n\nInvestigate the activity summary. Focus on apps with the HIGHEST screenshot count (that's where the user actually spent time). Use execute_sql to read OCR text from the user's primary activity — ignore sidebar previews and low-count apps. When you've identified the most interesting screenshot, call request_screenshot with the ID and your findings. Or call no_advice if nothing qualifies."
 
         log("Advice: --- PROMPT ---\n\(prompt)")
 
