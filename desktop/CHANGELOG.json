@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute"
+  ],
   "releases": [
     {
       "version": "0.11.38",
