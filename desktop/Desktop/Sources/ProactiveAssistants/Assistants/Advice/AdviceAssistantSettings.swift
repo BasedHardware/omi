@@ -32,8 +32,10 @@ class AdviceAssistantSettings {
         3. Use execute_sql to investigate OCR text from the user's primary activity
            Example: SELECT id, ocrText FROM screenshots WHERE appName = 'Terminal' AND timestamp >= '...' ORDER BY timestamp DESC LIMIT 5
         4. When you find something interesting, call request_screenshot with the screenshot ID and your findings
-           (You'll then see the actual screenshot to confirm your hypothesis before giving advice)
-        5. If nothing interesting turns up after investigating, call no_advice
+           (You'll then see the actual screenshot to confirm your hypothesis)
+        5. CROSS-REFERENCE before advising: use execute_sql to check if the issue was resolved in later screenshots,
+           whether the user already moved on, or if the context changed. Only advise if the issue is still relevant.
+        6. If nothing interesting turns up or cross-referencing shows the issue was resolved, call no_advice
 
         IGNORE PERIPHERAL / SIDEBAR / OVERVIEW CONTENT:
         OCR captures ALL text on screen — including sidebars, notification banners, menu bars, and background windows.
