@@ -1,6 +1,6 @@
 #include "lib/core/sd_card.h"
+
 #include <ff.h>
-#include <zephyr/fs/fs.h>
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
@@ -14,12 +14,12 @@
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define DISK_DRIVE_NAME "SD"        // Disk drive name
-#define DISK_MOUNT_PT "/SD:"        // Mount point path
-#define SD_REQ_QUEUE_MSGS  25       // Number of messages in the SD request queue
-#define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
-#define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
-#define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
+#define DISK_DRIVE_NAME "SD"     // Disk drive name
+#define DISK_MOUNT_PT "/SD:"     // Mount point path
+#define SD_REQ_QUEUE_MSGS 25     // Number of messages in the SD request queue
+#define SD_FSYNC_THRESHOLD 20000 // Threshold in bytes to trigger fsync
+#define WRITE_BATCH_COUNT 10     // Number of writes to batch before writing to SD card
+#define ERROR_THRESHOLD 5        // Maximum allowed write errors before taking action
 
 // batch write buffer
 static uint8_t write_batch_buffer[WRITE_BATCH_COUNT * MAX_WRITE_SIZE];
@@ -48,6 +48,7 @@ static bool is_mounted = false;
 static bool sd_enabled = false;
 static uint32_t current_file_size = 0;
 static uint32_t current_file_offset = 0;
+static uint32_t recording_start_time = 0;
 static size_t bytes_since_sync = 0;
 
 // Get the device pointer for the SDHC SPI slot from the device tree
@@ -186,9 +187,16 @@ static k_tid_t sd_worker_tid = NULL;
 int app_sd_init(void)
 {
     if (!sd_worker_tid) {
-        sd_worker_tid = k_thread_create(&sd_worker_thread_data, sd_worker_stack, SD_WORKER_STACK_SIZE,
-                                        (k_thread_entry_t)sd_worker_thread, NULL, NULL, NULL,
-                                        SD_WORKER_PRIORITY, 0, K_NO_WAIT);
+        sd_worker_tid = k_thread_create(&sd_worker_thread_data,
+                                        sd_worker_stack,
+                                        SD_WORKER_STACK_SIZE,
+                                        (k_thread_entry_t) sd_worker_thread,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        SD_WORKER_PRIORITY,
+                                        0,
+                                        K_NO_WAIT);
         k_thread_name_set(sd_worker_tid, "sd_worker");
     }
     return 0;
@@ -227,7 +235,6 @@ int read_audio_data(uint8_t *buf, int amount, int offset)
     }
     return resp.read_bytes;
 }
-
 
 uint32_t write_to_file(uint8_t *data, uint32_t length)
 {
@@ -292,6 +299,19 @@ int save_offset(uint32_t offset)
 uint32_t get_offset(void)
 {
     return current_file_offset;
+}
+
+void set_recording_start_time(uint32_t ts)
+{
+    if (recording_start_time == 0) {
+        recording_start_time = ts;
+        save_offset(current_file_offset);
+    }
+}
+
+uint32_t get_recording_start_time(void)
+{
+    return recording_start_time;
 }
 
 int app_sd_off(void)
@@ -369,22 +389,29 @@ void sd_worker_thread(void)
         }
         if (need_init_offset) {
             current_file_offset = 0;
-            uint32_t zero_offset = 0;
-            ssize_t bw = fs_write(&fil_info, &zero_offset, sizeof(zero_offset));
-            if (bw != sizeof(zero_offset)) {
-                LOG_ERR("[SD_WORK] init info.txt failed to write offset 0: %d\n", (int)bw);
+            recording_start_time = 0;
+            uint32_t zero_data[2] = {0, 0};
+            ssize_t bw = fs_write(&fil_info, zero_data, sizeof(zero_data));
+            if (bw != sizeof(zero_data)) {
+                LOG_ERR("[SD_WORK] init info.txt failed to write: %d\n", (int) bw);
             } else {
                 fs_sync(&fil_info);
             }
         } else {
-            /* Read existing offset from info.txt */
+            /* Read existing offset (and optional timestamp) from info.txt */
             fs_seek(&fil_info, 0, FS_SEEK_SET);
-            ssize_t rbytes = fs_read(&fil_info, &current_file_offset, sizeof(current_file_offset));
-            if (rbytes != sizeof(current_file_offset)) {
-                LOG_ERR("[SD_WORK] Failed to read offset at boot: %d\n", (int)rbytes);
-                current_file_offset = 0;
-            } else {
+            uint32_t info_data[2] = {0, 0};
+            ssize_t rbytes = fs_read(&fil_info, info_data, sizeof(info_data));
+            if (rbytes >= (ssize_t) sizeof(uint32_t)) {
+                current_file_offset = info_data[0];
                 LOG_INF("[SD_WORK] Loaded offset from info.txt: %u\n", current_file_offset);
+            } else {
+                LOG_ERR("[SD_WORK] Failed to read offset at boot: %d\n", (int) rbytes);
+                current_file_offset = 0;
+            }
+            if (rbytes >= (ssize_t) sizeof(info_data)) {
+                recording_start_time = info_data[1];
+                LOG_INF("[SD_WORK] Loaded recording start time: %u\n", recording_start_time);
             }
         }
 
@@ -396,7 +423,7 @@ void sd_worker_thread(void)
         if (k_msgq_get(&sd_msgq, &req, K_FOREVER) == 0) {
             switch (req.type) {
             case REQ_WRITE_DATA:
-                LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned)req.u.write.len);
+                LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned) req.u.write.len);
 
                 memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
                 write_batch_offset += req.u.write.len;
@@ -409,10 +436,13 @@ void sd_worker_thread(void)
                         LOG_ERR("[SD_WORK] seek end before write failed: %d\n", res);
                     }
                     bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
-                    if (bw < 0 || (size_t)bw != write_batch_offset) {
+                    if (bw < 0 || (size_t) bw != write_batch_offset) {
                         writing_error_counter++;
 
-                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n", (int)bw, (int)bw, (unsigned)write_batch_offset);
+                        LOG_ERR("[SD_WORK] batch write error %d bw=%d wanted=%u\n",
+                                (int) bw,
+                                (int) bw,
+                                (unsigned) write_batch_offset);
                         if (bw > 0) {
                             LOG_INF("Attempting to truncate to correct packet position");
                             uint32_t truncate_offset = current_file_size + bw - bw % MAX_WRITE_SIZE;
@@ -426,7 +456,8 @@ void sd_worker_thread(void)
                         }
 
                         if (writing_error_counter >= ERROR_THRESHOLD) {
-                            LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n", writing_error_counter);
+                            LOG_ERR("[SD_WORK] Too many write errors (%d). Stopping SD worker.\n",
+                                    writing_error_counter);
                             fs_close(&fil_data);
                             fs_file_t_init(&fil_data);
                             LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
@@ -451,7 +482,7 @@ void sd_worker_thread(void)
                 }
 
                 if (bytes_since_sync >= SD_FSYNC_THRESHOLD) {
-                    LOG_INF("[SD_WORK] fs_sync triggered after %u bytes\n", (unsigned)bytes_since_sync);
+                    LOG_INF("[SD_WORK] fs_sync triggered after %u bytes\n", (unsigned) bytes_since_sync);
                     res = fs_sync(&fil_data);
                     if (res < 0) {
                         LOG_ERR("[SD_WORK] fs_sync data failed: %d\n", res);
@@ -463,7 +494,8 @@ void sd_worker_thread(void)
 
             case REQ_READ_DATA:
                 LOG_DBG("[SD_WORK] Reading %u bytes from data file at offset %u\n",
-                        (unsigned)req.u.read.length, (unsigned)req.u.read.offset);
+                        (unsigned) req.u.read.length,
+                        (unsigned) req.u.read.offset);
                 if (&fil_data == NULL) {
                     LOG_ERR("[SD_WORK] data file not open (read)\n");
                     if (req.u.read.resp) {
@@ -493,17 +525,22 @@ void sd_worker_thread(void)
                 break;
 
             case REQ_SAVE_OFFSET:
-                LOG_DBG("[SD_WORK] Saving offset %u to info file\n", (unsigned)req.u.info.offset_value);
-                /* Overwrite info.txt with 4-byte offset value (binary) */
+                LOG_DBG("[SD_WORK] Saving offset %u, start_time %u to info file\n",
+                        (unsigned) req.u.info.offset_value,
+                        (unsigned) recording_start_time);
+                /* Overwrite info.txt with offset + recording start time */
                 if (&fil_info == NULL) {
                     LOG_ERR("[SD_WORK] info file not open\n");
                     break;
                 }
                 res = fs_seek(&fil_info, 0, FS_SEEK_SET);
                 if (res == 0) {
-                    bw = fs_write(&fil_info, &req.u.info.offset_value, sizeof(req.u.info.offset_value));
-                    if (bw < 0 || bw != sizeof(req.u.info.offset_value)) {
-                        LOG_ERR("[SD_WORK] info write err %d\n", (int)bw);
+                    uint32_t info_data[2];
+                    info_data[0] = req.u.info.offset_value;
+                    info_data[1] = recording_start_time;
+                    bw = fs_write(&fil_info, info_data, sizeof(info_data));
+                    if (bw < 0 || bw != sizeof(info_data)) {
+                        LOG_ERR("[SD_WORK] info write err %d\n", (int) bw);
                     } else {
                         res = fs_sync(&fil_info);
                         if (res < 0) {
@@ -533,6 +570,7 @@ void sd_worker_thread(void)
                 }
                 current_file_size = 0;
                 current_file_offset = 0;
+                recording_start_time = 0;
                 // Return result to resp if available
                 if (req.u.clear_dir.resp) {
                     req.u.clear_dir.resp->res = 0;
