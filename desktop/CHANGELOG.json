@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute",
-    "Focus assistant now uses your goals, tasks, and memories for smarter distraction detection"
+    "Focus assistant now uses your goals, tasks, and memories for smarter distraction detection",
+    "Added Focus Analysis Test Runner for validating focus detection prompts"
   ],
   "releases": [
     {
