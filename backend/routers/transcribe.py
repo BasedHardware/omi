@@ -1272,7 +1272,7 @@ async def _stream_handler(
                 translation = Translation(lang=translation_language, text=translated_text)
                 if segment.translations is not None:
                     existing_translation_index = next(
-                        (i for i, t in enumerate(segment.translations) if t.lang == language), None
+                        (i for i, t in enumerate(segment.translations) if t.lang == translation_language), None
                     )
                     if existing_translation_index is not None:
                         segment.translations[existing_translation_index] = translation
