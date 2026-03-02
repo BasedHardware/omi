@@ -235,8 +235,15 @@ def split_into_sentences(text: str) -> List[str]:
     """Splits text into sentences based on sentence-ending punctuation (.?!) and newlines."""
     if not text:
         return []
-    sentences = re.findall(r'[^.?!\n]+(?:[.?!]\s*|\s*$)', text)
-    return [s.strip() for s in sentences if s.strip()]
+    # Split on newlines first, then split each line on sentence-ending punctuation
+    result = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        sentences = re.findall(r'[^.?!]+(?:[.?!]\s*|\s*$)', line)
+        result.extend(s.strip() for s in sentences if s.strip())
+    return result
 
 
 def _redis_cache_key(text_hash: str, dest_lang: str) -> str:
