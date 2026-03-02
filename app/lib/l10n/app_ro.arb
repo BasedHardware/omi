@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Comută",
     "switchApiConfirmBody": "Comutați la {environment}? Va trebui să închideți și să redeschideți aplicația pentru ca modificările să aibă efect.",
     "switchApiConfirmTitle": "Comutare mediu API",
-    "switchRequiresRestart": "Comutarea necesită repornirea aplicației"
+    "switchRequiresRestart": "Comutarea necesită repornirea aplicației",
+    "shared": "Partajat",
+    "onlyYouCanSeeConversation": "Doar tu poți vedea această conversație",
+    "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza"
 }
