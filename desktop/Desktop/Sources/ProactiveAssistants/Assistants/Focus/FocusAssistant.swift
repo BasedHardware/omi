@@ -35,6 +35,12 @@ actor FocusAssistant: ProactiveAssistant {
     private let maxPendingTasks = 3
     private var currentApp: String?
 
+    // MARK: - Context Cache
+    // Cached context from local DB (goals, tasks, memories) to enrich focus analysis
+    private var cachedContextString: String?
+    private var contextCacheTime: Date?
+    private let contextCacheDuration: TimeInterval = 120  // 2 minutes
+
     // MARK: - Smart Analysis Filtering
     // Skip analysis when user is focused on the same context (app + window title)
     // Also skip during cooldown period after distraction (unless context changes)
@@ -293,6 +299,8 @@ actor FocusAssistant: ProactiveAssistant {
         analysisCooldownEndTime = nil
         consecutiveErrorCount = 0
         errorBackoffEndTime = nil
+        cachedContextString = nil
+        contextCacheTime = nil
 
         // Clear cooldown in UI
         await MainActor.run {
@@ -498,10 +506,87 @@ actor FocusAssistant: ProactiveAssistant {
         }
     }
 
+    /// Refresh context from local DB (goals, tasks, memories) with caching
+    private func refreshContext() async -> String {
+        // Return cached context if fresh
+        if let cached = cachedContextString,
+           let cacheTime = contextCacheTime,
+           Date().timeIntervalSince(cacheTime) < contextCacheDuration {
+            return cached
+        }
+
+        var sections: [String] = []
+
+        // Time context
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+        sections.append("TIME CONTEXT:\n\(formatter.string(from: Date()))")
+
+        // Active goals
+        do {
+            let goals = try await GoalStorage.shared.getLocalGoals(activeOnly: true)
+            if !goals.isEmpty {
+                var lines = ["ACTIVE GOALS:"]
+                for (i, goal) in goals.prefix(10).enumerated() {
+                    let desc = goal.description.map { " - \($0)" } ?? ""
+                    lines.append("\(i + 1). \(goal.title)\(desc)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load goals for context", error: error)
+        }
+
+        // Top tasks by importance
+        do {
+            let tasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 50)
+            if !tasks.isEmpty {
+                var lines = ["CURRENT TASKS (by importance):"]
+                for (i, task) in tasks.enumerated() {
+                    let priority = task.priority ?? "medium"
+                    lines.append("\(i + 1). [\(priority)] \(task.description)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load tasks for context", error: error)
+        }
+
+        // Recent memories
+        do {
+            let memories = try await MemoryStorage.shared.getLocalMemories(limit: 50, category: "core")
+            if !memories.isEmpty {
+                var lines = ["RECENT MEMORIES:"]
+                for (i, memory) in memories.enumerated() {
+                    lines.append("\(i + 1). \(memory.content)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load memories for context", error: error)
+        }
+
+        let contextString = sections.joined(separator: "\n\n")
+        cachedContextString = contextString
+        contextCacheTime = Date()
+        return contextString
+    }
+
     private func analyzeScreenshot(jpegData: Data) async throws -> ScreenAnalysis? {
-        // Build prompt with history context
+        // Refresh context from local DB
+        let context = await refreshContext()
+
+        // Build prompt with context + history
         let historyText = formatHistory()
-        let prompt = historyText.isEmpty ? "Analyze this screenshot:" : "\(historyText)\n\nNow analyze this new screenshot:"
+        var promptParts: [String] = []
+        if !context.isEmpty {
+            promptParts.append(context)
+        }
+        if !historyText.isEmpty {
+            promptParts.append(historyText)
+        }
+        promptParts.append("Now analyze this new screenshot:")
+        let prompt = promptParts.joined(separator: "\n\n")
 
         // Get current system prompt from settings
         let currentSystemPrompt = await systemPrompt
