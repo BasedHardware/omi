@@ -172,7 +172,7 @@ def get_conversations(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    conversations = conversations_db.get_conversations(
+    conversations = conversations_db.get_conversations_lite(
         uid,
         limit,
         offset,
