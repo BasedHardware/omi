@@ -1014,7 +1014,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Bağlan';
 
   @override
   String get comingSoon => 'Yakında';
@@ -2272,7 +2272,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get folderName => 'Klasör adı';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Açıklama (isteğe bağlı)';
 
   @override
   String get failedToDeleteFolder => 'Klasör silinemedi';
@@ -8012,27 +8012,27 @@ class AppLocalizationsTr extends AppLocalizations {
   String get addTask => 'Görev ekle';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP sunucusu ekle';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Harici yapay zeka araçlarını bağla';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count araç başarıyla bağlandı';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCP sunucusuna bağlanılamadı';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Yetkilendiriliyor...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bizi nasıl buldunuz?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8050,19 +8050,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Arkadaş';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Diğer';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Lütfen belirtin';
 
   @override
-  String get event => 'Event';
+  String get event => 'Etkinlik';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'İş arkadaşı';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8234,8 +8234,41 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Hakkında bildiklerim';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Bu harita, Omi konuşmalarınızdan öğrendikçe güncellenir.';
+
+  @override
+  String get apiEnvironment => 'API Ortamı';
+
+  @override
+  String get apiEnvironmentDescription => 'Bağlanılacak sunucuyu seçin';
+
+  @override
+  String get production => 'Üretim';
+
+  @override
+  String get staging => 'Test ortamı';
+
+  @override
+  String get switchRequiresRestart => 'Değiştirme uygulama yeniden başlatma gerektirir';
+
+  @override
+  String get switchApiConfirmTitle => 'API Ortamını Değiştir';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environment ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.';
+  }
+
+  @override
+  String get switchAndRestart => 'Değiştir';
+
+  @override
+  String get stagingDisclaimer =>
+      'Test ortamı kararsız olabilir, tutarsız performans gösterebilir ve veriler kaybolabilir. Yalnızca test için.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Kaydedildi. Değişiklikleri uygulamak için uygulamayı kapatıp yeniden açın.';
 }

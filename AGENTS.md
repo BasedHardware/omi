@@ -53,6 +53,7 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 ### App (Flutter)
 
 - All user-facing strings must use l10n (`context.l10n.keyName`). Add keys to ARB files using `jq` to avoid reading large files.
+- When adding new l10n keys, translate all 33 non-English locales — never leave English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill for translations. Ensure `{parameter}` placeholders match the English ARB exactly.
 - After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`
 
 ## Formatting

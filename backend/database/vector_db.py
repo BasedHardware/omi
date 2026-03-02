@@ -250,3 +250,103 @@ def delete_memory_vector(uid: str, memory_id: str):
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
+
+
+# ==========================================
+# Screen Activity Vector Functions
+# For screenshot embeddings (Gemini embedding-001, 3072-dim)
+# ==========================================
+
+SCREEN_ACTIVITY_NAMESPACE = "ns3"
+
+
+def upsert_screen_activity_vectors(uid: str, rows: List[dict]) -> int:
+    """Batch upsert screenshot embeddings to Pinecone ns3."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping screen activity vector upsert')
+        return 0
+
+    vectors = []
+    for row in rows:
+        embedding = row.get('embedding')
+        if not embedding:
+            continue
+        vectors.append(
+            {
+                "id": f'{uid}-sa-{row["id"]}',
+                "values": embedding,
+                "metadata": {
+                    "uid": uid,
+                    "screenshot_id": str(row['id']),
+                    "timestamp": (
+                        int(datetime.fromisoformat(row['timestamp'].replace('Z', '+00:00')).timestamp())
+                        if isinstance(row['timestamp'], str)
+                        else int(row['timestamp'])
+                    ),
+                    "appName": row.get('appName', ''),
+                },
+            }
+        )
+
+    if not vectors:
+        return 0
+
+    # Pinecone upsert limit is 100 vectors per call
+    upserted = 0
+    for i in range(0, len(vectors), 100):
+        chunk = vectors[i : i + 100]
+        index.upsert(vectors=chunk, namespace=SCREEN_ACTIVITY_NAMESPACE)
+        upserted += len(chunk)
+
+    logger.info(f'upsert_screen_activity_vectors uid={uid} count={upserted}')
+    return upserted
+
+
+def search_screen_activity_vectors(
+    uid: str,
+    query_vector: List[float],
+    start_date: int = None,
+    end_date: int = None,
+    app_filter: str = None,
+    k: int = 10,
+) -> List[dict]:
+    """Vector search across screenshot embeddings in ns3."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping screen activity search')
+        return []
+
+    filter_data = {'uid': uid}
+    if start_date and end_date:
+        filter_data['timestamp'] = {'$gte': start_date, '$lte': end_date}
+    elif start_date:
+        filter_data['timestamp'] = {'$gte': start_date}
+    elif end_date:
+        filter_data['timestamp'] = {'$lte': end_date}
+    if app_filter:
+        filter_data['appName'] = app_filter
+
+    xc = index.query(
+        vector=query_vector,
+        top_k=k,
+        include_metadata=True,
+        filter=filter_data,
+        namespace=SCREEN_ACTIVITY_NAMESPACE,
+    )
+
+    return [
+        {
+            'screenshot_id': match['metadata'].get('screenshot_id'),
+            'timestamp': match['metadata'].get('timestamp'),
+            'appName': match['metadata'].get('appName'),
+            'score': match['score'],
+        }
+        for match in xc.get('matches', [])
+    ]
+
+
+def delete_screen_activity_vectors(uid: str, ids: List[int]):
+    """Delete screen activity vectors by screenshot IDs."""
+    if index is None:
+        return
+    vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
+    index.delete(ids=vector_ids, namespace=SCREEN_ACTIVITY_NAMESPACE)

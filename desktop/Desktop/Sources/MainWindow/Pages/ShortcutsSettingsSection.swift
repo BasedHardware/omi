@@ -29,7 +29,7 @@ struct ShortcutsSettingsSection: View {
                 Text("AI Model")
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
-                Text("Choose the AI model for Ask Omi conversations.")
+                Text("Choose the AI model for Ask omi conversations.")
                     .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
             }
@@ -124,10 +124,10 @@ struct ShortcutsSettingsSection: View {
     private var askOmiKeyCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Ask Omi Shortcut")
+                Text("Ask omi Shortcut")
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
-                Text("Global shortcut to open Ask Omi from anywhere.")
+                Text("Global shortcut to open Ask omi from anywhere.")
                     .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
             }

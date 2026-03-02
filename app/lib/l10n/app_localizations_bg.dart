@@ -895,7 +895,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get useMcpApiKey => 'Използвайте вашия MCP API ключ';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Уеб куки';
 
   @override
   String get conversationEvents => 'Събития на разговори';
@@ -1017,7 +1017,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Свързване';
 
   @override
   String get comingSoon => 'Скоро';
@@ -2271,7 +2271,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get folderName => 'Име на папка';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Описание (незадължително)';
 
   @override
   String get failedToDeleteFolder => 'Неуспешно изтриване на папка';
@@ -5886,7 +5886,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Телефон';
 
   @override
   String get cancelSync => 'Отмени синхронизацията';
@@ -6280,7 +6280,7 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get device => 'Device';
+  String get device => 'Устройство';
 
   @override
   String get chatAssistantsTitle => 'Чат асистенти';
@@ -8031,27 +8031,27 @@ class AppLocalizationsBg extends AppLocalizations {
   String get addTask => 'Добавяне на задача';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Добавяне на MCP сървър';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Свързване на външни AI инструменти';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count инструмента свързани успешно';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Неуспешно свързване с MCP сървър';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Упълномощаване...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Как ни намерихте?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8069,19 +8069,19 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Приятел';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Друго';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Моля, уточнете';
 
   @override
-  String get event => 'Event';
+  String get event => 'Събитие';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Колега';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8255,8 +8255,42 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appIconLabel => 'App Icon';
 
   @override
-  String get onboardingWhatIKnowAboutYouTitle => 'Here is what I know about you';
+  String get onboardingWhatIKnowAboutYouTitle => 'Ето какво знам за теб';
 
   @override
-  String get onboardingWhatIKnowAboutYouDescription => 'This map updates as Omi learns from your conversations.';
+  String get onboardingWhatIKnowAboutYouDescription => 'Тази карта се обновява, докато Omi учи от вашите разговори.';
+
+  @override
+  String get apiEnvironment => 'API среда';
+
+  @override
+  String get apiEnvironmentDescription => 'Изберете към кой сървър да се свържете';
+
+  @override
+  String get production => 'Продукция';
+
+  @override
+  String get staging => 'Тестова среда';
+
+  @override
+  String get switchRequiresRestart => 'Превключването изисква рестартиране на приложението';
+
+  @override
+  String get switchApiConfirmTitle => 'Превключване на API среда';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Превключване към $environment? Ще трябва да затворите и отворите отново приложението, за да влязат в сила промените.';
+  }
+
+  @override
+  String get switchAndRestart => 'Превключи';
+
+  @override
+  String get stagingDisclaimer =>
+      'Тестовата среда може да е нестабилна, с непостоянна производителност и данните могат да бъдат загубени. Само за тестване.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Запазено. Затворете и отворете отново приложението, за да приложите промените.';
 }

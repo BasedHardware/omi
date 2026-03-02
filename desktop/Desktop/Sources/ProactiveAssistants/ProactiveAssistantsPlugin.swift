@@ -98,6 +98,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     private static var hasAutoResetThisSession = false
     private static var hasSoftRecoveryThisSession = false
 
+    // Retain distributed notification observer tokens
+    private var testNotificationObservers: [NSObjectProtocol] = []
+
     // MARK: - Initialization
 
     private override init() {
@@ -113,6 +116,9 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         // Set up system event observers for sleep/wake/lock recovery
         setupSystemEventObservers()
+
+        // Listen for CLI-triggered test notifications
+        setupTestNotificationListeners()
 
         log("ProactiveAssistantsPlugin initialized")
     }
@@ -819,6 +825,29 @@ public class ProactiveAssistantsPlugin: NSObject {
         OverlayService.shared.showGlowAroundActiveWindow(colorMode: colorMode)
     }
 
+    // MARK: - CLI Test Triggers
+
+    /// Listen for distributed notifications from CLI to trigger test runs
+    private func setupTestNotificationListeners() {
+        // Use selector-based observer (more reliable with DistributedNotificationCenter)
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleAdviceTestNotification(_:)),
+            name: NSNotification.Name("com.omi.test.advice"),
+            object: nil
+        )
+        log("AdviceTestCLI: Notification observer registered")
+    }
+
+    @objc private func handleAdviceTestNotification(_ notification: Notification) {
+        Task { @MainActor in
+            let hours = (notification.userInfo?["hours"] as? String).flatMap { Double($0) } ?? 1.0
+            let count = (notification.userInfo?["count"] as? String).flatMap { Int($0) } ?? 10
+            log("AdviceTestCLI: Received test trigger (hours=\(hours), count=\(count))")
+            await AdviceTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
+        }
+    }
+
     // MARK: - System Event Handling
 
     /// Set up observers for system sleep/wake and screen lock/unlock events
@@ -987,7 +1016,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             // Send user notification
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
-                message: "Omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
+                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
             )
         } else {
             // Permission appears granted but capture is failing

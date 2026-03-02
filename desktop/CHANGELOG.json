@@ -1,5 +1,38 @@
 {
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.38",
+      "date": "2026-03-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.36",
+      "date": "2026-03-01",
+      "changes": [
+        "Interactive AI onboarding with permission guidance and file discovery"
+      ]
+    },
+    {
+      "version": "0.11.34",
+      "date": "2026-02-28",
+      "changes": [
+        "Added live 3D knowledge graph visualization during onboarding that builds incrementally as AI discovers information about you",
+        "Added interaction hints to onboarding knowledge graph (drag, zoom, pan)",
+        "Fixed onboarding resuming after Quit & Reopen for screen recording permission",
+        "Parallel AI exploration during onboarding \u2014 builds your digital profile and knowledge graph while you set up permissions",
+        "Automated release notes \u2014 changes are now tracked as they happen"
+      ]
+    },
+    {
+      "version": "0.11.9",
+      "date": "2026-02-26",
+      "changes": [
+        "Fixed AI chat not working (missing module after update)"
+      ]
+    },
     {
       "version": "11.5",
       "date": "2026-02-25",
@@ -66,9 +99,9 @@
         "If the Install button fails, download manually from <a href='https://macos.omi.me' style='font-weight:bold'>macos.omi.me</a> (known issue on macOS 26)",
         "Task chat session history: resume previous AI conversations about tasks across app restarts",
         "Dedicated task chat side panel with better layout isolation and session ID display",
-        "Add task button in toolbar (⌘N) for quick inline task creation",
+        "Add task button in toolbar (\u2318N) for quick inline task creation",
         "File graph keyboard hints: drag to rotate, right-drag to pan, scroll to zoom",
-        "Removed per-message timeouts in AI bridge — long-running tools no longer fail prematurely",
+        "Removed per-message timeouts in AI bridge \u2014 long-running tools no longer fail prematurely",
         "Chat memory capped at 200 messages to prevent unbounded growth",
         "Auto-restart memory threshold lowered from 4GB to 3GB for safer recovery",
         "Fixed PostHog lifecycle capture causing 2-second XPC hangs to Spotlight",
@@ -83,7 +116,7 @@
       "version": "0.10.9",
       "date": "2026-02-23",
       "changes": [
-        "<span style='color:red;font-size:16px;font-weight:bold'>⚠️ AUTO-UPDATE IS BROKEN — YOU MUST DOWNLOAD MANUALLY</span>",
+        "<span style='color:red;font-size:16px;font-weight:bold'>\u26a0\ufe0f AUTO-UPDATE IS BROKEN \u2014 YOU MUST DOWNLOAD MANUALLY</span>",
         "<span style='color:red'>The Install button will NOT work.</span> Please download the new version here: <a href='https://macos.omi.me' style='color:red;font-weight:bold;font-size:15px'>macos.omi.me</a>",
         "Steps: 1) Click the link above or open <a href='https://macos.omi.me'>macos.omi.me</a> in your browser  2) Download the DMG  3) Open it and drag Omi to Applications  4) Replace the existing app when prompted",
         "This is a one-time fix. After installing manually, all future updates will work normally.",
@@ -328,7 +361,7 @@
         "Hardware-accelerated screen recording (hevc_videotoolbox) for lower CPU usage",
         "Auto-detects video calls (Zoom, Teams, Meet) and reduces capture frequency to avoid slowdowns",
         "Floating bar shows OMI logo and no longer drifts across the screen or off-screen on monitor disconnect",
-        "AI agent turn limit removed — tasks can run as many steps as needed",
+        "AI agent turn limit removed \u2014 tasks can run as many steps as needed",
         "Capped in-memory embeddings to 5,000 entries to prevent unbounded memory growth",
         "Fixed database crashes from concurrent sync operations during memory and action item writes",
         "Reduced error noise: cleaner Sentry logs, quieter Crisp polling, slower recovery retries"
@@ -357,7 +390,7 @@
         "Accessibility permission reset: detects broken state after macOS updates and offers one-click fix",
         "Database upgraded to connection pool for better performance during concurrent reads",
         "Automation permission check now handles System Events not running (fixes -600 error)",
-        "Onboarding no longer blocks on permissions — grant them later from Settings",
+        "Onboarding no longer blocks on permissions \u2014 grant them later from Settings",
         "Hiding the floating bar now persists across app restarts",
         "Native notifications when support replies in Help chat",
         "Faster conversation sync by skipping unchanged sessions"
@@ -371,7 +404,7 @@
         "Model picker: switch between Sonnet and Opus directly from the floating bar",
         "Voice follow-up: use push-to-talk while viewing an AI response to continue the conversation",
         "Batch transcription mode: record first, transcribe after for better accuracy (Settings > Shortcuts)",
-        "Customizable Ask Omi shortcut: choose ⌘Enter, ⌘⇧Enter, ⌘J, or ⌘O (Settings > Shortcuts)",
+        "Customizable Ask Omi shortcut: choose \u2318Enter, \u2318\u21e7Enter, \u2318J, or \u2318O (Settings > Shortcuts)",
         "Push-to-talk sounds can now be toggled off in settings",
         "AI chat now includes your tasks for more context-aware responses",
         "Long chat messages are auto-truncated with Show more/less toggle",

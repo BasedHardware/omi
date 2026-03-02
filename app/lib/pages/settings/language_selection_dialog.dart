@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -227,7 +228,9 @@ class LanguageSelectionDialog {
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
-                          final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!);
+                          final userProvider = Provider.of<UserProvider>(context, listen: false);
+                          final success = await homeProvider.updateUserPrimaryLanguage(selectedLanguage!,
+                              userProvider: userProvider);
                           if (success && context.mounted) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();

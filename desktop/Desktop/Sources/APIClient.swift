@@ -1053,9 +1053,11 @@ struct ServerMemory: Codable, Identifiable {
     let inputDeviceName: String?
     // Window title when memory was extracted
     let windowTitle: String?
+    // Short headline for notification preview (advice/tips only)
+    let headline: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning
+        case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning, headline
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case conversationId = "conversation_id"
@@ -1094,6 +1096,7 @@ struct ServerMemory: Codable, Identifiable {
         currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
         inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
         windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
+        headline = try container.decodeIfPresent(String.self, forKey: .headline)
     }
 
     var isPublic: Bool {
@@ -1295,7 +1298,8 @@ extension APIClient {
         reasoning: String? = nil,
         currentActivity: String? = nil,
         source: String? = nil,
-        windowTitle: String? = nil
+        windowTitle: String? = nil,
+        headline: String? = nil
     ) async throws -> CreateMemoryResponse {
         struct CreateRequest: Encodable {
             let content: String
@@ -1309,9 +1313,10 @@ extension APIClient {
             let currentActivity: String?
             let source: String?
             let windowTitle: String?
+            let headline: String?
 
             enum CodingKeys: String, CodingKey {
-                case content, visibility, category, confidence, tags, reasoning, source
+                case content, visibility, category, confidence, tags, reasoning, source, headline
                 case sourceApp = "source_app"
                 case contextSummary = "context_summary"
                 case currentActivity = "current_activity"
@@ -1329,7 +1334,8 @@ extension APIClient {
             reasoning: reasoning,
             currentActivity: currentActivity,
             source: source,
-            windowTitle: windowTitle
+            windowTitle: windowTitle,
+            headline: headline
         )
         return try await post("v3/memories", body: body)
     }
@@ -3399,31 +3405,19 @@ extension APIClient {
 
     // MARK: - Knowledge Graph API
 
-    // Knowledge graph uses the main omi API (not the desktop backend)
-    private var knowledgeGraphBaseURL: String { "https://api.omi.me/" }
-
     /// Get the full knowledge graph (nodes and edges)
     func getKnowledgeGraph() async throws -> KnowledgeGraphResponse {
-        return try await get("v1/knowledge-graph", customBaseURL: knowledgeGraphBaseURL)
+        return try await get("v1/knowledge-graph")
     }
 
     /// Rebuild the knowledge graph from memories
     func rebuildKnowledgeGraph(limit: Int = 500) async throws -> RebuildGraphResponse {
-        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody(), customBaseURL: knowledgeGraphBaseURL)
+        return try await post("v1/knowledge-graph/rebuild?limit=\(limit)", body: EmptyBody())
     }
 
     /// Delete the knowledge graph
     func deleteKnowledgeGraph() async throws {
-        let url = URL(string: knowledgeGraphBaseURL + "v1/knowledge-graph")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-
-        let (_, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
+        return try await delete("v1/knowledge-graph")
     }
 }
 
@@ -3454,6 +3448,16 @@ struct KnowledgeGraphNode: Codable, Identifiable {
         case memoryIds = "memory_ids"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    init(id: String, label: String, nodeType: KnowledgeGraphNodeType, aliases: [String] = [], memoryIds: [String] = [], createdAt: Date = Date(), updatedAt: Date = Date()) {
+        self.id = id
+        self.label = label
+        self.nodeType = nodeType
+        self.aliases = aliases
+        self.memoryIds = memoryIds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -3489,6 +3493,15 @@ struct KnowledgeGraphEdge: Codable, Identifiable {
         case createdAt = "created_at"
     }
 
+    init(id: String, sourceId: String, targetId: String, label: String, memoryIds: [String] = [], createdAt: Date = Date()) {
+        self.id = id
+        self.sourceId = sourceId
+        self.targetId = targetId
+        self.label = label
+        self.memoryIds = memoryIds
+        self.createdAt = createdAt
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -3504,6 +3517,11 @@ struct KnowledgeGraphEdge: Codable, Identifiable {
 struct KnowledgeGraphResponse: Codable {
     let nodes: [KnowledgeGraphNode]
     let edges: [KnowledgeGraphEdge]
+
+    init(nodes: [KnowledgeGraphNode], edges: [KnowledgeGraphEdge]) {
+        self.nodes = nodes
+        self.edges = edges
+    }
 }
 
 /// Response for rebuild operation
@@ -3589,12 +3607,14 @@ struct UserProfileResponse: Codable {
     let useCase: String?
     let job: String?
     let company: String?
+    let desktopUpdateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case uid, email, name, motivation, job, company
         case timeZone = "time_zone"
         case createdAt = "created_at"
         case useCase = "use_case"
+        case desktopUpdateChannel = "desktop_update_channel"
     }
 
     init(from decoder: Decoder) throws {
@@ -3608,6 +3628,7 @@ struct UserProfileResponse: Codable {
         useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
         job = try container.decodeIfPresent(String.self, forKey: .job)
         company = try container.decodeIfPresent(String.self, forKey: .company)
+        desktopUpdateChannel = try container.decodeIfPresent(String.self, forKey: .desktopUpdateChannel)
     }
 }
 

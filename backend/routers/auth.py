@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -344,7 +345,7 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
         )
 
         if token_response.status_code != 200:
-            logger.error(f"Apple token exchange failed: {token_response.text}")
+            logger.error(f"Apple token exchange failed: {sanitize(token_response.text)}")
             raise HTTPException(status_code=400, detail="Failed to exchange Apple authorization code")
 
         token_json = token_response.json()
@@ -409,8 +410,8 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         response = requests.post(sign_in_url, json=payload)
 
         if response.status_code != 200:
-            logger.error(f"Firebase sign-in failed: {response.text}")
-            raise Exception(f"Firebase sign-in failed: {response.text}")
+            logger.error(f"Firebase sign-in failed: {sanitize(response.text)}")
+            raise Exception(f"Firebase sign-in failed: status={response.status_code}")
 
         result = response.json()
         firebase_uid = result.get('localId')

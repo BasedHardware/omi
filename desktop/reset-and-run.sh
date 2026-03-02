@@ -107,7 +107,16 @@ BUNDLE_ID="com.omi.desktop-dev"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
-SIGN_IDENTITY="Developer ID Application: Matthew Diakonov (S6DP5HF77G)"
+# Auto-detect signing identity: prefer Apple Development (doesn't require notarization),
+# fall back to Developer ID Application
+SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
+    echo "ERROR: No signing identity found"
+    exit 1
+fi
 
 # Backend configuration (Rust)
 BACKEND_DIR="$(dirname "$0")/Backend-Rust"
@@ -189,6 +198,13 @@ CONFLICTING_APPS=(
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
 )
+# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
+echo "Scanning for stale Omi Dev.app in other locations..."
+find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+    echo "  Removing stale clone: $stale"
+    rm -rf "$stale"
+done
 # Xcode DerivedData can contain old builds with production bundle ID
 # These get registered in Launch Services and cause permission confusion
 echo "Cleaning Xcode DerivedData..."
@@ -348,6 +364,15 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     echo "  Copied acp-bridge to bundle"
 fi
 
+# Embed provisioning profile (required for Apple Development signing + restricted entitlements)
+if [ -f "Desktop/embedded-dev.provisionprofile" ]; then
+    cp "Desktop/embedded-dev.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied dev provisioning profile"
+elif [ -f "Desktop/embedded.provisionprofile" ]; then
+    cp "Desktop/embedded.provisionprofile" "$APP_BUNDLE/Contents/embedded.provisionprofile"
+    echo "  Copied provisioning profile"
+fi
+
 # Copy and fix Info.plist
 cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
@@ -426,6 +451,12 @@ echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
 echo "App:      $APP_PATH"
 echo "========================"
 echo ""
+
+# Re-register with LaunchServices (clear stale launch-disabled flags)
+echo "Re-registering with LaunchServices..."
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+$LSREGISTER -u "$APP_PATH" 2>/dev/null || true
+$LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
 # Remove quarantine and start app from /Applications
 echo "Starting app..."

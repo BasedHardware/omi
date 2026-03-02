@@ -391,6 +391,7 @@ def download_audio_file_endpoint(
 import shutil
 import wave
 import logging
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -401,7 +402,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
     Writes directly to WAV file to avoid accumulating all PCM data in memory.
     """
     if not os.path.exists(opus_file_path):
-        logger.warning(f"File not found: {opus_file_path}")
+        logger.warning(f"File not found: {sanitize(opus_file_path)}")
         return False
 
     decoder = Decoder(sample_rate, channels)
@@ -436,7 +437,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                     break
 
         if frame_count > 0:
-            logger.info(f"Decoded audio saved to {wav_file_path}")
+            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
         else:
             logger.info("No PCM data was decoded.")

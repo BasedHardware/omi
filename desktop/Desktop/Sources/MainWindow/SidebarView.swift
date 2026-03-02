@@ -484,7 +484,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")
+                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi")
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
@@ -603,7 +603,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     // Text content
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Get Omi Device")
+                        Text("Get omi Device")
                             .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -640,7 +640,7 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(isCollapsed ? "Get Omi Device" : "")
+        .help(isCollapsed ? "Get omi Device" : "")
     }
 
     // MARK: - Update Available Widget
@@ -813,7 +813,8 @@ struct SidebarView: View {
         VStack(spacing: 6) {
             // Screen Recording permission (primary for Rewind)
             // Also show if ScreenCaptureKit is broken (TCC says yes but SCK says no)
-            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken {
+            // or if permission is stale (developer signing changed)
+            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken || appState.isScreenRecordingStale {
                 screenRecordingPermissionRow
             }
 
@@ -855,18 +856,19 @@ struct SidebarView: View {
     private var screenRecordingPermissionRow: some View {
         let isDenied = appState.isScreenRecordingPermissionDenied()
         let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
-        let needsReset = isBroken  // Show reset when broken
-        let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
+        let isStale = appState.isScreenRecordingStale  // Developer signing changed
+        let needsReset = isBroken  // Show reset when broken (not stale — stale needs toggle off/on)
+        let color: Color = (isDenied || isBroken || isStale) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
-            Image(systemName: (isDenied || isBroken) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+            Image(systemName: (isDenied || isBroken || isStale) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
                 .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
-                .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
+                .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
+                Text(isStale ? "Screen Recording (Re-enable)" : (isBroken ? "Screen Recording (Reset Required)" : "Screen Recording"))
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -874,7 +876,10 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    if needsReset {
+                    if isStale {
+                        // Stale/corrupted TCC — navigate to Permissions page with full instructions
+                        selectedIndex = SidebarNavItem.permissions.rawValue
+                    } else if needsReset {
                         // Track reset button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
                         // Reset and restart to fix broken ScreenCaptureKit state
@@ -884,9 +889,11 @@ struct SidebarView: View {
                         ScreenCaptureService.requestAllScreenCapturePermissions()
                         // Also open settings for manual grant if needed
                         ScreenCaptureService.openScreenRecordingPreferences()
+                        // Track attempt — if still not granted on next check, show recovery instructions
+                        appState.screenRecordingGrantAttempts += 1
                     }
                 }) {
-                    Text(needsReset ? "Reset" : "Grant")
+                    Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -903,13 +910,13 @@ struct SidebarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
+                .fill(color.opacity(permissionPulse && (isDenied || isBroken || isStale) ? 0.25 : 0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
+                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken || isStale) ? 2 : 1)
                 )
         )
-        .help(isCollapsed ? (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required") : "")
+        .help(isCollapsed ? (isStale ? "Screen Recording needs re-enabling" : (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required")) : "")
     }
 
     private var microphonePermissionRow: some View {
@@ -1545,9 +1552,11 @@ private struct SidebarAudioBar: View {
         let variation = 1.0 - (centerOffset * 0.3)
 
         let scaledLevel = clampedLevel * variation
-        let randomVariation = CGFloat.random(in: 0.9...1.1)
+        // Deterministic per-bar variation (avoid CGFloat.random which causes layout churn)
+        let hash = sin(CGFloat(index) * 1.618 + 0.5)
+        let deterministicVariation = 0.9 + 0.2 * (hash * 0.5 + 0.5)
 
-        let height = minHeight + (maxHeight - minHeight) * scaledLevel * randomVariation
+        let height = minHeight + (maxHeight - minHeight) * scaledLevel * deterministicVariation
         return max(minHeight, min(maxHeight, height))
     }
 
@@ -1569,7 +1578,6 @@ private struct SidebarAudioBar: View {
         RoundedRectangle(cornerRadius: 1)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            .animation(.easeOut(duration: 0.08), value: level)
     }
 }
 

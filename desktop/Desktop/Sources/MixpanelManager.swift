@@ -35,8 +35,8 @@ class MixpanelManager {
 
     /// Get the MixPanel token from environment or .env file
     private func getToken() -> String? {
-        // Check environment variable first
-        if let token = ProcessInfo.processInfo.environment[tokenKey], !token.isEmpty {
+        // Check environment variable first (use getenv() to pick up setenv() from .env loading)
+        if let cString = getenv(tokenKey), let token = String(validatingUTF8: cString), !token.isEmpty {
             return token
         }
 

@@ -37,6 +37,9 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
+  // VAD Gate (experimental)
+  bool vadGateEnabled = false;
+
   // Claude Agent (experimental)
   bool claudeAgentEnabled = false;
   bool claudeAgentLoading = false;
@@ -113,6 +116,7 @@ class DeveloperModeProvider extends BaseProvider {
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -271,15 +275,26 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void onVadGateChanged(bool value) {
+    vadGateEnabled = value;
+    SharedPreferencesUtil().vadGateEnabled = value;
+    notifyListeners();
+  }
+
   Future<void> onClaudeAgentChanged(bool value) async {
+    await initAgentLog();
+    agentLog('onClaudeAgentChanged($value)');
+
     if (value) {
-      // Enabling — check if VM exists first
       claudeAgentLoading = true;
       notifyListeners();
 
       try {
+        agentLog('Calling getAgentVmStatus()...');
         final vmInfo = await getAgentVmStatus();
+        agentLog('getAgentVmStatus() returned: hasVm=${vmInfo?.hasVm}, status=${vmInfo?.status}');
         if (vmInfo == null || !vmInfo.hasVm) {
+          agentLog('No VM found, aborting enable');
           AppSnackbar.showSnackbarError('Requires OMI Desktop with agent enabled');
           claudeAgentLoading = false;
           notifyListeners();
@@ -288,17 +303,19 @@ class DeveloperModeProvider extends BaseProvider {
 
         claudeAgentEnabled = true;
         SharedPreferencesUtil().claudeAgentEnabled = true;
+        agentLog('Claude agent ENABLED successfully');
       } catch (e) {
+        agentLog('ERROR in onClaudeAgentChanged: $e');
         Logger.error('Failed to check agent VM status: $e');
         AppSnackbar.showSnackbarError('Failed to check agent VM status');
       }
 
       claudeAgentLoading = false;
     } else {
-      // Disabling — disconnect and revert
       claudeAgentEnabled = false;
       SharedPreferencesUtil().claudeAgentEnabled = false;
       await agentChatService.disconnect();
+      agentLog('Claude agent DISABLED');
     }
 
     notifyListeners();

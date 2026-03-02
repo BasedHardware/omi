@@ -1638,7 +1638,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1655,7 +1656,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])

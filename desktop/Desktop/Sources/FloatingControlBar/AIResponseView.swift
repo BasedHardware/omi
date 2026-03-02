@@ -140,6 +140,9 @@ struct AIResponseView: View {
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                case .discoveryCard(_, let title, let summary, let fullText):
+                    DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else if !message.text.isEmpty {

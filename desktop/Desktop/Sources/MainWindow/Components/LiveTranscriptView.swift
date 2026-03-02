@@ -68,6 +68,7 @@ struct RecordingBarAudioLevels: View {
                 )
             }
         }
+        .fixedSize()  // Prevent constraint invalidations from propagating to parent NSHostingView
     }
 }
 

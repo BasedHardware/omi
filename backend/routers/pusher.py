@@ -325,6 +325,10 @@ async def _websocket_util_trigger(
                 data = await websocket.receive_bytes()
                 header_type = struct.unpack('<I', data[:4])[0]
 
+                # Heartbeat (data-frame keepalive from backend to reset GKE ILB idle timer)
+                if header_type == 100:
+                    continue
+
                 # Conversation ID
                 if header_type == 103:
                     current_conversation_id = bytes(data[4:]).decode("utf-8")

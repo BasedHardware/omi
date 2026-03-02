@@ -10,14 +10,14 @@ echo "=== Bundle Helper: Starting ==="
 # Configuration
 SWIFT_APP_NAME="Omi Computer.app"
 SWIFT_APP_LOCATIONS=(
-    # Built app from build.sh script (omi-desktop is sibling to omi/, not inside it)
-    # PROJECT_DIR = omi/app/macos, so ../../../omi-desktop = /Users/matthewdi/omi-desktop
-    "$PROJECT_DIR/../../../omi-desktop/build/${SWIFT_APP_NAME}"
-    # Built app in omi-desktop (Xcode paths)
-    "$PROJECT_DIR/../../../omi-desktop/build/Build/Products/Release/${SWIFT_APP_NAME}"
-    "$PROJECT_DIR/../../../omi-desktop/build/Build/Products/Debug/${SWIFT_APP_NAME}"
+    # Built app from build.sh script (desktop/ is inside the monorepo)
+    # PROJECT_DIR = omi/app/macos, so ../../desktop = omi/desktop
+    "$PROJECT_DIR/../../desktop/build/${SWIFT_APP_NAME}"
+    # Built app in desktop (Xcode paths)
+    "$PROJECT_DIR/../../desktop/build/Build/Products/Release/${SWIFT_APP_NAME}"
+    "$PROJECT_DIR/../../desktop/build/Build/Products/Debug/${SWIFT_APP_NAME}"
     # Archived/exported app
-    "$PROJECT_DIR/../../../omi-desktop/export/${SWIFT_APP_NAME}"
+    "$PROJECT_DIR/../../desktop/export/${SWIFT_APP_NAME}"
     # User's Applications folder
     "/Applications/${SWIFT_APP_NAME}"
     # Home Applications folder

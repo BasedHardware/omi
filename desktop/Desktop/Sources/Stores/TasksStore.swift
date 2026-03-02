@@ -823,7 +823,7 @@ class TasksStore: ObservableObject {
     /// Retry syncing locally-created tasks that failed to push to the backend.
     /// These are records with backendSynced=false and no backendId — the API call
     /// failed during extraction and there was no retry mechanism.
-    private func retryUnsyncedItems() async {
+    func retryUnsyncedItems(includeRecent: Bool = false) async {
         guard !isRetryingUnsynced else {
             log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
             return
@@ -833,7 +833,7 @@ class TasksStore: ObservableObject {
 
         let items: [ActionItemRecord]
         do {
-            items = try await ActionItemStorage.shared.getUnsyncedActionItems()
+            items = try await ActionItemStorage.shared.getUnsyncedActionItems(includeRecent: includeRecent)
         } catch {
             logError("TasksStore: Failed to fetch unsynced items", error: error)
             return

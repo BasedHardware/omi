@@ -4,6 +4,7 @@ abstract class Env {
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
   static String? _agentProxyWsUrlOverride;
+  static bool isTestFlight = false;
 
   static void init([EnvFields? instance]) {
     _instance = instance ?? DevEnv() as EnvFields;
@@ -24,12 +25,34 @@ abstract class Env {
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
 
+  static String get stagingApiUrl {
+    final url = _instance.stagingApiUrl;
+    if (url != null && url.isNotEmpty) return url;
+    return 'https://api.omiapi.com/';
+  }
+
+  static bool get isUsingStagingApi {
+    final effective = apiBaseUrl;
+    if (effective == null) return false;
+    return _normalizeUrl(effective) == _normalizeUrl(stagingApiUrl);
+  }
+
+  static String _normalizeUrl(String url) {
+    var s = url.trim().toLowerCase();
+    while (s.endsWith('/')) {
+      s = s.substring(0, s.length - 1);
+    }
+    return s;
+  }
+
   /// WebSocket URL for the agent proxy service.
-  /// Always prod — agent VMs and Firestore are in the prod project only.
+  /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
   /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
   static String get agentProxyWsUrl {
     if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
-    return 'wss://agent.omi.me/v1/agent/ws';
+    final base = apiBaseUrl ?? 'https://api.omi.me';
+    final host = Uri.parse(base).host.replaceFirst('api.', 'agent.');
+    return 'wss://$host/v1/agent/ws';
   }
 
   static String? get growthbookApiKey => _instance.growthbookApiKey;
@@ -75,4 +98,6 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
+
+  String? get stagingApiUrl;
 }

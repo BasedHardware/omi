@@ -106,6 +106,36 @@ e.g. "reading about machine learning", "working on design mockups"`,
       required: ["query"],
     },
   },
+  {
+    name: "complete_task",
+    description: `Toggle a task's completion status. Syncs to backend (Firestore).
+Use after finding the task with execute_sql. Pass the backendId from the action_items table.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "The backendId of the task from action_items table",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
+  {
+    name: "delete_task",
+    description: `Delete a task permanently. Syncs to backend (Firestore).
+Use after finding the task with execute_sql. Pass the backendId from the action_items table.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "The backendId of the task from action_items table",
+        },
+      },
+      required: ["task_id"],
+    },
+  },
 ];
 
 /** Handle a JSON-RPC request */
@@ -178,6 +208,26 @@ async function handleJsonRpc(
         };
         if (args.app_filter) input.app_filter = args.app_filter;
         const result = await requestSwiftTool("semantic_search", input);
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: { content: [{ type: "text", text: result }] },
+        };
+      }
+
+      if (toolName === "complete_task") {
+        const taskId = args.task_id as string;
+        const result = await requestSwiftTool("complete_task", { task_id: taskId });
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: { content: [{ type: "text", text: result }] },
+        };
+      }
+
+      if (toolName === "delete_task") {
+        const taskId = args.task_id as string;
+        const result = await requestSwiftTool("delete_task", { task_id: taskId });
         return {
           jsonrpc: "2.0",
           id,

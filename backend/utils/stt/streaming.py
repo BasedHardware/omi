@@ -10,6 +10,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from utils.stt.soniox_util import *
+from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
 
 logger = logging.getLogger(__name__)
@@ -314,8 +315,24 @@ async def process_audio_dg(
     preseconds: int = 0,
     model: str = 'nova-2-general',
     keywords: List[str] = [],
+    vad_gate=None,
 ):
+    """Create a Deepgram streaming connection.
+
+    Args:
+        vad_gate: Optional VADStreamingGate. If provided, returns a
+            GatedDeepgramSocket that handles VAD gating internally and
+            remaps timestamps in the stream_transcript callback.
+    """
     logger.info(f'process_audio_dg {language} {sample_rate} {channels} {preseconds}')
+
+    # If gate provided, wrap stream_transcript to remap DG timestamps
+    if vad_gate is not None:
+        _original_stream_transcript = stream_transcript
+
+        def stream_transcript(segments):
+            vad_gate.remap_segments(segments)
+            _original_stream_transcript(segments)
 
     def on_message(self, result, **kwargs):
         # print(f"Received message from Deepgram")  # Log when message is received
@@ -366,7 +383,14 @@ async def process_audio_dg(
         logger.error(f"Error: {error}")
 
     logger.info("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model, keywords)
+    dg_connection = connect_to_deepgram_with_backoff(
+        on_message, on_error, language, sample_rate, channels, model, keywords
+    )
+
+    # Wrap with VAD gate if provided
+    if vad_gate is not None:
+        return GatedDeepgramSocket(dg_connection, gate=vad_gate)
+    return dg_connection
 
 
 # Calculate backoff with jitter

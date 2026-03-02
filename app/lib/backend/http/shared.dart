@@ -66,6 +66,8 @@ Future<Map<String, String>> buildHeaders({
 }
 
 bool _isRequiredAuthCheck(String url) {
+  // Agent VM endpoints always hit prod even when app uses dev
+  if (url.contains('api.omi.me')) return true;
   if (url.contains(Env.apiBaseUrl!)) {
     return true;
   }

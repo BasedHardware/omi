@@ -23,7 +23,7 @@ if [ -d "$ACP_BRIDGE_DIR" ]; then
     echo "Building acp-bridge..."
     cd "$ACP_BRIDGE_DIR"
     npm install --no-fund --no-audit
-    npx tsc
+    npm run build --silent
     cd - > /dev/null
 fi
 

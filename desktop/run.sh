@@ -85,14 +85,14 @@ step "Cleaning up conflicting app bundles..."
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
 CONFLICTING_APPS=(
     "/Applications/Omi Computer.app"
-    "/Applications/Omi Dev.app"
     "/Applications/Omi.app/Contents/MacOS/Omi Computer.app"
+    "/Applications/Omi.app"
     "$HOME/Desktop/Omi.app"
+    "$HOME/Desktop/Omi Dev.app"
     "$HOME/Downloads/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi/app/build/macos/Build/Products/Release/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../omi-computer/build/macos/Build/Products/Release/Omi.app"
+    "$HOME/Downloads/Omi Dev.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
+    "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
 )
 for app in "${CONFLICTING_APPS[@]}"; do
     if [ -d "$app" ]; then
@@ -101,7 +101,13 @@ for app in "${CONFLICTING_APPS[@]}"; do
     fi
 done
 # Also remove any "Omi Computer.app" nested inside Flutter builds (any config: Debug/Release/Release-prod/etc.)
-find "$(dirname "$0")/../omi/app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$(dirname "$0")/../app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
+# Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
+# These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
+find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+    substep "Removing stale clone: $stale"
+    rm -rf "$stale"
+done
 
 step "Starting Cloudflare tunnel..."
 cloudflared tunnel run omi-computer-dev &
@@ -295,6 +301,12 @@ fi
 step "Removing quarantine attributes..."
 xattr -cr "$APP_BUNDLE"
 
+step "Installing to /Applications/..."
+# Install to /Applications/ so "Quit & Reopen" (after granting screen recording
+# permission) launches the correct binary instead of a stale copy elsewhere.
+ditto "$APP_BUNDLE" "$APP_PATH"
+substep "Installed to $APP_PATH"
+
 step "Clearing stale LaunchServices registration..."
 # Unregister first to clear any launch-disabled flag from stale entries,
 # then let `open` re-register the app fresh. Without this, notifications
@@ -302,13 +314,15 @@ step "Clearing stale LaunchServices registration..."
 # the launch-disabled flag prevents notification center registration.
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 $LSREGISTER -u "$APP_BUNDLE" 2>/dev/null || true
+$LSREGISTER -u "$APP_PATH" 2>/dev/null || true
 # Purge stale registrations from old DMG staging dirs and unmounted volumes
 # These create ghost entries that can cause notification icons to show a
 # generic folder instead of the app icon
 for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
     [ -d "$stale" ] || $LSREGISTER -u "$stale" 2>/dev/null || true
 done
-$LSREGISTER -f "$APP_BUNDLE" 2>/dev/null || true
+# Register the /Applications/ copy as the canonical bundle for this bundle ID
+$LSREGISTER -f "$APP_PATH" 2>/dev/null || true
 
 step "Starting app..."
 
@@ -320,13 +334,13 @@ echo ""
 echo "=== Services Running (total: ${TOTAL_TIME%.*}s) ==="
 echo "Backend:  http://localhost:8080 (PID: $BACKEND_PID)"
 echo "Tunnel:   $TUNNEL_URL (PID: $TUNNEL_PID)"
-echo "App:      $APP_BUNDLE"
+echo "App:      $APP_PATH (installed from $APP_BUNDLE)"
 echo "Using backend: $TUNNEL_URL"
 echo "========================================"
 echo ""
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-open "$APP_BUNDLE" || "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" &
+open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 
 # Wait for backend process (keeps script running and shows logs)
 echo "Press Ctrl+C to stop all services..."
