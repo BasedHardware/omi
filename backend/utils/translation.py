@@ -190,7 +190,9 @@ MAX_BATCH_SIZE = 100
 
 
 def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
-    if hint_language not in LANGDETECT_RELIABLE_LANGUAGES:
+    # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
+    base_hint = hint_language.split('-')[0] if hint_language else None
+    if base_hint not in LANGDETECT_RELIABLE_LANGUAGES:
         return None
     try:
         return langdetect_detect(text)
