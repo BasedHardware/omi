@@ -2,11 +2,11 @@
 Tests for the limit-based branching in GET /v1/conversations.
 limit=1 uses full get_conversations() (in-progress recovery needs transcripts).
 limit>1 uses get_conversations_lite() (list view optimization).
+Imports the REAL router function via module stubbing to avoid Firestore init.
 """
 
 import os
 import sys
-import types
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault(
@@ -15,20 +15,23 @@ os.environ.setdefault(
 )
 
 
-def _stub_module(name: str) -> types.ModuleType:
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
+def _ensure_mock_module(name: str):
+    """Ensure a MagicMock module exists in sys.modules."""
+    if name not in sys.modules:
+        mod = MagicMock()
+        mod.__path__ = []
+        mod.__name__ = name
+        mod.__loader__ = None
+        mod.__spec__ = None
+        mod.__package__ = name if '.' not in name else name.rsplit('.', 1)[0]
+        sys.modules[name] = mod
+    return sys.modules[name]
 
 
-# Stub database package and submodules to avoid Firestore init.
-if "database" not in sys.modules:
-    database_mod = _stub_module("database")
-    database_mod.__path__ = []
-else:
-    database_mod = sys.modules["database"]
-
-for submodule in [
+# Stub database and utility modules to avoid Firestore init
+_ensure_mock_module("database")
+sys.modules["database"].__path__ = getattr(sys.modules["database"], '__path__', [])
+for sub in [
     "_client",
     "redis_db",
     "auth",
@@ -40,131 +43,131 @@ for submodule in [
     "action_items",
     "mcp_api_key",
 ]:
-    full_name = f"database.{submodule}"
-    if full_name not in sys.modules:
-        mod = _stub_module(full_name)
-        setattr(database_mod, submodule, mod)
+    _ensure_mock_module(f"database.{sub}")
 
-# Set up mock Firestore client
-client_mod = sys.modules["database._client"]
-client_mod.db = MagicMock()
-client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
-
-# Stub out heavy utility modules
 for name in [
+    "utils",
     "utils.apps",
+    "utils.llm",
     "utils.llm.memories",
+    "utils.conversations",
     "utils.conversations.process_conversation",
+    "utils.conversations.search",
+    "utils.conversations.location",
+    "utils.llm.conversation_processing",
+    "utils.llm.external_integrations",
     "utils.notifications",
     "utils.webhooks",
-    "utils.llm.external_integrations",
+    "utils.retrieval",
     "utils.retrieval.rag",
+    "utils.other",
     "utils.other.hume",
+    "utils.other.endpoints",
+    "utils.other.storage",
+    "utils.encryption",
+    "utils.speaker_identification",
+    "utils.app_integrations",
+    "dependencies",
 ]:
-    if name not in sys.modules:
-        _stub_module(name)
+    _ensure_mock_module(name)
 
-# Mock conversations_db at module scope so routers.conversations can import it
-mock_conv_db = MagicMock()
-sys.modules["database.conversations"] = mock_conv_db
+# Force reimport so routers.conversations picks up stubs
+if "routers.conversations" in sys.modules:
+    del sys.modules["routers.conversations"]
 
-
-def _call_get_conversations(limit, statuses="completed", offset=0):
-    """Simulate the router's get_conversations branching logic."""
-    # Replicate the exact branching from routers/conversations.py
-    uid = 'test_uid'
-    include_discarded = False
-    start_date = None
-    end_date = None
-    folder_id = None
-    starred = None
-
-    if len(statuses) == 0:
-        statuses = "processing,completed"
-
-    if limit > 1:
-        conversations = mock_conv_db.get_conversations_lite(
-            uid,
-            limit,
-            offset,
-            include_discarded=include_discarded,
-            statuses=statuses.split(",") if len(statuses) > 0 else [],
-            start_date=start_date,
-            end_date=end_date,
-            folder_id=folder_id,
-            starred=starred,
-        )
-    else:
-        conversations = mock_conv_db.get_conversations(
-            uid,
-            limit,
-            offset,
-            include_discarded=include_discarded,
-            statuses=statuses.split(",") if len(statuses) > 0 else [],
-            start_date=start_date,
-            end_date=end_date,
-            folder_id=folder_id,
-            starred=starred,
-        )
-
-    for conv in conversations:
-        if conv.get('is_locked', False):
-            conv['structured']['action_items'] = []
-            conv['structured']['events'] = []
-            conv['apps_results'] = []
-            conv['plugins_results'] = []
-            conv['suggested_summarization_apps'] = []
-    return conversations
+from routers.conversations import get_conversations  # noqa: E402
 
 
 class TestConversationsRouterBranching:
-    def setup_method(self):
-        mock_conv_db.reset_mock()
-
-    def test_limit_1_uses_full_hydration(self):
+    @patch('routers.conversations.conversations_db')
+    def test_limit_1_uses_full_hydration(self, mock_db):
         """limit=1 calls get_conversations() for in-progress recovery (needs transcripts)."""
-        mock_conv_db.get_conversations.return_value = [{'id': 'c1', 'is_locked': False}]
+        mock_db.get_conversations.return_value = [{'id': 'c1', 'is_locked': False}]
 
-        result = _call_get_conversations(limit=1, statuses="in_progress")
+        result = get_conversations(
+            limit=1,
+            offset=0,
+            statuses="in_progress",
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test_uid',
+        )
 
-        mock_conv_db.get_conversations.assert_called_once()
-        mock_conv_db.get_conversations_lite.assert_not_called()
+        mock_db.get_conversations.assert_called_once()
+        mock_db.get_conversations_lite.assert_not_called()
         assert len(result) == 1
 
-    def test_limit_2_uses_lite(self):
+    @patch('routers.conversations.conversations_db')
+    def test_limit_2_uses_lite(self, mock_db):
         """limit=2 calls get_conversations_lite() (list optimization)."""
-        mock_conv_db.get_conversations_lite.return_value = [
+        mock_db.get_conversations_lite.return_value = [
             {'id': 'c1', 'is_locked': False},
             {'id': 'c2', 'is_locked': False},
         ]
 
-        result = _call_get_conversations(limit=2)
+        result = get_conversations(
+            limit=2,
+            offset=0,
+            statuses="completed",
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test_uid',
+        )
 
-        mock_conv_db.get_conversations_lite.assert_called_once()
-        mock_conv_db.get_conversations.assert_not_called()
+        mock_db.get_conversations_lite.assert_called_once()
+        mock_db.get_conversations.assert_not_called()
         assert len(result) == 2
 
-    def test_limit_100_uses_lite(self):
+    @patch('routers.conversations.conversations_db')
+    def test_limit_100_uses_lite(self, mock_db):
         """limit=100 (default) uses lite path."""
-        mock_conv_db.get_conversations_lite.return_value = []
+        mock_db.get_conversations_lite.return_value = []
 
-        _call_get_conversations(limit=100)
+        get_conversations(
+            limit=100,
+            offset=0,
+            statuses="completed",
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test_uid',
+        )
 
-        mock_conv_db.get_conversations_lite.assert_called_once()
-        mock_conv_db.get_conversations.assert_not_called()
+        mock_db.get_conversations_lite.assert_called_once()
+        mock_db.get_conversations.assert_not_called()
 
-    def test_empty_statuses_defaults_to_processing_completed(self):
+    @patch('routers.conversations.conversations_db')
+    def test_empty_statuses_defaults_to_processing_completed(self, mock_db):
         """Empty statuses string defaults to 'processing,completed'."""
-        mock_conv_db.get_conversations_lite.return_value = []
+        mock_db.get_conversations_lite.return_value = []
 
-        _call_get_conversations(limit=25, statuses="")
+        get_conversations(
+            limit=25,
+            offset=0,
+            statuses="",
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test_uid',
+        )
 
-        call_kwargs = mock_conv_db.get_conversations_lite.call_args
+        call_kwargs = mock_db.get_conversations_lite.call_args
         assert call_kwargs[1]['statuses'] == ['processing', 'completed']
 
-    def test_locked_conversations_stripped(self):
+    @patch('routers.conversations.conversations_db')
+    def test_locked_conversations_stripped(self, mock_db):
         """Locked conversations have sensitive fields stripped."""
-        mock_conv_db.get_conversations_lite.return_value = [
+        mock_db.get_conversations_lite.return_value = [
             {
                 'id': 'c1',
                 'is_locked': True,
@@ -175,7 +178,17 @@ class TestConversationsRouterBranching:
             },
         ]
 
-        result = _call_get_conversations(limit=10)
+        result = get_conversations(
+            limit=10,
+            offset=0,
+            statuses="completed",
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test_uid',
+        )
 
         assert result[0]['structured']['action_items'] == []
         assert result[0]['structured']['events'] == []
