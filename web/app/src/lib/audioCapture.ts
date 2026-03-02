@@ -18,6 +18,7 @@ export interface AudioCapture {
   stop: () => void;
   pause: () => void;
   resume: () => void;
+  getSystemStream: () => MediaStream | null;
 }
 
 // Target audio format for transcription
@@ -53,7 +54,7 @@ export async function getMicrophoneStream(): Promise<MediaStream> {
 /**
  * Get system audio stream via screen share
  */
-export async function getSystemAudioStream(): Promise<MediaStream> {
+export async function getSystemAudioStream(keepVideo = false): Promise<MediaStream> {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true, // Required by browsers, we'll ignore the video track
@@ -72,8 +73,10 @@ export async function getSystemAudioStream(): Promise<MediaStream> {
       throw new Error('No audio selected. Please share a tab with audio enabled.');
     }
 
-    // Stop video track - we only need audio
-    stream.getVideoTracks().forEach((track) => track.stop());
+    // Stop video track unless requested to keep it
+    if (!keepVideo) {
+      stream.getVideoTracks().forEach((track) => track.stop());
+    }
 
     return stream;
   } catch (err) {
@@ -157,7 +160,7 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
   let processor: ScriptProcessorNode | null = null;
   let micAnalyser: AnalyserNode | null = null;
   let systemAnalyser: AnalyserNode | null = null;
-  let levelInterval: NodeJS.Timeout | null = null;
+  let levelInterval: number | null = null;
   let isPaused = false;
 
   const start = async () => {
@@ -177,7 +180,7 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
       // Get system audio if needed
       if (mode === 'mic-and-system') {
         try {
-          systemStream = await getSystemAudioStream();
+          systemStream = await getSystemAudioStream(true);
           systemSource = audioContext.createMediaStreamSource(systemStream);
 
           // Create system analyser for level metering
@@ -246,7 +249,7 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
       const micDataArray = new Float32Array(micAnalyser.fftSize);
       const systemDataArray = systemAnalyser ? new Float32Array(systemAnalyser.fftSize) : null;
 
-      levelInterval = setInterval(() => {
+      levelInterval = window.setInterval(() => {
         if (isPaused) return;
 
         // Mic level
@@ -320,7 +323,9 @@ export function createAudioCapture(options: AudioCaptureOptions): AudioCapture {
     isPaused = false;
   };
 
-  return { start, stop, pause, resume };
+  const getSystemStream = () => systemStream;
+
+  return { start, stop, pause, resume, getSystemStream };
 }
 
 /**

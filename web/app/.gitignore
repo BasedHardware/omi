@@ -1,2 +1,3 @@
 # Claude Code local files
 .claude/
+web/app/tsconfig.tsbuildinfo
