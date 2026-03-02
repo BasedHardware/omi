@@ -45,8 +45,8 @@ export async function generateMetadata(
     metadataBase: prevData.metadataBase,
     description: prevData.description,
     robots: {
-      follow: true,
-      index: true,
+      follow: false,
+      index: false,
     },
     openGraph: {
       ...prevData.openGraph,
