@@ -142,6 +142,13 @@ class TestDetectLanguage:
         assert detect_language("") is None
         assert detect_language("   ") is None
 
+    def test_locale_tagged_hint_language(self):
+        """Locale-tagged hint_language (e.g. en-US) should be normalized to base tag."""
+        with patch('utils.translation._detect_with_langdetect', return_value='en') as mock_langdetect:
+            result = detect_language("Hello how are you today", hint_language='en-US')
+            mock_langdetect.assert_called_once()
+            assert result == 'en'
+
 
 class TestTranslationServiceBatch:
     def setup_method(self):
@@ -345,18 +352,39 @@ class TestTranscriptSegmentLanguageCache:
         cache.update_from_translate_response("seg1", "fr", "en")
         assert cache.cache["seg1"] is False
 
+    def test_update_from_translate_response_locale_tagged(self):
+        """update_from_translate_response should normalize locale tags (en-US -> en)."""
+        cache = TranscriptSegmentLanguageCache()
+        cache.update_from_translate_response("seg1", "en-US", "en")
+        assert cache.cache["seg1"] is True
+
     def test_foreign_stays_foreign(self):
         """Once marked as foreign, segment stays foreign even without new text."""
         cache = TranscriptSegmentLanguageCache()
         cache.cache["seg1"] = False
         assert cache.is_in_target_language("seg1", "", "en") is False
 
-    def test_unknown_defaults_to_needs_translation(self):
-        """Unknown segments (not in cache) with text should run detection."""
+    def test_unknown_detection_returns_false(self):
+        """When detection is inconclusive (None), should return False (needs translation)."""
+        cache = TranscriptSegmentLanguageCache()
+        with patch('utils.translation_cache.detect_language', return_value=None):
+            result = cache.is_in_target_language("seg1", "short", "en")
+            # Should NOT assume target language when detection is unknown
+            assert result is False
+
+    def test_detected_foreign_returns_false(self):
+        """When detected language differs from target, should return False."""
         cache = TranscriptSegmentLanguageCache()
         with patch('utils.translation_cache.detect_language', return_value='fr'):
             result = cache.is_in_target_language("seg1", "Bonjour", "en")
             assert result is False
+
+    def test_detected_target_returns_true(self):
+        """When detected language matches target, should return True."""
+        cache = TranscriptSegmentLanguageCache()
+        with patch('utils.translation_cache.detect_language', return_value='en'):
+            result = cache.is_in_target_language("seg1", "Hello world today", "en")
+            assert result is True
 
     def test_delete_cache(self):
         cache = TranscriptSegmentLanguageCache()
