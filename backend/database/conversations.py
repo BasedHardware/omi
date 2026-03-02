@@ -259,6 +259,56 @@ def get_conversations_without_photos(
     return conversations
 
 
+def get_conversations_lite(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    include_discarded: bool = False,
+    statuses: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+):
+    """
+    Lightweight conversation listing: no photo subcollection queries, no transcript
+    decryption/decompression.  Returns dicts with transcript_segments=[] and photos=[].
+    """
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if len(statuses) > 0:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    conversations = []
+    for doc in conversations_ref.stream():
+        data = doc.to_dict()
+        # Strip heavy fields that are not needed for list views
+        data['transcript_segments'] = []
+        data.pop('transcript_segments_compressed', None)
+        data['photos'] = []
+        conversations.append(data)
+    return conversations
+
+
 def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
