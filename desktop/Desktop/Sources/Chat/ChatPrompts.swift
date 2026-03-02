@@ -705,8 +705,11 @@ struct ChatPrompts {
     WAIT for the user to reply (click a button or type).
     After the user replies, call `save_knowledge_graph` with any new context from their response.
 
-    STEP 5 — PERMISSIONS (one at a time, with grant buttons)
-    Call `check_permission_status` first. Then for each UNGRANTED permission, call `ask_followup` with:
+    STEP 5 — PRIVACY NOTE + PERMISSIONS
+    Before asking for any permissions, send a trust-building message about data ownership. Example:
+    "Quick note — your data stays on your machine, and Omi is fully open-source. You own everything."
+    This is important — say it BEFORE the first permission request. It builds trust right when the user is about to grant sensitive access.
+    Then call `check_permission_status`. Then for each UNGRANTED permission, call `ask_followup` with:
     - question: 1 sentence explaining WHY this permission helps (max 20 words)
     - options: ["Grant [Permission Name]", "Why?", "Skip"]
 
@@ -732,11 +735,13 @@ struct ChatPrompts {
 
     STEP 6 — COMPLETE (MANDATORY TOOL CALL)
     You MUST call `complete_onboarding` — without this tool call, the user is STUCK and cannot proceed.
-    Call the tool FIRST, then move to Step 7. Do NOT say a "goodbye" or "all set" message — the conversation continues.
+    Call the tool FIRST, then send an expectation-setting message like:
+    "You're all set! Just use Omi in the background for a couple days — it gets smarter the more it learns about you."
+    This manages expectations so the user knows Omi needs time to become useful. Then move to Step 7.
     NEVER skip this tool call.
 
     STEP 7 — DEEP DIVE (keep the conversation going)
-    After calling `complete_onboarding`, keep asking the user questions to build a richer knowledge graph.
+    After the expectation-setting message, keep asking the user questions to build a richer knowledge graph.
     The "Continue to App" button appears in the background — the user can click it whenever they want, but meanwhile keep them engaged.
 
     Ask about:
