@@ -356,6 +356,77 @@ actor FocusAssistant: ProactiveAssistant {
         return try await analyzeScreenshot(jpegData: jpegData)
     }
 
+    /// Reset test history — call before starting a test run to get a clean slate.
+    func resetTestHistory() {
+        testAnalysisHistory.removeAll()
+    }
+
+    /// Run analysis with accumulating history across calls (simulates production behavior).
+    /// Each result is appended to a separate test history buffer so the model sees prior decisions.
+    func testAnalyzeWithHistory(jpegData: Data, appName: String) async throws -> ScreenAnalysis? {
+        let result = try await analyzeScreenshotWithHistory(jpegData: jpegData, history: testAnalysisHistory)
+        if let result = result {
+            testAnalysisHistory.append(result)
+            if testAnalysisHistory.count > maxHistorySize {
+                testAnalysisHistory.removeFirst()
+            }
+        }
+        return result
+    }
+
+    /// Separate history buffer for test runs (doesn't pollute production history)
+    private var testAnalysisHistory: [ScreenAnalysis] = []
+
+    /// Variant of analyzeScreenshot that accepts an explicit history array
+    private func analyzeScreenshotWithHistory(jpegData: Data, history: [ScreenAnalysis]) async throws -> ScreenAnalysis? {
+        let context = await refreshContext()
+
+        // Format provided history
+        var historyText = ""
+        if !history.isEmpty {
+            var lines = ["Recent activity (oldest to newest):"]
+            for (i, past) in history.enumerated() {
+                lines.append("\(i + 1). [\(past.status.rawValue)] \(past.appOrSite): \(past.description)")
+                if let message = past.message {
+                    lines.append("   Message: \(message)")
+                }
+            }
+            historyText = lines.joined(separator: "\n")
+        }
+
+        var promptParts: [String] = []
+        if !context.isEmpty {
+            promptParts.append(context)
+        }
+        if !historyText.isEmpty {
+            promptParts.append(historyText)
+        }
+        promptParts.append("Now analyze this new screenshot:")
+        let prompt = promptParts.joined(separator: "\n\n")
+
+        let currentSystemPrompt = await systemPrompt
+
+        let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
+            type: "object",
+            properties: [
+                "status": .init(type: "string", enum: ["focused", "distracted"], description: "Whether the user is focused or distracted"),
+                "app_or_site": .init(type: "string", enum: nil, description: "The app or website visible"),
+                "description": .init(type: "string", enum: nil, description: "Brief description of what's on screen"),
+                "message": .init(type: "string", enum: nil, description: "Coaching message")
+            ],
+            required: ["status", "app_or_site", "description"]
+        )
+
+        let responseText = try await geminiClient.sendRequest(
+            prompt: prompt,
+            imageData: jpegData,
+            systemPrompt: currentSystemPrompt,
+            responseSchema: responseSchema
+        )
+
+        return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
+    }
+
     // MARK: - Analysis
 
     private func formatHistory() -> String {
