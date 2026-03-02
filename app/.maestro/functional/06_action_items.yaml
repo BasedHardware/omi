@@ -1,0 +1,110 @@
+# Functional Test: Action Items Feature
+# Tests: View action items → Mark complete → Delete items
+#
+# Preconditions:
+#   - User is signed in
+#   - Action items exist (extracted from conversations)
+#
+# Note: Action items are AI-extracted tasks from conversations.
+
+appId: ${APP_ID}
+tags:
+  - functional
+  - action_items
+  - tasks
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load - check for main UI elements
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
+    timeout: 10000
+
+- takeScreenshot: actions_01_home
+
+# Navigate to action items / tasks section
+- tapOn:
+    text: ".*[Aa]ction.*|.*[Tt]ask.*|.*[Tt]o.*[Dd]o.*"
+    optional: true
+
+# Alternative: look for tasks icon
+- tapOn:
+    id: ".*action.*|.*task.*|.*todo.*|.*check.*"
+    optional: true
+
+# Some apps show action items in settings or a specific tab
+- runFlow:
+    when:
+      notVisible: ".*[Aa]ction.*[Ii]tem.*|.*[Tt]ask.*"
+    commands:
+      - tapOn:
+          text: ".*[Ss]etting.*|.*[Pp]rofile.*"
+          optional: true
+      - tapOn:
+          text: ".*[Aa]ction.*|.*[Tt]ask.*"
+          optional: true
+
+- takeScreenshot: actions_02_list
+
+# Verify action items section is accessible - check for action items or empty state
+- assertVisible:
+    text: ".*[Aa]ction.*|.*[Tt]ask.*|.*[Ee]mpty.*|.*[Nn]o.*[Tt]ask.*"
+    optional: false
+
+# Check if action items exist
+- runFlow:
+    when:
+      visible: ".*[Aa]ction.*|.*[Tt]ask.*|.*[Cc]heckbox.*"
+    commands:
+      - takeScreenshot: actions_03_has_items
+      # Mark an action item as complete
+      - tapOn:
+          id: ".*checkbox.*|.*complete.*"
+          index: 0
+          optional: true
+      - tapOn:
+          text: ".*[Cc]omplete.*|.*[Dd]one.*"
+          index: 0
+          optional: true
+      - takeScreenshot: actions_04_marked_complete
+
+# Handle empty state
+- runFlow:
+    when:
+      visible: ".*[Nn]o.*[Aa]ction.*|.*[Nn]o.*[Tt]ask.*|.*[Ee]mpty.*"
+    commands:
+      - takeScreenshot: actions_03_empty_state
+      - assertVisible:
+          text: ".*[Nn]o.*|.*[Ee]mpty.*"
+
+# Scroll through action items
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+- takeScreenshot: actions_05_scrolled
+
+# Test delete action item (if available)
+- runFlow:
+    when:
+      visible: ".*[Dd]elete.*|.*[Rr]emove.*|.*[Ss]wipe.*"
+    commands:
+      - swipe:
+          start: "80%,50%"
+          end: "20%,50%"
+          duration: 500
+      - takeScreenshot: actions_06_swipe_delete
+      - tapOn:
+          text: ".*[Dd]elete.*|.*[Rr]emove.*"
+          optional: true
+
+# Go back to home
+- back
+- back
+
+- takeScreenshot: actions_07_final
+
+- stopApp

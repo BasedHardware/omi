@@ -1,0 +1,142 @@
+# Functional Test: Apps (Plugins) Feature
+# Tests: Browse apps → Install app → Configure app → Uninstall app
+#
+# Preconditions:
+#   - User is signed in
+#   - Internet connection available
+#
+# Note: Tests the plugin/app marketplace functionality.
+
+appId: ${APP_ID}
+tags:
+  - functional
+  - apps
+  - plugins
+---
+
+# Launch app
+- launchApp
+
+# Wait for home to load - check for main UI elements
+- extendedWaitUntil:
+    visible:
+      text: ".*[Rr]ecord.*|.*[Hh]ome.*|.*[Cc]onversation.*|.*[Mm]emor.*"
+    timeout: 10000
+
+- takeScreenshot: apps_01_home
+
+# Navigate to apps/plugins section
+- tapOn:
+    text: ".*[Aa]pp.*|.*[Pp]lugin.*|.*[Ss]tore.*|.*[Mm]arketplace.*"
+    optional: true
+
+# Alternative: look for apps icon in navigation
+- tapOn:
+    id: ".*app.*|.*plugin.*|.*store.*|.*grid.*"
+    optional: true
+
+# Check settings if not found in main nav
+- runFlow:
+    when:
+      notVisible: ".*[Aa]pp.*|.*[Pp]lugin.*"
+    commands:
+      - tapOn:
+          text: ".*[Ss]etting.*|.*[Pp]rofile.*"
+          optional: true
+      - tapOn:
+          text: ".*[Aa]pp.*|.*[Pp]lugin.*|.*[Ii]ntegration.*"
+          optional: true
+
+- takeScreenshot: apps_02_store
+
+# Verify apps section is accessible - check for apps or store elements
+- assertVisible:
+    text: ".*[Aa]pp.*|.*[Pp]lugin.*|.*[Ss]tore.*|.*[Mm]arketplace.*|.*[Ii]ntegration.*"
+    optional: false
+
+# Browse available apps
+- scroll:
+    direction: DOWN
+    duration: 1500
+
+- takeScreenshot: apps_03_browse
+
+# Look for app categories
+- runFlow:
+    when:
+      visible: ".*[Cc]ategory.*|.*[Aa]ll.*|.*[Pp]roductivity.*|.*[Ii]ntegration.*"
+    commands:
+      - tapOn:
+          text: ".*[Cc]ategory.*|.*[Aa]ll.*"
+          index: 0
+          optional: true
+      - takeScreenshot: apps_04_categories
+
+# Find and tap on an app to view details
+- runFlow:
+    when:
+      visible: ".*[Ii]nstall.*|.*[Aa]dd.*|.*[Gg]et.*"
+    commands:
+      - tapOn:
+          text: ".*[Aa]pp.*"
+          index: 0
+          optional: true
+      - takeScreenshot: apps_05_app_detail
+
+# Test install flow
+- runFlow:
+    when:
+      visible: ".*[Ii]nstall.*|.*[Aa]dd.*|.*[Gg]et.*|.*[Ee]nable.*"
+    commands:
+      - tapOn:
+          text: ".*[Ii]nstall.*|.*[Aa]dd.*|.*[Gg]et.*|.*[Ee]nable.*"
+      # Wait for installation
+      - extendedWaitUntil:
+          visible:
+            text: ".*[Ii]nstalled.*|.*[Aa]dded.*|.*[Ee]nabled.*|.*[Cc]onfigure.*|.*[Rr]emove.*"
+          timeout: 10000
+      - takeScreenshot: apps_06_installed
+
+# Test app configuration (if available)
+- runFlow:
+    when:
+      visible: ".*[Cc]onfigure.*|.*[Ss]etting.*|.*[Oo]ption.*"
+    commands:
+      - tapOn:
+          text: ".*[Cc]onfigure.*|.*[Ss]etting.*"
+      - takeScreenshot: apps_07_configure
+      - back
+
+# Test uninstall/remove flow
+- runFlow:
+    when:
+      visible: ".*[Uu]ninstall.*|.*[Rr]emove.*|.*[Dd]isable.*"
+    commands:
+      - tapOn:
+          text: ".*[Uu]ninstall.*|.*[Rr]emove.*|.*[Dd]isable.*"
+      # Confirm if needed
+      - runFlow:
+          when:
+            visible: ".*[Cc]onfirm.*|.*[Yy]es.*"
+          commands:
+            - tapOn:
+                text: ".*[Cc]onfirm.*|.*[Yy]es.*|.*[Rr]emove.*"
+      - takeScreenshot: apps_08_uninstalled
+
+# View installed apps
+- runFlow:
+    when:
+      visible: ".*[Ii]nstalled.*|.*[Mm]y.*[Aa]pp.*|.*[Aa]ctive.*"
+    commands:
+      - tapOn:
+          text: ".*[Ii]nstalled.*|.*[Mm]y.*[Aa]pp.*|.*[Aa]ctive.*"
+      - takeScreenshot: apps_09_installed_list
+
+# Go back to home
+- back
+- back
+- back
+
+- takeScreenshot: apps_10_final
+
+- stopApp

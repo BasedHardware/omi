@@ -1,0 +1,14 @@
+# Maestro Configuration for Omi App Functional Tests
+# https://docs.maestro.dev
+
+flows:
+  - functional/**/*.yaml
+  - performance/**/*.yaml
+
+tags:
+  functional: "Functional tests for core app flows"
+  performance: "Performance and stability tests"
+
+env:
+  APP_ID: com.friend.ios
+  APP_ID_DEV: com.friend.ios.dev
