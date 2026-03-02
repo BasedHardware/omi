@@ -60,6 +60,11 @@ class NotificationUtil {
     _handleAppLinkOrDeepLink(receivedAction.payload!);
   }
 
+  /// Public entry point for programmatic deep-link navigation (e.g. FCM background/terminated tap)
+  static void handleNavigateTo(String route) {
+    _handleAppLinkOrDeepLink({'navigate_to': route});
+  }
+
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     // Always ensure that all plugins was initialized
     // TODO: for what?
