@@ -241,7 +241,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             except ValueError:
                 pass
 
-        conversations = conversations_db.get_conversations(
+        conversations = conversations_db.get_conversations_lite(
             user_id,
             limit,
             offset,
