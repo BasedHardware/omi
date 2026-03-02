@@ -1,8 +1,10 @@
 """
 Tests for get_conversations_lite() in database/conversations.py.
 Verifies that the lite function strips heavy fields and applies all filters.
+Imports the REAL production function via importlib to avoid Firestore init.
 """
 
+import importlib.util
 import os
 import sys
 import types
@@ -14,80 +16,70 @@ os.environ.setdefault(
 )
 
 
-def _stub_module(name: str) -> types.ModuleType:
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
+def _ensure_mock_module(name: str):
+    """Ensure a MagicMock module exists in sys.modules (supports 'from X import Y')."""
+    if name not in sys.modules:
+        mod = MagicMock()
+        mod.__path__ = []
+        mod.__name__ = name
+        mod.__loader__ = None
+        mod.__spec__ = None
+        mod.__package__ = name if '.' not in name else name.rsplit('.', 1)[0]
+        sys.modules[name] = mod
+    return sys.modules[name]
 
 
-# Stub database package and submodules to avoid Firestore init.
-if "database" not in sys.modules:
-    database_mod = _stub_module("database")
-    database_mod.__path__ = []
-else:
-    database_mod = sys.modules["database"]
-
-for submodule in ["_client", "redis_db", "auth", "users", "memories", "conversations", "apps"]:
-    full_name = f"database.{submodule}"
-    if full_name not in sys.modules:
-        mod = _stub_module(full_name)
-        setattr(database_mod, submodule, mod)
-
-# Set up mock Firestore client
-client_mod = sys.modules["database._client"]
+# Stub _client with mock db BEFORE database.conversations can import it
 mock_db = MagicMock()
-client_mod.db = mock_db
-client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
-# Set up conversations_collection constant
-conv_mod = sys.modules["database.conversations"]
-conv_mod.conversations_collection = "conversations"
+_ensure_mock_module("database")
+sys.modules["database"].__path__ = getattr(sys.modules["database"], '__path__', [])
 
-# Now we can import the real function — re-exec the module with our stubs
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
+client_stub = _ensure_mock_module("database._client")
+client_stub.db = mock_db
+client_stub.document_id_from_seed = MagicMock(return_value="doc-id")
+
+# Stub database.users and database.helpers
+_ensure_mock_module("database.users")
 
 
-def get_conversations_lite(
-    uid,
-    limit=100,
-    offset=0,
-    include_discarded=False,
-    statuses=None,
-    start_date=None,
-    end_date=None,
-    categories=None,
-    folder_id=None,
-    starred=None,
-):
-    """Mirror of database.conversations.get_conversations_lite for testing."""
-    if statuses is None:
-        statuses = []
-    conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
-    if not include_discarded:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
-    if len(statuses) > 0:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
-    if categories:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
-    if folder_id:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
-    if starred is not None:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
-    if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
-    if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
-    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
-    conversations = []
-    for doc in conversations_ref.stream():
-        data = doc.to_dict()
-        data['transcript_segments'] = []
-        data.pop('transcript_segments_compressed', None)
-        data['photos'] = []
-        conversations.append(data)
-    return conversations
+def _passthrough(*args, **kwargs):
+    """No-op decorator factory: @decorator(...) returns identity decorator."""
+    return lambda f: f
+
+
+# Stub helpers with real passthrough decorators (database.conversations uses them at import time)
+helpers_mod = types.ModuleType("database.helpers")
+helpers_mod.set_data_protection_level = _passthrough
+helpers_mod.prepare_for_write = _passthrough
+helpers_mod.prepare_for_read = _passthrough
+helpers_mod.with_photos = _passthrough
+sys.modules["database.helpers"] = helpers_mod
+
+# Stub utils modules (must be MagicMock to support 'from X import Y')
+for name in [
+    "utils",
+    "utils.other",
+    "utils.other.hume",
+    "utils.other.storage",
+    "utils.encryption",
+]:
+    _ensure_mock_module(name)
+
+# Load the REAL database/conversations.py using importlib
+_conv_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
+_conv_path = os.path.abspath(_conv_path)
+
+# Remove any stale entry so we get the real module
+if "database.conversations" in sys.modules:
+    del sys.modules["database.conversations"]
+
+spec = importlib.util.spec_from_file_location("database.conversations", _conv_path)
+conv_module = importlib.util.module_from_spec(spec)
+sys.modules["database.conversations"] = conv_module
+spec.loader.exec_module(conv_module)
+
+get_conversations_lite = conv_module.get_conversations_lite
 
 
 def _make_fake_doc(data: dict):
