@@ -160,6 +160,14 @@ struct OnboardingChatView: View {
 
                         // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            // Show permission GIF when quick replies include a "Grant" button
+                            if let grantOption = quickReplyOptions.first(where: { isGrantButton($0) }),
+                               let permType = permissionType(from: grantOption) {
+                                OnboardingPermissionImage(permissionType: permType)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+                            }
+
                             HStack(spacing: 8) {
                                 ForEach(quickReplyOptions, id: \.self) { option in
                                     Button(action: {
@@ -188,6 +196,45 @@ struct OnboardingChatView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.leading, 44) // align with message text
                             .id("quick-replies")
+                        }
+
+                        // Retry "Open System Settings" button — shown when a permission grant
+                        // is pending but System Settings didn't open (or user closed it)
+                        if let pending = pendingPermissionType, quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            let isStillPending: Bool = {
+                                switch pending {
+                                case "screen_recording": return !appState.hasScreenRecordingPermission
+                                case "microphone": return !appState.hasMicrophonePermission
+                                case "notifications": return !appState.hasNotificationPermission
+                                case "accessibility": return !appState.hasAccessibilityPermission
+                                case "automation": return !appState.hasAutomationPermission
+                                default: return false
+                                }
+                            }()
+                            if isStillPending {
+                                OnboardingPermissionImage(permissionType: pending)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+
+                                Button(action: {
+                                    openSettingsForPermission(pending)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "gear")
+                                            .font(.system(size: 12))
+                                        Text("Open System Settings")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(20)
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 44)
+                            }
                         }
 
                         // "Continue to App" button — shown after AI calls complete_onboarding
@@ -325,6 +372,29 @@ struct OnboardingChatView: View {
                 .frame(width: 32, height: 32)
                 .background(OmiColors.backgroundTertiary)
                 .clipShape(Circle())
+        }
+    }
+
+    /// Open System Settings to the correct pane for a permission type
+    private func openSettingsForPermission(_ type: String) {
+        let urlString: String? = {
+            switch type {
+            case "screen_recording":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            case "microphone":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            case "accessibility":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            case "automation":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            case "notifications":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"
+            default:
+                return nil
+            }
+        }()
+        if let urlString, let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
         }
     }
 

@@ -22,6 +22,7 @@ async fn record_llm_usage(
             req.cache_write_tokens,
             req.total_tokens,
             req.cost_usd,
+            &req.account,
         )
         .await
     {

@@ -3,62 +3,60 @@ import SwiftUI
 
 // MARK: - Test Result Model
 
-struct AdviceTestResult: Identifiable {
+struct FocusTestResult: Identifiable {
     let id = UUID()
     let index: Int
     let timestamp: Date
     let appName: String
     let windowTitle: String?
-    let result: AdviceExtractionResult?
+    let result: ScreenAnalysis?
     let error: String?
     let duration: TimeInterval
-    let sqlQueryCount: Int
 }
 
 // MARK: - SwiftUI View
 
-struct AdviceTestRunnerView: View {
+struct FocusTestRunnerView: View {
     @State private var periodFrom: Date = Calendar.current.date(byAdding: .hour, value: -24, to: Date()) ?? Date()
     @State private var periodTo: Date = Date()
     @State private var isRunning = false
-    @State private var results: [AdviceTestResult] = []
+    @State private var results: [FocusTestResult] = []
     @State private var progress: Double = 0
     @State private var elapsedTime: TimeInterval = 0
     @State private var statusMessage = "Ready"
     @State private var cancellationRequested = false
-    @State private var totalScreenshots = 0
+    @State private var totalContextSwitches = 0
 
     var onClose: (() -> Void)?
 
-    private var adviceFound: Int {
-        results.filter { $0.result?.hasAdvice == true }.count
+    private var focusedCount: Int {
+        results.filter { $0.result?.status == .focused }.count
+    }
+
+    private var distractedCount: Int {
+        results.filter { $0.result?.status == .distracted }.count
     }
 
     private var errorsCount: Int {
         results.filter { $0.error != nil }.count
     }
 
-    private var totalSqlQueries: Int {
-        results.reduce(0) { $0 + $1.sqlQueryCount }
+    private var distractionPercent: Int {
+        let decided = focusedCount + distractedCount
+        guard decided > 0 else { return 0 }
+        return Int(round(Double(distractedCount) / Double(decided) * 100))
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             header
                 .padding(20)
-
             Divider()
-
-            // Column headers
             columnHeaders
                 .padding(.horizontal, 20)
                 .padding(.vertical, 6)
                 .background(Color(nsColor: .windowBackgroundColor))
-
             Divider()
-
-            // Results
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 1) {
@@ -77,10 +75,7 @@ struct AdviceTestRunnerView: View {
                     }
                 }
             }
-
             Divider()
-
-            // Footer
             footer
                 .padding(16)
         }
@@ -94,11 +89,11 @@ struct AdviceTestRunnerView: View {
         VStack(spacing: 16) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Advice Extraction Test Runner")
+                    Text("Focus Analysis Test Runner")
                         .scaledFont(size: 16, weight: .semibold)
                         .foregroundColor(.primary)
 
-                    Text("Replay screenshots through the agentic advice pipeline (activity summary + SQL investigation + advice)")
+                    Text("Replay departing frames from context switches through the focus analysis pipeline")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
                 }
@@ -114,7 +109,6 @@ struct AdviceTestRunnerView: View {
             }
 
             HStack(spacing: 16) {
-                // Time range pickers
                 HStack(spacing: 8) {
                     Text("From:")
                         .scaledFont(size: 13)
@@ -139,7 +133,6 @@ struct AdviceTestRunnerView: View {
 
                 Spacer()
 
-                // Run / Stop button
                 if isRunning {
                     Button(action: { cancellationRequested = true }) {
                         HStack(spacing: 4) {
@@ -166,7 +159,6 @@ struct AdviceTestRunnerView: View {
                 }
             }
 
-            // Progress bar
             if isRunning {
                 VStack(spacing: 4) {
                     ProgressView(value: progress)
@@ -192,14 +184,12 @@ struct AdviceTestRunnerView: View {
                 .frame(width: 100, alignment: .leading)
             Text("Window")
                 .frame(width: 200, alignment: .leading)
-            Text("Decision")
+            Text("Status")
                 .frame(width: 100, alignment: .leading)
-            Text("SQL")
-                .frame(width: 40, alignment: .leading)
-            Text("Details")
+            Text("Description")
+                .frame(width: 300, alignment: .leading)
+            Text("Message")
             Spacer()
-            Text("Conf")
-                .frame(width: 40, alignment: .trailing)
             Text("Time")
                 .frame(width: 50, alignment: .trailing)
         }
@@ -209,107 +199,65 @@ struct AdviceTestRunnerView: View {
 
     // MARK: - Result Row
 
-    private func resultRow(_ testResult: AdviceTestResult) -> some View {
+    private func resultRow(_ testResult: FocusTestResult) -> some View {
         HStack(spacing: 16) {
-            // Index
             Text("\(testResult.index)")
                 .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .trailing)
 
-            // Timestamp
             Text(testResult.timestamp, format: .dateTime.hour().minute().second())
                 .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 90, alignment: .leading)
 
-            // App name
             Text(testResult.appName)
                 .scaledFont(size: 12)
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
                 .lineLimit(1)
 
-            // Window title
             Text(testResult.windowTitle ?? "—")
                 .scaledFont(size: 12)
                 .foregroundColor(.secondary)
                 .frame(width: 200, alignment: .leading)
                 .lineLimit(1)
 
-            // Decision column
-            decisionBadge(for: testResult)
+            statusBadge(for: testResult)
                 .frame(width: 100, alignment: .leading)
 
-            // SQL query count indicator
-            if testResult.sqlQueryCount > 0 {
-                HStack(spacing: 2) {
-                    Image(systemName: "cylinder")
-                        .scaledFont(size: 9)
-                    Text("×\(testResult.sqlQueryCount)")
-                        .scaledFont(size: 11, design: .monospaced)
-                }
-                .foregroundColor(.secondary)
-                .frame(width: 40, alignment: .leading)
-            } else {
-                Text("")
-                    .frame(width: 40)
-            }
-
-            // Advice text or context summary
+            // Description
             if let error = testResult.error {
                 Text(error)
                     .scaledFont(size: 12)
                     .foregroundColor(.orange)
+                    .frame(width: 300, alignment: .leading)
                     .lineLimit(2)
             } else if let result = testResult.result {
-                if result.hasAdvice, let advice = result.advice {
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let headline = advice.headline {
-                            Text(headline)
-                                .scaledFont(size: 12, weight: .medium)
-                                .foregroundColor(.primary)
-                                .lineLimit(1)
-                        }
-                        Text(advice.advice)
-                            .scaledFont(size: 11)
-                            .foregroundColor(.primary.opacity(0.8))
-                            .lineLimit(2)
-                        HStack(spacing: 8) {
-                            Text(advice.category.rawValue)
-                                .scaledFont(size: 10, weight: .medium)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(categoryColor(advice.category))
-                                .cornerRadius(3)
-                            Text(advice.sourceApp)
-                                .scaledFont(size: 10)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } else {
-                    Text(result.contextSummary)
-                        .scaledFont(size: 12)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                }
+                Text(result.description)
+                    .scaledFont(size: 12)
+                    .foregroundColor(.secondary)
+                    .frame(width: 300, alignment: .leading)
+                    .lineLimit(2)
+            } else {
+                Text("")
+                    .frame(width: 300)
+            }
+
+            // Message
+            if let result = testResult.result, let message = result.message {
+                Text(message)
+                    .scaledFont(size: 12)
+                    .foregroundColor(.primary.opacity(0.8))
+                    .lineLimit(2)
+            } else if testResult.error == nil {
+                Text("—")
+                    .scaledFont(size: 12)
+                    .foregroundColor(.secondary.opacity(0.5))
             }
 
             Spacer()
 
-            // Confidence (only for advice)
-            if let result = testResult.result, result.hasAdvice, let advice = result.advice {
-                Text("\(Int(advice.confidence * 100))%")
-                    .scaledFont(size: 12, weight: .medium, design: .monospaced)
-                    .foregroundColor(confidenceColor(advice.confidence))
-                    .frame(width: 40, alignment: .trailing)
-            } else {
-                Text("")
-                    .frame(width: 40)
-            }
-
-            // Duration
             Text(String(format: "%.1fs", testResult.duration))
                 .scaledFont(size: 12, design: .monospaced)
                 .foregroundColor(.secondary.opacity(0.7))
@@ -317,10 +265,10 @@ struct AdviceTestRunnerView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
-        .background(testResult.result?.hasAdvice == true ? Color.green.opacity(0.05) : Color.clear)
+        .background(rowBackground(for: testResult))
     }
 
-    private func decisionBadge(for testResult: AdviceTestResult) -> some View {
+    private func statusBadge(for testResult: FocusTestResult) -> some View {
         Group {
             if testResult.error != nil {
                 HStack(spacing: 4) {
@@ -331,41 +279,34 @@ struct AdviceTestRunnerView: View {
                 }
                 .foregroundColor(.orange)
             } else if let result = testResult.result {
-                if result.hasAdvice {
+                switch result.status {
+                case .focused:
                     HStack(spacing: 4) {
-                        Image(systemName: "lightbulb.fill")
+                        Image(systemName: "checkmark.circle.fill")
                             .scaledFont(size: 10)
-                        Text("Advice")
+                        Text("Focused")
                             .scaledFont(size: 11, weight: .medium)
                     }
                     .foregroundColor(.green)
-                } else {
+                case .distracted:
                     HStack(spacing: 4) {
-                        Image(systemName: "minus.circle")
+                        Image(systemName: "exclamationmark.circle.fill")
                             .scaledFont(size: 10)
-                        Text("No Advice")
+                        Text("Distracted")
                             .scaledFont(size: 11, weight: .medium)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.red)
                 }
             }
         }
     }
 
-    private func categoryColor(_ category: AdviceCategory) -> Color {
-        switch category {
-        case .productivity: return .blue
-        case .communication: return .purple
-        case .learning: return .orange
-        case .health: return .green
-        case .other: return .gray
+    private func rowBackground(for testResult: FocusTestResult) -> Color {
+        guard let result = testResult.result else { return .clear }
+        switch result.status {
+        case .focused: return Color.green.opacity(0.05)
+        case .distracted: return Color.red.opacity(0.05)
         }
-    }
-
-    private func confidenceColor(_ confidence: Double) -> Color {
-        if confidence >= 0.9 { return .green }
-        if confidence >= 0.75 { return .yellow }
-        return .orange
     }
 
     // MARK: - Footer
@@ -374,17 +315,21 @@ struct AdviceTestRunnerView: View {
         HStack {
             if !results.isEmpty {
                 HStack(spacing: 16) {
-                    Label("\(results.count)/\(totalScreenshots)", systemImage: "photo")
+                    Label("\(results.count)/\(totalContextSwitches)", systemImage: "arrow.triangle.swap")
                         .scaledFont(size: 12)
                         .foregroundColor(.secondary)
 
-                    Label("\(adviceFound) advice", systemImage: "lightbulb")
+                    Label("\(focusedCount) focused", systemImage: "checkmark.circle")
                         .scaledFont(size: 12)
-                        .foregroundColor(adviceFound > 0 ? .green : .secondary)
+                        .foregroundColor(focusedCount > 0 ? .green : .secondary)
 
-                    Label("\(totalSqlQueries) SQL queries", systemImage: "cylinder")
+                    Label("\(distractedCount) distracted", systemImage: "exclamationmark.circle")
                         .scaledFont(size: 12)
-                        .foregroundColor(totalSqlQueries > 0 ? .blue : .secondary)
+                        .foregroundColor(distractedCount > 0 ? .red : .secondary)
+
+                    Label("\(distractionPercent)%", systemImage: "chart.pie")
+                        .scaledFont(size: 12)
+                        .foregroundColor(.secondary)
 
                     if errorsCount > 0 {
                         Label("\(errorsCount) errors", systemImage: "exclamationmark.triangle")
@@ -418,48 +363,40 @@ struct AdviceTestRunnerView: View {
     // MARK: - Test Execution
 
     private func runTest() {
-        log("AdviceTestRunner: runTest() called")
+        log("FocusTestRunner: runTest() called")
         isRunning = true
         results = []
         progress = 0
         elapsedTime = 0
-        totalScreenshots = 0
+        totalContextSwitches = 0
         cancellationRequested = false
-        statusMessage = "Loading screenshots..."
+        statusMessage = "Finding context switches..."
 
         Task {
             let startTime = Date()
             let periodStart = periodFrom
             let periodEnd = periodTo
 
-            // Try coordinator first, fall back to creating a fresh instance
-            let coordAssistant = await MainActor.run(body: {
-                AssistantCoordinator.shared.assistant(withIdentifier: "advice")
+            // Get FocusAssistant from coordinator
+            let assistant = await MainActor.run(body: {
+                AssistantCoordinator.shared.assistant(withIdentifier: "focus")
             })
-            let adviceAssistant: AdviceAssistant
-            if let existing = coordAssistant as? AdviceAssistant {
-                adviceAssistant = existing
-                log("AdviceTestRunner: Using existing AdviceAssistant from coordinator")
-            } else {
-                do {
-                    adviceAssistant = try AdviceAssistant()
-                    log("AdviceTestRunner: Created fresh AdviceAssistant instance")
-                } catch {
-                    log("AdviceTestRunner: ERROR - Failed to create AdviceAssistant: \(error)")
-                    await MainActor.run {
-                        statusMessage = "Failed to create Advice Assistant: \(error.localizedDescription)"
-                        isRunning = false
-                    }
-                    return
+
+            guard let focusAssistant = assistant as? FocusAssistant else {
+                log("FocusTestRunner: ERROR - Focus Assistant not available or wrong type")
+                await MainActor.run {
+                    statusMessage = "Focus Assistant not available"
+                    isRunning = false
                 }
+                return
             }
 
             // Get excluded apps
             let excludedApps = await MainActor.run {
-                AdviceAssistantSettings.shared.excludedApps
+                FocusAssistantSettings.shared.excludedApps
             }
 
-            // Fetch all screenshots from selected range (excluding excluded apps)
+            // Fetch all screenshots from selected range
             let allScreenshots: [Screenshot]
             do {
                 allScreenshots = try await RewindDatabase.shared.getScreenshots(
@@ -468,7 +405,7 @@ struct AdviceTestRunnerView: View {
                     limit: 100_000
                 ).reversed() // getScreenshots returns desc, we want chronological
             } catch {
-                log("AdviceTestRunner: ERROR - Failed to load screenshots: \(error)")
+                log("FocusTestRunner: ERROR - Failed to load screenshots: \(error)")
                 await MainActor.run {
                     statusMessage = "Failed to load screenshots: \(error.localizedDescription)"
                     isRunning = false
@@ -476,41 +413,95 @@ struct AdviceTestRunnerView: View {
                 return
             }
 
-            // Filter out excluded apps and apps with no name
+            // Filter out excluded apps and system apps
             let filtered = allScreenshots.filter { screenshot in
                 !screenshot.appName.isEmpty
                     && !TaskAssistantSettings.builtInExcludedApps.contains(screenshot.appName)
                     && !excludedApps.contains(screenshot.appName)
             }
 
-            guard !filtered.isEmpty else {
+            guard filtered.count >= 2 else {
                 await MainActor.run {
-                    statusMessage = "No screenshots found in selected range (after excluding apps)"
+                    statusMessage = "Not enough screenshots in selected range to detect context switches"
                     isRunning = false
                 }
                 return
             }
 
-            // Sample evenly: pick up to 50 screenshots spread across the range
-            let maxSamples = 50
-            let sampled: [Screenshot]
-            if filtered.count <= maxSamples {
-                sampled = filtered
-            } else {
-                let step = Double(filtered.count) / Double(maxSamples)
-                sampled = (0..<maxSamples).map { i in
-                    filtered[min(Int(Double(i) * step), filtered.count - 1)]
+            // Walk chronologically and find departing frames at context switches
+            var departingFrames: [Screenshot] = []
+            for i in 0..<(filtered.count - 1) {
+                let current = filtered[i]
+                let next = filtered[i + 1]
+
+                if ContextDetection.didContextChange(
+                    fromApp: current.appName,
+                    fromWindowTitle: current.windowTitle,
+                    toApp: next.appName,
+                    toWindowTitle: next.windowTitle
+                ) {
+                    departingFrames.append(current)
                 }
             }
 
-            await MainActor.run {
-                totalScreenshots = sampled.count
-                statusMessage = "Testing \(sampled.count) screenshots (sampled from \(filtered.count))..."
+            guard !departingFrames.isEmpty else {
+                await MainActor.run {
+                    statusMessage = "No context switches found in \(filtered.count) screenshots"
+                    isRunning = false
+                }
+                return
             }
 
-            // Process each sampled screenshot
+            await MainActor.run {
+                totalContextSwitches = departingFrames.count
+                statusMessage = "Found \(departingFrames.count) context switches, testing all..."
+            }
+
+            let sampled = departingFrames
+
+            // Reset test history for a clean run
+            await focusAssistant.resetTestHistory()
+
+            // Simulate production cooldown behavior:
+            // - After "focused": skip frames with same app+window (same context)
+            // - After "distracted": skip ALL frames on same app until app changes
+            //   (simulates production cooldown — once distracted, don't re-analyze until user leaves the app)
+            var lastTestStatus: FocusStatus?
+            var lastTestApp: String?
+            var lastTestWindow: String?
+            var skippedCount = 0
+
+            // Process each departing frame
             for (i, screenshot) in sampled.enumerated() {
                 if cancellationRequested { break }
+
+                if let status = lastTestStatus {
+                    if status == .distracted {
+                        // After distraction: skip until the APP changes (cooldown simulation)
+                        if screenshot.appName == lastTestApp {
+                            skippedCount += 1
+                            await MainActor.run {
+                                progress = Double(i + 1) / Double(sampled.count)
+                            }
+                            continue
+                        }
+                    } else {
+                        // After focused: skip if same app+window (same context)
+                        let contextChanged = ContextDetection.didContextChange(
+                            fromApp: lastTestApp,
+                            fromWindowTitle: lastTestWindow,
+                            toApp: screenshot.appName,
+                            toWindowTitle: screenshot.windowTitle
+                        )
+                        if !contextChanged {
+                            skippedCount += 1
+                            await MainActor.run {
+                                progress = Double(i + 1) / Double(sampled.count)
+                            }
+                            continue
+                        }
+                    }
+                }
 
                 await MainActor.run {
                     statusMessage = "Processing \(i + 1)/\(sampled.count) — \(screenshot.appName)..."
@@ -520,42 +511,44 @@ struct AdviceTestRunnerView: View {
                     let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
 
                     let analyzeStart = Date()
-                    let (result, sqlCount) = try await adviceAssistant.testAnalyze(
-                        jpegData: jpegData,
-                        appName: screenshot.appName,
-                        windowTitle: screenshot.windowTitle,
-                        screenshotTime: screenshot.timestamp
-                    )
+                    let result = try await focusAssistant.testAnalyzeWithHistory(jpegData: jpegData, appName: screenshot.appName)
                     let duration = Date().timeIntervalSince(analyzeStart)
 
+                    // Update tracking state
+                    lastTestStatus = result?.status
+                    lastTestApp = screenshot.appName
+                    lastTestWindow = screenshot.windowTitle
+
                     await MainActor.run {
-                        results.append(AdviceTestResult(
+                        results.append(FocusTestResult(
                             index: i + 1,
                             timestamp: screenshot.timestamp,
                             appName: screenshot.appName,
                             windowTitle: screenshot.windowTitle,
                             result: result,
                             error: nil,
-                            duration: duration,
-                            sqlQueryCount: sqlCount
+                            duration: duration
                         ))
                         progress = Double(i + 1) / Double(sampled.count)
                     }
                 } catch {
                     await MainActor.run {
-                        results.append(AdviceTestResult(
+                        results.append(FocusTestResult(
                             index: i + 1,
                             timestamp: screenshot.timestamp,
                             appName: screenshot.appName,
                             windowTitle: screenshot.windowTitle,
                             result: nil,
                             error: error.localizedDescription,
-                            duration: 0,
-                            sqlQueryCount: 0
+                            duration: 0
                         ))
                         progress = Double(i + 1) / Double(sampled.count)
                     }
                 }
+            }
+
+            if skippedCount > 0 {
+                log("FocusTestRunner: Skipped \(skippedCount) same-context frames")
             }
 
             let totalElapsed = Date().timeIntervalSince(startTime)
@@ -570,8 +563,8 @@ struct AdviceTestRunnerView: View {
 
 // MARK: - NSWindow Subclass
 
-class AdviceTestRunnerWindow: NSWindow {
-    private static var sharedWindow: AdviceTestRunnerWindow?
+class FocusTestRunnerWindow: NSWindow {
+    private static var sharedWindow: FocusTestRunnerWindow?
 
     static func show() {
         if let existingWindow = sharedWindow {
@@ -580,7 +573,7 @@ class AdviceTestRunnerWindow: NSWindow {
             return
         }
 
-        let window = AdviceTestRunnerWindow()
+        let window = FocusTestRunnerWindow()
         sharedWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -601,13 +594,13 @@ class AdviceTestRunnerWindow: NSWindow {
             defer: false
         )
 
-        self.title = "Advice Extraction Test Runner"
+        self.title = "Focus Analysis Test Runner"
         self.isReleasedWhenClosed = false
         self.delegate = self
         self.minSize = NSSize(width: 900, height: 600)
         self.center()
 
-        let runnerView = AdviceTestRunnerView(onClose: { [weak self] in
+        let runnerView = FocusTestRunnerView(onClose: { [weak self] in
             self?.close()
         })
 
@@ -618,148 +611,181 @@ class AdviceTestRunnerWindow: NSWindow {
 
 // MARK: - NSWindowDelegate
 
-extension AdviceTestRunnerWindow: NSWindowDelegate {
+extension FocusTestRunnerWindow: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        AdviceTestRunnerWindow.sharedWindow = nil
+        FocusTestRunnerWindow.sharedWindow = nil
     }
 }
 
 // MARK: - CLI Test Runner (headless, logs to omi-dev.log)
 
-enum AdviceTestRunner {
+enum FocusTestRunner {
 
-    /// Run the advice test headlessly — triggered by distributed notification from CLI.
-    /// Simulates production cadence: divides the time range into extraction-interval
-    /// windows (from settings) and runs one analysis per window, just like production.
-    /// Results are logged to the app log file.
+    /// Run the focus test headlessly — triggered by distributed notification from CLI.
+    /// Finds context switches in the time range, analyzes departing frames, and logs results.
     static func runCLITest(lookbackHours: Double, maxScreenshots: Int) async {
         let periodEnd = Date()
         let periodStart = periodEnd.addingTimeInterval(-lookbackHours * 3600)
-        let interval = await MainActor.run { AdviceAssistantSettings.shared.extractionInterval }
 
-        log("AdviceTestCLI: Starting test — range \(periodStart) to \(periodEnd), interval \(Int(interval))s, max \(maxScreenshots) windows")
+        log("FocusTestCLI: Starting test — range \(periodStart) to \(periodEnd), max \(maxScreenshots) context switches")
 
-        // Get or create AdviceAssistant
+        // Get or create FocusAssistant
         let coordAssistant = await MainActor.run {
-            AssistantCoordinator.shared.assistant(withIdentifier: "advice")
+            AssistantCoordinator.shared.assistant(withIdentifier: "focus")
         }
-        let adviceAssistant: AdviceAssistant
-        if let existing = coordAssistant as? AdviceAssistant {
-            adviceAssistant = existing
+        let focusAssistant: FocusAssistant
+        if let existing = coordAssistant as? FocusAssistant {
+            focusAssistant = existing
         } else {
             do {
-                adviceAssistant = try AdviceAssistant()
+                focusAssistant = try FocusAssistant()
             } catch {
-                log("AdviceTestCLI: ERROR — Failed to create AdviceAssistant: \(error)")
+                log("FocusTestCLI: ERROR — Failed to create FocusAssistant: \(error)")
                 return
             }
         }
 
         // Get excluded apps
         let excludedApps = await MainActor.run {
-            AdviceAssistantSettings.shared.excludedApps
+            FocusAssistantSettings.shared.excludedApps
         }
 
-        // Ensure storage is initialized for the current user
+        // Ensure storage is initialized
         do {
             try await RewindStorage.shared.initialize()
         } catch {
-            log("AdviceTestCLI: WARNING — Storage init failed: \(error)")
+            log("FocusTestCLI: WARNING — Storage init failed: \(error)")
         }
 
-        // Build analysis windows (each covers one extraction interval)
-        // Walk backwards from periodEnd in interval-sized steps
-        var windows: [(windowEnd: Date, windowStart: Date)] = []
-        var cursor = periodEnd
-        while cursor > periodStart {
-            let windowStart = max(cursor.addingTimeInterval(-interval), periodStart)
-            windows.append((windowEnd: cursor, windowStart: windowStart))
-            cursor = windowStart
+        // Fetch all screenshots from range
+        let allScreenshots: [Screenshot]
+        do {
+            allScreenshots = try await RewindDatabase.shared.getScreenshots(
+                from: periodStart,
+                to: periodEnd,
+                limit: 100_000
+            ).reversed()
+        } catch {
+            log("FocusTestCLI: ERROR — Failed to load screenshots: \(error)")
+            return
         }
-        windows.reverse() // Chronological order
 
-        // Sample evenly if too many windows
-        let sampled: [(windowEnd: Date, windowStart: Date)]
-        if windows.count <= maxScreenshots {
-            sampled = windows
-        } else {
-            let step = Double(windows.count) / Double(maxScreenshots)
-            sampled = (0..<maxScreenshots).map { i in
-                windows[min(Int(Double(i) * step), windows.count - 1)]
+        // Filter excluded apps
+        let filtered = allScreenshots.filter { screenshot in
+            !screenshot.appName.isEmpty
+                && !TaskAssistantSettings.builtInExcludedApps.contains(screenshot.appName)
+                && !excludedApps.contains(screenshot.appName)
+        }
+
+        guard filtered.count >= 2 else {
+            log("FocusTestCLI: ERROR — Not enough screenshots (\(filtered.count) after filtering)")
+            return
+        }
+
+        // Find context switches
+        var departingFrames: [Screenshot] = []
+        for i in 0..<(filtered.count - 1) {
+            let current = filtered[i]
+            let next = filtered[i + 1]
+            if ContextDetection.didContextChange(
+                fromApp: current.appName,
+                fromWindowTitle: current.windowTitle,
+                toApp: next.appName,
+                toWindowTitle: next.windowTitle
+            ) {
+                departingFrames.append(current)
             }
         }
 
-        // For each window, find the latest non-excluded screenshot to get app context
-        log("AdviceTestCLI: Processing \(sampled.count) windows (from \(windows.count) total)")
+        guard !departingFrames.isEmpty else {
+            log("FocusTestCLI: No context switches found in \(filtered.count) screenshots")
+            return
+        }
+
+        log("FocusTestCLI: Processing \(departingFrames.count) context switches")
+
+        let sampled = departingFrames
+
+        // Reset test history for a clean run
+        await focusAssistant.resetTestHistory()
 
         let timeFormatter = DateFormatter()
         timeFormatter.dateFormat = "HH:mm:ss"
-        var adviceCount = 0
+        var focusedCount = 0
+        var distractedCount = 0
+        var skippedCount = 0
         var errorCount = 0
-        var nilCount = 0
-        var noAdviceCount = 0
-        var totalSql = 0
         let testStart = Date()
 
-        for (i, window) in sampled.enumerated() {
+        // Track last status + app to simulate production cooldown behavior
+        var lastTestStatus: FocusStatus?
+        var lastTestApp: String?
+        var lastTestWindow: String?
+
+        for (i, screenshot) in sampled.enumerated() {
             let label = "[\(i + 1)/\(sampled.count)]"
+            let time = timeFormatter.string(from: screenshot.timestamp)
+            let windowTitle = screenshot.windowTitle ?? "(no title)"
 
-            // Find the latest screenshot in this window for app context
-            let screenshots: [Screenshot]
-            do {
-                screenshots = try await RewindDatabase.shared.getScreenshots(
-                    from: window.windowStart,
-                    to: window.windowEnd,
-                    limit: 10
-                )
-            } catch {
-                errorCount += 1
-                log("AdviceTestCLI: \(label) ERROR fetching screenshots: \(error.localizedDescription)")
-                continue
-            }
-
-            // Pick the latest non-excluded screenshot
-            guard let anchor = screenshots.first(where: { ss in
-                !ss.appName.isEmpty
-                    && !TaskAssistantSettings.builtInExcludedApps.contains(ss.appName)
-                    && !excludedApps.contains(ss.appName)
-            }) else {
-                log("AdviceTestCLI: \(label) \(timeFormatter.string(from: window.windowEnd)) — skipped (no non-excluded screenshots)")
-                continue
-            }
-
-            do {
-                let analyzeStart = Date()
-                let (result, sqlCount) = try await adviceAssistant.testAnalyze(
-                    jpegData: Data(),
-                    appName: anchor.appName,
-                    windowTitle: anchor.windowTitle,
-                    screenshotTime: window.windowEnd
-                )
-                let duration = Date().timeIntervalSince(analyzeStart)
-                totalSql += sqlCount
-
-                let time = timeFormatter.string(from: window.windowEnd)
-                let windowTitle = anchor.windowTitle ?? "(no title)"
-
-                if let result = result, result.hasAdvice, let advice = result.advice {
-                    adviceCount += 1
-                    let conf = Int(advice.confidence * 100)
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → ADVICE [\(conf)%] \(advice.headline ?? "") — \(advice.advice) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
-                } else if let result = result, !result.hasAdvice {
-                    noAdviceCount += 1
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → no_advice (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+            // Simulate production cooldown:
+            // - After distracted: skip until app changes
+            // - After focused: skip if same app+window
+            if let status = lastTestStatus {
+                if status == .distracted {
+                    if screenshot.appName == lastTestApp {
+                        skippedCount += 1
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → SKIPPED (cooldown)")
+                        continue
+                    }
                 } else {
-                    nilCount += 1
-                    log("AdviceTestCLI: \(label) \(time) \(anchor.appName) | \"\(windowTitle)\" → nil (loop exhausted) (sql=\(sqlCount), \(String(format: "%.1fs", duration)))")
+                    let contextChanged = ContextDetection.didContextChange(
+                        fromApp: lastTestApp,
+                        fromWindowTitle: lastTestWindow,
+                        toApp: screenshot.appName,
+                        toWindowTitle: screenshot.windowTitle
+                    )
+                    if !contextChanged {
+                        skippedCount += 1
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → SKIPPED (same context)")
+                        continue
+                    }
+                }
+            }
+
+            do {
+                let jpegData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+
+                let analyzeStart = Date()
+                let result = try await focusAssistant.testAnalyzeWithHistory(jpegData: jpegData, appName: screenshot.appName)
+                let duration = Date().timeIntervalSince(analyzeStart)
+
+                if let result = result {
+                    lastTestStatus = result.status
+                    lastTestApp = screenshot.appName
+                    lastTestWindow = screenshot.windowTitle
+
+                    switch result.status {
+                    case .focused:
+                        focusedCount += 1
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → FOCUSED: \(result.description) (\(String(format: "%.1fs", duration)))")
+                    case .distracted:
+                        distractedCount += 1
+                        let msg = result.message.map { " msg=\"\($0)\"" } ?? ""
+                        log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → DISTRACTED: \(result.description)\(msg) (\(String(format: "%.1fs", duration)))")
+                    }
+                } else {
+                    errorCount += 1
+                    log("FocusTestCLI: \(label) \(time) \(screenshot.appName) | \"\(windowTitle)\" → nil (\(String(format: "%.1fs", duration)))")
                 }
             } catch {
                 errorCount += 1
-                log("AdviceTestCLI: \(label) \(anchor.appName) → ERROR: \(error.localizedDescription)")
+                log("FocusTestCLI: \(label) \(time) \(screenshot.appName) → ERROR: \(error.localizedDescription)")
             }
         }
 
         let totalTime = Date().timeIntervalSince(testStart)
-        log("AdviceTestCLI: DONE — \(sampled.count) windows, \(adviceCount) advice, \(noAdviceCount) no_advice, \(nilCount) exhausted, \(errorCount) errors, \(totalSql) SQL queries, \(String(format: "%.1fs", totalTime)) total")
+        let analyzed = focusedCount + distractedCount
+        let distractionPct = analyzed > 0 ? Int(round(Double(distractedCount) / Double(analyzed) * 100)) : 0
+        log("FocusTestCLI: DONE — \(sampled.count) switches (\(skippedCount) skipped, \(analyzed) analyzed), \(focusedCount) focused, \(distractedCount) distracted (\(distractionPct)%), \(errorCount) errors, \(String(format: "%.1fs", totalTime)) total")
     }
 }

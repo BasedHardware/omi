@@ -311,6 +311,7 @@ impl FirestoreService {
         cache_write: i64,
         total: i64,
         cost: f64,
+        account: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let date_key = Utc::now().format("%Y-%m-%d").to_string();
         let doc_path = format!(
@@ -321,6 +322,9 @@ impl FirestoreService {
             "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
             self.project_id
         );
+        // Write to account-specific prefix (e.g. "desktop_chat_omi" or "desktop_chat_personal")
+        // Also continue writing to "desktop_chat" for backward compat with existing queries
+        let acct_prefix = format!("desktop_chat_{}", account);
         let body = json!({
             "writes": [{
                 "transform": {
@@ -333,6 +337,13 @@ impl FirestoreService {
                         { "fieldPath": "desktop_chat.total_tokens",       "increment": { "integerValue": total.to_string() } },
                         { "fieldPath": "desktop_chat.cost_usd",           "increment": { "doubleValue": cost } },
                         { "fieldPath": "desktop_chat.call_count",         "increment": { "integerValue": "1" } },
+                        { "fieldPath": format!("{}.input_tokens", acct_prefix),       "increment": { "integerValue": input.to_string() } },
+                        { "fieldPath": format!("{}.output_tokens", acct_prefix),      "increment": { "integerValue": output.to_string() } },
+                        { "fieldPath": format!("{}.cache_read_tokens", acct_prefix),  "increment": { "integerValue": cache_read.to_string() } },
+                        { "fieldPath": format!("{}.cache_write_tokens", acct_prefix), "increment": { "integerValue": cache_write.to_string() } },
+                        { "fieldPath": format!("{}.total_tokens", acct_prefix),       "increment": { "integerValue": total.to_string() } },
+                        { "fieldPath": format!("{}.cost_usd", acct_prefix),           "increment": { "doubleValue": cost } },
+                        { "fieldPath": format!("{}.call_count", acct_prefix),         "increment": { "integerValue": "1" } },
                     ]
                 }
             }]

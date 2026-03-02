@@ -14,6 +14,8 @@ class AnalyticsManager {
         Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
     }
 
+    private var lastTranscriptionStartedAt: Date?
+
     private init() {}
 
     // MARK: - Initialization
@@ -126,6 +128,11 @@ class AnalyticsManager {
     // MARK: - Recording Events
 
     func transcriptionStarted() {
+        // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
+        if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
+            return
+        }
+        lastTranscriptionStartedAt = Date()
         MixpanelManager.shared.transcriptionStarted()
         PostHogManager.shared.transcriptionStarted()
     }
@@ -609,6 +616,21 @@ class AnalyticsManager {
     func taskPromoted(taskCount: Int) {
         MixpanelManager.shared.taskPromoted(taskCount: taskCount)
         PostHogManager.shared.taskPromoted(taskCount: taskCount)
+    }
+
+    func taskCompleted(source: String?) {
+        MixpanelManager.shared.taskCompleted(source: source)
+        PostHogManager.shared.taskCompleted(source: source)
+    }
+
+    func taskDeleted(source: String?) {
+        MixpanelManager.shared.taskDeleted(source: source)
+        PostHogManager.shared.taskDeleted(source: source)
+    }
+
+    func taskAdded() {
+        MixpanelManager.shared.taskAdded()
+        PostHogManager.shared.taskAdded()
     }
 
     func memoryExtracted(memoryCount: Int) {
