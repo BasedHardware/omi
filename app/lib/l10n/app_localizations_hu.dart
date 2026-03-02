@@ -8299,4 +8299,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével';
 }

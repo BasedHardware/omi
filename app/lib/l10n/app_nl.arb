@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Overschakelen naar {environment}? Je moet de app sluiten en opnieuw openen om de wijzigingen door te voeren.",
   "switchApiConfirmTitle": "API-omgeving wisselen",
   "switchRequiresRestart": "Wisselen vereist herstart van de app",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Begin een gesprek met Nooto of neem er een op met je apparaat"
 }

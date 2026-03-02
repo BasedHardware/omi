@@ -10075,5 +10075,6 @@
   "@apiEnvSavedRestartRequired": {
     "description": "Snackbar message after saving API environment preference"
   },
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start a conversation with Nooto or record one with your device"
 }

@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Pārslēgt uz {environment}? Jums būs jāaizver un vēlreiz jāatver lietotne, lai izmaiņas stātos spēkā.",
   "switchApiConfirmTitle": "Pārslēgt API vidi",
   "switchRequiresRestart": "Pārslēgšanai nepieciešama lietotnes pārstartēšana",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Sāciet sarunu ar Nooto vai ierakstiet vienu ar savu ierīci"
 }

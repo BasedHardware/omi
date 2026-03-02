@@ -8313,4 +8313,8 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage =>
+      'Avvia una conversazione con Nooto o registrane una con il tuo dispositivo';
 }

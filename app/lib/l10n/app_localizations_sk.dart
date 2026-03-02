@@ -8254,4 +8254,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Začnite konverzáciu s Nooto alebo nahrajte jednu svojím zariadením';
 }

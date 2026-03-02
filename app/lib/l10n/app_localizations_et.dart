@@ -8260,4 +8260,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Alustage vestlust Nootoga või salvestage üks oma seadmega';
 }

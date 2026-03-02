@@ -8275,4 +8275,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin';
 }

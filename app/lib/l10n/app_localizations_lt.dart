@@ -8270,4 +8270,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Pradėkite pokalbį su Nooto arba įrašykite vieną savo įrenginiu';
 }

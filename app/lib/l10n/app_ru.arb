@@ -2690,5 +2690,6 @@
   "switchApiConfirmBody": "Переключиться на {environment}? Вам нужно будет закрыть и снова открыть приложение, чтобы изменения вступили в силу.",
   "switchApiConfirmTitle": "Переключение среды API",
   "switchRequiresRestart": "Переключение требует перезапуска приложения",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Начните разговор с Nooto или запишите его с помощью вашего устройства"
 }

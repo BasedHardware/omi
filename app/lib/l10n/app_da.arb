@@ -2664,5 +2664,6 @@
   "switchApiConfirmBody": "Skift til {environment}? Du skal lukke og genåbne appen for at ændringerne træder i kraft.",
   "switchApiConfirmTitle": "Skift API-miljø",
   "switchRequiresRestart": "Skift kræver genstart af appen",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller optag en med din enhed"
 }

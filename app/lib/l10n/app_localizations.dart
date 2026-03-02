@@ -15428,6 +15428,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nooto Team'**
   String get officialTeamName;
+
+  /// No description provided for @conversationsEmptyStateMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation with Nooto or record one with your device'**
+  String get conversationsEmptyStateMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

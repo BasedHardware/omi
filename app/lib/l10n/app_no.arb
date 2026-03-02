@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Bytte til {environment}? Du må lukke og åpne appen på nytt for at endringene skal tre i kraft.",
   "switchApiConfirmTitle": "Bytt API-miljø",
   "switchRequiresRestart": "Bytting krever omstart av appen",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Start en samtale med Nooto eller ta opp en med enheten din"
 }

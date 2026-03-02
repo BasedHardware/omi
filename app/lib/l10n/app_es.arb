@@ -2656,5 +2656,6 @@
   "switchApiConfirmBody": "¿Cambiar a {environment}? Tendrás que cerrar y volver a abrir la aplicación para que los cambios surtan efecto.",
   "switchApiConfirmTitle": "Cambiar entorno API",
   "switchRequiresRestart": "El cambio requiere reiniciar la aplicación",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Inicia una conversación con Nooto o graba una con tu dispositivo"
 }

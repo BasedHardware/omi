@@ -2691,5 +2691,6 @@
   "switchApiConfirmBody": "Trocar para {environment}? Você precisará fechar e reabrir o aplicativo para que as alterações tenham efeito.",
   "switchApiConfirmTitle": "Trocar ambiente API",
   "switchRequiresRestart": "A troca requer reinicialização do aplicativo",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Inicie uma conversa com o Nooto ou grave uma com o seu dispositivo"
 }

@@ -2660,5 +2660,6 @@
   "switchApiConfirmBody": "Chuyển sang {environment}? Bạn sẽ cần đóng và mở lại ứng dụng để các thay đổi có hiệu lực.",
   "switchApiConfirmTitle": "Chuyển đổi môi trường API",
   "switchRequiresRestart": "Chuyển đổi yêu cầu khởi động lại ứng dụng",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Bắt đầu cuộc trò chuyện với Nooto hoặc ghi âm một cuộc bằng thiết bị của bạn"
 }

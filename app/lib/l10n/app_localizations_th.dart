@@ -8219,4 +8219,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'เริ่มการสนทนากับ Nooto หรือบันทึกการสนทนาด้วยอุปกรณ์ของคุณ';
 }

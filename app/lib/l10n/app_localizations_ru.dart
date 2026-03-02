@@ -8289,4 +8289,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Начните разговор с Nooto или запишите его с помощью вашего устройства';
 }

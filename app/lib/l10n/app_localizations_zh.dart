@@ -8111,4 +8111,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => '与Nooto开始对话或使用您的设备录制一段';
 }

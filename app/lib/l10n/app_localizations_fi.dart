@@ -8261,4 +8261,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi';
 }

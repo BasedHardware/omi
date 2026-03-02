@@ -2690,5 +2690,6 @@
   "switchApiConfirmBody": "{environment} ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.",
   "switchApiConfirmTitle": "API Ortamını Değiştir",
   "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Nooto ile bir sohbet başlatın veya cihazınızla bir tane kaydedin"
 }

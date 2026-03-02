@@ -8288,4 +8288,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage => 'Mulakan perbualan dengan Nooto atau rakam satu dengan peranti anda';
 }

@@ -2624,5 +2624,6 @@
   "switchApiConfirmBody": "Přepnout na {environment}? Budete muset zavřít a znovu otevřít aplikaci, aby se změny projevily.",
   "switchApiConfirmTitle": "Přepnout prostředí API",
   "switchRequiresRestart": "Přepnutí vyžaduje restart aplikace",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Zahajte konverzaci s Nooto nebo ji nahrajte svým zařízením"
 }

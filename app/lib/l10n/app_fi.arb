@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Vaihdetaanko ympäristöön {environment}? Sinun on suljettava ja avattava sovellus uudelleen, jotta muutokset tulevat voimaan.",
   "switchApiConfirmTitle": "Vaihda API-ympäristö",
   "switchRequiresRestart": "Vaihto vaatii sovelluksen uudelleenkäynnistyksen",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Aloita keskustelu Nooton kanssa tai nauhoita yksi laitteellasi"
 }

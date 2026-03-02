@@ -2751,5 +2751,6 @@
   "switchApiConfirmBody": "Váltás erre: {environment}? A módosítások érvényesítéséhez be kell zárnod és újra kell nyitnod az alkalmazást.",
   "switchApiConfirmTitle": "API környezet váltása",
   "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Kezdjen beszélgetést a Nootóval, vagy rögzítsen egyet az eszközével"
 }

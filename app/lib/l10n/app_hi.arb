@@ -2656,5 +2656,6 @@
   "switchApiConfirmBody": "{environment} पर स्विच करें? बदलाव लागू करने के लिए आपको ऐप बंद करके फिर से खोलना होगा।",
   "switchApiConfirmTitle": "API वातावरण बदलें",
   "switchRequiresRestart": "बदलने के लिए ऐप रीस्टार्ट आवश्यक है",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Nooto के साथ बातचीत शुरू करें या अपने डिवाइस से एक रिकॉर्ड करें"
 }

@@ -2677,5 +2677,6 @@
   "switchApiConfirmBody": "切换到{environment}？您需要关闭并重新打开应用，更改才能生效。",
   "switchApiConfirmTitle": "切换 API 环境",
   "switchRequiresRestart": "切换需要重启应用",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "与Nooto开始对话或使用您的设备录制一段"
 }

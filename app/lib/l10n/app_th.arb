@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "สลับไปที่ {environment}? คุณจะต้องปิดและเปิดแอปใหม่เพื่อให้การเปลี่ยนแปลงมีผล",
   "switchApiConfirmTitle": "สลับสภาพแวดล้อม API",
   "switchRequiresRestart": "การสลับต้องรีสตาร์ทแอป",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "เริ่มการสนทนากับ Nooto หรือบันทึกการสนทนาด้วยอุปกรณ์ของคุณ"
 }

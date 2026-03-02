@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Lülituda keskkonnale {environment}? Peate rakenduse sulgema ja uuesti avama, et muudatused jõustuksid.",
   "switchApiConfirmTitle": "Vaheta API keskkonda",
   "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Alustage vestlust Nootoga või salvestage üks oma seadmega"
 }

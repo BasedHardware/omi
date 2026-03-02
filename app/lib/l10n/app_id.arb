@@ -2697,5 +2697,6 @@
   "switchApiConfirmBody": "Beralih ke {environment}? Anda perlu menutup dan membuka kembali aplikasi agar perubahan diterapkan.",
   "switchApiConfirmTitle": "Ganti Lingkungan API",
   "switchRequiresRestart": "Pergantian memerlukan restart aplikasi",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Mulai percakapan dengan Nooto atau rekam satu dengan perangkat Anda"
 }

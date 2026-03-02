@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Perjungti į {environment}? Turėsite uždaryti ir vėl atidaryti programėlę, kad pakeitimai įsigaliotų.",
   "switchApiConfirmTitle": "Perjungti API aplinką",
   "switchRequiresRestart": "Perjungimui reikia iš naujo paleisti programėlę",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Pradėkite pokalbį su Nooto arba įrašykite vieną savo įrenginiu"
 }

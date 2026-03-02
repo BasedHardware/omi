@@ -8266,4 +8266,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get officialTeamName => 'Nooto Team';
+
+  @override
+  String get conversationsEmptyStateMessage =>
+      'Bắt đầu cuộc trò chuyện với Nooto hoặc ghi âm một cuộc bằng thiết bị của bạn';
 }

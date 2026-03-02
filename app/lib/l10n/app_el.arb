@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Εναλλαγή σε {environment}; Θα πρέπει να κλείσετε και να ανοίξετε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.",
   "switchApiConfirmTitle": "Εναλλαγή περιβάλλοντος API",
   "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Ξεκινήστε μια συνομιλία με το Nooto ή ηχογραφήστε μία με τη συσκευή σας"
 }

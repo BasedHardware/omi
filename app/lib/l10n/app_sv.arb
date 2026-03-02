@@ -2655,5 +2655,6 @@
   "switchApiConfirmBody": "Byta till {environment}? Du behöver stänga och öppna appen igen för att ändringarna ska börja gälla.",
   "switchApiConfirmTitle": "Byt API-miljö",
   "switchRequiresRestart": "Byte kräver omstart av appen",
-  "officialTeamName": "Nooto Team"
+  "officialTeamName": "Nooto Team",
+  "conversationsEmptyStateMessage": "Starta en konversation med Nooto eller spela in en med din enhet"
 }
