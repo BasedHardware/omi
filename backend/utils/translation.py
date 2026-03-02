@@ -1,18 +1,21 @@
 import os
 import hashlib
+import json
 import re
 from collections import OrderedDict
-from typing import List
+from typing import List, Optional, Tuple
 
 from google.cloud import translate_v3
 from langdetect import detect as langdetect_detect, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 import logging
 
+from database.redis_db import r
+
 logger = logging.getLogger(__name__)
 
 
-# LRU Cache for language detection
+# LRU Cache for language detection (local, free via langdetect)
 detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
 
@@ -179,9 +182,17 @@ LANGDETECT_RELIABLE_LANGUAGES = {
     'vi',
 }
 
+# Redis translation cache TTL (14 days)
+TRANSLATION_CACHE_TTL = int(os.environ.get("TRANSLATION_CACHE_TTL", 60 * 60 * 24 * 14))
+
+# Max sentences per batch API call (API supports up to 1024, use conservative limit)
+MAX_BATCH_SIZE = 100
+
 
 def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
-    if hint_language not in LANGDETECT_RELIABLE_LANGUAGES:
+    # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
+    base_hint = hint_language.split('-')[0] if hint_language else None
+    if base_hint not in LANGDETECT_RELIABLE_LANGUAGES:
         return None
     try:
         return langdetect_detect(text)
@@ -189,17 +200,8 @@ def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
         return None
 
 
-def _detect_with_google_cloud(text: str) -> str | None:
-    """Helper function to detect language using Google Cloud API."""
-    response = _client.detect_language(parent=_parent, content=text, mime_type=_mime_type)
-    if response.languages and len(response.languages) > 0:
-        for language in response.languages:
-            if language.confidence >= 1:
-                return language.language_code
-    return None
-
-
 def detect_language(text: str, remove_non_lexical: bool = False, hint_language: str = None) -> str | None:
+    """Detect language using free local langdetect library only (no paid API calls)."""
     text_for_detection = text
     if remove_non_lexical:
         cleaned_text = _non_lexical_utterances_pattern.sub('', text)
@@ -212,18 +214,10 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
         detection_cache.move_to_end(text_for_detection)
         return detection_cache[text_for_detection]
 
-    # Count words to determine which detection method to use
-    word_count = len(text_for_detection.split())
     detected_language = None
 
-    # Use Google Cloud API for short text (≤5 words)
-    # Otherwise, use langdetect for longer text (cost-effective)
-    # Fallback to Google Cloud API if langdetect fails
     try:
-        if word_count <= 5:
-            detected_language = _detect_with_google_cloud(text_for_detection)
-        if not detected_language:
-            detected_language = _detect_with_langdetect(text_for_detection, hint_language)
+        detected_language = _detect_with_langdetect(text_for_detection, hint_language)
 
         # Cache the result
         if detected_language:
@@ -240,12 +234,44 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
 
 
 def split_into_sentences(text: str) -> List[str]:
-    """Splits text into sentences based on punctuation."""
+    """Splits text into sentences based on sentence-ending punctuation (.?!) and newlines."""
     if not text:
         return []
-    # Find all sequences of characters that are not .?!,, followed by an optional .?!,, and optional whitespace.
-    sentences = re.findall(r'[^.?!,]+(?:[.?!,]\s*|\s*$)', text)
-    return [s.strip() for s in sentences if s.strip()]
+    # Split on newlines first, then split each line on sentence-ending punctuation
+    result = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        sentences = re.findall(r'[^.?!]+(?:[.?!]\s*|\s*$)', line)
+        result.extend(s.strip() for s in sentences if s.strip())
+    return result
+
+
+def _redis_cache_key(text_hash: str, dest_lang: str) -> str:
+    return f"translate:v1:{text_hash}:{dest_lang}"
+
+
+def get_cached_translation(text_hash: str, dest_lang: str) -> Optional[dict]:
+    """Get translation from Redis cache. Returns {"text": ..., "detected_lang": ...} or None."""
+    try:
+        key = _redis_cache_key(text_hash, dest_lang)
+        cached = r.get(key)
+        if cached:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"Redis translation cache read error: {e}")
+    return None
+
+
+def cache_translation(text_hash: str, dest_lang: str, translated_text: str, detected_lang: str):
+    """Store translation in Redis cache with TTL."""
+    try:
+        key = _redis_cache_key(text_hash, dest_lang)
+        value = json.dumps({"text": translated_text, "detected_lang": detected_lang})
+        r.set(key, value, ex=TRANSLATION_CACHE_TTL)
+    except Exception as e:
+        logger.warning(f"Redis translation cache write error: {e}")
 
 
 class TranslationService:
@@ -254,50 +280,137 @@ class TranslationService:
         self.MAX_CACHE_SIZE = 1000
 
     def _get_cache_key(self, text_hash: str, dest_language: str) -> str:
-        """Generate a cache key from text hash and language"""
         return f"{text_hash}:{dest_language}"
 
-    def translate_text_by_sentence(self, dest_language: str, text: str) -> str:
-        """
-        Translates text by splitting it into sentences, translating each, and rejoining.
-        Maximizes cache hits by translating sentence by sentence.
-        """
-        if not text:
-            return ""
-
-        sentences = split_into_sentences(text)
-        translated_sentences = []
-        for sentence in sentences:
-            # Each sentence translation will hit the cache if seen before.
-            translated_sentences.append(self.translate_text(dest_language, sentence))
-
-        return ' '.join(translated_sentences)
-
-    def translate_text(self, dest_language: str, text: str) -> str:
-        """
-        Translates text to the specified destination language using Google Cloud Translation API.
-        Uses a cache to avoid redundant translations.
-
-        Args:
-            dest_language: The language code to translate to (e.g., 'en', 'es', 'fr')
-            text: The text to translate
-
-        Returns:
-            The translated text as a string
-        """
-        # Generate hash for the text
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-
-        # Check if translation is in cache
+    def _check_memory_cache(self, text_hash: str, dest_language: str) -> Optional[Tuple[str, str]]:
+        """Check in-memory LRU cache. Returns (translated_text, detected_lang) or None."""
         cache_key = self._get_cache_key(text_hash, dest_language)
         if cache_key in self.translation_cache:
-            # Move the item to the end of the OrderedDict to mark it as recently used
-            translated_text = self.translation_cache.pop(cache_key)
-            self.translation_cache[cache_key] = translated_text
-            return translated_text
+            entry = self.translation_cache.pop(cache_key)
+            self.translation_cache[cache_key] = entry
+            return entry
+        return None
+
+    def _set_memory_cache(self, text_hash: str, dest_language: str, translated_text: str, detected_lang: str):
+        """Store in in-memory LRU cache."""
+        cache_key = self._get_cache_key(text_hash, dest_language)
+        if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
+            self.translation_cache.popitem(last=False)
+        self.translation_cache[cache_key] = (translated_text, detected_lang)
+
+    def translate_text_by_sentence(self, dest_language: str, text: str) -> Tuple[str, str]:
+        """
+        Translates text by splitting into sentences, batching uncached sentences
+        into a single API call, and rejoining.
+
+        Returns:
+            (translated_text, detected_language_code) tuple.
+            detected_language_code is the dominant detected language from the batch.
+        """
+        if not text:
+            return ("", "")
+
+        sentences = split_into_sentences(text)
+        if not sentences:
+            return ("", "")
+
+        # Phase 1: Check caches (memory -> Redis) for each sentence
+        results = [None] * len(sentences)
+        uncached_indices = []
+        detected_langs = []
+
+        for i, sentence in enumerate(sentences):
+            text_hash = hashlib.md5(sentence.encode()).hexdigest()
+
+            # Check memory cache
+            cached = self._check_memory_cache(text_hash, dest_language)
+            if cached:
+                results[i] = cached[0]
+                detected_langs.append(cached[1])
+                continue
+
+            # Check Redis cache
+            redis_cached = get_cached_translation(text_hash, dest_language)
+            if redis_cached:
+                results[i] = redis_cached["text"]
+                detected_lang = redis_cached.get("detected_lang", "")
+                detected_langs.append(detected_lang)
+                self._set_memory_cache(text_hash, dest_language, redis_cached["text"], detected_lang)
+                continue
+
+            uncached_indices.append(i)
+
+        # Phase 2: Batch translate uncached sentences
+        if uncached_indices:
+            uncached_sentences = [sentences[i] for i in uncached_indices]
+
+            # Batch in chunks of MAX_BATCH_SIZE
+            for chunk_start in range(0, len(uncached_sentences), MAX_BATCH_SIZE):
+                chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_sentences))
+                chunk = uncached_sentences[chunk_start:chunk_end]
+                chunk_indices = uncached_indices[chunk_start:chunk_end]
+
+                try:
+                    response = _client.translate_text(
+                        contents=chunk,
+                        parent=_parent,
+                        mime_type=_mime_type,
+                        target_language_code=dest_language,
+                    )
+
+                    for j, translation in enumerate(response.translations):
+                        idx = chunk_indices[j]
+                        translated_text = translation.translated_text
+                        detected_lang = translation.detected_language_code or ""
+                        results[idx] = translated_text
+                        detected_langs.append(detected_lang)
+
+                        # Cache in memory and Redis
+                        text_hash = hashlib.md5(sentences[idx].encode()).hexdigest()
+                        self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
+                        cache_translation(text_hash, dest_language, translated_text, detected_lang)
+
+                except Exception as e:
+                    logger.error(f"Batch translation error: {e}")
+                    for idx in chunk_indices:
+                        if results[idx] is None:
+                            results[idx] = sentences[idx]
+
+        # Determine dominant detected language
+        dominant_lang = ""
+        if detected_langs:
+            from collections import Counter
+
+            lang_counts = Counter(lang for lang in detected_langs if lang)
+            if lang_counts:
+                dominant_lang = lang_counts.most_common(1)[0][0]
+
+        translated_text = ' '.join(r for r in results if r is not None)
+        return (translated_text, dominant_lang)
+
+    def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
+        """
+        Translates text to the specified destination language using Google Cloud Translation API.
+        Uses multi-level cache: in-memory LRU -> Redis -> API.
+
+        Returns:
+            (translated_text, detected_language_code) tuple.
+        """
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+
+        # Check memory cache
+        cached = self._check_memory_cache(text_hash, dest_language)
+        if cached:
+            return cached
+
+        # Check Redis cache
+        redis_cached = get_cached_translation(text_hash, dest_language)
+        if redis_cached:
+            result = (redis_cached["text"], redis_cached.get("detected_lang", ""))
+            self._set_memory_cache(text_hash, dest_language, result[0], result[1])
+            return result
 
         try:
-            # Not in cache, perform translation
             response = _client.translate_text(
                 contents=[text],
                 parent=_parent,
@@ -306,14 +419,13 @@ class TranslationService:
             )
 
             translated_text = response.translations[0].translated_text
+            detected_lang = response.translations[0].detected_language_code or ""
 
-            # Add to cache
-            if len(self.translation_cache) >= self.MAX_CACHE_SIZE:
-                # Remove oldest item (first item in OrderedDict)
-                self.translation_cache.popitem(last=False)
+            # Cache in memory and Redis
+            self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
+            cache_translation(text_hash, dest_language, translated_text, detected_lang)
 
-            self.translation_cache[cache_key] = translated_text
-            return translated_text
+            return (translated_text, detected_lang)
         except Exception as e:
             logger.error(f"Translation error: {e}")
-            return text  # Return original text if translation fails
+            return (text, "")

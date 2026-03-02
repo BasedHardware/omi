@@ -1915,9 +1915,17 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // at session/new; for the normal reused-session path it is ignored.
             // Passing it here ensures it is applied if the session was invalidated
             // (e.g. cwd change) and a new session/new is triggered mid-conversation.
-            var systemPrompt = cachedMainSystemPrompt
-            if let prefix = systemPromptPrefix, !prefix.isEmpty {
-                systemPrompt = prefix + "\n\n" + systemPrompt
+            var systemPrompt: String
+            if isOnboarding, let prefix = systemPromptPrefix, !prefix.isEmpty {
+                // Onboarding uses its own prompt exclusively — the main chat prompt
+                // contains rules like "don't ask follow-up questions" that conflict
+                // with the onboarding deep-dive step.
+                systemPrompt = prefix
+            } else {
+                systemPrompt = cachedMainSystemPrompt
+                if let prefix = systemPromptPrefix, !prefix.isEmpty {
+                    systemPrompt = prefix + "\n\n" + systemPrompt
+                }
             }
             if let suffix = systemPromptSuffix, !suffix.isEmpty {
                 systemPrompt += "\n\n" + suffix

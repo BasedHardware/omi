@@ -2407,7 +2407,7 @@ workflows:
 
       - name: Register release in Firestore
         script: |
-          CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
+          export CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
 
           RELEASE_JSON=$(python3 - <<PYEOF
           import json, os

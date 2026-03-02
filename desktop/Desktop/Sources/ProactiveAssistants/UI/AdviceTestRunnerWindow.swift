@@ -657,6 +657,13 @@ enum AdviceTestRunner {
             AdviceAssistantSettings.shared.excludedApps
         }
 
+        // Ensure storage is initialized for the current user
+        do {
+            try await RewindStorage.shared.initialize()
+        } catch {
+            log("AdviceTestCLI: WARNING — Storage init failed: \(error)")
+        }
+
         // Fetch screenshots
         let allScreenshots: [Screenshot]
         do {

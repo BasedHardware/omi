@@ -189,6 +189,9 @@ struct OnboardingView: View {
         // Stop the AI if it's still running
         chatProvider.stopAgent()
 
+        // Navigate to Chat page after transition (not Dashboard)
+        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
+
         appState.hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 

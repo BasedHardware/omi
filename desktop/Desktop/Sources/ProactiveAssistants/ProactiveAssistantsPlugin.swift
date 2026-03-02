@@ -1016,7 +1016,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             // Send user notification
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
-                message: "Omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
+                message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings."
             )
         } else {
             // Permission appears granted but capture is failing
