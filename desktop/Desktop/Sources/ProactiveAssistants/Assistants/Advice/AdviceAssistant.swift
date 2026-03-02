@@ -777,6 +777,7 @@ actor AdviceAssistant: ProactiveAssistant {
             }
             break // Break on unexpected tool
         }
+        return (nil, sqlCount)
     }
 
     // MARK: - Activity Summary
