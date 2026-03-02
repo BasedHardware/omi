@@ -1264,18 +1264,18 @@ async def _stream_handler(
             if not segment_text:
                 return
 
-            # Pre-API stale-write check
+            # Pre-API stale-write check: abort if a newer version exists or entry was pruned
             pending = pending_translations.get(segment.id)
-            if pending and pending.get('version', 0) > version:
+            if not pending or pending.get('version', 0) != version:
                 return
 
             translated_text, detected_lang = translation_service.translate_text_by_sentence(
                 translation_language, segment_text
             )
 
-            # Post-API stale-write check (newer version may have arrived during API call)
+            # Post-API stale-write check: abort if a newer version exists or entry was pruned
             pending = pending_translations.get(segment.id)
-            if pending and pending.get('version', 0) > version:
+            if not pending or pending.get('version', 0) != version:
                 return
 
             # Update language cache from translate response (free detection)
