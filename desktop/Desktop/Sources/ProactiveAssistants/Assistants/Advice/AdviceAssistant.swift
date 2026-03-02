@@ -677,17 +677,24 @@ actor AdviceAssistant: ProactiveAssistant {
             return (nil, sqlCount)
         }
 
-        // Build Phase 2 prompt — compact findings + image
+        // Build Phase 2 prompt — compact findings + image + cross-reference instruction
         let phase2Prompt = """
             INVESTIGATION FINDINGS:
             \(findings)
 
-            The screenshot below is from the app/window identified during investigation. Based on your findings AND what you see in the screenshot, call provide_advice if there's a specific non-obvious insight, or no_advice if nothing qualifies.
+            The screenshot below is from the app/window identified during investigation.
+
+            Before giving advice, CROSS-REFERENCE your findings:
+            - Use execute_sql to check if this issue was resolved in later screenshots
+            - Check if the user moved on to something else (the issue may be stale)
+            - Verify the context is still relevant by looking at nearby timestamps
+
+            Then call provide_advice if the insight is still valid, or no_advice if it was resolved or is no longer relevant.
             """
 
         let phase2Tools = buildPhase2Tools()
         let base64 = imageData.base64EncodedString()
-        let phase2Contents: [GeminiImageToolRequest.Content] = [
+        var phase2Contents: [GeminiImageToolRequest.Content] = [
             GeminiImageToolRequest.Content(
                 role: "user",
                 parts: [
@@ -697,47 +704,78 @@ actor AdviceAssistant: ProactiveAssistant {
             )
         ]
 
-        // Single Gemini call with image
-        let phase2Result: ToolChatResult
-        do {
+        // Phase 2 loop — model can cross-reference via SQL before deciding
+        for p2Iteration in 0..<5 {
             let p2Contents = phase2Contents
             let p2SystemPrompt = currentSystemPrompt
             let p2Tools = [phase2Tools]
-            phase2Result = try await withThrowingTimeout(seconds: 120) {
-                try await client.sendImageToolLoop(
-                    contents: p2Contents,
-                    systemPrompt: p2SystemPrompt,
-                    tools: p2Tools,
-                    forceToolCall: true
-                )
+            let p2Force = p2Iteration == 0
+            let phase2Result: ToolChatResult
+            do {
+                phase2Result = try await withThrowingTimeout(seconds: 120) {
+                    try await client.sendImageToolLoop(
+                        contents: p2Contents,
+                        systemPrompt: p2SystemPrompt,
+                        tools: p2Tools,
+                        forceToolCall: p2Force
+                    )
+                }
+            } catch {
+                log("Advice: Phase 2 failed on iteration \(p2Iteration): \(error.localizedDescription)")
+                throw error
             }
-        } catch {
-            log("Advice: Phase 2 Gemini call failed: \(error.localizedDescription)")
-            throw error
-        }
 
-        guard let toolCall = phase2Result.toolCalls.first else {
-            log("Advice: Phase 2 — no tool call returned")
-            return (nil, sqlCount)
-        }
+            guard let toolCall = phase2Result.toolCalls.first else {
+                log("Advice: Phase 2 — no tool call on iteration \(p2Iteration), breaking")
+                break
+            }
 
-        switch toolCall.name {
-        case "provide_advice":
-            log("Advice: P2 provide_advice")
-            return (parseProvideAdvice(toolCall), sqlCount)
-        case "no_advice":
-            let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
-            let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-            log("Advice: P2 no_advice — \(contextSummary)")
-            return (AdviceExtractionResult(
-                hasAdvice: false,
-                advice: nil,
-                contextSummary: contextSummary,
-                currentActivity: currentActivity
-            ), sqlCount)
-        default:
-            log("Advice: P2 unexpected tool: \(toolCall.name)")
-            return (nil, sqlCount)
+            switch toolCall.name {
+            case "execute_sql":
+                let query = toolCall.arguments["query"] as? String ?? ""
+                sqlCount += 1
+                log("Advice: P2 execute_sql iter \(p2Iteration): \(query)")
+                let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
+                let resultStr = await ChatToolExecutor.execute(sqlToolCall)
+                let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
+                log("Advice: P2 sql result (\(resultStr.count) chars): \(truncated)")
+
+                phase2Contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["query": query]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                phase2Contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: resultStr)
+                    ))]
+                ))
+                continue
+
+            case "provide_advice":
+                log("Advice: P2 provide_advice (after \(p2Iteration) cross-reference iterations)")
+                return (parseProvideAdvice(toolCall), sqlCount)
+
+            case "no_advice":
+                let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
+                let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
+                log("Advice: P2 no_advice — \(contextSummary)")
+                return (AdviceExtractionResult(
+                    hasAdvice: false,
+                    advice: nil,
+                    contextSummary: contextSummary,
+                    currentActivity: currentActivity
+                ), sqlCount)
+
+            default:
+                log("Advice: P2 unexpected tool: \(toolCall.name)")
+                break
+            }
+            break // Break on unexpected tool
         }
     }
 
@@ -846,12 +884,23 @@ actor AdviceAssistant: ProactiveAssistant {
         ])
     }
 
-    /// Phase 2 tools: vision call with screenshot (provide_advice, no_advice)
+    /// Phase 2 tools: vision call with screenshot + SQL cross-referencing (execute_sql, provide_advice, no_advice)
     private func buildPhase2Tools() -> GeminiTool {
         GeminiTool(functionDeclarations: [
             GeminiTool.FunctionDeclaration(
+                name: "execute_sql",
+                description: "Cross-reference your findings by querying the database. Use this to check if an issue was resolved in later screenshots, verify context across time, or look up related activity. The screenshots table has: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT. SELECT queries only.",
+                parameters: GeminiTool.FunctionDeclaration.Parameters(
+                    type: "object",
+                    properties: [
+                        "query": .init(type: "string", description: "SQL SELECT query to execute on the screenshots table")
+                    ],
+                    required: ["query"]
+                )
+            ),
+            GeminiTool.FunctionDeclaration(
                 name: "provide_advice",
-                description: "Call this when you have a specific, non-obvious insight for the user based on the screenshot and your investigation findings.",
+                description: "Call this when you have a specific, non-obvious insight for the user based on the screenshot and your investigation findings. You should cross-reference first using execute_sql to verify the issue is still relevant.",
                 parameters: GeminiTool.FunctionDeclaration.Parameters(
                     type: "object",
                     properties: [
@@ -869,7 +918,7 @@ actor AdviceAssistant: ProactiveAssistant {
             ),
             GeminiTool.FunctionDeclaration(
                 name: "no_advice",
-                description: "Call this when the screenshot doesn't reveal anything worth advising about. Nothing qualifies as a specific, non-obvious insight.",
+                description: "Call this when the screenshot doesn't reveal anything worth advising about, or when cross-referencing shows the issue was already resolved.",
                 parameters: GeminiTool.FunctionDeclaration.Parameters(
                     type: "object",
                     properties: [
