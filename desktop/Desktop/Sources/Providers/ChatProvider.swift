@@ -1963,6 +1963,12 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 self?.needsBrowserExtensionSetup = true
                                 self?.stopAgent()
                             }
+                            // Show the floating bar so the user has an always-on-top UI
+                            // when Chrome takes focus (important on small screens)
+                            if !FloatingControlBarManager.shared.isVisible {
+                                log("ChatProvider: Browser tool active — showing floating bar so it stays above Chrome")
+                                FloatingControlBarManager.shared.showTemporarily()
+                            }
                         }
                     } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
                         let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
