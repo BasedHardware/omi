@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute"
+    "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute",
+    "Focus assistant now uses your goals, tasks, and memories for smarter distraction detection"
   ],
   "releases": [
     {
