@@ -42,3 +42,6 @@ pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
+pytest tests/unit/test_conversations_lite_db.py -v
+pytest tests/unit/test_conversations_router_branching.py -v
+pytest tests/unit/test_mcp_and_developer_conversations_lite.py -v
