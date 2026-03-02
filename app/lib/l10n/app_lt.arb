@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Perjungti",
     "switchApiConfirmBody": "Perjungti į {environment}? Turėsite uždaryti ir vėl atidaryti programėlę, kad pakeitimai įsigaliotų.",
     "switchApiConfirmTitle": "Perjungti API aplinką",
-    "switchRequiresRestart": "Perjungimui reikia iš naujo paleisti programėlę"
+    "switchRequiresRestart": "Perjungimui reikia iš naujo paleisti programėlę",
+    "shared": "Bendrinamas",
+    "onlyYouCanSeeConversation": "Tik jūs galite matyti šį pokalbį",
+    "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti"
 }

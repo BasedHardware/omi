@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Bytt",
     "switchApiConfirmBody": "Bytte til {environment}? Du må lukke og åpne appen på nytt for at endringene skal tre i kraft.",
     "switchApiConfirmTitle": "Bytt API-miljø",
-    "switchRequiresRestart": "Bytting krever omstart av appen"
+    "switchRequiresRestart": "Bytting krever omstart av appen",
+    "shared": "Delt",
+    "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
+    "anyoneWithLinkCanView": "Alle med lenken kan se"
 }

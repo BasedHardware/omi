@@ -2690,5 +2690,8 @@
     "switchAndRestart": "Trocar",
     "switchApiConfirmBody": "Trocar para {environment}? Você precisará fechar e reabrir o aplicativo para que as alterações tenham efeito.",
     "switchApiConfirmTitle": "Trocar ambiente API",
-    "switchRequiresRestart": "A troca requer reinicialização do aplicativo"
+    "switchRequiresRestart": "A troca requer reinicialização do aplicativo",
+    "shared": "Partilhado",
+    "onlyYouCanSeeConversation": "Só você pode ver esta conversa",
+    "anyoneWithLinkCanView": "Qualquer pessoa com o link pode visualizar"
 }

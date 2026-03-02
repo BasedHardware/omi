@@ -10074,5 +10074,8 @@
     "apiEnvSavedRestartRequired": "Saved. Close and reopen the app to apply.",
     "@apiEnvSavedRestartRequired": {
         "description": "Snackbar message after saving API environment preference"
-    }
+    },
+    "shared": "Shared",
+    "onlyYouCanSeeConversation": "Only you can see this conversation",
+    "anyoneWithLinkCanView": "Anyone with the link can view"
 }

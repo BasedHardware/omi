@@ -56,6 +56,22 @@ class ConversationExternalData {
   Map<String, dynamic> toJson() => {'text': text};
 }
 
+// ignore: constant_identifier_names
+enum ConversationVisibility {
+  private_('private'),
+  shared('shared');
+
+  final String value;
+  const ConversationVisibility(this.value);
+
+  static ConversationVisibility fromString(String? s) {
+    if (s == private_.value) return private_;
+    if (s == shared.value) return shared;
+    if (s == 'public') return shared;
+    return private_;
+  }
+}
+
 enum ConversationPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
 
 enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
@@ -195,6 +211,7 @@ class ServerConversation {
   final bool isLocked;
   bool starred;
   String? folderId;
+  ConversationVisibility visibility;
 
   // local label
   bool isNew = false;
@@ -220,6 +237,7 @@ class ServerConversation {
     this.isLocked = false,
     this.starred = false,
     this.folderId,
+    this.visibility = ConversationVisibility.private_,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -253,6 +271,7 @@ class ServerConversation {
       isLocked: json['is_locked'] ?? false,
       starred: json['starred'] ?? false,
       folderId: json['folder_id'],
+      visibility: ConversationVisibility.fromString(json['visibility']),
     );
   }
 
@@ -277,6 +296,7 @@ class ServerConversation {
       'is_locked': isLocked,
       'starred': starred,
       'folder_id': folderId,
+      'visibility': visibility.value,
     };
   }
 

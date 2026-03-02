@@ -8293,4 +8293,13 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Запазено. Затворете и отворете отново приложението, за да приложите промените.';
+
+  @override
+  String get shared => 'Споделено';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Само вие можете да видите този разговор';
+
+  @override
+  String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
 }

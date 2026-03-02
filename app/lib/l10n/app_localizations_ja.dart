@@ -8118,4 +8118,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => '保存しました。変更を適用するにはアプリを閉じて再度開いてください。';
+
+  @override
+  String get shared => '共有済み';
+
+  @override
+  String get onlyYouCanSeeConversation => 'この会話を見ることができるのはあなただけです';
+
+  @override
+  String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
 }

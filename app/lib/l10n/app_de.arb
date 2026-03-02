@@ -2622,5 +2622,8 @@
     "switchAndRestart": "Wechseln",
     "switchApiConfirmBody": "Zu {environment} wechseln? Sie müssen die App schließen und erneut öffnen, damit die Änderungen wirksam werden.",
     "switchApiConfirmTitle": "API-Umgebung wechseln",
-    "switchRequiresRestart": "Wechsel erfordert Neustart der App"
+    "switchRequiresRestart": "Wechsel erfordert Neustart der App",
+    "shared": "Geteilt",
+    "onlyYouCanSeeConversation": "Nur Sie können diese Unterhaltung sehen",
+    "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen"
 }

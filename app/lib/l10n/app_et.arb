@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Lülita",
     "switchApiConfirmBody": "Lülituda keskkonnale {environment}? Peate rakenduse sulgema ja uuesti avama, et muudatused jõustuksid.",
     "switchApiConfirmTitle": "Vaheta API keskkonda",
-    "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist"
+    "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist",
+    "shared": "Jagatud",
+    "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
+    "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata"
 }

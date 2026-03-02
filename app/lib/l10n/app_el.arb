@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Εναλλαγή",
     "switchApiConfirmBody": "Εναλλαγή σε {environment}; Θα πρέπει να κλείσετε και να ανοίξετε ξανά την εφαρμογή για να εφαρμοστούν οι αλλαγές.",
     "switchApiConfirmTitle": "Εναλλαγή περιβάλλοντος API",
-    "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής"
+    "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
+    "shared": "Κοινόχρηστο",
+    "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
+    "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει"
 }
