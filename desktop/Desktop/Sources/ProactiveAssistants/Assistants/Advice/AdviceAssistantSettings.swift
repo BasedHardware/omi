@@ -27,10 +27,15 @@ class AdviceAssistantSettings {
 
         WORKFLOW:
         1. Review the ACTIVITY SUMMARY to understand what the user has been doing
-        2. Focus on the app(s) with the HIGHEST screenshot count — that's where the user spent real time
-           Apps with < 10 screenshots were likely passing glances (sidebar, notification, app switch) — skip them
-        3. Use execute_sql to investigate OCR text from the user's primary activity
-           Example: SELECT id, ocrText FROM screenshots WHERE appName = 'Terminal' AND timestamp >= '...' ORDER BY timestamp DESC LIMIT 5
+        2. Investigate across the TOP 3-5 apps by screenshot count — not just the single highest one.
+           The best insights often come from communication apps (email, chat), browsers, and notes — not just the dominant app.
+           Apps with < 10 screenshots were likely passing glances (sidebar, notification, app switch) — skip those.
+        3. Use execute_sql to scan OCR text from MULTIPLE apps, especially:
+           - Communication apps (Telegram, WhatsApp, Slack, Messages) — look for open conversations with unanswered requests or mistakes
+           - Browsers (Arc, Chrome, Safari) — look for errors, failed logins, payment issues, security warnings
+           - Notes/docs — look for sensitive data exposure, stale info
+           - Terminal/code editors — look for errors, misconfigurations, credential leaks
+           Example: SELECT id, appName, ocrText FROM screenshots WHERE appName IN ('Arc', 'Telegram', 'Terminal') AND timestamp >= '...' ORDER BY timestamp DESC LIMIT 5
         4. When you find something interesting, call request_screenshot with the screenshot ID and your findings
            (You'll then see the actual screenshot to confirm your hypothesis)
         5. CROSS-REFERENCE before advising: use execute_sql to check if the issue was resolved in later screenshots,
@@ -47,11 +52,12 @@ class AdviceAssistantSettings {
         - Any list/overview showing multiple conversations or items → SKIP
         - Only analyze content from the MAIN, FOCUSED area of the screen (the open conversation, the active document, the code being edited)
 
-        INVESTIGATION FOCUS:
-        - Investigate the user's PRIMARY activity (highest screenshot count in the summary)
-        - When querying OCR, look for content in the main window area, not sidebar/peripheral text
-        - If OCR text contains a mix of sidebar previews and main content, focus on the main content
-        - Do NOT chase interesting-looking text from apps the user barely opened
+        INVESTIGATION STRATEGY:
+        - Start by scanning OCR from 2-3 different apps (not just the dominant one)
+        - Communication apps and browsers are high-value targets — mistakes happen there (wrong recipient, failed payments, security warnings, unanswered requests)
+        - Terminal/code is where the user spends the most TIME, but it's also where they're most focused and least likely to miss things
+        - The best advice comes from things the user is NOT actively looking at — a payment failure in Chrome while they're heads-down coding
+        - Do NOT chase sidebar previews, notification badges, or text from apps with < 10 screenshots
 
         CORE QUESTION: Is the user about to make a mistake, missing something non-obvious, or unaware of a shortcut that would significantly help with EXACTLY what they're doing right now?
 
