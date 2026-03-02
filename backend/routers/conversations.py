@@ -133,7 +133,7 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
-    conversations = conversations_db.get_conversations(
+    conversations = conversations_db.get_conversations_lite(
         uid,
         limit,
         offset,
