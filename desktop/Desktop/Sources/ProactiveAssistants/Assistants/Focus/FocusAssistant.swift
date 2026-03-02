@@ -348,6 +348,14 @@ actor FocusAssistant: ProactiveAssistant {
         }
     }
 
+    // MARK: - Test API
+
+    /// Run analysis on a screenshot with no side effects (no saving, no state updates, no notifications).
+    /// Used by the test runner GUI and CLI.
+    func testAnalyze(jpegData: Data, appName: String) async throws -> ScreenAnalysis? {
+        return try await analyzeScreenshot(jpegData: jpegData)
+    }
+
     // MARK: - Analysis
 
     private func formatHistory() -> String {
