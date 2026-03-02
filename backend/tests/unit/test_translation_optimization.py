@@ -67,6 +67,8 @@ from utils.translation import (
     cache_translation,
     _redis_cache_key,
     detection_cache,
+    TRANSLATION_CACHE_TTL,
+    MAX_BATCH_SIZE,
 )
 from utils.translation_cache import TranscriptSegmentLanguageCache
 
@@ -391,3 +393,102 @@ class TestTranscriptSegmentLanguageCache:
         cache.cache["seg1"] = True
         cache.delete_cache("seg1")
         assert "seg1" not in cache.cache
+
+
+class TestRedisCacheTTL:
+    def setup_method(self):
+        self.service = TranslationService()
+        mock_redis.get.return_value = None
+        mock_redis.set.return_value = True
+
+    def test_redis_set_includes_ttl(self):
+        """Redis cache should be set with the configured TTL."""
+        mock_translation = MagicMock()
+        mock_translation.translated_text = "Bonjour"
+        mock_translation.detected_language_code = "en"
+        mock_response = MagicMock()
+        mock_response.translations = [mock_translation]
+
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.return_value = mock_response
+
+            self.service.translate_text("fr", "Hello")
+
+            # Verify Redis set was called with TTL
+            set_calls = mock_redis.set.call_args_list
+            assert len(set_calls) > 0
+            last_set_call = set_calls[-1]
+            assert last_set_call.kwargs.get('ex') == TRANSLATION_CACHE_TTL
+
+    def test_ttl_default_value(self):
+        """Default TTL should be 14 days."""
+        assert TRANSLATION_CACHE_TTL == 60 * 60 * 24 * 14
+
+
+class TestTranslationServiceErrorFallback:
+    def setup_method(self):
+        self.service = TranslationService()
+        mock_redis.get.return_value = None
+        mock_redis.set.return_value = True
+
+    def test_translate_text_api_error_returns_original(self):
+        """On API error, translate_text should return original text and empty detected lang."""
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.side_effect = Exception("API unavailable")
+
+            result_text, detected_lang = self.service.translate_text("fr", "Hello")
+            assert result_text == "Hello"
+            assert detected_lang == ""
+
+    def test_batch_api_error_returns_originals(self):
+        """On batch API error, translate_text_by_sentence should return original sentences."""
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.side_effect = Exception("API unavailable")
+
+            result_text, detected_lang = self.service.translate_text_by_sentence("fr", "Hello. How are you.")
+            # Should fall back to original sentences joined
+            assert "Hello" in result_text
+            assert "How are you" in result_text
+
+
+class TestDominantLanguageDetection:
+    def setup_method(self):
+        self.service = TranslationService()
+        mock_redis.get.return_value = None
+        mock_redis.set.return_value = True
+
+    def test_dominant_language_from_multiple_sentences(self):
+        """Should return the most common detected language across sentences."""
+        mock_t1 = MagicMock(translated_text="Bonjour", detected_language_code="en")
+        mock_t2 = MagicMock(translated_text="Comment", detected_language_code="en")
+        mock_t3 = MagicMock(translated_text="Hola", detected_language_code="es")
+        mock_response = MagicMock(translations=[mock_t1, mock_t2, mock_t3])
+
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.return_value = mock_response
+
+            _, detected_lang = self.service.translate_text_by_sentence("fr", "Hello. How are you. Hola.")
+            # "en" appears twice, "es" once — dominant should be "en"
+            assert detected_lang == "en"
+
+    def test_single_sentence_detected_language(self):
+        """Single sentence should return its detected language."""
+        mock_t = MagicMock(translated_text="Bonjour", detected_language_code="en")
+        mock_response = MagicMock(translations=[mock_t])
+
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.return_value = mock_response
+
+            _, detected_lang = self.service.translate_text_by_sentence("fr", "Hello")
+            assert detected_lang == "en"
+
+
+class TestBatchChunking:
+    def setup_method(self):
+        self.service = TranslationService()
+        mock_redis.get.return_value = None
+        mock_redis.set.return_value = True
+
+    def test_max_batch_size_constant(self):
+        """MAX_BATCH_SIZE should be 100."""
+        assert MAX_BATCH_SIZE == 100
