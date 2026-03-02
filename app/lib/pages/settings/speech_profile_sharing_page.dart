@@ -58,8 +58,14 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
       ),
     );
     if (confirmed != true) return;
-    await revokeSpeechProfile(info.uid);
+    final success = await revokeSpeechProfile(info.uid);
     if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.profileSharedFail)),
+      );
+      return;
+    }
     setState(() => _loading = true);
     await _loadData();
   }
@@ -77,8 +83,14 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
       ),
     );
     if (confirmed != true) return;
-    await removeSharedProfile(info.uid);
+    final success = await removeSharedProfile(info.uid);
     if (!mounted) return;
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.profileSharedFail)),
+      );
+      return;
+    }
     setState(() => _loading = true);
     await _loadData();
   }

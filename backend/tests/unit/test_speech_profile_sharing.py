@@ -800,7 +800,7 @@ def test_spoofed_shared_pid_rejected_by_ownership_check():
     from utils.shared_profiles import resolve_shared_people
 
     with patch('utils.shared_profiles.users_db') as mock_users, \
-         patch('database.auth.get_user_name') as mock_name:
+         patch('utils.shared_profiles.get_user_name') as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid']
         mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
         mock_name.return_value = 'Alice'
@@ -822,7 +822,7 @@ def test_all_valid_shared_pids_resolved():
         return {'alice_uid': 'Alice Smith', 'charlie_uid': 'Charlie Brown'}.get(uid)
 
     with patch('utils.shared_profiles.users_db') as mock_users, \
-         patch('database.auth.get_user_name') as mock_name:
+         patch('utils.shared_profiles.get_user_name') as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
         mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
         mock_name.side_effect = mock_name_fn

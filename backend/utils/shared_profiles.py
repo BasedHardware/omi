@@ -2,13 +2,12 @@ from datetime import datetime, timezone
 from typing import List
 
 import database.users as users_db
+from database.auth import get_user_name
 from models.other import Person
 
 
 def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
     """Resolve shared:{owner_uid} person IDs into Person objects, validating ownership."""
-    from database.auth import get_user_name
-
     shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
     if not shared_pids:
         return []

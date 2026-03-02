@@ -70,7 +70,9 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from database.auth import get_user_name
 from utils.other.storage import precache_conversation_audio
+from utils.shared_profiles import resolve_shared_people
 
 logger = logging.getLogger(__name__)
 
@@ -632,23 +634,7 @@ def process_conversation(
         people = [Person(**p) for p in people_data]
 
         # Resolve shared profile names for LLM transcript
-        shared_pids = [pid for pid in person_ids if pid.startswith("shared:")]
-        if shared_pids:
-            from database.auth import get_user_name
-
-            for shared_pid in shared_pids:
-                owner_uid = shared_pid.split(":", 1)[1]
-                profile = users_db.get_user_profile(owner_uid)
-                if profile:
-                    name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
-                    people.append(
-                        Person(
-                            id=shared_pid,
-                            name=name,
-                            created_at=datetime.now(timezone.utc),
-                            updated_at=datetime.now(timezone.utc),
-                        )
-                    )
+        people.extend(resolve_shared_people(person_ids, uid))
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
