@@ -836,7 +836,10 @@ class AppState: ObservableObject {
                 }
             } else {
                 let hasPermission = status == noErr
-                log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                let previousValue = await MainActor.run { self.hasAutomationPermission }
+                if hasPermission != previousValue {
+                    log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                }
 
                 await MainActor.run {
                     self.hasAutomationPermission = hasPermission
@@ -897,15 +900,21 @@ class AppState: ObservableObject {
             // AXIsProcessTrusted() says not granted — but on macOS 26 this may be stale.
             // Probe via event tap which checks the live TCC database.
             if probeAccessibilityViaEventTap() {
-                log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                if !previouslyGranted {
+                    log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                }
                 let axWorks = testAccessibilityPermission()
                 hasAccessibilityPermission = true
                 if !axWorks {
+                    if !isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
+                    }
                     isAccessibilityBroken = true
-                    log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
                 } else {
+                    if isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
+                    }
                     isAccessibilityBroken = false
-                    log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
                 }
             } else {
                 // Event tap also failed — permission genuinely not granted

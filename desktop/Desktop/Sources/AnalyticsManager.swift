@@ -64,6 +64,21 @@ class AnalyticsManager {
         PostHogManager.shared.onboardingCompleted()
     }
 
+    func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
+        var props = properties
+        props["tool"] = tool
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Tool Used", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
+    }
+
+    func onboardingChatMessage(role: String, step: String) {
+        let props: [String: Any] = ["role": role, "step": step]
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Message", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Message", properties: props)
+    }
+
     // MARK: - Authentication Events
 
     func signInStarted(provider: String) {
