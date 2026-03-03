@@ -24,7 +24,7 @@ enum UpdateChannel: String, CaseIterable {
     /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
     static var appDisplayName: String {
         let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-        return channel == "beta" ? "Omi Beta" : "omi"
+        return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
     }
 }
 
@@ -133,7 +133,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Channels are additive: the default (stable) channel is always included.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        if raw == "beta" {
+        if raw == "beta" || raw == "staging" {
             return Set(["beta"])
         }
         return Set() // empty = default (stable) channel only
@@ -269,7 +269,9 @@ final class UpdaterViewModel: ObservableObject {
         automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
         // Initialize update channel from UserDefaults
-        let storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        // Normalize legacy "staging" → "beta" for users upgrading from older builds
+        var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        if storedChannel == "staging" { storedChannel = "beta" }
         updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
         // Wire up delegate back-reference
@@ -318,6 +320,6 @@ final class UpdaterViewModel: ObservableObject {
     /// The active channel label
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        return raw == "beta" ? "Beta" : ""
+        return (raw == "beta" || raw == "staging") ? "Beta" : ""
     }()
 }
