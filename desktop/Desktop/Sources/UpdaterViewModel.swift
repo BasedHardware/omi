@@ -12,7 +12,7 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Stable"
         case .beta: return "Beta"
-        case .staging: return "Staging"
+        case .staging: return "Beta"
         }
     }
 
@@ -20,8 +20,13 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Recommended for most users"
         case .beta: return "Early access to new features"
-        case .staging: return "Internal testing builds"
+        case .staging: return "Get updates as soon as they're built"
         }
+    }
+
+    /// Cases visible in the Settings picker (hides real .beta)
+    static var visibleCases: [UpdateChannel] {
+        [.stable, .staging]
     }
 }
 
@@ -320,7 +325,7 @@ final class UpdaterViewModel: ObservableObject {
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
         switch raw {
-        case "staging": return "Staging"
+        case "staging": return "Beta"
         case "beta": return "Beta"
         default: return ""
         }
