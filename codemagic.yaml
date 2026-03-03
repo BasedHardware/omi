@@ -2403,7 +2403,11 @@ workflows:
           gsutil -h "Content-Disposition:attachment; filename=\"Omi Beta.dmg\"" \
             cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
           echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
-          echo "(Run promote_release.sh to update the latest/ pointer when promoting to stable)"
+
+          # Update latest/ pointer so macos.omi.me always serves the newest build
+          gsutil -h "Content-Disposition:attachment; filename=\"Omi Beta.dmg\"" \
+            cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg"
+          echo "Updated: $GCS_BUCKET/latest/Omi.Beta.dmg"
 
       - name: Register release in Firestore
         script: |
