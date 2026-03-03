@@ -2342,8 +2342,6 @@ workflows:
 
       - name: Create GitHub release
         script: |
-          DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
-
           CHANGELOG_MD=$(python3 -c "
           import json
           try:
@@ -2354,21 +2352,6 @@ workflows:
           except:
             print('- Bug fixes and improvements')
           ")
-
-          CHANGELOG_JSON=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
-          except:
-            print('[]')
-          ")
-
-          # Store for Firestore step (base64 to survive env var export)
-          CHANGELOG_JSON_B64=$(echo "$CHANGELOG_JSON" | base64)
-          echo "CHANGELOG_JSON_B64=$CHANGELOG_JSON_B64" >> $CM_ENV
-          echo "DOWNLOAD_URL=$DOWNLOAD_URL" >> $CM_ENV
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
@@ -2384,7 +2367,7 @@ workflows:
 
           <!-- KEY_VALUE_START
           isLive: true
-          channel: staging
+          channel: beta
           edSignature: ${ED_SIGNATURE}
           changelog: ${CHANGELOG_PIPE}
           KEY_VALUE_END -->"
