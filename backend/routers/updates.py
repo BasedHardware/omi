@@ -13,6 +13,13 @@ router = APIRouter()
 
 VALID_CHANNELS = {"beta", "stable"}
 
+_XML_ATTR_ENTITIES = {'"': '&quot;', "'": '&apos;'}
+
+
+def _xml_attr(value: str) -> str:
+    """Escape a string for use inside XML double-quoted attributes."""
+    return xml_escape(value, _XML_ATTR_ENTITIES)
+
 
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
@@ -232,9 +239,9 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         lines.append(f'      <description><![CDATA[{safe_html}]]></description>')
         lines.append(f'      <pubDate>{xml_escape(pub_date)}</pubDate>')
 
-        enclosure = f'      <enclosure url="{xml_escape(url)}" type="application/octet-stream" sparkle:os="{xml_escape(platform)}"'
+        enclosure = f'      <enclosure url="{_xml_attr(url)}" type="application/octet-stream" sparkle:os="{_xml_attr(platform)}"'
         if ed_signature:
-            enclosure += f' sparkle:edSignature="{xml_escape(ed_signature)}"'
+            enclosure += f' sparkle:edSignature="{_xml_attr(ed_signature)}"'
         enclosure += ' />'
         lines.append(enclosure)
 
