@@ -530,6 +530,58 @@ class TasksStore: ObservableObject {
 
         isLoadingIncomplete = false
         NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+
+        // Force reconciliation on initial load to clean up tasks deleted on other devices.
+        // This bypasses the 5-minute throttle since the first load should always reconcile.
+        if lastReconciliationDate == nil {
+            Task {
+                await forceReconcileOnLoad()
+            }
+        }
+    }
+
+    /// Reconcile on initial load: paginate ALL incomplete task IDs from API,
+    /// then hard-delete any local tasks that are absent. This catches tasks
+    /// deleted on other devices (e.g. mobile) that still exist in local SQLite.
+    private func forceReconcileOnLoad() async {
+        let batchSize = 500
+        var allApiIds = Set<String>()
+        var offset = 0
+
+        do {
+            while true {
+                let response = try await APIClient.shared.getActionItems(
+                    limit: batchSize,
+                    offset: offset,
+                    completed: false
+                )
+                allApiIds.formUnion(response.items.map { $0.id })
+                offset += response.items.count
+                if response.items.count < batchSize { break }
+            }
+
+            let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
+            lastReconciliationDate = Date()
+
+            if deleted > 0 {
+                log("TasksStore: Reconciled on load: hard-deleted \(deleted) absent tasks")
+                let reloadLimit = max(pageSize, incompleteTasks.count)
+                let refreshed = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: reloadLimit,
+                    offset: 0,
+                    completed: false
+                )
+                if refreshed != incompleteTasks {
+                    incompleteTasks = refreshed
+                    incompleteOffset = refreshed.count
+                }
+                await loadDashboardTasks()
+            } else {
+                log("TasksStore: Reconciled on load: all local tasks match API")
+            }
+        } catch {
+            logError("TasksStore: Force reconciliation on load failed", error: error)
+        }
     }
 
     /// Load completed tasks (Done) - called when user views Done tab
