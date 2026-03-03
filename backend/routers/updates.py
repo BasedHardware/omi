@@ -16,17 +16,23 @@ router = APIRouter()
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
-    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
+    Expected formats:
+      - v1.0.77+464-desktop-cm (3-component: major.minor.patch)
+      - v11.0+11000-macos (2-component: major.minor)
+      - 0.11.41+1100-macos (without v prefix)
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}[-{cm|auto}]
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
+    # Match pattern: v{major}.{minor}[.{patch}]+{build}-{platform}[-{cm|auto}]
+    # Patch version is optional (defaults to 0)
+    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
         return None
 
     major, minor, patch, build = match.groups()
+    # Default patch to '0' if not present (for tags like v11.0+11000-macos)
+    patch = patch or '0'
 
     return {
         'major': major,
