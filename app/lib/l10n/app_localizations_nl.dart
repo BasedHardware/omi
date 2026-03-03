@@ -8295,4 +8295,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Iedereen met de link kan bekijken';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
 }

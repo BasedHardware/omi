@@ -8129,4 +8129,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => '링크가 있는 사람은 누구나 볼 수 있습니다';
+
+  @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
 }

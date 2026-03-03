@@ -15440,6 +15440,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Anyone with the link can view'**
   String get anyoneWithLinkCanView;
+
+  /// Description for show daily score toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Daily Score on homepage'**
+  String get showDailyScoreOnHomepage;
+
+  /// Description for show tasks toggle in developer settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show Tasks on homepage'**
+  String get showTasksOnHomepage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -8318,4 +8318,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Qualsevol persona amb l\'enllaç pot veure';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra la puntuació diària a la pàgina principal';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
 }
