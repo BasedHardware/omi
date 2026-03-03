@@ -5,13 +5,11 @@ import Sparkle
 /// Update channel for staged releases
 enum UpdateChannel: String, CaseIterable {
     case stable = "stable"
-    case beta = "beta"
     case staging = "staging"
 
     var displayName: String {
         switch self {
         case .stable: return "Stable"
-        case .beta: return "Beta"
         case .staging: return "Beta"
         }
     }
@@ -19,20 +17,14 @@ enum UpdateChannel: String, CaseIterable {
     var description: String {
         switch self {
         case .stable: return "Recommended for most users"
-        case .beta: return "Early access to new features"
         case .staging: return "Get updates as soon as they're built"
         }
     }
 
-    /// Cases visible in the Settings picker (hides real .beta)
-    static var visibleCases: [UpdateChannel] {
-        [.stable, .staging]
-    }
-
-    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta/staging
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for staging
     static var appDisplayName: String {
         let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-        return (channel == "staging" || channel == "beta") ? "Omi Beta" : "omi"
+        return channel == "staging" ? "Omi Beta" : "omi"
     }
 }
 
@@ -141,14 +133,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Channels are additive: the default (stable) channel is always included.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        switch raw {
-        case "staging":
-            return Set(["staging", "beta"])
-        case "beta":
-            return Set(["beta"])
-        default:
-            return Set() // empty = default (stable) channel only
+        if raw == "staging" {
+            return Set(["staging"])
         }
+        return Set() // empty = default (stable) channel only
     }
 
     /// Called after Sparkle has launched the installer and submitted launchd jobs.
@@ -327,13 +315,9 @@ final class UpdaterViewModel: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
     }
 
-    /// The active channel label, including the hidden "staging" option
+    /// The active channel label
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        switch raw {
-        case "staging": return "Beta"
-        case "beta": return "Beta"
-        default: return ""
-        }
+        return raw == "staging" ? "Beta" : ""
     }()
 }
