@@ -13,7 +13,7 @@ struct OnboardingView: View {
     @State private var showGraphHints = false
     @State private var hintsHovered = false
 
-    let steps = ["Video", "Chat"]
+    let steps = ["Video", "Chat", "Notifications", "FloatingBar"]
 
     var body: some View {
         ZStack {
@@ -43,10 +43,9 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            // If currentStep is beyond the new 2-step flow (e.g. user was on old step 3+),
-            // clamp to step 1 (chat) so they don't get stuck
-            if currentStep > 1 {
-                currentStep = 1
+            // If currentStep is beyond the 4-step flow, clamp to last step
+            if currentStep > 3 {
+                currentStep = 3
             }
         }
         .task {
@@ -87,7 +86,7 @@ struct OnboardingView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            } else if currentStep == 1 {
                 // Step 1: Interactive AI Chat + Live Knowledge Graph
                 HStack(spacing: 0) {
                     OnboardingChatView(
@@ -96,12 +95,10 @@ struct OnboardingView: View {
                         graphViewModel: graphViewModel,
                         onComplete: {
                             AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
-                            if let onComplete = onComplete {
-                                onComplete()
-                            }
+                            currentStep = 2
                         },
                         onSkip: {
-                            handleSkip()
+                            currentStep = 2
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -159,6 +156,30 @@ struct OnboardingView: View {
                         }
                     }
                 }
+            } else if currentStep == 2 {
+                // Step 2: Smart Notifications Demo
+                OnboardingNotificationStepView(
+                    onContinue: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Notifications")
+                        currentStep = 3
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Notifications_Skipped")
+                        currentStep = 3
+                    }
+                )
+            } else {
+                // Step 3: Floating Bar Demo
+                OnboardingFloatingBarDemoView(
+                    onContinue: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar")
+                        handleOnboardingComplete()
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar_Skipped")
+                        handleOnboardingComplete()
+                    }
+                )
             }
         }
     }
@@ -180,10 +201,9 @@ struct OnboardingView: View {
         }
     }
 
-    /// Skip onboarding — complete with minimal setup
-    private func handleSkip() {
-        log("OnboardingView: User skipped onboarding chat")
-        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat_Skipped")
+    /// Complete onboarding — start all services and transition to the app
+    private func handleOnboardingComplete() {
+        log("OnboardingView: Onboarding complete")
         AnalyticsManager.shared.onboardingCompleted()
 
         // Stop the AI if it's still running
@@ -200,7 +220,7 @@ struct OnboardingView: View {
             await AgentVMService.shared.startPipeline()
         }
         if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_skip")
+            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
