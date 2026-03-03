@@ -2149,6 +2149,13 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addMemoryAccessTracking") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "accessCount", .integer).notNull().defaults(to: 0)
+                t.add(column: "lastAccessedAt", .datetime)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

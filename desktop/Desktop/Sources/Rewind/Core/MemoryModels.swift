@@ -40,6 +40,10 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var isDismissed: Bool
     var deleted: Bool
 
+    // Access tracking for memory decay scoring
+    var accessCount: Int
+    var lastAccessedAt: Date?
+
     // Timestamps
     var createdAt: Date
     var updatedAt: Date
@@ -71,6 +75,8 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         currentActivity: String? = nil,
         inputDeviceName: String? = nil,
         headline: String? = nil,
+        accessCount: Int = 0,
+        lastAccessedAt: Date? = nil,
         isRead: Bool = false,
         isDismissed: Bool = false,
         deleted: Bool = false,
@@ -99,6 +105,8 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.currentActivity = currentActivity
         self.inputDeviceName = inputDeviceName
         self.headline = headline
+        self.accessCount = accessCount
+        self.lastAccessedAt = lastAccessedAt
         self.isRead = isRead
         self.isDismissed = isDismissed
         self.deleted = deleted
@@ -198,6 +206,8 @@ extension MemoryRecord {
             currentActivity: memory.currentActivity,
             inputDeviceName: memory.inputDeviceName,
             headline: memory.headline,
+            accessCount: memory.accessCount,
+            lastAccessedAt: memory.lastAccessedAt,
             isRead: memory.isRead,
             isDismissed: memory.isDismissed,
             deleted: false,
@@ -258,6 +268,12 @@ extension MemoryRecord {
             self.headline = headline
         }
 
+        // Update access tracking
+        self.accessCount = memory.accessCount
+        if let lat = memory.lastAccessedAt {
+            self.lastAccessedAt = lat
+        }
+
         // Update status
         self.isRead = memory.isRead
         self.isDismissed = memory.isDismissed
@@ -298,7 +314,9 @@ extension MemoryRecord {
             currentActivity: currentActivity,
             inputDeviceName: inputDeviceName,
             windowTitle: windowTitle,
-            headline: headline
+            headline: headline,
+            accessCount: accessCount,
+            lastAccessedAt: lastAccessedAt
         )
     }
 }
@@ -330,7 +348,9 @@ extension ServerMemory {
         currentActivity: String?,
         inputDeviceName: String?,
         windowTitle: String? = nil,
-        headline: String? = nil
+        headline: String? = nil,
+        accessCount: Int = 0,
+        lastAccessedAt: Date? = nil
     ) {
         self.id = id
         self.content = content
@@ -355,6 +375,8 @@ extension ServerMemory {
         self.inputDeviceName = inputDeviceName
         self.windowTitle = windowTitle
         self.headline = headline
+        self.accessCount = accessCount
+        self.lastAccessedAt = lastAccessedAt
     }
 }
 

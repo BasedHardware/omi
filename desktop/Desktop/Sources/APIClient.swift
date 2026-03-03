@@ -1055,6 +1055,9 @@ struct ServerMemory: Codable, Identifiable {
     let windowTitle: String?
     // Short headline for notification preview (advice/tips only)
     let headline: String?
+    // Access tracking for memory decay scoring
+    let accessCount: Int
+    let lastAccessedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning, headline
@@ -1070,6 +1073,8 @@ struct ServerMemory: Codable, Identifiable {
         case currentActivity = "current_activity"
         case inputDeviceName = "input_device_name"
         case windowTitle = "window_title"
+        case accessCount = "access_count"
+        case lastAccessedAt = "last_accessed_at"
     }
 
     init(from decoder: Decoder) throws {
@@ -1097,6 +1102,8 @@ struct ServerMemory: Codable, Identifiable {
         inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
         windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
         headline = try container.decodeIfPresent(String.self, forKey: .headline)
+        accessCount = try container.decodeIfPresent(Int.self, forKey: .accessCount) ?? 0
+        lastAccessedAt = try container.decodeIfPresent(Date.self, forKey: .lastAccessedAt)
     }
 
     var isPublic: Bool {
