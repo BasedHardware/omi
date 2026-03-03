@@ -31,6 +31,8 @@ class Memory {
   bool deleted;
   MemoryVisibility visibility;
   bool isLocked;
+  int accessCount;
+  DateTime? lastAccessedAt;
 
   Memory({
     required this.id,
@@ -47,6 +49,8 @@ class Memory {
     this.deleted = false,
     required this.visibility,
     this.isLocked = false,
+    this.accessCount = 0,
+    this.lastAccessedAt,
   });
 
   factory Memory.fromJson(Map<String, dynamic> json) {
@@ -67,6 +71,10 @@ class Memory {
           ? (MemoryVisibility.values.asNameMap()[json['visibility']] ?? MemoryVisibility.public)
           : MemoryVisibility.public,
       isLocked: json['is_locked'] ?? false,
+      accessCount: json['access_count'] ?? 0,
+      lastAccessedAt: json['last_accessed_at'] != null
+          ? DateTime.parse(json['last_accessed_at']).toLocal()
+          : null,
     );
   }
 
