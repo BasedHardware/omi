@@ -8127,4 +8127,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
 }

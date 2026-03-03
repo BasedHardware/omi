@@ -8262,4 +8262,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Alle med lenken kan se';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Vis daglig poengsum på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis oppgaver på hjemmesiden';
 }

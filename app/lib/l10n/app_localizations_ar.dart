@@ -8209,4 +8209,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'يمكن لأي شخص لديه الرابط العرض';
+
+  @override
+  String get showDailyScoreOnHomepage => 'عرض النتيجة اليومية على الصفحة الرئيسية';
+
+  @override
+  String get showTasksOnHomepage => 'عرض المهام على الصفحة الرئيسية';
 }

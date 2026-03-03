@@ -8309,4 +8309,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Oricine are linkul poate vizualiza';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
+
+  @override
+  String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
 }

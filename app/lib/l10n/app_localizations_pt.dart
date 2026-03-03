@@ -8270,4 +8270,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Qualquer pessoa com o link pode visualizar';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostrar pontuação diária na página inicial';
+
+  @override
+  String get showTasksOnHomepage => 'Mostrar tarefas na página inicial';
 }

@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Perjungimui reikia iš naujo paleisti programėlę",
     "shared": "Bendrinamas",
     "onlyYouCanSeeConversation": "Tik jūs galite matyti šį pokalbį",
-    "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti"
+    "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
+    "showDailyScoreOnHomepage": "Rodyti dienos balą pagrindiniame puslapyje",
+    "showTasksOnHomepage": "Rodyti užduotis pagrindiniame puslapyje"
 }

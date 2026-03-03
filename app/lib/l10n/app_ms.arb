@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Penukaran memerlukan permulaan semula aplikasi",
     "shared": "Dikongsi",
     "onlyYouCanSeeConversation": "Hanya anda boleh melihat perbualan ini",
-    "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat"
+    "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
+    "showDailyScoreOnHomepage": "Tunjukkan Skor Harian di laman utama",
+    "showTasksOnHomepage": "Tunjukkan Tugasan di laman utama"
 }

@@ -8284,4 +8284,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Cualquier persona con el enlace puede ver';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostrar puntuación diaria en la página de inicio';
+
+  @override
+  String get showTasksOnHomepage => 'Mostrar tareas en la página de inicio';
 }

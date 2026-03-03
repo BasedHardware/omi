@@ -10077,5 +10077,13 @@
     },
     "shared": "Shared",
     "onlyYouCanSeeConversation": "Only you can see this conversation",
-    "anyoneWithLinkCanView": "Anyone with the link can view"
+    "anyoneWithLinkCanView": "Anyone with the link can view",
+    "showDailyScoreOnHomepage": "Show Daily Score on homepage",
+    "@showDailyScoreOnHomepage": {
+        "description": "Description for show daily score toggle in developer settings"
+    },
+    "showTasksOnHomepage": "Show Tasks on homepage",
+    "@showTasksOnHomepage": {
+        "description": "Description for show tasks toggle in developer settings"
+    }
 }

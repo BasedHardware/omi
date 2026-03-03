@@ -8302,4 +8302,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Покажи дневния резултат на началната страница';
+
+  @override
+  String get showTasksOnHomepage => 'Покажи задачите на началната страница';
 }

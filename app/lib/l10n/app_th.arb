@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "การสลับต้องรีสตาร์ทแอป",
     "shared": "แชร์แล้ว",
     "onlyYouCanSeeConversation": "เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้",
-    "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้"
+    "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
+    "showDailyScoreOnHomepage": "แสดงคะแนนประจำวันบนหน้าหลัก",
+    "showTasksOnHomepage": "แสดงงานบนหน้าหลัก"
 }

@@ -2679,5 +2679,7 @@
     "switchRequiresRestart": "切换需要重启应用",
     "shared": "已共享",
     "onlyYouCanSeeConversation": "只有您可以看到此对话",
-    "anyoneWithLinkCanView": "任何拥有链接的人都可以查看"
+    "anyoneWithLinkCanView": "任何拥有链接的人都可以查看",
+    "showDailyScoreOnHomepage": "在首页显示每日评分",
+    "showTasksOnHomepage": "在首页显示任务"
 }

@@ -8224,4 +8224,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'ใครก็ตามที่มีลิงก์สามารถดูได้';
+
+  @override
+  String get showDailyScoreOnHomepage => 'แสดงคะแนนประจำวันบนหน้าหลัก';
+
+  @override
+  String get showTasksOnHomepage => 'แสดงงานบนหน้าหลัก';
 }

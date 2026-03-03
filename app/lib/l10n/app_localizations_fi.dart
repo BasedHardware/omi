@@ -8266,4 +8266,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Kuka tahansa linkin haltija voi katsella';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Näytä päivittäinen pistemäärä etusivulla';
+
+  @override
+  String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
 }

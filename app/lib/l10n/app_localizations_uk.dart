@@ -8280,4 +8280,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Будь-хто з посиланням може переглядати';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показати щоденний рахунок на головній сторінці';
+
+  @override
+  String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
 }

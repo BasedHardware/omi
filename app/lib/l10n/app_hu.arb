@@ -2753,5 +2753,7 @@
     "switchRequiresRestart": "A váltás az alkalmazás újraindítását igényli",
     "shared": "Megosztott",
     "onlyYouCanSeeConversation": "Csak Ön láthatja ezt a beszélgetést",
-    "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link"
+    "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link",
+    "showDailyScoreOnHomepage": "Napi pontszám megjelenítése a főoldalon",
+    "showTasksOnHomepage": "Feladatok megjelenítése a főoldalon"
 }

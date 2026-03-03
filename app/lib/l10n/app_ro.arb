@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Comutarea necesită repornirea aplicației",
     "shared": "Partajat",
     "onlyYouCanSeeConversation": "Doar tu poți vedea această conversație",
-    "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza"
+    "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza",
+    "showDailyScoreOnHomepage": "Afișați scorul zilnic pe pagina principală",
+    "showTasksOnHomepage": "Afișați sarcinile pe pagina principală"
 }

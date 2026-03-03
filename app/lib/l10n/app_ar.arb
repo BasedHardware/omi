@@ -2624,5 +2624,7 @@
     "switchRequiresRestart": "يتطلب التبديل إعادة تشغيل التطبيق",
     "shared": "مشترك",
     "onlyYouCanSeeConversation": "أنت فقط من يمكنه رؤية هذه المحادثة",
-    "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض"
+    "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
+    "showDailyScoreOnHomepage": "عرض النتيجة اليومية على الصفحة الرئيسية",
+    "showTasksOnHomepage": "عرض المهام على الصفحة الرئيسية"
 }

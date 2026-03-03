@@ -8295,4 +8295,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Любой, у кого есть ссылка, может просматривать';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показать дневной счёт на главной странице';
+
+  @override
+  String get showTasksOnHomepage => 'Показать задачи на главной странице';
 }
