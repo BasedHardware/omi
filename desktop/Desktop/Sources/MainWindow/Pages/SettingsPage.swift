@@ -4102,7 +4102,7 @@ struct SettingsContentView: View {
 
                     settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
                         Picker("", selection: $updaterViewModel.updateChannel) {
-                            ForEach(UpdateChannel.visibleCases, id: \.self) { channel in
+                            ForEach(UpdateChannel.allCases, id: \.self) { channel in
                                 Text(channel.displayName).tag(channel)
                             }
                         }
