@@ -5,6 +5,7 @@ Tools for accessing user memories and facts.
 from datetime import datetime
 from typing import Optional, List
 import contextvars
+import threading
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +23,12 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _track_memory_access(uid: str, memory_ids: List[str]):
+    """Fire-and-forget helper: update access tracking for a list of memory IDs."""
+    for memory_id in memory_ids:
+        memory_db.update_memory_access(uid, memory_id)
 
 
 @tool
@@ -191,6 +198,11 @@ def get_memories_tool(
     result = f"User Memories ({len(memory_objects)} total):\n\n"
     result += MemoryDB.get_memories_as_str(memory_objects)
 
+    # Fire-and-forget: track access for up to 50 memories to boost their relevance score
+    # Cap at 50 to avoid excessive Firestore writes when fetching thousands of memories
+    ids_to_track = [m.id for m in memory_objects[:50]]
+    threading.Thread(target=_track_memory_access, args=(uid, ids_to_track), daemon=True).start()
+
     return result.strip()
 
 
@@ -306,6 +318,10 @@ def search_memories_tool(
             )
 
         logger.info(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
+
+        # Fire-and-forget: track access for all returned memories (vector search always returns <= 20)
+        ids_to_track = [item['memory'].id for item in memory_objects]
+        threading.Thread(target=_track_memory_access, args=(uid, ids_to_track), daemon=True).start()
 
         return result.strip()
 

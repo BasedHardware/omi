@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum
@@ -124,20 +125,63 @@ class MemoryDB(Memory):
     data_protection_level: Optional[str] = None
     is_locked: bool = False
     kg_extracted: bool = False
+    access_count: int = 0
+    last_accessed_at: Optional[datetime] = None
 
     def __init__(self, **data):
         super().__init__(**data)
         self.memory_id = self.conversation_id
 
+    # Type weights for decay formula — higher = decays slower
+    CATEGORY_TYPE_WEIGHTS = {
+        MemoryCategory.interesting.value: 1.2,
+        MemoryCategory.manual.value: 1.2,
+        MemoryCategory.system.value: 0.8,
+        MemoryCategory.core.value: 1.2,
+        MemoryCategory.hobbies.value: 1.2,
+        MemoryCategory.lifestyle.value: 1.2,
+        MemoryCategory.interests.value: 1.2,
+        MemoryCategory.work.value: 1.2,
+        MemoryCategory.skills.value: 1.2,
+        MemoryCategory.learnings.value: 1.2,
+        MemoryCategory.habits.value: 0.8,
+        MemoryCategory.other.value: 0.8,
+        MemoryCategory.auto.value: 0.8,
+    }
+
     @staticmethod
-    def calculate_score(memory: 'MemoryDB') -> 'MemoryDB':
-        cat_boost = (999 - CATEGORY_BOOSTS[memory.category.value]) if memory.category.value in CATEGORY_BOOSTS else 0
+    def calculate_score(memory: 'MemoryDB') -> str:
+        # Vault: manually-added memories never decay — always sort first
+        if memory.manually_added:
+            return "01_00_{:010d}".format(int(memory.created_at.timestamp()))
 
-        user_manual_added_boost = 1
-        if memory.manually_added is False:
-            user_manual_added_boost = 0
+        # Use last_accessed_at if available, else fall back to created_at
+        reference = memory.last_accessed_at or memory.created_at
+        # Ensure timezone-aware comparison
+        now = datetime.now(timezone.utc)
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=timezone.utc)
+        days_since = max(0, (now - reference).days)
 
-        return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(memory.created_at.timestamp()))
+        # Use access_count + 2 so new memories (access_count=0) start at log2(2)=1.0, not 0
+        access_boost = math.log2((memory.access_count or 0) + 2)
+        type_weight = MemoryDB.CATEGORY_TYPE_WEIGHTS.get(
+            memory.category.value if memory.category else MemoryCategory.system.value, 0.8
+        )
+
+        # Exponential decay: high access + recent access = high relevance
+        relevance = math.exp(-0.03 * days_since) * access_boost * type_weight
+        # Scale to 10-digit integer for string format
+        relevance_int = min(9999999999, int(relevance * 1_000_000_000))
+
+        cat_boost = (
+            1
+            if memory.category
+            and memory.category.value in (MemoryCategory.interesting.value, MemoryCategory.manual.value)
+            else 0
+        )
+
+        return "{:02d}_{:02d}_{:010d}".format(0, cat_boost, relevance_int)
 
     @staticmethod
     def from_memory(memory: Memory, uid: str, conversation_id: str, manually_added: bool) -> 'MemoryDB':

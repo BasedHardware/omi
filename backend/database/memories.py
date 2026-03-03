@@ -230,6 +230,21 @@ def update_memory_fields(uid: str, memory_id: str, data: dict):
     memory_ref.update(update_payload)
 
 
+def update_memory_access(uid: str, memory_id: str):
+    """Increment access_count and set last_accessed_at for a memory. Fire-and-forget; errors are swallowed."""
+    try:
+        memory_ref = db.collection(users_collection).document(uid).collection(memories_collection).document(memory_id)
+        memory_ref.update(
+            {
+                'access_count': firestore.Increment(1),
+                'last_accessed_at': datetime.now(timezone.utc),
+                'updated_at': datetime.now(timezone.utc),
+            }
+        )
+    except Exception as e:
+        logger.warning(f"update_memory_access failed for {uid}/{memory_id}: {e}")
+
+
 def edit_memory(uid: str, memory_id: str, value: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
