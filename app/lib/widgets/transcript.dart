@@ -558,8 +558,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                               const SizedBox(width: 6),
                               GestureDetector(
                                 onTap: () => widget.onAcceptSuggestion?.call(suggestion),
-                                child: const Text(
-                                  'Tag',
+                                child: Text(
+                                  context.l10n.tagLabel,
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,

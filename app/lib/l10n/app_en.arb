@@ -8099,6 +8099,10 @@
             }
         }
     },
+    "tagLabel": "Tag",
+    "@tagLabel": {
+        "description": "Short label for accepting a speaker suggestion in live transcript"
+    },
     "personNameAlreadyExists": "A person with this name already exists.",
     "selectYouFromList": "To tag yourself, please select \"You\" from the list.",
     "enterPersonsName": "Enter Person's Name",
