@@ -466,7 +466,6 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database.auth import get_user_name
 
             user_name = get_user_name(uid)
 

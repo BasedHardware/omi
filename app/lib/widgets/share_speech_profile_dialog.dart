@@ -12,9 +12,9 @@ Future<void> showShareSpeechProfileDialog(
   bool? cachedHasProfile,
   VoidCallback? onShared,
 }) async {
-  final hasProfile = cachedHasProfile ?? await userHasSpeakerProfile();
+  final hasProfile = (cachedHasProfile == true) ? true : await userHasSpeakerProfile();
   if (!context.mounted) return;
-  
+
   if (!hasProfile) {
     final goRecord = await showDialog<bool>(
       context: context,
@@ -38,71 +38,89 @@ Future<void> showShareSpeechProfileDialog(
   showDialog(
     context: context,
     builder: (ctx) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.l10n.shareSpeechProfile, style: const TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(context.l10n.enterUserIdToShare, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: context.l10n.userId,
-                hintStyle: const TextStyle(color: Color(0xFF636366)),
-                enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
-                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
-              ),
+      bool isSharing = false;
+      final outerContext = context;
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(context.l10n.shareSpeechProfile, style: const TextStyle(color: Colors.white)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.enterUserIdToShare, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  enabled: !isSharing,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: context.l10n.userId,
+                    hintStyle: const TextStyle(color: Color(0xFF636366)),
+                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
+                    focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
-          ),
-          TextButton(
-            onPressed: () async {
-              final targetUid = controller.text.trim();
-              if (targetUid.isEmpty) return;
-              if (targetUid == SharedPreferencesUtil().uid) {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.cannotShareWithSelf)),
-                );
-                return;
-              }
-              final result = await shareSpeechProfile(targetUid);
-              if (!context.mounted) return;
-              Navigator.pop(ctx);
-              if (result['status'] == 'ok') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.profileSharedSuccess)),
-                );
-                onShared?.call();
-              } else {
-                final error = result['error'] ?? '';
-                String message;
-                if (error.contains('not found')) {
-                  message = context.l10n.userNotFound;
-                } else if (error.contains('yourself')) {
-                  message = context.l10n.cannotShareWithSelf;
-                } else if (error.contains('No speech profile')) {
-                  message = context.l10n.noSpeechProfileRecorded;
-                } else if (error.contains('Already shared')) {
-                  message = context.l10n.alreadySharedWithUser;
-                } else {
-                  message = context.l10n.profileSharedFail;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-              }
-            },
-            child: Text(context.l10n.share, style: const TextStyle(color: Colors.white)),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: isSharing ? null : () => Navigator.pop(ctx),
+                child: Text(context.l10n.cancel, style: TextStyle(color: isSharing ? Colors.grey : Colors.white)),
+              ),
+              TextButton(
+                onPressed: isSharing
+                    ? null
+                    : () async {
+                        final targetUid = controller.text.trim();
+                        if (targetUid.isEmpty) return;
+                        if (targetUid == SharedPreferencesUtil().uid) {
+                          Navigator.pop(ctx);
+                          if (!outerContext.mounted) return;
+                          ScaffoldMessenger.of(
+                            outerContext,
+                          ).showSnackBar(SnackBar(content: Text(outerContext.l10n.cannotShareWithSelf)));
+                          return;
+                        }
+                        setState(() => isSharing = true);
+                        final result = await shareSpeechProfile(targetUid);
+                        if (!ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        if (!outerContext.mounted) return;
+                        if (result['status'] == 'ok') {
+                          ScaffoldMessenger.of(
+                            outerContext,
+                          ).showSnackBar(SnackBar(content: Text(outerContext.l10n.profileSharedSuccess)));
+                          onShared?.call();
+                        } else {
+                          final error = result['error'] ?? '';
+                          String message;
+                          if (error.contains('not found')) {
+                            message = outerContext.l10n.userNotFound;
+                          } else if (error.contains('yourself')) {
+                            message = outerContext.l10n.cannotShareWithSelf;
+                          } else if (error.contains('No speech profile')) {
+                            message = outerContext.l10n.noSpeechProfileRecorded;
+                          } else if (error.contains('Already shared')) {
+                            message = outerContext.l10n.alreadySharedWithUser;
+                          } else {
+                            message = outerContext.l10n.profileSharedFail;
+                          }
+                          ScaffoldMessenger.of(outerContext).showSnackBar(SnackBar(content: Text(message)));
+                        }
+                      },
+                child: isSharing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(context.l10n.share, style: const TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
       );
     },
   );

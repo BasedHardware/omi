@@ -8,6 +8,7 @@ from pydub import AudioSegment
 
 from database.conversations import get_conversation
 from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
+from database.auth import get_user_name
 from database.users import (
     get_person,
     get_user_profile,
@@ -16,9 +17,8 @@ from database.users import (
     share_speech_profile,
     revoke_speech_profile_share,
     remove_shared_profile_from_me,
-    get_profiles_shared_with_user_details,
+    get_profiles_shared_with_user,
     get_users_shared_with,
-    get_users_shared_with_details,
 )
 from models.conversation import Conversation
 from models.other import ShareSpeechProfileRequest, UploadProfile
@@ -170,12 +170,12 @@ def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depend
 @router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
 def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
     """List users who have shared their speech profile with the current user"""
-    owners = get_profiles_shared_with_user_details(uid)
-    return {"shared_with_me": owners}
+    owner_uids = get_profiles_shared_with_user(uid)
+    return {"shared_with_me": [{'uid': u, 'name': get_user_name(u, use_default=False) or ''} for u in owner_uids]}
 
 
 @router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
 def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
     """List users with whom the current user has shared their speech profile"""
-    shared = get_users_shared_with_details(uid)
-    return {"i_have_shared_with": shared}
+    target_uids = get_users_shared_with(uid)
+    return {"i_have_shared_with": [{'uid': u, 'name': get_user_name(u, use_default=False) or ''} for u in target_uids]}

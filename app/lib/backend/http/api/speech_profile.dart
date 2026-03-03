@@ -45,8 +45,12 @@ Future<bool> uploadProfile(File file) async {
       Logger.debug('uploadProfile Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      Logger.debug('Failed to upload sample. Status code: ${response.statusCode} body: ${response.body}');
-      throw Exception('Failed to upload sample (${response.statusCode}): ${response.body}');
+      Logger.debug(
+        'Failed to upload sample. Status code: ${response.statusCode} body: ${response.body}',
+      );
+      throw Exception(
+        'Failed to upload sample (${response.statusCode}): ${response.body}',
+      );
     }
   } catch (e) {
     Logger.debug('An error occurred uploadSample: $e');
@@ -140,10 +144,7 @@ class SharedProfileInfo {
   SharedProfileInfo({required this.uid, required this.name});
 
   factory SharedProfileInfo.fromJson(Map<String, dynamic> json) {
-    return SharedProfileInfo(
-      uid: json['uid'] ?? '',
-      name: json['name'] ?? '',
-    );
+    return SharedProfileInfo(uid: json['uid'] ?? '', name: json['name'] ?? '');
   }
 
   String get displayName => name.isNotEmpty ? name : uid;

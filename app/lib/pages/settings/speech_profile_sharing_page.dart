@@ -61,9 +61,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     final success = await revokeSpeechProfile(info.uid);
     if (!mounted) return;
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.profileSharedFail)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.profileSharedFail)));
       return;
     }
     setState(() => _loading = true);
@@ -86,9 +84,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     final success = await removeSharedProfile(info.uid);
     if (!mounted) return;
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.profileSharedFail)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.profileSharedFail)));
       return;
     }
     setState(() => _loading = true);
@@ -111,12 +107,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         title.toUpperCase(),
-        style: TextStyle(
-          color: Colors.grey.shade500,
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
-        ),
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.5),
       ),
     );
   }
@@ -125,10 +116,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
           Icon(icon, color: Colors.grey.shade600, size: 32),
@@ -145,8 +133,9 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
 
   Widget _buildProfileTile(SharedProfileInfo info, {required Widget trailing}) {
     final hasName = info.name.isNotEmpty;
-    final truncatedUid =
-        info.uid.length > 12 ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}' : info.uid;
+    final truncatedUid = info.uid.length > 12
+        ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}'
+        : info.uid;
     return ListTile(
       title: Text(
         hasName ? info.name : truncatedUid,
@@ -156,18 +145,14 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
           ? GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: info.uid));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.userIdCopied)),
-                );
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
               },
               child: Text(truncatedUid, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
             )
           : null,
       onLongPress: () {
         Clipboard.setData(ClipboardData(text: info.uid));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.userIdCopied)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
       },
       trailing: trailing,
     );
@@ -178,10 +163,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(6),
-        ),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
         child: Text(
           label,
           style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500),
@@ -199,19 +181,10 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
         elevation: 0,
         title: Text(context.l10n.sharedProfiles, style: const TextStyle(color: Colors.white, fontSize: 18)),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _openShareDialog,
-          ),
-        ],
+        actions: [IconButton(icon: const Icon(Icons.add), onPressed: _openShareDialog)],
       ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
+          ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
           : SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Column(
@@ -224,9 +197,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1C1C1E),
-                        ),
+                        decoration: const BoxDecoration(color: Color(0xFF1C1C1E)),
                         child: Column(
                           children: [
                             for (int i = 0; i < _sharedWith.length; i++) ...[
@@ -254,9 +225,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1C1C1E),
-                        ),
+                        decoration: const BoxDecoration(color: Color(0xFF1C1C1E)),
                         child: Column(
                           children: [
                             for (int i = 0; i < _sharedWithMe.length; i++) ...[

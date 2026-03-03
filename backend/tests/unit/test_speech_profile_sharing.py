@@ -124,7 +124,7 @@ def test_revoke_speech_profile_share_exists():
     """Test revoking an existing shared profile"""
     mock_db = MagicMock()
     shared_ref = MagicMock()
-    shared_ref.get.return_value.exists = True
+    shared_ref.get.return_value = _FakeSnapshot({'shared_with_uid': 'target_uid', 'revoked_at': None}, exists=True)
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
     with patch('database.users.db', mock_db):
@@ -465,48 +465,6 @@ def test_match_empty_cache_returns_none():
     assert name is None
 
 
-def test_get_profiles_shared_with_user_details_returns_uid_and_name():
-    """Test that details endpoint returns {uid, name} dicts."""
-    with patch('database.users.get_profiles_shared_with_user') as mock_shared, \
-         patch('database.auth.get_user_name') as mock_name:
-        mock_shared.return_value = ['owner1', 'owner2']
-        mock_name.side_effect = lambda uid, use_default=True: {
-            'owner1': 'Alice',
-            'owner2': 'Bob',
-        }.get(uid, '')
-
-        result = users_db.get_profiles_shared_with_user_details('target_uid')
-
-        assert len(result) == 2
-        assert result[0] == {'uid': 'owner1', 'name': 'Alice'}
-        assert result[1] == {'uid': 'owner2', 'name': 'Bob'}
-
-
-def test_get_profiles_shared_with_user_details_empty():
-    """Test that details endpoint returns empty list when no profiles shared."""
-    with patch('database.users.get_profiles_shared_with_user') as mock_shared:
-        mock_shared.return_value = []
-        result = users_db.get_profiles_shared_with_user_details('target_uid')
-        assert result == []
-
-
-def test_get_users_shared_with_details_returns_uid_and_name():
-    """Test that owner's shared list returns {uid, name} dicts."""
-    with patch('database.users.get_users_shared_with') as mock_shared, \
-         patch('database.auth.get_user_name') as mock_name:
-        mock_shared.return_value = ['target1', 'target2']
-        mock_name.side_effect = lambda uid, use_default=True: {
-            'target1': 'Charlie',
-            'target2': 'Diana',
-        }.get(uid, '')
-
-        result = users_db.get_users_shared_with_details('owner_uid')
-
-        assert len(result) == 2
-        assert result[0] == {'uid': 'target1', 'name': 'Charlie'}
-        assert result[1] == {'uid': 'target2', 'name': 'Diana'}
-
-
 def test_remove_shared_profile_from_me():
     """Test that receiver can remove a shared profile."""
     mock_db = MagicMock()
@@ -697,7 +655,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     # --- STEP 9: Verify revoke removes from future sessions ---
     mock_db3 = MagicMock()
     revoke_ref = MagicMock()
-    revoke_ref.get.return_value.exists = True
+    revoke_ref.get.return_value = _FakeSnapshot({'shared_with_uid': 'bob_uid', 'revoked_at': None}, exists=True)
     mock_db3.collection.return_value.document.return_value.collection.return_value.document.return_value = revoke_ref
 
     with patch('database.users.db', mock_db3):
@@ -795,12 +753,14 @@ def test_full_pipeline_picks_correct_person_from_multiple(monkeypatch):
     assert pid == 'shared:charlie_uid'
     assert name == 'Charlie'
 
+
 def test_spoofed_shared_pid_rejected_by_ownership_check():
     """Spoofed shared:{attacker_uid} is rejected because attacker hasn't shared with current user."""
     from utils.shared_profiles import resolve_shared_people
 
-    with patch('utils.shared_profiles.users_db') as mock_users, \
-         patch('utils.shared_profiles.get_user_name') as mock_name:
+    with patch('utils.shared_profiles.users_db') as mock_users, patch(
+        'utils.shared_profiles.get_user_name'
+    ) as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid']
         mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
         mock_name.return_value = 'Alice'
@@ -821,8 +781,9 @@ def test_all_valid_shared_pids_resolved():
     def mock_name_fn(uid, use_default=True):
         return {'alice_uid': 'Alice Smith', 'charlie_uid': 'Charlie Brown'}.get(uid)
 
-    with patch('utils.shared_profiles.users_db') as mock_users, \
-         patch('utils.shared_profiles.get_user_name') as mock_name:
+    with patch('utils.shared_profiles.users_db') as mock_users, patch(
+        'utils.shared_profiles.get_user_name'
+    ) as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
         mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
         mock_name.side_effect = mock_name_fn
