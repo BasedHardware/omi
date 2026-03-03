@@ -325,16 +325,14 @@ struct MacOSNotificationBanner: View {
                     Text("omi")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.primary)
+                    Text(headline)
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
                     Spacer()
                     Text("now")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
-
-                Text(headline)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
 
                 Text(message)
                     .font(.system(size: 12))
