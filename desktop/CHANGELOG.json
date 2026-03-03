@@ -1,8 +1,24 @@
 {
   "unreleased": [
-    "Interactive AI onboarding with permission guidance and file discovery"
+    "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute",
+    "Focus assistant now uses your goals, tasks, and memories for smarter distraction detection",
+    "Added Focus Analysis Test Runner for validating focus detection prompts"
   ],
   "releases": [
+    {
+      "version": "0.11.38",
+      "date": "2026-03-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.36",
+      "date": "2026-03-01",
+      "changes": [
+        "Interactive AI onboarding with permission guidance and file discovery"
+      ]
+    },
     {
       "version": "0.11.34",
       "date": "2026-02-28",

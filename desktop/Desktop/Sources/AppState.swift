@@ -282,6 +282,7 @@ class AppState: ObservableObject {
                 if self.isTranscribing {
                     log("App terminating - finalizing conversation")
                     _ = await self.finalizeConversation()
+                    self.clearTranscriptionState()
                 }
             }
         }
@@ -836,7 +837,10 @@ class AppState: ObservableObject {
                 }
             } else {
                 let hasPermission = status == noErr
-                log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                let previousValue = await MainActor.run { self.hasAutomationPermission }
+                if hasPermission != previousValue {
+                    log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                }
 
                 await MainActor.run {
                     self.hasAutomationPermission = hasPermission
@@ -897,15 +901,21 @@ class AppState: ObservableObject {
             // AXIsProcessTrusted() says not granted — but on macOS 26 this may be stale.
             // Probe via event tap which checks the live TCC database.
             if probeAccessibilityViaEventTap() {
-                log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                if !previouslyGranted {
+                    log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                }
                 let axWorks = testAccessibilityPermission()
                 hasAccessibilityPermission = true
                 if !axWorks {
+                    if !isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
+                    }
                     isAccessibilityBroken = true
-                    log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
                 } else {
+                    if isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
+                    }
                     isAccessibilityBroken = false
-                    log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
                 }
             } else {
                 // Event tap also failed — permission genuinely not granted
@@ -2139,7 +2149,7 @@ class AppState: ObservableObject {
             return .saved
         } catch {
             logError("Transcription: Failed to save conversation", error: error)
-            AnalyticsManager.shared.recordingError(error: "Failed to save: \(error.localizedDescription)")
+            // Error event deferred to TranscriptionRetryService after all retries are exhausted
 
             // Mark session as failed in DB for later retry
             if let sessionId = sessionId {
@@ -2559,7 +2569,7 @@ class AppState: ObservableObject {
                     for buildDir in buildDirs {
                         let appPath = "\(buildProductsPath)/\(buildDir)/Omi.app"
                         let appPath2 = "\(buildProductsPath)/\(buildDir)/Omi Computer.app"
-                        let appPath3 = "\(buildProductsPath)/\(buildDir)/Omi Beta.app"
+                        let appPath3 = "\(buildProductsPath)/\(buildDir)/omi.app"
                         let appPath4 = "\(buildProductsPath)/\(buildDir)/Omi Dev.app"
                         for path in [appPath, appPath2, appPath3, appPath4] {
                             if fileManager.fileExists(atPath: path) {

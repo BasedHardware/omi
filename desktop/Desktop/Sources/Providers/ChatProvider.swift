@@ -1915,9 +1915,17 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             // at session/new; for the normal reused-session path it is ignored.
             // Passing it here ensures it is applied if the session was invalidated
             // (e.g. cwd change) and a new session/new is triggered mid-conversation.
-            var systemPrompt = cachedMainSystemPrompt
-            if let prefix = systemPromptPrefix, !prefix.isEmpty {
-                systemPrompt = prefix + "\n\n" + systemPrompt
+            var systemPrompt: String
+            if isOnboarding, let prefix = systemPromptPrefix, !prefix.isEmpty {
+                // Onboarding uses its own prompt exclusively — the main chat prompt
+                // contains rules like "don't ask follow-up questions" that conflict
+                // with the onboarding deep-dive step.
+                systemPrompt = prefix
+            } else {
+                systemPrompt = cachedMainSystemPrompt
+                if let prefix = systemPromptPrefix, !prefix.isEmpty {
+                    systemPrompt = prefix + "\n\n" + systemPrompt
+                }
             }
             if let suffix = systemPromptSuffix, !suffix.isEmpty {
                 systemPrompt += "\n\n" + suffix
@@ -1954,6 +1962,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
                                 self?.needsBrowserExtensionSetup = true
                                 self?.stopAgent()
+                                // Bring the app to the foreground so the setup sheet is visible
+                                // (the failed browser attempt may have opened Chrome, stealing focus)
+                                NSApp.activate(ignoringOtherApps: true)
+                                for window in NSApp.windows where window.title.hasPrefix("Omi") {
+                                    window.makeKeyAndOrderFront(nil)
+                                }
+                            }
+                            // Show the floating bar so the user has an always-on-top UI
+                            // when Chrome takes focus (important on small screens)
+                            if !FloatingControlBarManager.shared.isVisible {
+                                log("ChatProvider: Browser tool active — showing floating bar so it stays above Chrome")
+                                FloatingControlBarManager.shared.showTemporarily()
                             }
                         }
                     } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
@@ -2088,20 +2108,23 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 messageLength: responseLength
             )
 
-            if bridgeMode == BridgeMode.omiAI.rawValue {
+            let isOmiMode = bridgeMode == BridgeMode.omiAI.rawValue
+            let accountType = isOmiMode ? "omi" : "personal"
+            let r = queryResult
+            Task.detached(priority: .background) {
+                await APIClient.shared.recordLlmUsage(
+                    inputTokens: r.inputTokens,
+                    outputTokens: r.outputTokens,
+                    cacheReadTokens: r.cacheReadTokens,
+                    cacheWriteTokens: r.cacheWriteTokens,
+                    totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
+                    costUsd: r.costUsd,
+                    account: accountType
+                )
+            }
+            if isOmiMode {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
-                let r = queryResult
-                Task.detached(priority: .background) {
-                    await APIClient.shared.recordLlmUsage(
-                        inputTokens: r.inputTokens,
-                        outputTokens: r.outputTokens,
-                        cacheReadTokens: r.cacheReadTokens,
-                        cacheWriteTokens: r.cacheWriteTokens,
-                        totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
-                        costUsd: r.costUsd
-                    )
-                }
                 // Auto-switch to the user's Claude account when the $50 Omi usage threshold is reached
                 if omiAICumulativeCostUsd >= 50.0 {
                     showOmiThresholdAlert = true

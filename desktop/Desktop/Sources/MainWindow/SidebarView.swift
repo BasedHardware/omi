@@ -20,7 +20,7 @@ enum SidebarNavItem: Int, CaseIterable {
         switch self {
         case .dashboard: return "Dashboard"
         case .conversations: return "Conversations"
-        case .chat: return "AI chat"
+        case .chat: return "Chat"
         case .memories: return "Memories"
         case .tasks: return "Tasks"
         case .focus: return "Focus"
@@ -321,21 +321,6 @@ struct SidebarView: View {
                         )
                     }
 
-                    // Help from Founder - navigates to Crisp chat page
-                    NavItemView(
-                        icon: SidebarNavItem.help.icon,
-                        label: SidebarNavItem.help.title,
-                        isSelected: selectedIndex == SidebarNavItem.help.rawValue,
-                        isCollapsed: isCollapsed,
-                        iconWidth: iconWidth,
-                        badge: crispManager.unreadCount,
-                        onTap: {
-                            selectedIndex = SidebarNavItem.help.rawValue
-                            crispManager.markAsRead()
-                            AnalyticsManager.shared.tabChanged(tabName: SidebarNavItem.help.title)
-                        }
-                    )
-
                     // Settings at the very bottom
                     NavItemView(
                         icon: "gearshape.fill",
@@ -484,7 +469,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")
+                Text(UpdateChannel.appDisplayName)
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
@@ -603,7 +588,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     // Text content
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Get Omi Device")
+                        Text("Get omi Device")
                             .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -640,7 +625,7 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(isCollapsed ? "Get Omi Device" : "")
+        .help(isCollapsed ? "Get omi Device" : "")
     }
 
     // MARK: - Update Available Widget
@@ -885,10 +870,12 @@ struct SidebarView: View {
                         // Reset and restart to fix broken ScreenCaptureKit state
                         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
                     } else {
-                        // Request both traditional TCC and ScreenCaptureKit permissions
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                        // Also open settings for manual grant if needed
+                        // Open Settings FIRST so it's visible before system dialog steals focus
                         ScreenCaptureService.openScreenRecordingPreferences()
+                        // Then request permissions (may show system dialog)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            ScreenCaptureService.requestAllScreenCapturePermissions()
+                        }
                         // Track attempt — if still not granted on next check, show recovery instructions
                         appState.screenRecordingGrantAttempts += 1
                     }
@@ -1127,9 +1114,11 @@ struct SidebarView: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Request both traditional TCC and ScreenCaptureKit permissions
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 

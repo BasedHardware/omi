@@ -2654,5 +2654,8 @@
     "switchAndRestart": "Byt",
     "switchApiConfirmBody": "Byta till {environment}? Du behöver stänga och öppna appen igen för att ändringarna ska börja gälla.",
     "switchApiConfirmTitle": "Byt API-miljö",
-    "switchRequiresRestart": "Byte kräver omstart av appen"
+    "switchRequiresRestart": "Byte kräver omstart av appen",
+    "shared": "Delad",
+    "onlyYouCanSeeConversation": "Bara du kan se den här konversationen",
+    "anyoneWithLinkCanView": "Alla med länken kan visa"
 }

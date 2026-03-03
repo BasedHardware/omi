@@ -8242,4 +8242,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Gemt. Luk og genåbn appen for at anvende ændringerne.';
+
+  @override
+  String get shared => 'Delt';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Kun du kan se denne samtale';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alle med linket kan se';
 }

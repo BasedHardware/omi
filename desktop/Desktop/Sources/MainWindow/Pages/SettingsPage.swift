@@ -255,7 +255,7 @@ struct SettingsContentView: View {
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
         case goals = "Goals"
-        case askOmiFloatingBar = "Ask Omi Floating Bar"
+        case askOmiFloatingBar = "Ask omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
 
@@ -549,7 +549,7 @@ struct SettingsContentView: View {
                         .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Ask Omi")
+                        Text("Ask omi")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -1409,7 +1409,7 @@ struct SettingsContentView: View {
                     }
                     .padding(.bottom, 4)
 
-                    Text("Allow Omi to store audio recordings of your conversations")
+                    Text("Allow omi to store audio recordings of your conversations")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.leading, 34)
@@ -1644,7 +1644,7 @@ struct SettingsContentView: View {
                         Spacer()
 
                         Picker("", selection: $chatBridgeMode) {
-                            Text("Omi account").tag("agentSDK")
+                            Text("omi account").tag("agentSDK")
                             Text("Your Claude Account").tag("claudeCode")
                         }
                         .pickerStyle(.menu)
@@ -1660,7 +1660,7 @@ struct SettingsContentView: View {
 
                     Text(chatBridgeMode == "claudeCode"
                          ? "Using your Claude Pro/Max subscription. You'll be prompted to sign in with your Claude account."
-                         : "Using your Omi account.")
+                         : "Using your omi account.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
 
@@ -2762,18 +2762,33 @@ struct SettingsContentView: View {
                     }
 
                     settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
-                        Button(action: {
-                            PromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                FocusTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                PromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -3992,7 +4007,7 @@ struct SettingsContentView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("Omi")
+                                Text("omi")
                                     .scaledFont(size: 18, weight: .bold)
                                     .foregroundColor(OmiColors.textPrimary)
 
@@ -4006,16 +4021,7 @@ struct SettingsContentView: View {
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
-                                .onTapGesture {
-                                    // Hidden: Option+click to enable staging channel
-                                    if NSEvent.modifierFlags.contains(.option) {
-                                        // Set staging directly in UserDefaults, bypassing the
-                                        // updateChannel didSet which would overwrite with "beta"
-                                        UserDefaults.standard.set("staging", forKey: "update_channel")
-                                        updaterViewModel.activeChannelLabel = "Staging"
-                                        logSync("Settings: Staging channel enabled via hidden gesture")
-                                    }
-                                }
+                                .textSelection(.enabled)
                         }
 
                         Spacer()
@@ -4096,7 +4102,7 @@ struct SettingsContentView: View {
 
                     settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
                         Picker("", selection: $updaterViewModel.updateChannel) {
-                            ForEach(UpdateChannel.allCases, id: \.self) { channel in
+                            ForEach(UpdateChannel.visibleCases, id: \.self) { channel in
                                 Text(channel.displayName).tag(channel)
                             }
                         }
@@ -4118,7 +4124,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text("Help us improve Omi")
+                        Text("Help us improve omi")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -4522,8 +4528,6 @@ struct SettingsContentView: View {
                     isLoadingSettings = false
                 }
 
-                // Sync update channel from user profile (separate from assistant settings)
-                UpdaterViewModel.shared.syncUpdateChannelFromServer()
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {

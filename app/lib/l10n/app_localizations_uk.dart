@@ -8271,4 +8271,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Збережено. Закрийте та знову відкрийте додаток, щоб застосувати зміни.';
+
+  @override
+  String get shared => 'Спільний';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Лише ви можете бачити цю розмову';
+
+  @override
+  String get anyoneWithLinkCanView => 'Будь-хто з посиланням може переглядати';
 }

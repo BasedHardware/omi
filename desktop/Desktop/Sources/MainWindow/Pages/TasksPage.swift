@@ -2198,7 +2198,7 @@ struct TasksPage: View {
     /// Expand or shrink the main window to accommodate the chat panel.
     /// Saves the user's original width before expanding so it can be restored exactly.
     private func adjustWindowWidth(expand: Bool) {
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
 
         let expandAmount = chatPanelWidth + 1 // +1 for divider
         var frame = window.frame
@@ -2241,7 +2241,7 @@ struct TasksPage: View {
     /// Uses no animation since the app is just opening.
     private func shrinkWindowIfNeeded() {
         guard preChatWindowWidth > 0 else { return }
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
         var frame = window.frame
         frame.size.width = preChatWindowWidth
         window.setFrame(frame, display: true)

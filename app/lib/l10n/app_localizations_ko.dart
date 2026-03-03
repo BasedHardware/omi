@@ -8120,4 +8120,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => '저장되었습니다. 변경 사항을 적용하려면 앱을 닫고 다시 여세요.';
+
+  @override
+  String get shared => '공유됨';
+
+  @override
+  String get onlyYouCanSeeConversation => '이 대화는 본인만 볼 수 있습니다';
+
+  @override
+  String get anyoneWithLinkCanView => '링크가 있는 사람은 누구나 볼 수 있습니다';
 }

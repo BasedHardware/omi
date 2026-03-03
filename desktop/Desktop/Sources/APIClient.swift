@@ -3607,14 +3607,12 @@ struct UserProfileResponse: Codable {
     let useCase: String?
     let job: String?
     let company: String?
-    let desktopUpdateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case uid, email, name, motivation, job, company
         case timeZone = "time_zone"
         case createdAt = "created_at"
         case useCase = "use_case"
-        case desktopUpdateChannel = "desktop_update_channel"
     }
 
     init(from decoder: Decoder) throws {
@@ -3628,7 +3626,6 @@ struct UserProfileResponse: Codable {
         useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
         job = try container.decodeIfPresent(String.self, forKey: .job)
         company = try container.decodeIfPresent(String.self, forKey: .company)
-        desktopUpdateChannel = try container.decodeIfPresent(String.self, forKey: .desktopUpdateChannel)
     }
 }
 
@@ -4375,7 +4372,8 @@ extension APIClient {
         cacheReadTokens: Int,
         cacheWriteTokens: Int,
         totalTokens: Int,
-        costUsd: Double
+        costUsd: Double,
+        account: String = "omi"
     ) async {
         struct Req: Encodable {
             let input_tokens: Int
@@ -4384,6 +4382,7 @@ extension APIClient {
             let cache_write_tokens: Int
             let total_tokens: Int
             let cost_usd: Double
+            let account: String
         }
         struct Res: Decodable { let status: String }
         do {
@@ -4393,7 +4392,8 @@ extension APIClient {
                 cache_read_tokens: cacheReadTokens,
                 cache_write_tokens: cacheWriteTokens,
                 total_tokens: totalTokens,
-                cost_usd: costUsd
+                cost_usd: costUsd,
+                account: account
             ))
         } catch {
             log("APIClient: LLM usage record failed: \(error.localizedDescription)")

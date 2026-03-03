@@ -12,7 +12,7 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Stable"
         case .beta: return "Beta"
-        case .staging: return "Staging"
+        case .staging: return "Beta"
         }
     }
 
@@ -20,8 +20,19 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Recommended for most users"
         case .beta: return "Early access to new features"
-        case .staging: return "Internal testing builds"
+        case .staging: return "Get updates as soon as they're built"
         }
+    }
+
+    /// Cases visible in the Settings picker (hides real .beta)
+    static var visibleCases: [UpdateChannel] {
+        [.stable, .staging]
+    }
+
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta/staging
+    static var appDisplayName: String {
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
+        return (channel == "staging" || channel == "beta") ? "Omi Beta" : "omi"
     }
 }
 
@@ -301,26 +312,9 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
-    /// Sync update channel from server.
-    /// If the backend has a `desktop_update_channel` field set on the user doc,
-    /// override the local channel preference. Triggers a Sparkle check if the channel changed.
-    func syncUpdateChannelFromServer() {
-        Task {
-            do {
-                let profile = try await APIClient.shared.getUserProfile()
-                guard let serverChannel = profile.desktopUpdateChannel,
-                      let channel = UpdateChannel(rawValue: serverChannel) else { return }
-                if updateChannel != channel {
-                    log("Sparkle: Server assigned update channel: \(serverChannel)")
-                    updateChannel = channel
-                    // Trigger an immediate update check so the new channel takes effect
-                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s for Sparkle to pick up new channel
-                    updaterController.updater.checkForUpdatesInBackground()
-                }
-            } catch {
-                // Non-fatal — channel sync is best-effort
-            }
-        }
+    /// Background update check (no UI). Used after channel changes.
+    func checkForUpdatesInBackground() {
+        updaterController.updater.checkForUpdatesInBackground()
     }
 
     /// Get the current app version string
@@ -337,7 +331,7 @@ final class UpdaterViewModel: ObservableObject {
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
         switch raw {
-        case "staging": return "Staging"
+        case "staging": return "Beta"
         case "beta": return "Beta"
         default: return ""
         }

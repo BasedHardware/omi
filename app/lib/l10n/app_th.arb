@@ -2654,5 +2654,8 @@
     "switchAndRestart": "สลับ",
     "switchApiConfirmBody": "สลับไปที่ {environment}? คุณจะต้องปิดและเปิดแอปใหม่เพื่อให้การเปลี่ยนแปลงมีผล",
     "switchApiConfirmTitle": "สลับสภาพแวดล้อม API",
-    "switchRequiresRestart": "การสลับต้องรีสตาร์ทแอป"
+    "switchRequiresRestart": "การสลับต้องรีสตาร์ทแอป",
+    "shared": "แชร์แล้ว",
+    "onlyYouCanSeeConversation": "เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้",
+    "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้"
 }

@@ -726,7 +726,7 @@ struct ConversationDetailView: View {
     private var sourceLabel: String {
         switch displayConversation.source {
         case .desktop: return "Desktop"
-        case .omi: return "Omi"
+        case .omi: return "omi"
         case .phone: return "Phone"
         case .appleWatch: return "Apple Watch"
         case .workflow: return "Workflow"

@@ -14,6 +14,8 @@ class AnalyticsManager {
         Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
     }
 
+    private var lastTranscriptionStartedAt: Date?
+
     private init() {}
 
     // MARK: - Initialization
@@ -64,6 +66,21 @@ class AnalyticsManager {
         PostHogManager.shared.onboardingCompleted()
     }
 
+    func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
+        var props = properties
+        props["tool"] = tool
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Tool Used", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
+    }
+
+    func onboardingChatMessage(role: String, step: String) {
+        let props: [String: Any] = ["role": role, "step": step]
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Message", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Message", properties: props)
+    }
+
     // MARK: - Authentication Events
 
     func signInStarted(provider: String) {
@@ -111,6 +128,11 @@ class AnalyticsManager {
     // MARK: - Recording Events
 
     func transcriptionStarted() {
+        // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
+        if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
+            return
+        }
+        lastTranscriptionStartedAt = Date()
         MixpanelManager.shared.transcriptionStarted()
         PostHogManager.shared.transcriptionStarted()
     }
@@ -594,6 +616,21 @@ class AnalyticsManager {
     func taskPromoted(taskCount: Int) {
         MixpanelManager.shared.taskPromoted(taskCount: taskCount)
         PostHogManager.shared.taskPromoted(taskCount: taskCount)
+    }
+
+    func taskCompleted(source: String?) {
+        MixpanelManager.shared.taskCompleted(source: source)
+        PostHogManager.shared.taskCompleted(source: source)
+    }
+
+    func taskDeleted(source: String?) {
+        MixpanelManager.shared.taskDeleted(source: source)
+        PostHogManager.shared.taskDeleted(source: source)
+    }
+
+    func taskAdded() {
+        MixpanelManager.shared.taskAdded()
+        PostHogManager.shared.taskAdded()
     }
 
     func memoryExtracted(memoryCount: Int) {

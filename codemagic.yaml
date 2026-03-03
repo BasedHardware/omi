@@ -1859,7 +1859,7 @@ workflows:
         - desktop_secrets
       vars:
         BINARY_NAME: "Omi Computer"
-        APP_NAME: "Omi Beta"
+        APP_NAME: "omi"
         BUNDLE_ID: "com.omi.computer-macos"
         BUILD_DIR: "build"
         GITHUB_REPO: "BasedHardware/omi"
@@ -2400,14 +2400,14 @@ workflows:
           rm /tmp/gcp_key.json
 
           GCS_BUCKET="gs://omi_macos_updates"
-          gsutil -h "Content-Disposition:attachment; filename=\"Omi Beta.dmg\"" \
-            cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
-          echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
+          gsutil -h "Content-Disposition:attachment; filename=\"omi.dmg\"" \
+            cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/omi.dmg"
+          echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/omi.dmg"
           echo "(Run promote_release.sh to update the latest/ pointer when promoting to stable)"
 
       - name: Register release in Firestore
         script: |
-          CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
+          export CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
 
           RELEASE_JSON=$(python3 - <<PYEOF
           import json, os

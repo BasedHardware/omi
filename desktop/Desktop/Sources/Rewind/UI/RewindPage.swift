@@ -355,8 +355,11 @@ struct RewindPage: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 
@@ -1038,8 +1041,11 @@ struct RewindPage: View {
                     // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
                     screenAnalysisEnabled = true
                     AssistantSettings.shared.screenAnalysisEnabled = true
-                    ScreenCaptureService.requestAllScreenCapturePermissions()
+                    // Open Settings FIRST, then request permissions after a delay
                     ScreenCaptureService.openScreenRecordingPreferences()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        ScreenCaptureService.requestAllScreenCapturePermissions()
+                    }
                 } label: {
                     Text("Grant Permission")
                         .scaledFont(size: 13, weight: .semibold)

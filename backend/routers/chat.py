@@ -91,6 +91,11 @@ def send_message(
         type='text',
         app_id=compat_app_id,
     )
+    # Ensure chat session exists when files are attached
+    if data.file_ids and not chat_session:
+        chat_session = acquire_chat_session(uid, compat_app_id)
+        chat_session = ChatSession(**chat_session) if isinstance(chat_session, dict) else chat_session
+
     if data.file_ids is not None and chat_session:
         new_file_ids = chat_session.retrieve_new_file(data.file_ids)
         chat_session.add_file_ids(data.file_ids)

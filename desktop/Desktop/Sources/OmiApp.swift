@@ -81,8 +81,7 @@ struct OMIApp: App {
     /// Window title with version number (different for rewind mode)
     private var windowTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
-        let baseName = Self.launchMode == .rewind ? "Omi Rewind" : displayName
+        let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
         return version.isEmpty ? baseName : "\(baseName) v\(version)"
     }
 
@@ -157,18 +156,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
-        // Force macOS to use the correct app icon (bypasses icon cache)
-        // NOTE: Only set NSApp.applicationIconImage (in-memory).
+        // Force macOS to use the correct app icon (bypasses icon cache).
+        // Apply squircle mask with proper margins because NSApp.applicationIconImage
+        // renders the raw image without macOS auto-masking.
         // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
         // the .app bundle, which breaks the code signature and prevents Sparkle
         // auto-updates from working ("An error occurred while running the updater").
-        if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
+        if let iconURL = Bundle.resourceBundle.url(forResource: "omi_app_icon", withExtension: "png"),
            let icon = NSImage(contentsOf: iconURL) {
-            NSApp.applicationIconImage = icon
+            let size = icon.size
+            let maskedIcon = NSImage(size: size)
+            maskedIcon.lockFocus()
+            // Scale content to ~88% with 6% margin on each side (matches macOS Dock icon sizing)
+            let margin = size.width * 0.06
+            let contentRect = NSRect(x: margin, y: margin,
+                                     width: size.width - margin * 2,
+                                     height: size.height - margin * 2)
+            // Corner radius ≈ 22.37% of content size
+            let radius = contentRect.width * 0.2237
+            let path = NSBezierPath(roundedRect: contentRect, xRadius: radius, yRadius: radius)
+            path.addClip()
+            icon.draw(in: contentRect)
+            maskedIcon.unlockFocus()
+            NSApp.applicationIconImage = maskedIcon
             if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
-            log("AppDelegate: Set application icon from OmiIcon.icns")
+            log("AppDelegate: Set application icon with squircle mask")
         }
 
         // One-time icon cache reset: forces macOS to pick up the new squircle icon.
@@ -197,7 +211,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             options.enableCaptureFailedRequests = false
             options.maxBreadcrumbs = 100
             options.beforeSend = { event in
-                // Never send events from dev builds — they pollute production Sentry data
+                // Allow user feedback through from all builds (dev + prod)
+                if event.message?.formatted.hasPrefix("User Report") == true { return event }
+                // Never send other events from dev builds — they pollute production Sentry data
                 if isDev { return nil }
                 // Filter out HTTP errors targeting the dev tunnel — noise when the tunnel is down
                 if let urlTag = event.tags?["url"], urlTag.contains("m13v.com") {
@@ -298,8 +314,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // One-time migration: Enable launch at login for existing users who haven't set it
         migrateLaunchAtLoginDefault()
 
-        // One-time migration: Rename app bundle from "Omi Computer.app" to "Omi Beta.app"
-        migrateAppNameToBeta()
+        // One-time migration: Rename app bundle from legacy names to "omi.app"
+        migrateAppName()
 
         // Track launch at login status once per app launch
         Task { @MainActor in
@@ -419,7 +435,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
     /// Includes a safety net to restart the Dock if it crashes during the reset.
     private func resetIconCacheIfNeeded() {
-        let key = "hasResetIconCache_v1"
+        let key = "hasResetIconCache_v2"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         log("AppDelegate: Running one-time icon cache reset")
@@ -553,7 +569,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Re-apply the icon to force the system to redraw
         if let button = item.button {
             if OMIApp.launchMode == .rewind {
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                 }
@@ -604,13 +620,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
 
         // Set up the button with icon — use "omi" text logo (not a circle)
         if let button = statusBarItem.button {
             if OMIApp.launchMode == .rewind {
                 // Rewind mode uses SF Symbol
-                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind") {
+                if let icon = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind") {
                     icon.isTemplate = true
                     button.image = icon
                     log("AppDelegate: [MENUBAR] Rewind icon set successfully")
@@ -626,13 +642,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 log("AppDelegate: [MENUBAR] Omi text logo set successfully (size: \(icon.size))")
             } else {
                 // Fallback to SF Symbol
-                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Omi") {
+                if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
                     icon.isTemplate = true
                     button.image = icon
                 }
                 log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_text_logo, using fallback")
             }
-            button.toolTip = OMIApp.launchMode == .rewind ? "Omi Rewind" : displayName
+            button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
         } else {
             log("AppDelegate: [MENUBAR] WARNING - statusBarItem.button is nil")
         }
@@ -989,62 +1005,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func migrateAppNameToBeta() {
-        let currentPath = Bundle.main.bundlePath
+    private func migrateAppName() {
+        // No rename migration — APFS is case-insensitive so "omi.app" and "Omi.app"
+        // collide. Renaming the running app also breaks Dock pins and Spotlight indexing.
+        // The app ships as "omi.app" for new installs; existing users keep their current
+        // bundle name and get updates in-place via Sparkle.
 
-        // Case 1: Running as "Omi Computer.app" — rename self to "Omi Beta.app"
-        if currentPath.hasSuffix("Omi Computer.app") {
-            let key = "didMigrateAppNameToBetaV1"
-            guard !UserDefaults.standard.bool(forKey: key) else { return }
-            UserDefaults.standard.set(true, forKey: key)
-
-            let dir = (currentPath as NSString).deletingLastPathComponent
-            let newPath = dir + "/Omi Beta.app"
-            guard !FileManager.default.fileExists(atPath: newPath) else { return }
-
-            do {
-                try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
-                log("App rename migration: moved to \(newPath)")
-
-                // Re-register with Launch Services and relaunch from new path (off main thread)
-                DispatchQueue.global(qos: .utility).async {
-                    let lsregister = Process()
-                    lsregister.executableURL = URL(fileURLWithPath:
-                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-                    lsregister.arguments = ["-f", newPath]
-                    try? lsregister.run()
-                    lsregister.waitUntilExit()
-
-                    // Relaunch from new path
-                    let relaunch = Process()
-                    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                    relaunch.arguments = [newPath]
-                    try? relaunch.run()
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        NSApp.terminate(nil)
-                    }
-                }
-            } catch {
-                log("App rename migration failed: \(error.localizedDescription)")
-            }
-            return
-        }
-
-        // Case 2: Running as "Omi Beta.app" — kill and delete old "Omi Computer.app" if it exists
-        cleanupOldOmiComputerApp()
+        // Clean up stale legacy bundles (never the running app)
+        cleanupLegacyAppBundles()
     }
 
-    private func cleanupOldOmiComputerApp() {
+    private func cleanupLegacyAppBundles() {
+        let currentPath = Bundle.main.bundlePath
         let oldAppPaths = [
             "/Applications/Omi Computer.app",
             NSHomeDirectory() + "/Applications/Omi Computer.app",
         ]
 
         for oldPath in oldAppPaths {
+            // Never delete the running app
+            guard oldPath != currentPath else { continue }
             guard FileManager.default.fileExists(atPath: oldPath) else { continue }
 
-            log("Found old Omi Computer.app at \(oldPath), cleaning up...")
+            log("Found old app at \(oldPath), cleaning up...")
 
             // Kill the old app if it's running
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.omi.computer-macos")
@@ -1058,15 +1041,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) {
                 do {
                     try FileManager.default.removeItem(atPath: oldPath)
-                    log("Deleted old Omi Computer.app at \(oldPath)")
+                    log("Deleted old app at \(oldPath)")
                 } catch {
-                    log("Failed to delete old Omi Computer.app: \(error.localizedDescription)")
+                    log("Failed to delete old app: \(error.localizedDescription)")
                     // Try moving to trash as fallback
                     do {
                         try FileManager.default.trashItem(at: URL(fileURLWithPath: oldPath), resultingItemURL: nil)
-                        log("Moved old Omi Computer.app to trash")
+                        log("Moved old app to trash")
                     } catch {
-                        log("Failed to trash old Omi Computer.app: \(error.localizedDescription)")
+                        log("Failed to trash old app: \(error.localizedDescription)")
                     }
                 }
             }
@@ -1077,7 +1060,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AnalyticsManager.shared.appBecameActive()
         // Sync remote assistant settings so server-side changes take effect promptly
         Task { await SettingsSyncManager.shared.syncFromServer() }
-        UpdaterViewModel.shared.syncUpdateChannelFromServer()
     }
 
     func applicationWillResignActive(_ notification: Notification) {

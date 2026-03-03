@@ -783,6 +783,14 @@ class FloatingControlBarManager {
         window?.orderOut(nil)
     }
 
+    /// Show the floating bar temporarily without changing the user's persisted preference.
+    /// Used when browser tools activate so the bar stays visible above Chrome.
+    func showTemporarily() {
+        guard window != nil else { return }
+        log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
+        window?.makeKeyAndOrderFront(nil)
+    }
+
     /// Cancel any in-flight chat streaming.
     func cancelChat() {
         chatCancellable?.cancel()

@@ -311,6 +311,7 @@ impl FirestoreService {
         cache_write: i64,
         total: i64,
         cost: f64,
+        account: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let date_key = Utc::now().format("%Y-%m-%d").to_string();
         let doc_path = format!(
@@ -321,6 +322,9 @@ impl FirestoreService {
             "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
             self.project_id
         );
+        // Write to account-specific prefix (e.g. "desktop_chat_omi" or "desktop_chat_personal")
+        // Also continue writing to "desktop_chat" for backward compat with existing queries
+        let acct_prefix = format!("desktop_chat_{}", account);
         let body = json!({
             "writes": [{
                 "transform": {
@@ -333,6 +337,13 @@ impl FirestoreService {
                         { "fieldPath": "desktop_chat.total_tokens",       "increment": { "integerValue": total.to_string() } },
                         { "fieldPath": "desktop_chat.cost_usd",           "increment": { "doubleValue": cost } },
                         { "fieldPath": "desktop_chat.call_count",         "increment": { "integerValue": "1" } },
+                        { "fieldPath": format!("{}.input_tokens", acct_prefix),       "increment": { "integerValue": input.to_string() } },
+                        { "fieldPath": format!("{}.output_tokens", acct_prefix),      "increment": { "integerValue": output.to_string() } },
+                        { "fieldPath": format!("{}.cache_read_tokens", acct_prefix),  "increment": { "integerValue": cache_read.to_string() } },
+                        { "fieldPath": format!("{}.cache_write_tokens", acct_prefix), "increment": { "integerValue": cache_write.to_string() } },
+                        { "fieldPath": format!("{}.total_tokens", acct_prefix),       "increment": { "integerValue": total.to_string() } },
+                        { "fieldPath": format!("{}.cost_usd", acct_prefix),           "increment": { "doubleValue": cost } },
+                        { "fieldPath": format!("{}.call_count", acct_prefix),         "increment": { "integerValue": "1" } },
                     ]
                 }
             }]
@@ -2492,20 +2503,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["relevance_score", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2513,7 +2528,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
@@ -2552,20 +2567,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["sort_order", "indent_level", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2573,7 +2592,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
@@ -5208,7 +5227,6 @@ impl FirestoreService {
             use_case: self.parse_string(fields, "use_case"),
             job: self.parse_string(fields, "job"),
             company: self.parse_string(fields, "company"),
-            desktop_update_channel: self.parse_string(fields, "desktop_update_channel"),
         })
     }
 
@@ -6499,7 +6517,7 @@ impl FirestoreService {
             vec![]
         };
 
-        // channel: None means stable (missing field or null in Firestore)
+        // channel: None = unpromoted (staging), Some("stable") = promoted stable
         let channel = self.parse_string(fields, "channel");
 
         Ok(crate::routes::updates::ReleaseInfo {
@@ -6534,10 +6552,10 @@ impl FirestoreService {
             .map(|s| json!({"stringValue": s}))
             .collect();
 
-        // Channel field: stringValue for non-stable, nullValue for stable
+        // Channel field: always a string. None/empty → "staging" (unpromoted default)
         let channel_value = match &release.channel {
             Some(ch) if !ch.is_empty() => json!({"stringValue": ch}),
-            _ => json!({"nullValue": null}),
+            _ => json!({"stringValue": "staging"}),
         };
 
         let doc = json!({
@@ -6571,7 +6589,7 @@ impl FirestoreService {
     }
 
     /// Promote a desktop release to the next channel: staging → beta → stable
-    /// Returns (old_channel, new_channel) where empty string = stable
+    /// Returns (old_channel, new_channel)
     pub async fn promote_desktop_release(
         &self,
         doc_id: &str,
@@ -6600,16 +6618,13 @@ impl FirestoreService {
 
         // Determine next channel
         let (old_channel, new_channel_value) = match current_channel.as_str() {
-            "staging" => ("staging".to_string(), json!({"stringValue": "beta"})),
-            "beta" => ("beta".to_string(), json!({"nullValue": null})),
-            "" => return Err("Release is already on stable channel, cannot promote further".into()),
+            "staging" | "" => ("staging".to_string(), json!({"stringValue": "beta"})),
+            "beta" => ("beta".to_string(), json!({"stringValue": "stable"})),
+            "stable" => return Err("Release is already on stable channel, cannot promote further".into()),
             other => return Err(format!("Unknown channel '{}', cannot promote", other).into()),
         };
 
-        let new_channel = match new_channel_value.get("stringValue").and_then(|v| v.as_str()) {
-            Some(ch) => ch.to_string(),
-            None => String::new(), // stable
-        };
+        let new_channel = new_channel_value.get("stringValue").and_then(|v| v.as_str()).unwrap().to_string();
 
         // PATCH only the channel field
         let patch_url = format!(
@@ -6636,10 +6651,7 @@ impl FirestoreService {
             return Err(format!("Failed to update channel: {}", error_text).into());
         }
 
-        tracing::info!("Promoted release {}: {} → {}", doc_id,
-            if old_channel.is_empty() { "stable" } else { &old_channel },
-            if new_channel.is_empty() { "stable" } else { &new_channel },
-        );
+        tracing::info!("Promoted release {}: {} → {}", doc_id, old_channel, new_channel);
 
         Ok((old_channel, new_channel))
     }
