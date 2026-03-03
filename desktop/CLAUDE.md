@@ -125,9 +125,9 @@ See `.claude/settings.json` for connection details.
 - To check which app is currently running: `ps aux | grep "Omi"`
 
 ### After Implementing Changes
-- **By default**, do NOT build or run the app — let the user test manually with `./run.sh`
-- **When the user says "test it"** (or similar), use the `test-local` skill to build, run, and verify changes using macOS automation
-- See `.claude/skills/test-local/SKILL.md` for the full build → run → test → iterate workflow
+- `xcrun swift build` is for **compile checks only** — it does NOT start the backend
+- To actually test, ALWAYS use `./run.sh` — it starts Rust backend + Cloudflare tunnel + Swift app together
+- **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
 ### Changelog Entries
 
