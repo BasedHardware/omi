@@ -478,6 +478,14 @@ struct DesktopHomeView: View {
                 selectedIndex = SidebarNavItem.rewind.rawValue
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.rewind.rawValue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.chat.rawValue
