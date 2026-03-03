@@ -178,10 +178,8 @@ struct RewindPage: View {
                 currentIndex = newIndex
                 // No need to reload frame - it's the same screenshot
             } else if !newScreenshots.isEmpty {
-                // Can't find the current screenshot (first load, or it was deleted)
-                if currentIndex >= newScreenshots.count {
-                    currentIndex = 0
-                }
+                // First load or current screenshot deleted — start at newest (last index, ASC order)
+                currentIndex = newScreenshots.count - 1
                 selectedGroupIndex = 0
                 Task { await loadCurrentFrame() }
             }
@@ -225,15 +223,17 @@ struct RewindPage: View {
         }
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
+            // Left = older = lower index (ASC order: oldest first)
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
+            // Right = newer = higher index
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
@@ -278,7 +278,7 @@ struct RewindPage: View {
         }
 
         let sensitivity: CGFloat = 0.5  // Reduced from 3.0 - was too fast
-        let framesToMove = Int(-delta * sensitivity)
+        let framesToMove = Int(delta * sensitivity) // Positive delta (scroll right/down) = newer = higher index
 
         if framesToMove != 0 {
             let newIndex = max(0, min(activeScreenshots.count - 1, currentIndex + framesToMove))
@@ -911,11 +911,11 @@ struct RewindPage: View {
     }
 
     private func nextFrame() {
-        seekToIndex(currentIndex - 1) // Screenshots are newest first
+        seekToIndex(currentIndex + 1) // Screenshots are oldest first — right/next = newer = higher index
     }
 
     private func previousFrame() {
-        seekToIndex(currentIndex + 1)
+        seekToIndex(currentIndex - 1)
     }
 
 
