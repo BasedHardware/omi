@@ -35,6 +35,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
   bool showGoalTrackerEnabled = true; // Default to true
+  bool showDailyScoreEnabled = true;
+  bool showTasksEnabled = true;
   bool dailyReflectionEnabled = true;
 
   // VAD Gate (experimental)
@@ -115,6 +117,8 @@ class DeveloperModeProvider extends BaseProvider {
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
+    showDailyScoreEnabled = SharedPreferencesUtil().showDailyScoreEnabled;
+    showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
@@ -223,6 +227,8 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
     prefs.showGoalTrackerEnabled = showGoalTrackerEnabled;
+    prefs.showDailyScoreEnabled = showDailyScoreEnabled;
+    prefs.showTasksEnabled = showTasksEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -258,6 +264,18 @@ class DeveloperModeProvider extends BaseProvider {
   void onShowGoalTrackerChanged(var value) {
     showGoalTrackerEnabled = value;
     SharedPreferencesUtil().showGoalTrackerEnabled = value; // Save immediately
+    notifyListeners();
+  }
+
+  void onShowDailyScoreChanged(var value) {
+    showDailyScoreEnabled = value;
+    SharedPreferencesUtil().showDailyScoreEnabled = value;
+    notifyListeners();
+  }
+
+  void onShowTasksChanged(var value) {
+    showTasksEnabled = value;
+    SharedPreferencesUtil().showTasksEnabled = value;
     notifyListeners();
   }
 
