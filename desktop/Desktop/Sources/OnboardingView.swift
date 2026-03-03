@@ -159,6 +159,7 @@ struct OnboardingView: View {
             } else if currentStep == 2 {
                 // Step 2: Smart Notifications Demo
                 OnboardingNotificationStepView(
+                    appState: appState,
                     onContinue: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Notifications")
                         currentStep = 3
@@ -171,7 +172,9 @@ struct OnboardingView: View {
             } else {
                 // Step 3: Floating Bar Demo
                 OnboardingFloatingBarDemoView(
-                    onContinue: {
+                    appState: appState,
+                    chatProvider: chatProvider,
+                    onComplete: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar")
                         handleOnboardingComplete()
                     },
