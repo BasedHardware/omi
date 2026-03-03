@@ -28,6 +28,12 @@ enum UpdateChannel: String, CaseIterable {
     static var visibleCases: [UpdateChannel] {
         [.stable, .staging]
     }
+
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta/staging
+    static var appDisplayName: String {
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
+        return (channel == "staging" || channel == "beta") ? "Omi Beta" : "omi"
+    }
 }
 
 private let kUpdateChannelKey = "update_channel"
