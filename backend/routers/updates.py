@@ -1,6 +1,7 @@
 import os
 import re
 from typing import Optional, List, Dict
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response
@@ -188,7 +189,7 @@ def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
         icon = {'feature': '&#10024;', 'fix': '&#128027;', 'improvement': '&#9889;', 'breaking': '&#9888;'}.get(
             change_type, '&#8226;'
         )
-        html += f"<li>{icon} {message}</li>"
+        html += f"<li>{icon} {xml_escape(message)}</li>"
 
     html += "</ul>"
     return html
@@ -221,16 +222,19 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         if not url:
             continue
 
-        lines.append('    <item>')
-        lines.append(f'      <title>Omi {version}</title>')
-        lines.append(f'      <sparkle:version>{short_version}</sparkle:version>')
-        lines.append(f'      <sparkle:shortVersionString>{version}</sparkle:shortVersionString>')
-        lines.append(f'      <description><![CDATA[{changes_html}]]></description>')
-        lines.append(f'      <pubDate>{pub_date}</pubDate>')
+        # Escape CDATA-unsafe sequences in changelog HTML
+        safe_html = changes_html.replace(']]>', ']]]]><![CDATA[>')
 
-        enclosure = f'      <enclosure url="{url}" type="application/octet-stream" sparkle:os="{platform}"'
+        lines.append('    <item>')
+        lines.append(f'      <title>Omi {xml_escape(version)}</title>')
+        lines.append(f'      <sparkle:version>{xml_escape(short_version)}</sparkle:version>')
+        lines.append(f'      <sparkle:shortVersionString>{xml_escape(version)}</sparkle:shortVersionString>')
+        lines.append(f'      <description><![CDATA[{safe_html}]]></description>')
+        lines.append(f'      <pubDate>{xml_escape(pub_date)}</pubDate>')
+
+        enclosure = f'      <enclosure url="{xml_escape(url)}" type="application/octet-stream" sparkle:os="{xml_escape(platform)}"'
         if ed_signature:
-            enclosure += f' sparkle:edSignature="{ed_signature}"'
+            enclosure += f' sparkle:edSignature="{xml_escape(ed_signature)}"'
         enclosure += ' />'
         lines.append(enclosure)
 
