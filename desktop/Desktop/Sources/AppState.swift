@@ -2569,7 +2569,7 @@ class AppState: ObservableObject {
                     for buildDir in buildDirs {
                         let appPath = "\(buildProductsPath)/\(buildDir)/Omi.app"
                         let appPath2 = "\(buildProductsPath)/\(buildDir)/Omi Computer.app"
-                        let appPath3 = "\(buildProductsPath)/\(buildDir)/Omi Beta.app"
+                        let appPath3 = "\(buildProductsPath)/\(buildDir)/omi.app"
                         let appPath4 = "\(buildProductsPath)/\(buildDir)/Omi Dev.app"
                         for path in [appPath, appPath2, appPath3, appPath4] {
                             if fileManager.fileExists(atPath: path) {
