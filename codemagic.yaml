@@ -2377,7 +2377,12 @@ workflows:
 
           ### Downloads
           - **DMG Installer**: For fresh installs, download the DMG below
-          - **Auto-Update**: Existing users will receive this update automatically via Sparkle"
+          - **Auto-Update**: Existing users will receive this update automatically via Sparkle
+
+          <!-- KEY_VALUE_START
+          isLive: true
+          edSignature: ${ED_SIGNATURE}
+          KEY_VALUE_END -->"
 
           # Safe re-run: delete existing release if it exists
           gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
