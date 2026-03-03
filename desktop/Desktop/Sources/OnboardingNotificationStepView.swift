@@ -1,94 +1,37 @@
-import AppKit
-import CoreGraphics
 import SwiftUI
-import UserNotifications
 
-// MARK: - Onboarding Notification Step View (Step 2)
-
+/// Onboarding step that demonstrates the value of proactive notifications.
+/// Captures a screenshot, analyzes it with Gemini, fires a real notification,
+/// and shows a macOS notification-style preview so the user sees real value.
 struct OnboardingNotificationStepView: View {
-    let onContinue: () -> Void
-    let onSkip: () -> Void
+    @ObservedObject var appState: AppState
+    var onContinue: () -> Void
+    var onSkip: () -> Void
 
+    @State private var analysisState: AnalysisState = .idle
+    @State private var tipText: String = ""
     @State private var tipHeadline: String = ""
-    @State private var tipBody: String = ""
-    @State private var isLoading = true
     @State private var showNotification = false
-    @State private var showConfirmation = false
+    @State private var notificationSent = false
+    @State private var pulseAnimation = false
+
+    private enum AnalysisState {
+        case idle
+        case capturing
+        case analyzing
+        case done
+        case error(String)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
-
-            VStack(spacing: 28) {
-                // Title
-                Text("Smart notifications")
-                    .font(.system(size: 28, weight: .bold))
+            // Header
+            HStack {
+                Text("Notifications")
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
 
-                Text("omi watches your screen and sends helpful tips")
-                    .font(.system(size: 15))
-                    .foregroundColor(OmiColors.textTertiary)
-                    .multilineTextAlignment(.center)
-
-                // Notification area with purple glow
-                ZStack {
-                    // Subtle purple radial glow
-                    RadialGradient(
-                        colors: [
-                            OmiColors.purplePrimary.opacity(0.15),
-                            Color.clear,
-                        ],
-                        center: .center,
-                        startRadius: 20,
-                        endRadius: 200
-                    )
-                    .frame(width: 400, height: 200)
-
-                    if isLoading {
-                        NotificationShimmer()
-                            .transition(.opacity)
-                    }
-
-                    if showNotification {
-                        MacOSNotificationBanner(
-                            headline: tipHeadline,
-                            message: tipBody
-                        )
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                }
-                .frame(height: 120)
-                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: showNotification)
-                .animation(.easeInOut(duration: 0.3), value: isLoading)
-
-                // Confirmation text
-                if showConfirmation {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bell.badge.fill")
-                            .foregroundColor(OmiColors.purplePrimary)
-                            .font(.system(size: 13))
-                        Text("Notification sent to your Mac")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(OmiColors.textSecondary)
-                    }
-                    .transition(.opacity)
-                }
-            }
-
-            Spacer()
-
-            // Bottom buttons
-            VStack(spacing: 12) {
-                Button(action: onContinue) {
-                    Text("Continue")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: 220)
-                        .padding(.vertical, 12)
-                        .background(OmiColors.purplePrimary)
-                        .cornerRadius(12)
-                }
-                .buttonStyle(.plain)
+                Spacer()
 
                 Button(action: onSkip) {
                     Text("Skip")
@@ -97,323 +40,310 @@ struct OnboardingNotificationStepView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 40)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 16)
+
+            Divider()
+                .background(OmiColors.backgroundTertiary)
+
+            Spacer()
+
+            // Content
+            VStack(spacing: 32) {
+                // Icon with glow
+                ZStack {
+                    // Glow
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .frame(width: 100, height: 100)
+                        .blur(radius: 20)
+                        .scaleEffect(pulseAnimation ? 1.2 : 1.0)
+                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 44))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [OmiColors.purplePrimary, OmiColors.purpleSecondary],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .onAppear { pulseAnimation = true }
+
+                VStack(spacing: 10) {
+                    Text("Proactive Intelligence")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(OmiColors.textPrimary)
+
+                    Text("omi watches your screen and catches things you'd miss —\nwrong recipients, stale data, hidden shortcuts.")
+                        .font(.system(size: 14))
+                        .foregroundColor(OmiColors.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+
+                // Analysis status / notification preview
+                switch analysisState {
+                case .idle:
+                    EmptyView()
+
+                case .capturing:
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(OmiColors.purplePrimary)
+                        Text("Capturing your screen...")
+                            .font(.system(size: 13))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                case .analyzing:
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .tint(OmiColors.purplePrimary)
+                        Text("Analyzing what you're working on...")
+                            .font(.system(size: 13))
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
+
+                case .done:
+                    if showNotification {
+                        notificationPreview
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.95)),
+                                removal: .opacity
+                            ))
+                    }
+
+                case .error(let message):
+                    VStack(spacing: 12) {
+                        Text(message)
+                            .font(.system(size: 13))
+                            .foregroundColor(OmiColors.textTertiary)
+                            .multilineTextAlignment(.center)
+
+                        Button("Try again") {
+                            startAnalysis()
+                        }
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(OmiColors.purplePrimary)
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 40)
+
+            Spacer()
+
+            // Bottom button
+            if notificationSent {
+                VStack(spacing: 12) {
+                    Text("Check the top-right of your screen for the real notification")
+                        .font(.system(size: 12))
+                        .foregroundColor(OmiColors.textTertiary)
+
+                    Button(action: onContinue) {
+                        Text("Continue")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: 280)
+                            .padding(.vertical, 12)
+                            .background(OmiColors.purplePrimary)
+                            .cornerRadius(12)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, 32)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            await generateTip()
-        }
-    }
-
-    // MARK: - Screen Capture & Tip Generation
-
-    private func generateTip() async {
-        // Capture the screen behind the omi window
-        let imageData = captureScreenBehindOmiWindow()
-
-        if let imageData = imageData {
-            // Try Gemini for a contextual tip
-            do {
-                let tip = try await requestGeminiTip(imageData: imageData)
-                await MainActor.run {
-                    tipHeadline = tip.headline
-                    tipBody = tip.body
-                    revealNotification()
+        .background(OmiColors.backgroundPrimary)
+        .onAppear {
+            // Auto-start analysis after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                if case .idle = analysisState {
+                    startAnalysis()
                 }
-                return
-            } catch {
-                log("OnboardingNotification: Gemini tip failed: \(error.localizedDescription)")
             }
         }
-
-        // Fallback: generic but useful tip
-        await MainActor.run {
-            tipHeadline = "Tip"
-            tipBody = "omi will send tips like this based on what's on your screen"
-            revealNotification()
-        }
     }
 
-    private func revealNotification() {
-        withAnimation {
-            isLoading = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation {
-                showNotification = true
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            withAnimation(.easeIn(duration: 0.4)) {
-                showConfirmation = true
-            }
-            sendRealNotification()
-        }
-    }
+    // MARK: - macOS Notification Preview
 
-    private func sendRealNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "omi"
-        content.subtitle = tipHeadline
-        content.body = tipBody
-        let request = UNNotificationRequest(identifier: "onboarding-tip", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
-    }
-
-    // MARK: - Capture Behind Window
-
-    private func captureScreenBehindOmiWindow() -> Data? {
-        // Find the omi onboarding window
-        guard let omiWindow = NSApp.windows.first(where: { window in
-            window.isVisible && (window.title.contains("Omi") || window.title.contains("omi"))
-        }) else {
-            // Fallback: capture main display
-            return captureFullScreen()
-        }
-
-        let windowNumber = CGWindowID(omiWindow.windowNumber)
-
-        // Capture everything on screen BELOW the omi window (excludes the omi window itself)
-        guard
-            let cgImage = CGWindowListCreateImage(
-                CGRect.null,
-                .optionOnScreenBelowWindow,
-                windowNumber,
-                [.bestResolution, .nominalResolution]
-            )
-        else {
-            return captureFullScreen()
-        }
-
-        return jpegData(from: cgImage, quality: 0.5)
-    }
-
-    private func captureFullScreen() -> Data? {
-        guard
-            let cgImage = CGWindowListCreateImage(
-                CGRect.null,
-                .optionOnScreenOnly,
-                kCGNullWindowID,
-                [.bestResolution]
-            )
-        else {
-            return nil
-        }
-        return jpegData(from: cgImage, quality: 0.5)
-    }
-
-    private func jpegData(from cgImage: CGImage, quality: CGFloat) -> Data? {
-        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
-        return bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: quality])
-    }
-
-    // MARK: - Gemini API
-
-    private struct TipResult {
-        let headline: String
-        let body: String
-    }
-
-    private func requestGeminiTip(imageData: Data) async throws -> TipResult {
-        let systemPrompt = """
-            You are omi, an always-on AI assistant that watches the user's screen. \
-            The user just installed omi and you're showing them what smart notifications look like. \
-            Look at the screenshot of their desktop and generate ONE useful, specific, non-obvious tip \
-            about what they're working on right now.
-
-            Rules:
-            - Reference specific things visible on screen (filenames, tab titles, app names, content)
-            - Be observational and casual: "hey, heads up..." tone, not commands
-            - Non-obvious — something they wouldn't figure out themselves easily
-            - Under 100 characters for the body text
-            - Do NOT comment on omi, the onboarding, or the setup process itself
-            - Do NOT say generic things like "I see you're setting up notifications"
-            - If you see code, reference the specific file/function/pattern
-            - If you see a browser, reference the specific page/content
-            - If you see nothing useful, give a genuinely helpful macOS productivity tip
-
-            Respond with ONLY a JSON object: {"headline": "short label", "body": "the tip text"}
-            headline should be 1-3 words like "Tip", "Heads up", "Quick note", etc.
-            """
-
-        let prompt = "Analyze this screenshot and generate a contextual notification tip."
-
-        let base64 = imageData.base64EncodedString()
-
-        let request = GeminiRequest(
-            contents: [
-                GeminiRequest.Content(parts: [
-                    GeminiRequest.Part(text: prompt),
-                    GeminiRequest.Part(mimeType: "image/jpeg", data: base64),
-                ])
-            ],
-            systemInstruction: GeminiRequest.SystemInstruction(
-                parts: [GeminiRequest.SystemInstruction.TextPart(text: systemPrompt)]
-            ),
-            generationConfig: GeminiRequest.GenerationConfig(
-                responseMimeType: "application/json",
-                responseSchema: GeminiRequest.GenerationConfig.ResponseSchema(
-                    type: "object",
-                    properties: [
-                        "headline": GeminiRequest.GenerationConfig.ResponseSchema.Property(
-                            type: "string", description: "Short 1-3 word label"),
-                        "body": GeminiRequest.GenerationConfig.ResponseSchema.Property(
-                            type: "string", description: "The tip text, under 100 chars"),
-                    ],
-                    required: ["headline", "body"]
-                )
-            )
-        )
-
-        let requestBody = try JSONEncoder().encode(request)
-
-        guard let apiKey = getenv("GEMINI_API_KEY").flatMap({ String(validatingUTF8: $0) }) else {
-            throw NSError(domain: "OnboardingTip", code: 1, userInfo: [NSLocalizedDescriptionKey: "No API key"])
-        }
-
-        let url = URL(
-            string:
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=\(apiKey)"
-        )!
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.timeoutInterval = 15
-        urlRequest.httpBody = requestBody
-
-        let (data, _) = try await URLSession.shared.data(for: urlRequest)
-
-        let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
-
-        guard let text = response.candidates?.first?.content?.parts?.first?.text else {
-            throw NSError(
-                domain: "OnboardingTip", code: 2, userInfo: [NSLocalizedDescriptionKey: "No response text"])
-        }
-
-        // Parse JSON response
-        guard let jsonData = text.data(using: .utf8) else {
-            throw NSError(
-                domain: "OnboardingTip", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid response"])
-        }
-
-        struct TipJSON: Decodable {
-            let headline: String
-            let body: String
-        }
-
-        let tipJSON = try JSONDecoder().decode(TipJSON.self, from: jsonData)
-        return TipResult(headline: tipJSON.headline, body: tipJSON.body)
-    }
-}
-
-// MARK: - macOS Notification Banner Component
-
-struct MacOSNotificationBanner: View {
-    let headline: String
-    let message: String
-
-    var body: some View {
+    private var notificationPreview: some View {
         HStack(spacing: 12) {
             // App icon
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 32, height: 32)
-                .clipShape(RoundedRectangle(cornerRadius: 7))
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [OmiColors.purplePrimary, OmiColors.purpleAccent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
 
-            VStack(alignment: .leading, spacing: 2) {
+                Text("omi")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text("omi")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.primary)
-                    Text(headline)
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.black)
+
                     Spacer()
+
                     Text("now")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.gray)
                 }
 
-                Text(message)
+                Text(tipHeadline.isEmpty ? "Tip from omi" : tipHeadline)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.black.opacity(0.85))
+                    .lineLimit(1)
+
+                Text(tipText)
                     .font(.system(size: 12))
-                    .foregroundColor(.primary.opacity(0.85))
+                    .foregroundColor(.black.opacity(0.7))
                     .lineLimit(2)
+                    .lineSpacing(1)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(width: 360)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.25), radius: 20, x: 0, y: 8)
-        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-    }
-}
-
-// MARK: - Shimmer Skeleton
-
-struct NotificationShimmer: View {
-    @State private var shimmerOffset: CGFloat = -1
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Icon placeholder
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.white.opacity(0.06))
-                .frame(width: 32, height: 32)
-
-            VStack(alignment: .leading, spacing: 6) {
-                // Title line
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 80, height: 10)
-
-                // Body line 1
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 260, height: 10)
-
-                // Body line 2
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 180, height: 10)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(width: 360)
+        .padding(12)
+        .frame(maxWidth: 380, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white.opacity(0.04))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.white)
+                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+                .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
         )
-        .overlay(
-            shimmerGradient
-                .mask(
-                    RoundedRectangle(cornerRadius: 16)
-                )
-        )
-        .onAppear {
-            withAnimation(
-                .linear(duration: 1.5)
-                    .repeatForever(autoreverses: false)
-            ) {
-                shimmerOffset = 2
-            }
-        }
     }
 
-    private var shimmerGradient: some View {
-        GeometryReader { geo in
-            LinearGradient(
-                colors: [
-                    Color.clear,
-                    Color.white.opacity(0.05),
-                    Color.clear,
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: geo.size.width * 0.6)
-            .offset(x: geo.size.width * shimmerOffset)
+    // MARK: - Analysis
+
+    private func startAnalysis() {
+        analysisState = .capturing
+
+        Task {
+            // Step 1: Capture screenshot
+            let screenCapture = ScreenCaptureService()
+            let screenshotData = await screenCapture.captureActiveWindowAsync()
+            guard let jpegData = screenshotData else {
+                await MainActor.run {
+                    analysisState = .error("Could not capture screen. Make sure Screen Recording permission is granted.")
+                }
+                return
+            }
+
+            await MainActor.run {
+                analysisState = .analyzing
+            }
+
+            // Step 2: Analyze with Gemini using production-quality prompt
+            do {
+                let gemini = try GeminiClient(model: "gemini-2.0-flash")
+
+                let prompt = """
+                Look at this screenshot and find ONE specific, high-value insight the user would NOT figure out on their own. \
+                The goal is to IMPRESS them — make them think "wow, I'm glad I have this."
+
+                CORE QUESTION: Is the user about to make a mistake, missing something non-obvious, or unaware of a \
+                shortcut that would significantly help with what they're doing right now?
+
+                WHAT QUALIFIES:
+                - User is about to make a visible mistake (wrong recipient, wrong date, sensitive info exposed)
+                - A specific, lesser-known tool/feature that solves what they're doing
+                - A concrete error, misconfiguration, or stale state they may not have noticed
+                - Something non-obvious about what's on screen that saves them time or prevents an issue
+
+                WHAT DOES NOT QUALIFY:
+                - Anything obvious the user can see themselves
+                - Generic advice ("take a break", "consider adding tests", "remember to commit")
+                - Basic shortcuts everyone knows
+                - Pointing at UI elements already visible
+                - If you see the omi app onboarding, look at the OTHER windows behind it instead
+
+                TONE: Write like a knowledgeable friend glancing at your screen — an observation, not a command. \
+                Say what you noticed and why it matters.
+
+                GOOD EXAMPLES of the quality bar:
+                - "That draft is saved in /tmp — gets wiped on reboot"
+                - "Replying to the group thread, not the DM — double-check the recipient"
+                - "This regex misses Unicode — \\p{L} catches accented characters that [a-zA-Z] drops"
+                - "Your branch is 12 commits behind main — rebase before the PR or you'll get conflicts"
+                """
+
+                let systemPrompt = """
+                You are omi, an AI that runs in the background on the user's Mac analyzing their screen to catch things they'd miss. \
+                This is during onboarding — the user is seeing their first notification. Make it count. \
+                Give a genuinely impressive, specific observation about what you see. \
+                If the only visible content is the omi onboarding window, look for any other visible windows, menu bar items, \
+                or desktop state. If there's truly nothing else, give a specific observation about their system setup \
+                (number of displays, apps in dock, etc.) — but never generic advice.
+                """
+
+                let schema = GeminiRequest.GenerationConfig.ResponseSchema(
+                    type: "object",
+                    properties: [
+                        "headline": .init(type: "string", description: "Short 3-6 word headline — an observation, not an instruction. Example: 'Draft saved in /tmp' not 'Move file from /tmp'"),
+                        "tip": .init(type: "string", description: "The insight in 1-2 sentences. Specific to what's on screen. Under 100 characters if possible."),
+                    ],
+                    required: ["headline", "tip"]
+                )
+
+                let responseText = try await gemini.sendRequest(
+                    prompt: prompt,
+                    imageData: jpegData,
+                    systemPrompt: systemPrompt,
+                    responseSchema: schema
+                )
+
+                // Parse JSON response
+                if let data = responseText.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let tip = json["tip"] as? String {
+                    let headline = json["headline"] as? String ?? "Tip from omi"
+
+                    await MainActor.run {
+                        tipText = tip
+                        tipHeadline = headline
+                        analysisState = .done
+
+                        // Animate the notification preview in
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            showNotification = true
+                        }
+
+                        // Send real notification
+                        NotificationService.shared.sendNotification(
+                            title: headline,
+                            message: tip,
+                            assistantId: "onboarding"
+                        )
+
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            notificationSent = true
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        analysisState = .error("Couldn't parse the AI response. Try again.")
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    analysisState = .error("AI analysis failed: \(error.localizedDescription)")
+                }
+            }
         }
     }
 }
