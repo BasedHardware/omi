@@ -32,7 +32,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
       - name: Login to GCR
-        run: gcloud auth configure-docker --quiet
+        run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,24 +50,20 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
-      - name: Connect to GKE cluster
-        run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
-
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-
-      - name: Deploy desktop-backend to GKE
-        run: |
-          helm -n dev-omi-backend upgrade --install \
-            dev-omi-desktop-backend \
-            ./desktop/Backend-Rust/charts/desktop-backend \
-            -f ./desktop/Backend-Rust/charts/desktop-backend/dev_values.yaml
-          kubectl -n dev-omi-backend rollout restart deployment/dev-omi-desktop-backend
-          kubectl -n dev-omi-backend rollout status deployment/dev-omi-desktop-backend --timeout=180s
+      - name: Deploy desktop-backend to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          env_vars: |
+            FIREBASE_PROJECT_ID=based-hardware
+          secrets: |
+            GEMINI_API_KEY=GEMINI_API_KEY:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
+            FIREBASE_API_KEY=FIREBASE_API_KEY:latest
+            PINECONE_API_KEY=PINECONE_API_KEY:latest
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"
