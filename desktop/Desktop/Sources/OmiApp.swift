@@ -993,63 +993,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func migrateAppName() {
-        let currentPath = Bundle.main.bundlePath
+        // No rename migration — APFS is case-insensitive so "omi.app" and "Omi.app"
+        // collide. Renaming the running app also breaks Dock pins and Spotlight indexing.
+        // The app ships as "omi.app" for new installs; existing users keep their current
+        // bundle name and get updates in-place via Sparkle.
 
-        // Rename legacy app bundles ("Omi Computer.app" or "Omi Beta.app") to "omi.app"
-        let legacySuffixes = ["Omi Computer.app", "Omi Beta.app"]
-        for suffix in legacySuffixes {
-            guard currentPath.hasSuffix(suffix) else { continue }
-
-            let key = "didMigrateAppNameToOmiV1"
-            guard !UserDefaults.standard.bool(forKey: key) else { break }
-            UserDefaults.standard.set(true, forKey: key)
-
-            let dir = (currentPath as NSString).deletingLastPathComponent
-            let newPath = dir + "/omi.app"
-            guard !FileManager.default.fileExists(atPath: newPath) else { break }
-
-            do {
-                try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
-                log("App rename migration: moved \(suffix) to omi.app")
-
-                // Re-register with Launch Services and relaunch from new path (off main thread)
-                DispatchQueue.global(qos: .utility).async {
-                    let lsregister = Process()
-                    lsregister.executableURL = URL(fileURLWithPath:
-                        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-                    lsregister.arguments = ["-f", newPath]
-                    try? lsregister.run()
-                    lsregister.waitUntilExit()
-
-                    // Relaunch from new path
-                    let relaunch = Process()
-                    relaunch.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                    relaunch.arguments = [newPath]
-                    try? relaunch.run()
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        NSApp.terminate(nil)
-                    }
-                }
-            } catch {
-                log("App rename migration failed: \(error.localizedDescription)")
-            }
-            return
-        }
-
-        // Running as "omi.app" — clean up old app bundles if they exist
-        cleanupOldOmiComputerApp()
+        // Clean up stale legacy bundles (never the running app)
+        cleanupLegacyAppBundles()
     }
 
-    private func cleanupOldOmiComputerApp() {
+    private func cleanupLegacyAppBundles() {
+        let currentPath = Bundle.main.bundlePath
         let oldAppPaths = [
             "/Applications/Omi Computer.app",
             NSHomeDirectory() + "/Applications/Omi Computer.app",
-            "/Applications/Omi Beta.app",
-            NSHomeDirectory() + "/Applications/Omi Beta.app",
         ]
 
         for oldPath in oldAppPaths {
+            // Never delete the running app
+            guard oldPath != currentPath else { continue }
             guard FileManager.default.fileExists(atPath: oldPath) else { continue }
 
             log("Found old app at \(oldPath), cleaning up...")
@@ -1066,15 +1028,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) {
                 do {
                     try FileManager.default.removeItem(atPath: oldPath)
-                    log("Deleted old Omi Computer.app at \(oldPath)")
+                    log("Deleted old app at \(oldPath)")
                 } catch {
-                    log("Failed to delete old Omi Computer.app: \(error.localizedDescription)")
+                    log("Failed to delete old app: \(error.localizedDescription)")
                     // Try moving to trash as fallback
                     do {
                         try FileManager.default.trashItem(at: URL(fileURLWithPath: oldPath), resultingItemURL: nil)
-                        log("Moved old Omi Computer.app to trash")
+                        log("Moved old app to trash")
                     } catch {
-                        log("Failed to trash old Omi Computer.app: \(error.localizedDescription)")
+                        log("Failed to trash old app: \(error.localizedDescription)")
                     }
                 }
             }
