@@ -85,11 +85,7 @@ step "Cleaning up conflicting app bundles..."
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
 CONFLICTING_APPS=(
     "/Applications/Omi Computer.app"
-    "/Applications/Omi.app/Contents/MacOS/Omi Computer.app"
-    "/Applications/Omi.app"
-    "$HOME/Desktop/Omi.app"
     "$HOME/Desktop/Omi Dev.app"
-    "$HOME/Downloads/Omi.app"
     "$HOME/Downloads/Omi Dev.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
