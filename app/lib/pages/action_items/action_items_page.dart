@@ -12,6 +12,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'package:omi/utils/logger.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -173,23 +174,135 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildFab() {
-    return Positioned(
-      right: 20,
-      bottom: 100,
-      child: FloatingActionButton(
-        heroTag: 'action_items_fab',
-        onPressed: () {
-          HapticFeedback.lightImpact();
-          _showCreateActionItemSheet(
-            defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today),
-          );
-        },
-        backgroundColor: Colors.deepPurple,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-    );
-  }
+Widget _buildFab() {
+  return Consumer<ActionItemsProvider>(
+    builder: (context, provider, _) {
+      // 1. EDIT MODE WITH SELECTION: Vertical Actions
+      if (provider.isEditMode) {
+        return Positioned(
+          right: 20,
+          bottom: 100,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // --- BULK COMPLETE (Top - Green Mini FAB) ---
+              FloatingActionButton(
+                heroTag: 'bulk_complete_fab',
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  final selectedIds = List<String>.from(provider.selectedItems);
+                  
+                  if (selectedIds.isEmpty) {
+                      provider.toggleEditMode();
+                    return;
+                  }
+
+                  // Trigger updates in parallel for instant feel
+                  for (var id in selectedIds) {
+                    final item = provider.actionItems.firstWhere((i) => i.id == id);
+                    provider.updateActionItemState(item, true); 
+                    _onActionItemCompleted();
+                  }
+                  
+                  provider.toggleEditMode(); // Exit edit mode immediately
+                },
+                backgroundColor: Colors.green[600],
+                child: const Icon(Icons.check, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              // --- BULK DELETE (Bottom - Red Normal FAB) ---
+              FloatingActionButton(
+                heroTag: 'bulk_delete_fab',
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+
+                  if (provider.selectedItems.isEmpty) {
+                    provider.toggleEditMode();
+                    return;
+                  }
+                  
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1F1F25),
+                      title: Text('Delete ${provider.selectedCount} items', style: const TextStyle(color: Colors.white)),
+                      content: const Text('Are you sure you want to permanently delete these tasks?', style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await provider.deleteSelectedItems();
+                  }
+                },
+                backgroundColor: Colors.red[600],
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // 2. COMPLETED VIEW (Sweep Delete FAB)
+      if (provider.showCompletedView) {
+        return Positioned(
+          right: 20,
+          bottom: 100,
+          child: FloatingActionButton(
+            heroTag: 'sweep_delete_fab',
+            onPressed: () async {
+              HapticFeedback.mediumImpact();
+              if (provider.completedItems.isEmpty) {
+                provider.toggleShowCompletedView();
+                return;
+              }
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: const Color(0xFF1F1F25),
+                  title: const Text('Delete all completed', style: TextStyle(color: Colors.white)),
+                  content: const Text('This will permanently delete all completed tasks.', style: TextStyle(color: Colors.white70)),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete all'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) await provider.deleteCompletedItems();
+            },
+            backgroundColor: Colors.red[600],
+            child: const Icon(Icons.delete_sweep, color: Colors.white),
+          ),
+        );
+      }
+
+      // 3. NORMAL VIEW (Add Task FAB)
+      return Positioned(
+        right: 20,
+        bottom: 100,
+        child: FloatingActionButton(
+          heroTag: 'add_task_fab',
+          onPressed: () => _showCreateActionItemSheet(),
+          backgroundColor: Colors.deepPurple,
+          child: const Icon(Icons.add, color: Colors.white),
+        ),
+      );
+    },
+  );
+}
 
   // Categorize items by deadline
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
@@ -853,6 +966,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final taskContent = _buildTaskItemContent(item, provider, indentWidth);
 
+    if (provider.isEditMode) {
+      return taskContent;
+    }
     // If at indent 0, allow swipe-right to indent and swipe-left to delete.
     if (indentLevel == 0) {
       return Dismissible(
@@ -1028,7 +1144,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final goalTitle = _getGoalTitleForTask(item);
 
     return GestureDetector(
-      onTap: () => _showEditSheet(item),
+      onTap: () {
+        if (provider.isEditMode) {
+          HapticFeedback.lightImpact();
+          provider.toggleItemSelection(item.id);
+        } else {
+          _showEditSheet(item);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 1),
         child: Padding(
@@ -1049,16 +1172,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
                 ),
-              // Checkbox
-              GestureDetector(
-                onTap: () async {
-                  HapticFeedback.lightImpact();
-                  await provider.updateActionItemState(item, !item.completed);
-                  if (!item.completed) _onActionItemCompleted();
-                },
-                child: _buildCheckbox(item.completed),
-              ),
-              const SizedBox(width: 12),
+              // LEFT CHECKBOX: Source of Truth (Disappears in Edit Mode)
+              if (!provider.isEditMode)
+                GestureDetector(
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    await provider.updateActionItemState(item, !item.completed);
+                    if (!item.completed) _onActionItemCompleted();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: _buildCheckbox(item.completed),
+                  ),
+                ),
+
+              // Reduced spacing to allow text to shift left in edit mode
+              SizedBox(width: provider.isEditMode ? 0 : 4),
+
               // Task text
               Expanded(
                 child: Column(
@@ -1085,13 +1215,27 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ],
                 ),
               ),
+
+              // RIGHT CHECKBOX: Matches Left (Visible only in Edit Mode)
+              if (provider.isEditMode)
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    provider.toggleItemSelection(item.id);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: _buildRightSelectionCheckbox(
+                      provider.isItemSelected(item.id),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
     );
   }
-
   Widget _buildCheckbox(bool isCompleted) {
     return Container(
       width: 22,
@@ -1105,6 +1249,22 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
       child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
+    );
+  }
+
+  Widget _buildRightSelectionCheckbox(bool isSelected) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isSelected ? Colors.red.shade400 : Colors.grey.shade600,
+          width: 2,
+        ),
+        color: isSelected ? Colors.red[400] : Colors.transparent,
+      ),
+      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
     );
   }
 

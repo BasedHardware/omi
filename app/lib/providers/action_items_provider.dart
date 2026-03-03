@@ -56,6 +56,11 @@ class ActionItemsProvider extends ChangeNotifier {
   int get selectedCount => _selectedItems.length;
   bool get hasSelection => _selectedItems.isNotEmpty;
 
+  //edit tasks page
+  bool _isEditMode = false;
+  bool get isEditMode => _isEditMode;
+
+
   // Group action items by completion status
   List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
 
@@ -104,12 +109,90 @@ class ActionItemsProvider extends ChangeNotifier {
     }).toList();
   }
 
+
+//DELETE WHEN GO LIVE
+  void injectTestData() {
+    final now = DateTime.now();
+
+    _actionItems = [
+      // --- INCOMPLETE TASKS ---
+      ActionItemWithMetadata(
+        id: 'test_1',
+        description: 'Review Q1 TSLA stock performance',
+        completed: false,
+        createdAt: now.subtract(const Duration(days: 1)),
+        updatedAt: now,
+        dueAt: now, // Will show in "Today"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_2',
+        description: 'Follow up with Gabriel regarding Feb 2nd email',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: now.add(const Duration(days: 1)), // Will show in "Tomorrow"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_3',
+        description: 'Setup local Whisper transcription server',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: null, // Will show in "No Deadline"
+      ),
+      ActionItemWithMetadata(
+        id: 'test_4',
+        description: 'Renew US Mobile annual plan before May 2026',
+        completed: false,
+        createdAt: now,
+        updatedAt: now,
+        dueAt: now.add(const Duration(days: 5)), // Will show in "Later"
+      ),
+
+      // --- COMPLETED TASKS ---
+      ActionItemWithMetadata(
+        id: 'test_5',
+        description: 'Take 2-year-old to Sacramento ice skating rink',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 3)),
+        updatedAt: now.subtract(const Duration(days: 1)),
+        dueAt: now.subtract(const Duration(days: 2)),
+      ),
+      ActionItemWithMetadata(
+        id: 'test_6',
+        description: 'Fix Omi Flutter UI bug in action_items_page',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 2)),
+        updatedAt: now.subtract(const Duration(days: 1)),
+        dueAt: null,
+      ),
+      ActionItemWithMetadata(
+        id: 'test_7',
+        description: 'Install The Longest Journey on PC',
+        completed: true,
+        createdAt: now.subtract(const Duration(days: 5)),
+        updatedAt: now.subtract(const Duration(days: 4)),
+        dueAt: now.subtract(const Duration(days: 4)),
+      ),
+    ];
+    
+    notifyListeners();
+  }
+//DELETE WHEN GO LIVE
+  
+  
   ActionItemsProvider() {
     _preload();
   }
 
   void _preload() async {
-    await fetchActionItems();
+    // 1. Temporarily bypass the real API fetch - Restore this Go Live
+    // await fetchActionItems(); 
+
+    //DELETE WHEN GO LIVE
+    // 2. Load the fake data instead - 
+    injectTestData();
+    // DELETE WHEN GO LIVE
     _migrateCategoryOrderFromPrefs();
   }
 
@@ -214,7 +297,7 @@ class ActionItemsProvider extends ChangeNotifier {
       );
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
+        //_findAndUpdateItemState(item.id, !newState); //disabled for demo
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
       } else {
@@ -224,7 +307,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      _findAndUpdateItemState(item.id, !newState);
+      //_findAndUpdateItemState(item.id, !newState); //disabled for demo
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
     }
@@ -435,8 +518,24 @@ class ActionItemsProvider extends ChangeNotifier {
     // TODO: Add analytics for completed action items toggle
   }
 
+// Update toggleShowCompletedView to turn off Edit Mode
   void toggleShowCompletedView() {
     _showCompletedView = !_showCompletedView;
+    if (_showCompletedView) {
+      _isEditMode = false; // Turn off edit mode when viewing completed tasks
+      _selectedItems.clear();
+    }
+    notifyListeners();
+  }
+  
+// Update toggleEditMode to turn off Completed View
+  void toggleEditMode() {
+    _isEditMode = !_isEditMode;
+    if (_isEditMode) {
+      _showCompletedView = false; // Turn off completed tasks when entering edit mode
+    } else {
+      _selectedItems.clear();
+    }
     notifyListeners();
   }
 
@@ -553,19 +652,54 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Bulk operations
+
   Future<bool> deleteSelectedItems() async {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
-    final success = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)))
-        .then((results) => results.every((success) => success));
 
-    if (success) {
-      _selectedItems.clear();
-      _isSelectionMode = false;
+    _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
+    _selectedItems.clear();
+    _isEditMode = false;
+    notifyListeners();
+
+    try {
+      final success = await Future.wait(
+        itemsToDelete.map((item) => api.deleteActionItem(item.id)),
+      ).then((results) => results.every((success) => success));
+
+      if (!success) {
+        Logger.debug('Failed to delete some action items on server');
+      }
+      return success;
+    } catch (e) {
+      Logger.debug('Error in bulk deletion: $e');
+      return false;
     }
+  }
 
-    return success;
+  Future<bool> deleteCompletedItems() async {
+    final itemsToDelete = completedItems; 
+    if (itemsToDelete.isEmpty) return false;
+
+    // 1. Remove all completed items from local state immediately
+    _actionItems.removeWhere((item) => item.completed);
+    notifyListeners(); // Update the UI ONCE
+
+    // 2. Process API deletions in the background
+    try {
+      final success = await Future.wait(
+        itemsToDelete.map((item) => api.deleteActionItem(item.id))
+      ).then((results) => results.every((success) => success));
+
+      if (!success) {
+        Logger.debug('Failed to delete some completed action items on server');
+      }
+      return success;
+    } catch (e) {
+      Logger.debug('Error in bulk deletion: $e');
+      return false;
+    }
   }
 
   @override
