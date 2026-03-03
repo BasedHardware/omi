@@ -2503,20 +2503,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["relevance_score", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2524,7 +2528,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
@@ -2563,20 +2567,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["sort_order", "indent_level", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2584,7 +2592,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
