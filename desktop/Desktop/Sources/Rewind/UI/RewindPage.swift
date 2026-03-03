@@ -100,11 +100,6 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
-                    // Recording bar (always visible when appState exists)
-                    if let appState = appState {
-                        rewindRecordingBar(appState: appState)
-                    }
-
                     if isTranscriptExpanded {
                         // Expanded transcript + notes view replaces timeline
                         expandedTranscriptView
@@ -158,6 +153,11 @@ struct RewindPage: View {
             if !pluginState && screenAnalysisEnabled {
                 screenAnalysisEnabled = false
                 AssistantSettings.shared.screenAnalysisEnabled = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isTranscriptExpanded = true
             }
         }
         .onChange(of: isSearchFocused) { _, focused in
@@ -371,15 +371,6 @@ struct RewindPage: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
-        // Also toggle audio transcription
-        if let appState = appState {
-            if enabled && !appState.isTranscribing {
-                appState.startTranscription()
-            } else if !enabled && appState.isTranscribing {
-                appState.stopTranscription()
-            }
-        }
-
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
@@ -504,7 +495,7 @@ struct RewindPage: View {
             .buttonStyle(.plain)
             .help("Rewind Settings")
 
-            // Rewind on/off toggle (controls both screen + audio)
+            // Rewind on/off toggle (screen capture only)
             rewindToggle
         }
         .padding(.horizontal, 16)
