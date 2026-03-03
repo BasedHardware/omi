@@ -5,7 +5,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
@@ -345,21 +345,26 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
     """
     Get the download URL for the latest desktop release installer.
-    Delegates to the desktop backend service which tracks releases via Firestore.
+    Resolves the latest live release from GitHub and redirects to the DMG asset.
 
     Args:
         platform: Target platform (macos, windows, or linux)
 
     Returns:
-        Redirect to the desktop backend download endpoint
+        Redirect to the installer download URL (DMG for macOS)
     """
-    from fastapi.responses import RedirectResponse
+    desktop_releases = await _get_live_desktop_releases(platform)
+    if not desktop_releases:
+        raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
 
-    desktop_backend_url = os.getenv(
-        "DESKTOP_BACKEND_URL",
-        "https://desktop-backend-hhibjajaja-uc.a.run.app",
-    )
-    return RedirectResponse(url=f"{desktop_backend_url}/download", status_code=302)
+    # Find DMG asset in the latest release
+    latest = desktop_releases[0]["release"]
+    for asset in latest.get("assets", []):
+        name = asset.get("name", "")
+        if name.endswith(".dmg"):
+            return RedirectResponse(url=asset["browser_download_url"], status_code=302)
+
+    raise HTTPException(status_code=404, detail="No DMG installer found in latest release")
 
 
 @router.post("/v2/desktop/clear-cache")
