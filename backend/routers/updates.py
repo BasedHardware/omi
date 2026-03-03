@@ -5,7 +5,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
@@ -345,21 +345,39 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
     """
     Get the download URL for the latest desktop release installer.
-    Delegates to the desktop backend service which tracks releases via Firestore.
+    Redirects to the GitHub release asset (DMG for macOS).
 
     Args:
         platform: Target platform (macos, windows, or linux)
 
     Returns:
-        Redirect to the desktop backend download endpoint
+        Redirect to the installer download URL
     """
-    from fastapi.responses import RedirectResponse
+    cache_key = "github_releases_desktop"
+    releases = await get_omi_github_releases(cache_key)
 
-    desktop_backend_url = os.getenv(
-        "DESKTOP_BACKEND_URL",
-        "https://desktop-backend-hhibjajaja-uc.a.run.app",
-    )
-    return RedirectResponse(url=f"{desktop_backend_url}/download", status_code=302)
+    if not releases:
+        raise HTTPException(status_code=404, detail="No releases found")
+
+    extension_map = {"macos": ".dmg", "windows": ".exe", "linux": ".AppImage"}
+    target_extension = extension_map.get(platform, ".dmg")
+
+    # Find the latest published desktop release with an installer asset
+    for release in sorted(releases, key=lambda r: r.get("published_at", ""), reverse=True):
+        if release.get("draft") or not release.get("published_at"):
+            continue
+
+        tag_name = release.get("tag_name", "")
+        if not _parse_desktop_version(tag_name):
+            continue
+
+        for asset in release.get("assets", []):
+            if asset.get("name", "").lower().endswith(target_extension):
+                download_url = asset.get("browser_download_url")
+                if download_url:
+                    return RedirectResponse(url=download_url, status_code=302)
+
+    raise HTTPException(status_code=404, detail=f"No {target_extension} installer found")
 
 
 @router.post("/v2/desktop/clear-cache")
