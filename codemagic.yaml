@@ -2370,6 +2370,9 @@ workflows:
           echo "CHANGELOG_JSON_B64=$CHANGELOG_JSON_B64" >> $CM_ENV
           echo "DOWNLOAD_URL=$DOWNLOAD_URL" >> $CM_ENV
 
+          # Build changelog as pipe-separated string for KEY_VALUE_START
+          CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
+
           RELEASE_NOTES="## OMI Desktop v${VERSION}
 
           ### What's New
@@ -2377,7 +2380,14 @@ workflows:
 
           ### Downloads
           - **DMG Installer**: For fresh installs, download the DMG below
-          - **Auto-Update**: Existing users will receive this update automatically via Sparkle"
+          - **Auto-Update**: Existing users will receive this update automatically via Sparkle
+
+          <!-- KEY_VALUE_START
+          isLive: true
+          channel: staging
+          edSignature: ${ED_SIGNATURE}
+          changelog: ${CHANGELOG_PIPE}
+          KEY_VALUE_END -->"
 
           # Safe re-run: delete existing release if it exists
           gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
@@ -2391,94 +2401,6 @@ workflows:
             "$DMG_PATH"
 
           echo "GitHub release created: $CM_TAG"
-
-      - name: Upload DMG to GCS
-        script: |
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-          GCS_BUCKET="gs://omi_macos_updates"
-          gsutil -h "Content-Disposition:attachment; filename=\"omi.dmg\"" \
-            cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/omi.dmg"
-          echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/omi.dmg"
-          echo "(Run promote_release.sh to update the latest/ pointer when promoting to stable)"
-
-      - name: Register release in Firestore
-        script: |
-          export CHANGELOG_JSON=$(echo "$CHANGELOG_JSON_B64" | base64 --decode)
-
-          RELEASE_JSON=$(python3 - <<PYEOF
-          import json, os
-          data = {
-            'version':      os.environ['VERSION'],
-            'build_number': int(os.environ['BUILD_NUMBER']),
-            'download_url': os.environ.get('DOWNLOAD_URL', ''),
-            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
-            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
-            'is_live':      True,
-            'is_critical':  False,
-            'channel':      'staging',
-          }
-          print(json.dumps(data))
-          PYEOF
-          )
-
-          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Release-Secret: $RELEASE_SECRET" \
-            -d "$RELEASE_JSON" \
-            "$DESKTOP_BACKEND_URL/updates/releases")
-
-          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "Release registered in Firestore (channel: staging)"
-          else
-            echo "WARNING: Firestore registration returned HTTP $HTTP_CODE"
-            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
-            echo "Run local-scripts/add_release.py manually if needed"
-          fi
-
-      - name: Deploy Rust backend to Cloud Run
-        script: |
-          # Authenticate gcloud with service account
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          gcloud auth configure-docker gcr.io --quiet
-          rm /tmp/gcp_key.json
-
-          # Build linux/amd64 image and push directly to GCR using BuildKit
-          # (--push avoids loading the image locally on the arm64 runner)
-          export DOCKER_BUILDKIT=1
-          docker buildx build \
-            --platform linux/amd64 \
-            --push \
-            -t "$BACKEND_IMAGE:$VERSION" \
-            -t "$BACKEND_IMAGE:latest" \
-            Backend-Rust/
-
-          # Deploy to Cloud Run
-          gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --image "$BACKEND_IMAGE:$VERSION" \
-            --project "$GCP_PROJECT" \
-            --region "$GCP_REGION" \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID,FIREBASE_API_KEY=$FIREBASE_API_KEY,GEMINI_API_KEY=$GEMINI_API_KEY,APPLE_CLIENT_ID=$APPLE_CLIENT_ID,APPLE_TEAM_ID=$APPLE_TEAM_ID,APPLE_KEY_ID=$APPLE_KEY_ID,GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET,RUST_LOG=info,RELEASE_SECRET=$RELEASE_SECRET,RESEND_API_KEY=$RESEND_API_KEY,SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN,SENTRY_ADMIN_UID=$SENTRY_ADMIN_UID,SENTRY_WEBHOOK_SECRET=$SENTRY_WEBHOOK_SECRET,REDIS_DB_HOST=$REDIS_DB_HOST,REDIS_DB_PORT=$REDIS_DB_PORT,REDIS_DB_PASSWORD=$REDIS_DB_PASSWORD" \
-            --quiet
-
-          # Update APPLE_PRIVATE_KEY separately — it's multiline, so use ^@^ as the separator
-          # to prevent gcloud from splitting on commas within the key value
-          gcloud run services update "$CLOUD_RUN_SERVICE" \
-            --project "$GCP_PROJECT" \
-            --region "$GCP_REGION" \
-            --update-env-vars "^@^APPLE_PRIVATE_KEY=$APPLE_PRIVATE_KEY" \
-            --quiet
-
-          echo "Backend deployed: $CLOUD_RUN_SERVICE @ $VERSION"
 
     artifacts:
       - build/*.app
