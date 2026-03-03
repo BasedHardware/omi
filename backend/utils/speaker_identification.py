@@ -16,6 +16,9 @@ from utils.other.storage import (
 from utils.speaker_sample import verify_and_transcribe_sample
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
@@ -259,18 +262,18 @@ async def extract_speaker_samples(
         # Check sample count after migration
         sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 1:
-            print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
+            logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
             return
 
         # Fetch conversation to get started_at and segment details
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if not conversation:
-            print(f"Conversation {conversation_id} not found", uid)
+            logger.warning(f"Conversation {conversation_id} not found {uid}")
             return
 
         started_at = conversation.get('started_at')
         if not started_at:
-            print(f"Conversation {conversation_id} has no started_at", uid)
+            logger.info(f"Conversation {conversation_id} has no started_at {uid}")
             return
 
         started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
@@ -282,7 +285,7 @@ async def extract_speaker_samples(
         # Get chunks from audio_files instead of storage listing
         audio_files = conversation.get('audio_files', [])
         if not audio_files:
-            print(f"No audio files found for {conversation_id}, skipping speaker sample extraction", uid)
+            logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
             return
 
         # Collect all chunk timestamps from audio files
@@ -292,7 +295,7 @@ async def extract_speaker_samples(
             all_timestamps.extend(timestamps)
 
         if not all_timestamps:
-            print(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction", uid)
+            logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
             return
 
         # Build chunks list in expected format
@@ -311,7 +314,7 @@ async def extract_speaker_samples(
 
             seg = segment_map.get(seg_id)
             if not seg:
-                print(f"Segment {seg_id} not found in conversation", uid, conversation_id)
+                logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
                 continue
 
             segment_start = seg.get('start')
@@ -336,16 +339,16 @@ async def extract_speaker_samples(
                             segment_start = min(segment_start, prev_start)
                             seg_duration = segment_end - segment_start
                         if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                            print(
-                                f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
-                                uid,
-                                conversation_id,
+                            logger.info(
+                                f"Expanded segment to {seg_duration:.1f}s by including adjacent segments {uid} {conversation_id}"
                             )
                             break
                         i -= 1
 
             if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                print(f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping", uid, conversation_id)
+                logger.info(
+                    f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping {uid} {conversation_id}"
+                )
                 continue
 
             # Extract centered sample window (10 seconds max from center of segment)
@@ -377,7 +380,9 @@ async def extract_speaker_samples(
                     break
 
             if not relevant_timestamps:
-                print(f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s", uid, conversation_id)
+                logger.info(
+                    f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s {uid} {conversation_id}"
+                )
                 continue
 
             # Download, merge, and extract
@@ -401,10 +406,8 @@ async def extract_speaker_samples(
             min_sample_bytes = int(sample_rate * min_sample_seconds * 2)
             if len(sample_audio) < min_sample_bytes:
                 actual_seconds = len(sample_audio) / (sample_rate * 2)
-                print(
-                    f"Sample too short ({actual_seconds:.1f}s), need {min_sample_seconds}s, skipping",
-                    uid,
-                    conversation_id,
+                logger.info(
+                    f"Sample too short ({actual_seconds:.1f}s), need {min_sample_seconds}s, skipping {uid} {conversation_id}"
                 )
                 continue
 
@@ -417,7 +420,7 @@ async def extract_speaker_samples(
             # Verify sample quality and get transcript using centralized function
             transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
             if not is_valid:
-                print(f"Sample failed quality check: {reason}", uid, conversation_id)
+                logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
                 continue  # Try next segment
 
             # Upload and store
@@ -429,10 +432,8 @@ async def extract_speaker_samples(
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
-                print(
-                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text}",
-                    uid,
-                    conversation_id,
+                logger.info(
+                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text} {uid} {conversation_id}"
                 )
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
@@ -441,16 +442,14 @@ async def extract_speaker_samples(
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
                     users_db.set_person_speaker_embedding(uid, person_id, embedding_list)
-                    print(
-                        f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)})",
-                        uid,
-                        conversation_id,
+                    logger.info(
+                        f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )
                 except Exception as emb_err:
-                    print(f"Failed to extract/store speaker embedding: {emb_err}", uid, conversation_id)
+                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
             else:
-                print(f"Failed to add speech sample for person {person_id}", uid, conversation_id)
+                logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
                 break  # Likely hit limit
 
     except Exception as e:
-        print(f"Error extracting speaker samples: {e}", uid, conversation_id)
+        logger.error(f"Error extracting speaker samples: {e} {uid} {conversation_id}")

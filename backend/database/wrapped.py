@@ -7,7 +7,6 @@ from typing import Optional
 
 from ._client import db
 
-
 # Collection name under user document
 WRAPPED_COLLECTION = 'wrapped'
 

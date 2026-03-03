@@ -208,10 +208,14 @@ private struct NoteRowView: View {
     @State private var isHovering = false
     @FocusState private var isEditFocused: Bool
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f
+    }()
+
     private var formattedTime: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        return formatter.string(from: note.timestamp)
+        Self.timeFormatter.string(from: note.timestamp)
     }
 
     var body: some View {

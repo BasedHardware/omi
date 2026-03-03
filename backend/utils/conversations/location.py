@@ -8,9 +8,11 @@ import requests
 from database.redis_db import r
 from models.conversation import Geolocation
 
+logger = logging.getLogger(__name__)
+
 
 def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geolocation]:
-    print('get_google_maps_location', latitude, longitude)
+    logger.info(f'get_google_maps_location {latitude} {longitude}')
 
     # Round to ~100m precision for cache key
     rounded = f"{latitude:.3f},{longitude:.3f}"

@@ -589,6 +589,34 @@ class AddAppProvider extends ChangeNotifier {
     return success;
   }
 
+  bool isRefreshingManifest = false;
+
+  void setIsRefreshingManifest(bool value) {
+    isRefreshingManifest = value;
+    notifyListeners();
+  }
+
+  Future<bool> refreshManifest() async {
+    if (updateAppId == null) {
+      AppSnackbar.showSnackbarError('App ID not found');
+      return false;
+    }
+
+    setIsRefreshingManifest(true);
+    var success = await refreshAppManifestServer(updateAppId!);
+    if (success) {
+      var app = await getAppDetailsServer(updateAppId!);
+      if (app != null) {
+        appProvider!.updateLocalApp(App.fromJson(app));
+        AppSnackbar.showSnackbarSuccess('Manifest refreshed successfully');
+      }
+    } else {
+      AppSnackbar.showSnackbarError('Failed to refresh manifest');
+    }
+    setIsRefreshingManifest(false);
+    return success;
+  }
+
   Future<String?> submitApp() async {
     setIsSubmitting(true);
 

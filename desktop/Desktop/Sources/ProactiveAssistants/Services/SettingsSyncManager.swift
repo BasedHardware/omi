@@ -91,6 +91,19 @@ class SettingsSyncManager {
             if let v = memory.notificationsEnabled { MemoryAssistantSettings.shared.notificationsEnabled = v }
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
+
+        // Update channel (server-authoritative override)
+        if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
+            if UpdaterViewModel.shared.updateChannel != parsed {
+                log("SettingsSyncManager: Server assigned update channel: \(channel)")
+                UpdaterViewModel.shared.updateChannel = parsed
+                // Trigger an immediate update check so the new channel takes effect
+                Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    UpdaterViewModel.shared.checkForUpdatesInBackground()
+                }
+            }
+        }
     }
 
     // MARK: - Build Local → Response
@@ -144,7 +157,8 @@ class SettingsSyncManager {
             focus: focus,
             task: task,
             advice: advice,
-            memory: memory
+            memory: memory,
+            updateChannel: UpdaterViewModel.shared.updateChannel.rawValue
         )
     }
 }

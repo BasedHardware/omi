@@ -11,6 +11,7 @@ import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class FlashPageWalSyncImpl implements FlashPageWalSync {
@@ -246,6 +247,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
         Logger.debug("FlashPageSync: Could not get connection");
+        DebugLogManager.logWarning('Flash page sync: could not get device connection');
         return false;
       }
 
@@ -260,6 +262,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       final int startPage = wal.storageOffset;
       final int endPage = wal.storageTotalBytes;
       final int totalPages = endPage - startPage + 1;
+      DebugLogManager.logEvent('flash_page_download_started', {
+        'startPage': startPage,
+        'endPage': endPage,
+        'totalPages': totalPages,
+      });
       int emptyExtractions = 0;
       const maxEmptyExtractions = 60;
       int? lastProcessedIndex;
@@ -422,6 +429,10 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
           await limitlessConnection.enableRealTimeMode();
           Logger.debug("FlashPageSync: Cancelled. $filesSaved files saved before cancellation");
+          DebugLogManager.logWarning('Flash page download cancelled', {
+            'filesSaved': filesSaved,
+            'lastProcessedIndex': lastProcessedIndex ?? 0,
+          });
           return false; // Cancelled, not completed
         }
 
@@ -470,10 +481,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       await limitlessConnection.enableRealTimeMode();
 
       Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
+      DebugLogManager.logEvent('flash_page_download_completed', {'filesSaved': filesSaved});
       progress?.onWalSyncedProgress(1.0);
       return true; // Completed successfully
     } catch (e) {
       Logger.debug("FlashPageSync: Error: $e");
+      DebugLogManager.logError(e, null, 'Flash page download error');
       _isSyncing = false;
 
       // Clear sync progress info on error

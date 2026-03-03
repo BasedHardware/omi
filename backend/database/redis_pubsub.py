@@ -64,9 +64,7 @@ class RedisPubSubManager:
             self.pubsub.subscribe(self.CHANNEL)
 
             self.subscriber_thread = threading.Thread(
-                target=self._subscribe_loop,
-                daemon=True,
-                name='redis-pubsub-subscriber'
+                target=self._subscribe_loop, daemon=True, name='redis-pubsub-subscriber'
             )
             self.subscriber_thread.start()
             logger.info(f"Started Redis pub/sub subscription on channel: {self.CHANNEL}")
@@ -112,11 +110,7 @@ class RedisPubSubManager:
         Args:
             keys: List of cache keys to invalidate
         """
-        message = {
-            'event': 'invalidate',
-            'keys': keys,
-            'timestamp': time.time()
-        }
+        message = {'event': 'invalidate', 'keys': keys, 'timestamp': time.time()}
 
         try:
             self.redis_client.publish(self.CHANNEL, json.dumps(message))

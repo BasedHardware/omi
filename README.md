@@ -42,7 +42,7 @@ Get the omi app running locally:
 git clone https://github.com/BasedHardware/omi.git
 cd omi/app
 
-bash setup.sh ios     # android, macos
+bash setup.sh ios     # android
 ```
 
 ## Create your own App (1 min)
@@ -51,7 +51,6 @@ Download omi App
 
 [<img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' height="50px" width="180px">](https://play.google.com/store/apps/details?id=com.friend.ios)
 [<img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" height="50px" width="180px">](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163)
-[<img src='https://github.com/user-attachments/assets/59c47ec7-3da0-47d7-be2f-7467e4189499' alt="Download MacOS app" height="50px" width="180px">](https://apps.apple.com/us/app/omi-ai-smart-meeting-notes/id6502156163)
 
 Create webhook using [webhook.site](https://webhook.site) and copy this url
 

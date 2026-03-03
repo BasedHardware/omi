@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 // MARK: - Task Category (by due date)
 
@@ -439,6 +440,9 @@ class TasksViewModel: ObservableObject {
     // Use shared TasksStore as single source of truth
     private let store = TasksStore.shared
 
+    /// Set by TasksPage so delete operations can purge in-memory chat states.
+    weak var chatCoordinator: TaskChatCoordinator?
+
     // Search state - searches SQLite directly
     @Published var searchText = "" {
         didSet {
@@ -629,7 +633,8 @@ class TasksViewModel: ObservableObject {
     @Published var inlineCreateAfterTaskId: String?
     @Published var editingTaskId: String?
     var hoveredTaskId: String?
-    var isAnyTaskEditing = false
+    @Published var animateToggleTaskId: String?
+    @Published var isAnyTaskEditing = false
     var lastEnterPressTime: Date?
     var scrollProxy: ScrollViewProxy?
 
@@ -661,6 +666,11 @@ class TasksViewModel: ObservableObject {
     @Published var selectedTaskIds: Set<String> = []
 
     // MARK: - Drag-and-Drop Reordering (like Flutter)
+    /// Drag state for visual feedback
+    @Published var draggedTaskId: String? = nil
+    @Published var dropTargetTaskId: String? = nil
+    @Published var dropAbove: Bool = true
+
     /// Custom order of task IDs per category (persisted to UserDefaults as fallback)
     @Published var categoryOrder: [TaskCategory: [String]] = [:] {
         didSet { saveCategoryOrder() }
@@ -682,6 +692,10 @@ class TasksViewModel: ObservableObject {
 
     /// Throttle flag for loadMoreIfNeeded to prevent task storms during fast scroll
     private var isLoadingMoreGuard = false
+
+    /// Minimum interval between pagination triggers (seconds)
+    private var lastLoadMoreTime: Date = .distantPast
+    private let loadMoreThrottleInterval: TimeInterval = 0.5
 
     // MARK: - Cached Properties (avoid recomputation on every render)
 
@@ -767,52 +781,60 @@ class TasksViewModel: ObservableObject {
 
     // MARK: - Drag-and-Drop Methods
 
-    /// Get ordered tasks for a category, respecting sortOrder then legacy categoryOrder
+    /// Get ordered tasks for a category, using sortOrder when available, falling back to UserDefaults/default sort
     func getOrderedTasks(for category: TaskCategory) -> [TaskActionItem] {
         guard let tasks = categorizedTasks[category], !tasks.isEmpty else {
             return []
         }
 
-        // Check if any tasks have sortOrder set (backend-synced ordering)
-        let hasSortOrder = tasks.contains { ($0.sortOrder ?? 0) > 0 }
-
+        // Primary: if any task in this category has a sortOrder, use sortOrder-based sorting
+        let hasSortOrder = tasks.contains(where: { $0.sortOrder != nil })
         if hasSortOrder {
-            // Sort by sortOrder ascending; tasks without sortOrder go at the end sorted by createdAt
             return tasks.sorted { a, b in
                 let aOrder = a.sortOrder ?? Int.max
                 let bOrder = b.sortOrder ?? Int.max
-                if aOrder != bOrder {
-                    return aOrder < bOrder
-                }
+                if aOrder != bOrder { return aOrder < bOrder }
+                let aDue = a.dueAt ?? .distantFuture
+                let bDue = b.dueAt ?? .distantFuture
+                if aDue != bDue { return aDue < bDue }
                 return a.createdAt > b.createdAt
             }
         }
 
-        // Fall back to legacy UserDefaults categoryOrder
-        guard let order = categoryOrder[category], !order.isEmpty else {
-            return tasks // No custom order, return as-is
-        }
+        // Fallback: legacy UserDefaults categoryOrder (transitional for users who haven't synced yet)
+        if let order = categoryOrder[category], !order.isEmpty {
+            var orderedTasks: [TaskActionItem] = []
+            var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
 
-        // Sort tasks by custom order, new items go at the end
-        var orderedTasks: [TaskActionItem] = []
-        var taskMap = Dictionary(tasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
-
-        // Add tasks in custom order
-        for id in order {
-            if let task = taskMap[id] {
-                orderedTasks.append(task)
-                taskMap.removeValue(forKey: id)
+            for id in order {
+                if let task = taskMap[id] {
+                    orderedTasks.append(task)
+                    taskMap.removeValue(forKey: id)
+                }
             }
+
+            let remaining = taskMap.values.sorted { a, b in
+                let aDue = a.dueAt ?? .distantFuture
+                let bDue = b.dueAt ?? .distantFuture
+                if aDue != bDue { return aDue < bDue }
+                return a.createdAt > b.createdAt
+            }
+            orderedTasks.append(contentsOf: remaining)
+            return orderedTasks
         }
 
-        // Add remaining tasks (new ones not in custom order)
-        orderedTasks.append(contentsOf: taskMap.values)
-
-        return orderedTasks
+        // Default sort: due_at ascending (nulls last), created_at descending (newest first)
+        return tasks.sorted { a, b in
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue { return aDue < bDue }
+            return a.createdAt > b.createdAt
+        }
     }
 
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
+        log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
         var order = categoryOrder[category] ?? categorizedTasks[category]?.map { $0.id } ?? []
 
         // Remove task from current position
@@ -824,13 +846,66 @@ class TasksViewModel: ObservableObject {
 
         categoryOrder[category] = order
 
-        // Compute sortOrder values for all tasks in this category and schedule sync
+        // Write sortOrder in-memory immediately so getOrderedTasks() reflects the change
+        let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
+        for (index, taskId) in order.enumerated() {
+            let newSortOrder = categoryOffset + (index + 1) * 1000
+            if let storeIndex = store.incompleteTasks.firstIndex(where: { $0.id == taskId }) {
+                store.incompleteTasks[storeIndex].sortOrder = newSortOrder
+            }
+        }
+
+        // Recompute caches immediately so the UI updates
+        recomputeAllCaches()
+
+        // Schedule debounced sync to SQLite + backend
         scheduleSortOrderSync()
     }
 
     /// Move a task to first position in category
     func moveTaskToFirst(_ task: TaskActionItem, inCategory category: TaskCategory) {
         moveTask(task, toIndex: 0, inCategory: category)
+    }
+
+    /// Move a task to a specific position, handling cross-category moves by updating due_at
+    func moveTaskToCategory(_ task: TaskActionItem, toIndex index: Int, inCategory targetCategory: TaskCategory) {
+        let sourceCategory = currentCategoryFor(task)
+
+        if sourceCategory != targetCategory {
+            // Cross-category move: update due_at so categoryFor() places it correctly
+            guard let newDueAt = dueAtForCategory(targetCategory) else {
+                // Can't drag to No Deadline (clearing dueAt not supported via updateTaskDetails)
+                // Same-category reorder within No Deadline still works
+                moveTask(task, toIndex: index, inCategory: targetCategory)
+                return
+            }
+
+            // Remove from old category's UserDefaults order
+            if var oldOrder = categoryOrder[sourceCategory] {
+                oldOrder.removeAll { $0 == task.id }
+                categoryOrder[sourceCategory] = oldOrder
+            }
+
+            // Update due_at via async store call, then reorder
+            Task {
+                await updateTaskDetails(task, dueAt: newDueAt)
+                await MainActor.run {
+                    recomputeAllCaches()
+                    moveTask(task, toIndex: index, inCategory: targetCategory)
+                }
+            }
+        } else {
+            // Same category: just reorder
+            moveTask(task, toIndex: index, inCategory: targetCategory)
+        }
+    }
+
+    /// Get current category for a task (used for cross-category drag detection)
+    private func currentCategoryFor(_ task: TaskActionItem) -> TaskCategory {
+        let calendar = Calendar.current
+        let startOfTomorrow = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 1, to: Date()) ?? Date())
+        let startOfDayAfter = calendar.startOfDay(for: calendar.date(byAdding: .day, value: 2, to: Date()) ?? Date())
+        return categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfter)
     }
 
     // MARK: - Indent Methods
@@ -892,7 +967,7 @@ class TasksViewModel: ObservableObject {
     }
 
     /// Handle a key-down event. Returns true if the event was consumed.
-    func handleKeyDown(_ event: NSEvent) -> Bool {
+    func handleKeyDown(_ event: NSEvent, chatOpen: Bool = false) -> Bool {
         // Don't intercept keys when a text field has focus
         if let firstResponder = NSApp.keyWindow?.firstResponder,
            firstResponder is NSTextView || firstResponder is NSTextField {
@@ -902,15 +977,16 @@ class TasksViewModel: ObservableObject {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let keyCode = event.keyCode
 
-        // Cmd+N: new task
+        // Cmd+N: new task (inline at top)
         if modifiers == .command && keyCode == 45 {
-            showingCreateTask = true
+            isInlineCreating = true
+            inlineCreateAfterTaskId = nil
             return true
         }
 
         // Cmd+D: delete task
         if modifiers == .command && keyCode == 2 {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId,
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId,
                   let task = findTask(taskId) else { return false }
             let nav = navigationOrder
             if let idx = nav.firstIndex(where: { $0.id == taskId }) {
@@ -925,14 +1001,26 @@ class TasksViewModel: ObservableObject {
             return true
         }
 
+        // Space: toggle task complete (triggers animation in TaskRow)
+        if keyCode == 49 && modifiers.isEmpty {
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId,
+                  findTask(taskId) != nil else { return false }
+            animateToggleTaskId = taskId
+            // Reset so pressing space on the same task again triggers onChange
+            DispatchQueue.main.async { [weak self] in
+                self?.animateToggleTaskId = nil
+            }
+            return true
+        }
+
         // Tab / Shift+Tab: indent
         if keyCode == 48 && modifiers.isEmpty {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId else { return false }
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId else { return false }
             incrementIndent(for: taskId)
             return true
         }
         if keyCode == 48 && modifiers == .shift {
-            guard let taskId = hoveredTaskId ?? keyboardSelectedTaskId else { return false }
+            guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId else { return false }
             decrementIndent(for: taskId)
             return true
         }
@@ -955,7 +1043,9 @@ class TasksViewModel: ObservableObject {
         }
 
         // Enter: inline create or double-enter for edit
-        if keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
+        // Skip when chat panel is open — the input may briefly lose focus after
+        // sending a message and we don't want Enter to accidentally trigger here.
+        if !chatOpen && keyCode == 36 && modifiers.isEmpty && keyboardSelectedTaskId != nil {
             if !searchText.isEmpty { return false }
 
             let now = Date()
@@ -1168,14 +1258,18 @@ class TasksViewModel: ObservableObject {
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
         if hasNonStatusFilters {
-            Task { await loadFilteredTasksFromDatabase() }
+            Task { [weak self] in
+                guard let self, self.recomputeVersion == version else { return }
+                await self.loadFilteredTasksFromDatabase()
+            }
         } else {
             recomputeDisplayCaches()
         }
 
         // Load true counts from SQLite asynchronously
-        Task {
-            await loadTagCountsFromDatabase()
+        Task { [weak self] in
+            guard let self, self.recomputeVersion == version else { return }
+            await self.loadTagCountsFromDatabase()
         }
     }
 
@@ -1542,7 +1636,17 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
@@ -1568,7 +1672,17 @@ class TasksViewModel: ObservableObject {
         let startOfToday = calendar.startOfDay(for: Date())
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
         let startOfDayAfterTomorrow = calendar.date(byAdding: .day, value: 2, to: startOfToday)!
+        // Use exact 7-day offset from current time (matches Flutter: now.subtract(Duration(days: 7)))
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
         for task in displayTasks {
+            // Skip incomplete tasks older than 7 days (matches Flutter _categorizeItems)
+            if !task.completed {
+                if let dueAt = task.dueAt {
+                    if dueAt < sevenDaysAgo { continue }
+                } else if task.createdAt < sevenDaysAgo {
+                    continue
+                }
+            }
             let category = categoryFor(task: task, startOfTomorrow: startOfTomorrow, startOfDayAfterTomorrow: startOfDayAfterTomorrow)
             result[category, default: []].append(task)
         }
@@ -1638,22 +1752,15 @@ class TasksViewModel: ObservableObject {
     }
 
     private func sortTasks(_ tasks: [TaskActionItem]) -> [TaskActionItem] {
+        // Matches Python backend sort: due_at ASC (nulls last), created_at DESC (newest first)
         tasks.sorted { a, b in
-            // Tasks with due dates first, then by due date ascending
-            // Tie-breaker: created_at descending (newest first) - matches backend
-            switch (a.dueAt, b.dueAt) {
-            case (nil, nil):
-                return a.createdAt > b.createdAt
-            case (nil, _):
-                return false
-            case (_, nil):
-                return true
-            case (let aDate?, let bDate?):
-                if aDate == bDate {
-                    return a.createdAt > b.createdAt
-                }
-                return aDate < bDate
+            let aDue = a.dueAt ?? .distantFuture
+            let bDue = b.dueAt ?? .distantFuture
+            if aDue != bDue {
+                return aDue < bDue
             }
+            // Tie-breaker: created_at descending (newest first)
+            return a.createdAt > b.createdAt
         }
     }
 
@@ -1663,8 +1770,18 @@ class TasksViewModel: ObservableObject {
         await store.loadTasks()
     }
 
+    /// Throttled wrapper called from .onAppear — skips if called too recently
+    func throttledLoadMoreIfNeeded(currentTask: TaskActionItem) async {
+        let now = Date()
+        guard now.timeIntervalSince(lastLoadMoreTime) >= loadMoreThrottleInterval else { return }
+        lastLoadMoreTime = now
+        await loadMoreIfNeeded(currentTask: currentTask)
+    }
+
     func loadMoreIfNeeded(currentTask: TaskActionItem) async {
         guard !isLoadingMoreGuard else { return }
+        isLoadingMoreGuard = true
+        defer { isLoadingMoreGuard = false }
 
         if isInFilteredMode {
             // In filtered mode, check if we need to show more from already-queried results
@@ -1676,13 +1793,9 @@ class TasksViewModel: ObservableObject {
                   taskIndex >= thresholdIndex else {
                 return
             }
-            isLoadingMoreGuard = true
             loadMoreFiltered()
-            isLoadingMoreGuard = false
         } else {
-            isLoadingMoreGuard = true
             await store.loadMoreIfNeeded(currentTask: currentTask)
-            isLoadingMoreGuard = false
         }
     }
 
@@ -1694,6 +1807,7 @@ class TasksViewModel: ObservableObject {
 
     func deleteTask(_ task: TaskActionItem) async {
         removeFromDisplay(task.id)
+        chatCoordinator?.purgeState(for: task.id)
         await store.deleteTask(task)
     }
 
@@ -1707,6 +1821,7 @@ class TasksViewModel: ObservableObject {
 
         // Delete the task
         removeFromDisplay(task.id)
+        chatCoordinator?.purgeState(for: task.id)
         await store.deleteTask(task)
 
         // Show toast and schedule auto-dismiss
@@ -1806,6 +1921,9 @@ class TasksViewModel: ObservableObject {
 
     func deleteSelectedTasks() async {
         let idsToDelete = Array(selectedTaskIds)
+        for id in idsToDelete {
+            chatCoordinator?.purgeState(for: id)
+        }
         await store.deleteMultipleTasks(ids: idsToDelete)
         selectedTaskIds.removeAll()
         isMultiSelectMode = false
@@ -1816,9 +1934,16 @@ class TasksViewModel: ObservableObject {
         showingCreateTask = false
     }
 
-    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil) async {
-        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority)
+    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
+        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority, recurrenceRule: recurrenceRule)
         // Read the updated task back from the store for surgical update
+        if let updated = store.tasks.first(where: { $0.id == task.id }) {
+            updateInDisplay(updated)
+        }
+    }
+
+    func updateTaskTags(_ task: TaskActionItem, tags: [String]) async {
+        await store.updateTaskTags(task, tags: tags)
         if let updated = store.tasks.first(where: { $0.id == task.id }) {
             updateInDisplay(updated)
         }
@@ -1865,13 +1990,23 @@ class TasksViewModel: ObservableObject {
             tags: context.tags.isEmpty ? nil : context.tags
         )
 
-        // Position the new task after afterTaskId in category order
-        if let created = created, let afterId = afterTaskId {
-            for category in TaskCategory.allCases {
-                if let tasks = categorizedTasks[category],
-                   let afterIndex = tasks.firstIndex(where: { $0.id == afterId }) {
-                    moveTask(created, toIndex: afterIndex + 1, inCategory: category)
-                    break
+        if let created = created {
+            if let afterId = afterTaskId {
+                // Position the new task after afterTaskId in category order
+                for category in TaskCategory.allCases {
+                    if let tasks = categorizedTasks[category],
+                       let afterIndex = tasks.firstIndex(where: { $0.id == afterId }) {
+                        moveTask(created, toIndex: afterIndex + 1, inCategory: category)
+                        break
+                    }
+                }
+            } else {
+                // Cmd+N: move to index 0 in the first non-empty category
+                for category in TaskCategory.allCases {
+                    if let tasks = categorizedTasks[category], !tasks.isEmpty {
+                        moveTask(created, toIndex: 0, inCategory: category)
+                        break
+                    }
                 }
             }
             // Select the newly created task
@@ -1890,7 +2025,13 @@ struct TasksPage: View {
     var chatProvider: ChatProvider?
 
     // Chat panel state
-    @StateObject private var chatCoordinator: TaskChatCoordinator
+    // NOTE: NOT @ObservedObject — observing coordinator here would re-render the
+    // entire task list (including all row layout) on every streaming token.
+    // TaskChatSidePanelView handles coordinator observation in an isolated subtree.
+    var chatCoordinator: TaskChatCoordinator
+    /// Mirrors coordinator.activeTaskId — updated via onReceive so task rows
+    /// highlight the correct item without observing the full coordinator.
+    @State private var activeChatTaskId: String? = nil
     @State private var showChatPanel = false
     @AppStorage("tasksChatPanelWidth") private var chatPanelWidth: Double = 400
     /// The window width before the chat panel was opened, so we can restore it exactly.
@@ -1912,18 +2053,18 @@ struct TasksPage: View {
     @State private var showSaveFilterAlert = false
     @State private var saveFilterName = ""
 
-    /// Width added to the window for the chat panel
-    private static let chatExpandWidth: CGFloat = 400
+    // Chat panel resize state
+    @State private var isDraggingDivider = false
+    @State private var dragStartWidth: Double = 0
 
-    init(viewModel: TasksViewModel, chatProvider: ChatProvider? = nil) {
+    init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
         self.viewModel = viewModel
+        self.chatCoordinator = chatCoordinator
         self.chatProvider = chatProvider
-        let provider = chatProvider ?? ChatProvider()
-        _chatCoordinator = StateObject(wrappedValue: TaskChatCoordinator(chatProvider: provider))
     }
 
     var body: some View {
-        let isChatVisible = showChatPanel && chatProvider != nil
+        let isChatVisible = showChatPanel
 
         HStack(spacing: 0) {
             // Left panel: Tasks content (always full width)
@@ -1931,19 +2072,49 @@ struct TasksPage: View {
                 .frame(maxWidth: .infinity)
 
             if isChatVisible {
-                // Divider line
-                Rectangle()
-                    .fill(OmiColors.border)
-                    .frame(width: 1)
+                // Draggable divider with handle
+                ZStack {
+                    Rectangle()
+                        .fill(isDraggingDivider ? OmiColors.textSecondary.opacity(0.3) : OmiColors.border)
+                        .frame(width: 1)
 
-                // Right panel: Task chat (slides in from right)
-                TaskChatPanel(
-                    chatProvider: chatProvider!,
-                    coordinator: chatCoordinator,
-                    task: activeTask,
-                    onClose: {
-                        closeChatPanel()
+                    // Visible drag handle
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(isDraggingDivider ? OmiColors.textSecondary : OmiColors.textSecondary.opacity(0.4))
+                        .frame(width: 4, height: 36)
+                }
+                .frame(width: 9)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.resizeLeftRight.push()
+                    } else {
+                        NSCursor.pop()
                     }
+                }
+                .gesture(
+                    DragGesture(coordinateSpace: .global)
+                        .onChanged { value in
+                            isDraggingDivider = true
+                            if dragStartWidth == 0 {
+                                dragStartWidth = chatPanelWidth
+                            }
+                            let delta = value.startLocation.x - value.location.x
+                            chatPanelWidth = min(600, max(300, dragStartWidth + delta))
+                        }
+                        .onEnded { _ in
+                            isDraggingDivider = false
+                            dragStartWidth = 0
+                        }
+                )
+
+                // Right panel: Task chat (slides in from right).
+                // Uses a dedicated view that owns coordinator observation so
+                // streaming updates don't re-render the task list on the left.
+                TaskChatSidePanelView(
+                    coordinator: chatCoordinator,
+                    viewModel: viewModel,
+                    onClose: { closeChatPanel() }
                 )
                 .frame(width: chatPanelWidth)
                 .transition(.move(edge: .trailing))
@@ -1951,13 +2122,13 @@ struct TasksPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
-        .dismissableSheet(isPresented: $viewModel.showingCreateTask) {
-            TaskCreateSheet(
-                viewModel: viewModel,
-                onDismiss: { viewModel.showingCreateTask = false }
-            )
-        }
+        // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
+            // Restore panel UI if coordinator was open when we navigated away
+            if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
+                showChatPanel = true
+                adjustWindowWidth(expand: true)
+            }
             // If tasks are already loaded, notify sidebar to clear loading indicator
             if !viewModel.isLoading {
                 NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
@@ -1974,19 +2145,25 @@ struct TasksPage: View {
             }
         }
         .onDisappear {
-            // Reset chat state and shrink window when navigating away from Tasks tab
+            // Shrink window when navigating away, but keep coordinator alive
+            // so streaming state and unread dots persist across tab switches.
             if showChatPanel {
                 adjustWindowWidth(expand: false)
                 showChatPanel = false
-                Task { await chatCoordinator.closeChat() }
+                // Do NOT call chatCoordinator.closeChat() — coordinator state persists at app level
             }
+        }
+        .onReceive(chatCoordinator.$activeTaskId) { taskId in
+            activeChatTaskId = taskId
         }
     }
 
-    /// The currently active task for the chat panel
-    private var activeTask: TaskActionItem? {
-        guard let taskId = chatCoordinator.activeTaskId else { return nil }
-        return viewModel.findTask(taskId)
+    /// Start a background AI investigation for a task (no panel opens)
+    private func investigateTask(_ task: TaskActionItem) {
+        log("TaskChat: investigateTask called for task \(task.id)")
+        Task {
+            await chatCoordinator.investigateInBackground(for: task)
+        }
     }
 
     /// Open chat for a task
@@ -2007,7 +2184,7 @@ struct TasksPage: View {
 
     /// Close the chat panel and shrink window
     private func closeChatPanel() {
-        Task { await chatCoordinator.closeChat() }
+        chatCoordinator.closeChat()
         // Animate panel out and shrink window together
         withAnimation(.easeInOut(duration: 0.25)) {
             showChatPanel = false
@@ -2021,7 +2198,7 @@ struct TasksPage: View {
     /// Expand or shrink the main window to accommodate the chat panel.
     /// Saves the user's original width before expanding so it can be restored exactly.
     private func adjustWindowWidth(expand: Bool) {
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
 
         let expandAmount = chatPanelWidth + 1 // +1 for divider
         var frame = window.frame
@@ -2041,24 +2218,30 @@ struct TasksPage: View {
             // Restore to the saved width, or just subtract the expand amount
             if preChatWindowWidth > 0 {
                 frame.size.width = preChatWindowWidth
-                preChatWindowWidth = 0
             } else {
                 frame.size.width -= expandAmount
             }
         }
 
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.25
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             window.animator().setFrame(frame, display: true)
-        }
+        }, completionHandler: {
+            // Clear preChatWindowWidth only after the resize animation completes.
+            // If the app quits mid-animation, this won't fire, leaving the saved
+            // width intact so restorePreChatWindowWidth() can shrink on next launch.
+            if !expand {
+                UserDefaults.standard.set(Double(0), forKey: "tasksPreChatWindowWidth")
+            }
+        })
     }
 
     /// On launch, restore the window to its pre-chat width if the user quit with chat open.
     /// Uses no animation since the app is just opening.
     private func shrinkWindowIfNeeded() {
         guard preChatWindowWidth > 0 else { return }
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
         var frame = window.frame
         frame.size.width = preChatWindowWidth
         window.setFrame(frame, display: true)
@@ -2094,6 +2277,8 @@ struct TasksPage: View {
                         hasSelection: viewModel.keyboardSelectedTaskId != nil
                     )
                     .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
+                    .animation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
                 }
                 // Undo toast
                 if viewModel.showUndoToast, let lastAction = viewModel.undoStack.last {
@@ -2106,10 +2291,8 @@ struct TasksPage: View {
                 }
             }
             .padding(.bottom, 16)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
         }
-        .animation(.easeInOut(duration: 0.25), value: viewModel.showUndoToast)
-        .animation(.easeInOut(duration: 0.15), value: viewModel.keyboardSelectedTaskId)
-        .animation(.easeInOut(duration: 0.15), value: viewModel.isInlineCreating)
         .onAppear {
             installKeyboardMonitor()
         }
@@ -2136,8 +2319,9 @@ struct TasksPage: View {
     private func installKeyboardMonitor() {
         guard keyboardMonitor == nil else { return }
         let vm = viewModel
-        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            return vm.handleKeyDown(event) ? nil : event
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak chatCoordinator] event in
+            let chatOpen = chatCoordinator?.isPanelOpen == true
+            return vm.handleKeyDown(event, chatOpen: chatOpen) ? nil : event
         }
     }
 
@@ -2151,6 +2335,10 @@ struct TasksPage: View {
     // MARK: - Keyboard Navigation Helpers
 
     private func selectTask(_ task: TaskActionItem) {
+        if viewModel.editingTaskId != nil {
+            viewModel.editingTaskId = nil
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
         viewModel.keyboardSelectedTaskId = task.id
     }
 
@@ -2256,10 +2444,10 @@ struct TasksPage: View {
                 }
                 cancelMultiSelectButton
             } else {
-                addTaskButton
-                if chatProvider != nil {
+                if chatProvider != nil && TaskAgentSettings.shared.isChatEnabled {
                     chatToggleButton
                 }
+                addTaskButton
                 taskSettingsButton
             }
         }
@@ -2298,6 +2486,23 @@ struct TasksPage: View {
         }
         .buttonStyle(.plain)
         .help("Save current filters as a view")
+    }
+
+    private var addTaskButton: some View {
+        Button {
+            viewModel.inlineCreateAfterTaskId = nil
+            viewModel.isInlineCreating = true
+        } label: {
+            Image(systemName: "plus")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(OmiColors.backgroundSecondary)
+                .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+        .help("Add task (⌘N)")
     }
 
     // MARK: - Filter Dropdown
@@ -2651,26 +2856,6 @@ struct TasksPage: View {
         .buttonStyle(.plain)
     }
 
-    private var addTaskButton: some View {
-        Button {
-            viewModel.showingCreateTask = true
-        } label: {
-            Image(systemName: "plus")
-                .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(.black)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
 
 
     private var taskSettingsButton: some View {
@@ -2697,8 +2882,12 @@ struct TasksPage: View {
         Button {
             if showChatPanel {
                 closeChatPanel()
+            } else if let selectedId = viewModel.keyboardSelectedTaskId,
+                      let task = viewModel.displayTasks.first(where: { $0.id == selectedId }) {
+                // A task is selected — open chat directly for it
+                openChatForTask(task)
             } else {
-                // Open empty sidebar — user picks a task to chat about
+                // No task selected — open empty sidebar
                 adjustWindowWidth(expand: true)
                 withAnimation(.easeInOut(duration: 0.25)) {
                     showChatPanel = true
@@ -2803,6 +2992,17 @@ struct TasksPage: View {
                     let onlyDone = viewModel.selectedTags.contains(.done) && !viewModel.selectedTags.contains(.todo)
                     let onlyDeleted = (viewModel.selectedTags.contains(.removedByAI) || viewModel.selectedTags.contains(.removedByMe)) && !viewModel.selectedTags.contains(.todo) && !viewModel.selectedTags.contains(.done)
                     if !onlyDone && !onlyDeleted && !viewModel.isMultiSelectMode {
+                        // Inline creation at top (Cmd+N)
+                        if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
+                            InlineTaskCreationRow(
+                                text: $inlineCreateText,
+                                isFocused: $inlineCreateFocused,
+                                onCommit: { _ in commitInlineCreate() },
+                                onCancel: { cancelInlineCreate() }
+                            )
+                            .id("inline-create-top")
+                        }
+
                         ForEach(TaskCategory.allCases, id: \.self) { category in
                             let orderedTasks = viewModel.getOrderedTasks(for: category)
                             if !orderedTasks.isEmpty {
@@ -2816,23 +3016,45 @@ struct TasksPage: View {
                                     onToggle: { await viewModel.toggleTask($0) },
                                     onDelete: { await viewModel.deleteTaskWithUndo($0) },
                                     onToggleSelection: { viewModel.toggleTaskSelection($0) },
-                                    onUpdateDetails: { task, desc, date, priority in
-                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                                    onUpdateDetails: { task, desc, date, priority, recurrenceRule in
+                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
+                                    },
+                                    onUpdateTags: { task, tags in
+                                        await viewModel.updateTaskTags(task, tags: tags)
                                     },
                                     onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                                     onDecrementIndent: { viewModel.decrementIndent(for: $0) },
-                                    onMoveTask: { task, index, cat in viewModel.moveTask(task, toIndex: index, inCategory: cat) },
-                                    onOpenChat: chatProvider != nil ? { task in openChatForTask(task) } : nil,
+                                    onMoveTask: { task, index, cat in viewModel.moveTaskToCategory(task, toIndex: index, inCategory: cat) },
+                                    onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled) ? { task in openChatForTask(task) } : nil,
+                                    onInvestigate: { task in investigateTask(task) },
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
+                                    dropTargetTaskId: viewModel.dropTargetTaskId,
+                                    dropAbove: viewModel.dropAbove,
+                                    findTaskGlobal: { viewModel.findTask($0) },
+                                    onDragStarted: { viewModel.draggedTaskId = $0 },
+                                    onDragEnded: {
+                                        viewModel.draggedTaskId = nil
+                                        viewModel.dropTargetTaskId = nil
+                                    },
+                                    onDragHoverChanged: { taskId, isHovered in
+                                        if isHovered {
+                                            viewModel.dropTargetTaskId = taskId
+                                            viewModel.dropAbove = true
+                                        } else if viewModel.dropTargetTaskId == taskId {
+                                            viewModel.dropTargetTaskId = nil
+                                        }
+                                    },
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
                                         viewModel.isAnyTaskEditing = editing
                                         if !editing { viewModel.editingTaskId = nil }
                                     },
+                                    onStartEditing: { task in viewModel.editingTaskId = task.id },
+                                    animateToggleTaskId: viewModel.animateToggleTaskId,
                                     isInlineCreating: viewModel.isInlineCreating,
                                     inlineCreateAfterTaskId: viewModel.inlineCreateAfterTaskId,
                                     inlineCreateText: $inlineCreateText,
@@ -2843,6 +3065,17 @@ struct TasksPage: View {
                             }
                         }
                     } else {
+                        // Inline creation at top (Cmd+N) — flat view
+                        if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
+                            InlineTaskCreationRow(
+                                text: $inlineCreateText,
+                                isFocused: $inlineCreateFocused,
+                                onCommit: { _ in commitInlineCreate() },
+                                onCancel: { cancelInlineCreate() }
+                            )
+                            .id("inline-create-top-flat")
+                        }
+
                         // Flat list for other sort options, completed view, or multi-select mode
                         ForEach(viewModel.displayTasks) { task in
                             VStack(spacing: 0) {
@@ -2855,22 +3088,28 @@ struct TasksPage: View {
                                     onToggle: { await viewModel.toggleTask($0) },
                                     onDelete: { await viewModel.deleteTaskWithUndo($0) },
                                     onToggleSelection: { viewModel.toggleTaskSelection($0) },
-                                    onUpdateDetails: { task, desc, date, priority in
-                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority)
+                                    onUpdateDetails: { task, desc, date, priority, recurrenceRule in
+                                        await viewModel.updateTaskDetails(task, description: desc, dueAt: date, priority: priority, recurrenceRule: recurrenceRule)
+                                    },
+                                    onUpdateTags: { task, tags in
+                                        await viewModel.updateTaskTags(task, tags: tags)
                                     },
                                     onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                                     onDecrementIndent: { viewModel.decrementIndent(for: $0) },
-                                    onOpenChat: chatProvider != nil ? { task in openChatForTask(task) } : nil,
+                                    onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled) ? { task in openChatForTask(task) } : nil,
+                                    onInvestigate: { task in investigateTask(task) },
                                     onSelect: { task in selectTask(task) },
                                     onHover: { viewModel.hoveredTaskId = $0 },
                                     isChatActive: showChatPanel,
-                                    activeChatTaskId: chatCoordinator.activeTaskId,
+                                    activeChatTaskId: activeChatTaskId,
                                     chatCoordinator: chatCoordinator,
                                     editingTaskId: viewModel.editingTaskId,
                                     onEditingChanged: { editing in
                                         viewModel.isAnyTaskEditing = editing
                                         if !editing { viewModel.editingTaskId = nil }
-                                    }
+                                    },
+                                    onStartEditing: { task in viewModel.editingTaskId = task.id },
+                                    animateToggleTaskId: viewModel.animateToggleTaskId
                                 )
                                 .id(task.id)
 
@@ -2887,7 +3126,7 @@ struct TasksPage: View {
                             }
                             .onAppear {
                                 Task {
-                                    await viewModel.loadMoreIfNeeded(currentTask: task)
+                                    await viewModel.throttledLoadMoreIfNeeded(currentTask: task)
                                 }
                             }
                         }
@@ -2956,6 +3195,37 @@ struct TasksPage: View {
     }
 }
 
+// MARK: - Task Chat Side Panel (isolated coordinator observation)
+
+/// Owns @ObservedObject for the coordinator so streaming updates only
+/// re-render this subtree — not the task list on the left.
+private struct TaskChatSidePanelView: View {
+    @ObservedObject var coordinator: TaskChatCoordinator
+    let viewModel: TasksViewModel
+    let onClose: () -> Void
+
+    private var activeTask: TaskActionItem? {
+        guard let taskId = coordinator.activeTaskId else { return nil }
+        return viewModel.findTask(taskId)
+    }
+
+    var body: some View {
+        if let taskState = coordinator.activeTaskState {
+            TaskChatPanel(
+                taskState: taskState,
+                coordinator: coordinator,
+                task: activeTask,
+                onClose: onClose
+            )
+        } else {
+            TaskChatPanelPlaceholder(
+                coordinator: coordinator,
+                onClose: onClose
+            )
+        }
+    }
+}
+
 // MARK: - Task Category Section
 
 struct TaskCategorySection: View {
@@ -2970,20 +3240,34 @@ struct TaskCategorySection: View {
     var onToggle: ((TaskActionItem) async -> Void)?
     var onDelete: ((TaskActionItem) async -> Void)?
     var onToggleSelection: ((TaskActionItem) -> Void)?
-    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?, String?) async -> Void)?
+    var onUpdateTags: ((TaskActionItem, [String]) async -> Void)?
     var onIncrementIndent: ((String) -> Void)?
     var onDecrementIndent: ((String) -> Void)?
     var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
     var onOpenChat: ((TaskActionItem) -> Void)?
+    var onInvestigate: ((TaskActionItem) -> Void)?
     var onSelect: ((TaskActionItem) -> Void)?
     var onHover: ((String?) -> Void)?
     var isChatActive: Bool = false
     var activeChatTaskId: String?
     var chatCoordinator: TaskChatCoordinator?
 
+    // Drag-and-drop visual feedback
+    var dropTargetTaskId: String?
+    var dropAbove: Bool = true
+    var findTaskGlobal: ((String) -> TaskActionItem?)?
+    var onDragStarted: ((String) -> Void)?
+    var onDragEnded: (() -> Void)?
+    var onDragHoverChanged: ((String, Bool) -> Void)?
+
     // Edit mode support
     var editingTaskId: String?
     var onEditingChanged: ((Bool) -> Void)?
+    var onStartEditing: ((TaskActionItem) -> Void)?
+
+    // Space-key animated toggle
+    var animateToggleTaskId: String?
 
     // Inline creation support
     var isInlineCreating: Bool = false
@@ -2992,6 +3276,8 @@ struct TaskCategorySection: View {
     @FocusState.Binding var inlineCreateFocused: Bool
     var onInlineCommit: (() -> Void)?
     var onInlineCancel: (() -> Void)?
+
+    @State private var isTopDropTargeted = false
 
     private var visibleTasks: [TaskActionItem] {
         orderedTasks
@@ -3023,6 +3309,40 @@ struct TaskCategorySection: View {
             }
             .padding(.horizontal, 4)
 
+            // Drop zone at top of category (for dropping at position 0)
+            if !isMultiSelectMode {
+                Color.clear
+                    .frame(height: isTopDropTargeted ? 4 : 2)
+                    .overlay {
+                        if isTopDropTargeted {
+                            Rectangle()
+                                .fill(Color.accentColor)
+                                .frame(height: 2)
+                        }
+                    }
+                    .onDrop(of: [.plainText], isTargeted: Binding(
+                        get: { isTopDropTargeted },
+                        set: { targeted in
+                            log("DROP-TOP: isTargeted=\(targeted) on \(category.rawValue)")
+                            isTopDropTargeted = targeted
+                        }
+                    )) { providers in
+                        log("DROP-TOP: Received drop at top of \(category.rawValue)")
+                        isTopDropTargeted = false
+                        guard let provider = providers.first else { return false }
+                        provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                            guard let data = data as? Data,
+                                  let droppedId = String(data: data, encoding: .utf8) else { return }
+                            DispatchQueue.main.async {
+                                if let droppedTask = findTaskGlobal?(droppedId) ?? orderedTasks.first(where: { $0.id == droppedId }) {
+                                    onMoveTask?(droppedTask, 0, category)
+                                }
+                            }
+                        }
+                        return true
+                    }
+            }
+
             // Tasks in category with drag-and-drop reordering
             if !isMultiSelectMode {
                 LazyVStack(spacing: 8) {
@@ -3039,37 +3359,36 @@ struct TaskCategorySection: View {
                                 onDelete: onDelete,
                                 onToggleSelection: onToggleSelection,
                                 onUpdateDetails: onUpdateDetails,
+                                onUpdateTags: onUpdateTags,
                                 onIncrementIndent: onIncrementIndent,
                                 onDecrementIndent: onDecrementIndent,
                                 onOpenChat: onOpenChat,
+                                onInvestigate: onInvestigate,
                                 onSelect: onSelect,
                                 onHover: onHover,
                                 isChatActive: isChatActive,
                                 activeChatTaskId: activeChatTaskId,
                                 chatCoordinator: chatCoordinator,
                                 editingTaskId: editingTaskId,
-                                onEditingChanged: onEditingChanged
+                                onEditingChanged: onEditingChanged,
+                                onStartEditing: onStartEditing,
+                                animateToggleTaskId: animateToggleTaskId
                             )
                             .id(task.id)
-                            .draggable(task.id) {
-                                // Drag preview
-                                TaskDragPreview(task: task)
-                            }
-                            .dropDestination(for: String.self) { droppedIds, _ in
-                                guard let droppedId = droppedIds.first,
-                                      orderedTasks.contains(where: { $0.id == droppedId }),
-                                      let targetIndex = orderedTasks.firstIndex(where: { $0.id == task.id }) else {
-                                    return false
-                                }
-                                // Move the task
-                                if let droppedTask = orderedTasks.first(where: { $0.id == droppedId }) {
+                            .modifier(TaskDragDropModifier(
+                                isEnabled: !isMultiSelectMode,
+                                taskId: task.id,
+                                taskDescription: task.description,
+                                isDropTarget: dropTargetTaskId == task.id,
+                                dropAbove: dropAbove,
+                                findTask: { id in findTaskGlobal?(id) ?? orderedTasks.first(where: { $0.id == id }) },
+                                findTargetIndex: { orderedTasks.firstIndex(where: { $0.id == task.id }) },
+                                onMoveTask: { droppedTask, targetIndex in
                                     onMoveTask?(droppedTask, targetIndex, category)
-                                }
-                                return true
-                            }
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .top)),
-                                removal: .opacity.combined(with: .move(edge: .trailing))
+                                },
+                                onDragStarted: onDragStarted,
+                                onDragEnded: onDragEnded,
+                                onHoverChanged: onDragHoverChanged
                             ))
 
                             // Inline creation row after this task
@@ -3091,10 +3410,84 @@ struct TaskCategorySection: View {
     }
 }
 
-// MARK: - Task Drag Preview
+// MARK: - Conditional Drag & Drop (reduces gesture graph depth when disabled)
 
-struct TaskDragPreview: View {
-    let task: TaskActionItem
+/// Applies .onDrop to a task row for reorder drop targets.
+/// Uses onDrag/onDrop (NSItemProvider) instead of draggable/dropDestination for reliable macOS support.
+/// The .onDrag is handled by the drag handle inside TaskRow to avoid conflicts with swipe gestures.
+struct TaskDragDropModifier: ViewModifier {
+    let isEnabled: Bool
+    let taskId: String
+    let taskDescription: String
+    var isDropTarget: Bool = false
+    var dropAbove: Bool = true
+    var findTask: ((String) -> TaskActionItem?)?
+    var findTargetIndex: (() -> Int?)?
+    var onMoveTask: ((TaskActionItem, Int) -> Void)?
+    var onDragStarted: ((String) -> Void)?
+    var onDragEnded: (() -> Void)?
+    var onHoverChanged: ((String, Bool) -> Void)?
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .overlay(alignment: dropAbove ? .top : .bottom) {
+                    if isDropTarget {
+                        Rectangle()
+                            .fill(Color.accentColor)
+                            .frame(height: 2)
+                            .transition(.opacity)
+                    }
+                }
+                .onDrop(of: [.plainText], isTargeted: Binding(
+                    get: { isDropTarget },
+                    set: { targeted in
+                        log("DROP: isTargeted=\(targeted) on task \(taskId)")
+                        if targeted {
+                            onHoverChanged?(taskId, true)
+                        } else {
+                            onHoverChanged?(taskId, false)
+                        }
+                    }
+                )) { providers in
+                    log("DROP: Received drop on task \(taskId), providers=\(providers.count)")
+                    onDragEnded?()
+                    guard let provider = providers.first else {
+                        log("DROP: No providers")
+                        return false
+                    }
+                    provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
+                        guard let data = data as? Data,
+                              let droppedId = String(data: data, encoding: .utf8),
+                              droppedId != taskId else {
+                            log("DROP: Rejected — same task or failed to decode")
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            guard let targetIndex = findTargetIndex?() else {
+                                log("DROP: findTargetIndex returned nil")
+                                return
+                            }
+                            if let droppedTask = findTask?(droppedId) {
+                                log("DROP: Moving task \(droppedId) to index \(targetIndex)")
+                                onMoveTask?(droppedTask, targetIndex)
+                            } else {
+                                log("DROP: Could not find task for id \(droppedId)")
+                            }
+                        }
+                    }
+                    return true
+                }
+        } else {
+            content
+        }
+    }
+}
+
+/// Lightweight drag preview that doesn't hold a TaskActionItem reference
+struct TaskDragPreviewSimple: View {
+    let taskId: String
+    let description: String
 
     var body: some View {
         HStack(spacing: 8) {
@@ -3102,7 +3495,7 @@ struct TaskDragPreview: View {
                 .scaledFont(size: 16)
                 .foregroundColor(OmiColors.textTertiary)
 
-            Text(task.description)
+            Text(description)
                 .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textPrimary)
                 .lineLimit(1)
@@ -3122,41 +3515,68 @@ struct TaskDragPreview: View {
 
 /// Shows streaming activity or unread dot for a task's chat session.
 /// Appears inline in the TaskRow FlowLayout, after AgentStatusIndicator.
+///
+/// Uses @State + .onReceive instead of @ObservedObject so that only this
+/// specific task's indicator re-renders when coordinator state changes —
+/// not every task row simultaneously (which caused the 822-level layout
+/// traversal on every coordinator publish).
 struct ChatSessionStatusIndicator: View {
     let task: TaskActionItem
-    @ObservedObject var coordinator: TaskChatCoordinator
+    let coordinator: TaskChatCoordinator
     var onOpenChat: ((TaskActionItem) -> Void)?
 
+    @State private var isStreaming = false
+    @State private var streamingStatus: String? = nil
+    @State private var hasUnread = false
+
     var body: some View {
-        if coordinator.streamingTaskId == task.id {
-            // Streaming: spinning indicator + status text
-            HStack(spacing: 4) {
-                ProgressView()
-                    .scaleEffect(0.5)
-                    .frame(width: 10, height: 10)
-
-                Text(coordinator.streamingStatus.isEmpty ? "Responding..." : coordinator.streamingStatus)
-                    .scaledFont(size: 10, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .lineLimit(1)
-            }
-        } else if coordinator.unreadTaskIds.contains(task.id) {
-            // Unread: purple dot
-            Button {
-                onOpenChat?(task)
-            } label: {
+        Group {
+            if isStreaming {
+                // Streaming: spinning indicator + status text
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(OmiColors.purplePrimary)
-                        .frame(width: 8, height: 8)
+                    ProgressView()
+                        .scaleEffect(0.5)
+                        .frame(width: 10, height: 10)
 
-                    Text("New reply")
+                    Text(streamingStatus ?? "Responding...")
                         .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .lineLimit(1)
                 }
+            } else if hasUnread {
+                // Unread: purple dot
+                Button {
+                    onOpenChat?(task)
+                } label: {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(OmiColors.purplePrimary)
+                            .frame(width: 8, height: 8)
+
+                        Text("New reply")
+                            .scaledFont(size: 10, weight: .medium)
+                            .foregroundColor(OmiColors.purplePrimary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Open chat — new reply available")
             }
-            .buttonStyle(.plain)
-            .help("Open chat — new reply available")
+        }
+        // Subscribe to coordinator publishers to update task-local @State.
+        // .onReceive fires for all tasks but only mutates state when the
+        // value for THIS task changes, so re-renders stay task-local and
+        // don't trigger a full-tree layout pass on every coordinator publish.
+        .onReceive(coordinator.$streamingTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if isStreaming != new { isStreaming = new }
+        }
+        .onReceive(coordinator.$streamingStatuses) { statuses in
+            let new = statuses[task.id]
+            if streamingStatus != new { streamingStatus = new }
+        }
+        .onReceive(coordinator.$unreadTaskIds) { ids in
+            let new = ids.contains(task.id)
+            if hasUnread != new { hasUnread = new }
         }
     }
 }
@@ -3177,10 +3597,12 @@ struct TaskRow: View {
     var onToggle: ((TaskActionItem) async -> Void)?
     var onDelete: ((TaskActionItem) async -> Void)?
     var onToggleSelection: ((TaskActionItem) -> Void)?
-    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?) async -> Void)?
+    var onUpdateDetails: ((TaskActionItem, String?, Date?, String?, String?) async -> Void)?
+    var onUpdateTags: ((TaskActionItem, [String]) async -> Void)?
     var onIncrementIndent: ((String) -> Void)?
     var onDecrementIndent: ((String) -> Void)?
     var onOpenChat: ((TaskActionItem) -> Void)?
+    var onInvestigate: ((TaskActionItem) -> Void)?
     var onSelect: ((TaskActionItem) -> Void)?
     var onHover: ((String?) -> Void)?
     var isChatActive: Bool = false
@@ -3190,6 +3612,10 @@ struct TaskRow: View {
     // Edit mode support (external trigger from keyboard navigation)
     var editingTaskId: String?
     var onEditingChanged: ((Bool) -> Void)?
+    var onStartEditing: ((TaskActionItem) -> Void)?
+
+    // Space-key animated toggle (set by parent when space is pressed)
+    var animateToggleTaskId: String?
 
     @State private var isHovering = false
     @State private var isCompletingAnimation = false
@@ -3207,8 +3633,9 @@ struct TaskRow: View {
     // Inline due date popover
     @State private var showDatePicker = false
     @State private var editDueDate: Date = Date()
-
-    // Inline priority popover
+    @State private var showRepeatPicker = false
+    @State private var editRecurrenceRule: String = ""
+    @State private var showTagPicker = false
     @State private var showPriorityPicker = false
 
     // Swipe gesture state
@@ -3236,29 +3663,46 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        swipeableContent
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .simultaneousGesture(
-                TapGesture().onEnded {
+        HStack(alignment: .center, spacing: 0) {
+            // Drag handle OUTSIDE swipeableContent so DragGesture doesn't intercept it
+            if category != nil && !isMultiSelectMode && !isDeletedTask {
+                Image(systemName: "line.3.horizontal")
+                    .scaledFont(size: 10)
+                    .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
+                    .frame(width: 16, height: 24)
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
+                        return NSItemProvider(object: task.id as NSString)
+                    } preview: {
+                        TaskDragPreviewSimple(taskId: task.id, description: task.description)
+                    }
+                    .help("Drag to reorder")
+            }
+
+            swipeableContent
+                .contentShape(Rectangle())
+                .onTapGesture {
                     onSelect?(task)
                     if isChatActive, !isActiveChatTask {
                         onOpenChat?(task)
                     }
                 }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+        .sheet(isPresented: $showTaskDetail) {
+            TaskDetailView(
+                task: task,
+                onDismiss: { showTaskDetail = false }
             )
-            .sheet(isPresented: $showTaskDetail) {
-                TaskDetailView(
-                    task: task,
-                    onDismiss: { showTaskDetail = false }
-                )
-            }
+        }
     }
 
     // MARK: - Swipeable Content
@@ -3505,112 +3949,153 @@ struct TaskRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // Always-editable task content
-                FlowLayout(spacing: 6) {
-                    // Always-rendered TextField (notes-like editing)
-                    TextField("Task description", text: $editText, axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .scaledFont(size: 14)
-                        .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-                        .strikethrough(task.completed, color: OmiColors.textTertiary)
-                        .lineLimit(1...4)
-                        .focused($isTextFieldFocused)
-                        .disabled(isMultiSelectMode)
-                        .onKeyPress(.escape) {
-                            debounceTask?.cancel()
-                            commitEdit()
-                            isTextFieldFocused = false
-                            return .handled
-                        }
-                        .onSubmit {
-                            debounceTask?.cancel()
-                            commitEdit()
-                        }
-                        .onChange(of: isTextFieldFocused) { _, focused in
-                            onEditingChanged?(focused)
-                            if !focused {
+                // Task content
+                VStack(alignment: .leading, spacing: 2) {
+                    // Task title: edit mode shows TextField, view mode shows Text (tap to edit)
+                    if editingTaskId == task.id || isTextFieldFocused {
+                        // Editing: interactive TextField
+                        TextField("Task description", text: $editText, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .scaledFont(size: 14)
+                            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                            .strikethrough(task.completed, color: OmiColors.textTertiary)
+                            .lineLimit(1...4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .focused($isTextFieldFocused)
+                            .disabled(isMultiSelectMode)
+                            .onKeyPress(.escape) {
+                                debounceTask?.cancel()
+                                commitEdit()
+                                isTextFieldFocused = false
+                                return .handled
+                            }
+                            .onSubmit {
                                 debounceTask?.cancel()
                                 commitEdit()
                             }
-                        }
-                        .onChange(of: editingTaskId) { _, newId in
-                            if newId == task.id {
+                            .onChange(of: isTextFieldFocused) { _, focused in
+                                onEditingChanged?(focused)
+                                if !focused {
+                                    debounceTask?.cancel()
+                                    commitEdit()
+                                }
+                            }
+                            .onChange(of: editText) { _, _ in
+                                // Debounced auto-save: save after 1s of no typing
+                                debounceTask?.cancel()
+                                debounceTask = Task {
+                                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                                    guard !Task.isCancelled else { return }
+                                    commitEdit()
+                                }
+                            }
+                            .onAppear {
                                 isTextFieldFocused = true
                             }
+                            // Editing highlight: background hugs text characters, dark page background
+                            .background(alignment: .topLeading) {
+                                if isTextFieldFocused {
+                                    Text(editText.isEmpty ? "Task description" : editText)
+                                        .scaledFont(size: 14)
+                                        .lineLimit(1...4)
+                                        .foregroundColor(.clear)
+                                        .padding(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 6))
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .fill(OmiColors.backgroundPrimary)
+                                        )
+                                }
+                            }
+                    } else {
+                        // View mode: tapping on text starts editing; empty space just selects via outer gesture
+                        HStack(spacing: 0) {
+                            Text(editText.isEmpty ? "Task description" : editText)
+                                .scaledFont(size: 14)
+                                .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                                .strikethrough(task.completed, color: OmiColors.textTertiary)
+                                .lineLimit(1...4)
+                                .onTapGesture {
+                                    onSelect?(task)
+                                    onStartEditing?(task)
+                                }
+                            Spacer()
                         }
-                        .onChange(of: editText) { _, _ in
-                            // Debounced auto-save: save after 1s of no typing
-                            debounceTask?.cancel()
-                            debounceTask = Task {
-                                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                                guard !Task.isCancelled else { return }
-                                commitEdit()
+                    }
+
+                    // Badges + detail button row
+                    FlowLayout(spacing: 6) {
+                        // Recurring badge
+                        if task.isRecurring {
+                            HStack(spacing: 2) {
+                                Image(systemName: "repeat")
+                                    .scaledFont(size: 9)
+                            }
+                            .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        // New badge
+                        if isNewlyCreated {
+                            NewBadge()
+                        }
+
+                        // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
+                        if TaskAgentSettings.shared.isEnabled {
+                            AgentStatusIndicator(task: task)
+                        }
+
+                        // Investigate / View chat button (background AI chat)
+                        if let coordinator = chatCoordinator,
+                           TaskAgentSettings.shared.isChatEnabled,
+                           !coordinator.streamingTaskIds.contains(task.id),
+                           !coordinator.unreadTaskIds.contains(task.id) {
+                            if task.chatSessionId != nil {
+                                // Previous session exists but is no longer active — let user view/resume it
+                                Button {
+                                    onOpenChat?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "bubble.left")
+                                            .scaledFont(size: 9)
+                                        Text("View chat")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.purplePrimary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("View previous AI investigation")
+                            } else {
+                                // No prior session — start fresh investigation
+                                Button {
+                                    onInvestigate?(task)
+                                } label: {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "magnifyingglass")
+                                            .scaledFont(size: 9)
+                                        Text("Investigate")
+                                            .scaledFont(size: 10, weight: .medium)
+                                    }
+                                    .foregroundColor(OmiColors.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Start AI investigation in background")
                             }
                         }
-                        .onAppear {
-                            editText = task.description
-                        }
-                        .onChange(of: task.description) { _, newValue in
-                            if !isTextFieldFocused {
-                                editText = newValue
-                            }
+
+                        // Chat session status (streaming indicator or unread dot)
+                        if let coordinator = chatCoordinator, TaskAgentSettings.shared.isChatEnabled {
+                            ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
                         }
 
-                    // New badge
-                    if isNewlyCreated {
-                        NewBadge()
+                        // Task detail button (hover for preview, click for full detail)
+                        TaskDetailButton(task: task, showDetail: $showTaskDetail)
                     }
-
-
-
-                    // Tag badges (show up to 3)
-                    ForEach(task.tags.prefix(3), id: \.self) { tag in
-                        TaskClassificationBadge(category: tag)
-                    }
-
-                    // Agent status indicator (click status → detail modal, click terminal icon → open terminal)
-                    if TaskAgentSettings.shared.isEnabled {
-                        AgentStatusIndicator(task: task)
-                    }
-
-                    // Chat session status (streaming indicator or unread dot)
-                    if let coordinator = chatCoordinator {
-                        ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
-                    }
-
-                    // Task detail button (hover for preview, click for full detail)
-                    TaskDetailButton(task: task, showDetail: $showTaskDetail)
-
-                    // Due date badge - clickable
-                    if let dueAt = task.dueAt {
-                        DueDateBadgeInteractive(
-                            dueAt: dueAt,
-                            isCompleted: task.completed,
-                            showDatePicker: $showDatePicker,
-                            editDueDate: $editDueDate
-                        )
-                    }
-
-                    // Source badge (read-only)
-                    if let source = task.source {
-                        SourceBadgeCompact(source: source, sourceLabel: task.sourceAppLabel, sourceIcon: task.sourceIcon, windowTitle: task.windowTitle)
-                    }
-
-                    // Priority badge - clickable
-                    PriorityBadgeInteractive(
-                        priority: task.priority,
-                        isCompleted: task.completed,
-                        isHovering: isHovering,
-                        showPriorityPicker: $showPriorityPicker,
-                        onPriorityChange: { newPriority in
-                            Task {
-                                await onUpdateDetails?(task, nil, nil, newPriority)
-                            }
-                        }
-                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
+                .onAppear { editText = task.description }
+                .onChange(of: task.description) { _, newValue in
+                    if !isTextFieldFocused { editText = newValue }
+                }
                 .popover(isPresented: $showDatePicker) {
                     dueDatePopover
                 }
@@ -3619,7 +4104,7 @@ struct TaskRow: View {
         }
         .overlay(alignment: .trailing) {
             // Hover actions overlaid on trailing edge (no layout shift)
-            if isHovering && !isMultiSelectMode && !isDeletedTask {
+            if (isHovering || showRepeatPicker || showTagPicker || showPriorityPicker) && !isMultiSelectMode && !isDeletedTask && !isTextFieldFocused {
                 HStack(spacing: 4) {
                     // Add date button (shown on hover when no due date)
                     if task.dueAt == nil && !task.completed {
@@ -3634,6 +4119,50 @@ struct TaskRow: View {
                         }
                         .buttonStyle(.plain)
                         .help("Add due date")
+                    }
+
+                    // Repeat button
+                    if !task.completed {
+                        Button {
+                            editRecurrenceRule = task.recurrenceRule ?? ""
+                            showRepeatPicker = true
+                        } label: {
+                            Image(systemName: "repeat")
+                                .scaledFont(size: 12)
+                                .foregroundColor(task.isRecurring ? OmiColors.textPrimary : OmiColors.textTertiary)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help(task.isRecurring ? "Edit repeat" : "Set repeat")
+                        .popover(isPresented: $showRepeatPicker) {
+                            repeatPopover
+                        }
+                    }
+
+                    // Priority button
+                    if !task.completed {
+                        PriorityBadgeInteractive(
+                            priority: task.priority,
+                            isCompleted: task.completed,
+                            isHovering: isHovering,
+                            showPriorityPicker: $showPriorityPicker,
+                            onPriorityChange: { newPriority in
+                                Task { await onUpdateDetails?(task, nil, nil, newPriority, nil) }
+                            }
+                        )
+                    }
+
+                    // Tag button
+                    if !task.completed {
+                        TagBadgeInteractive(
+                            tags: task.tags,
+                            isCompleted: task.completed,
+                            isRowHovering: isHovering,
+                            showTagPicker: $showTagPicker,
+                            onUpdateTags: { newTags in
+                                Task { await onUpdateTags?(task, newTags) }
+                            }
+                        )
                     }
 
                     // Outdent button (decrease indent)
@@ -3717,7 +4246,7 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundPrimary)))
+                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -3745,6 +4274,11 @@ struct TaskRow: View {
             isCompletingAnimation = false
             checkmarkScale = 1.0
         }
+        .onChange(of: animateToggleTaskId) { _, newValue in
+            if newValue == task.id {
+                handleToggle()
+            }
+        }
         .onHover { hovering in
             isHovering = hovering
             onHover?(hovering ? task.id : nil)
@@ -3768,7 +4302,7 @@ struct TaskRow: View {
         }
 
         Task {
-            await onUpdateDetails?(task, trimmed, nil, nil)
+            await onUpdateDetails?(task, trimmed, nil, nil, nil)
         }
     }
 
@@ -3811,7 +4345,7 @@ struct TaskRow: View {
                 Button("Save") {
                     showDatePicker = false
                     Task {
-                        await onUpdateDetails?(task, nil, editDueDate, nil)
+                        await onUpdateDetails?(task, nil, editDueDate, nil, nil)
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -3820,6 +4354,46 @@ struct TaskRow: View {
         }
         .padding(16)
         .frame(width: 300)
+    }
+
+    private var repeatPopover: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Repeat")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+                Spacer()
+            }
+
+            Picker("", selection: $editRecurrenceRule) {
+                Text("Never").tag("")
+                Text("Daily").tag("daily")
+                Text("Weekdays").tag("weekdays")
+                Text("Weekly").tag("weekly")
+                Text("Every 2 Weeks").tag("biweekly")
+                Text("Monthly").tag("monthly")
+            }
+            .pickerStyle(.radioGroup)
+
+            HStack(spacing: 8) {
+                Button("Cancel") {
+                    showRepeatPicker = false
+                }
+                .buttonStyle(.bordered)
+
+                Button("Save") {
+                    showRepeatPicker = false
+                    let ruleToSave = editRecurrenceRule.isEmpty ? "" : editRecurrenceRule
+                    Task {
+                        await onUpdateDetails?(task, nil, nil, nil, ruleToSave)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(OmiColors.textPrimary)
+            }
+        }
+        .padding(16)
+        .frame(width: 200)
     }
 
     private func handleToggle() {
@@ -3869,6 +4443,7 @@ struct TaskRow: View {
 struct DueDateBadgeInteractive: View {
     let dueAt: Date
     let isCompleted: Bool
+    let isRecurring: Bool
     @Binding var showDatePicker: Bool
     @Binding var editDueDate: Date
 
@@ -3911,6 +4486,10 @@ struct DueDateBadgeInteractive: View {
                     .scaledFont(size: 9)
                 Text(displayText)
                     .scaledFont(size: 11, weight: .medium)
+                if isRecurring {
+                    Image(systemName: "repeat")
+                        .scaledFont(size: 9)
+                }
                 if isHovering {
                     Image(systemName: "pencil")
                         .scaledFont(size: 8)
@@ -3948,8 +4527,8 @@ struct PriorityBadgeInteractive: View {
     }
 
     var body: some View {
-        // Show if task has a priority, or show "add priority" on hover
-        if priority != nil || (isHovering && !isCompleted) {
+        // Show if task has a priority, or show "add priority" on hover/popover
+        if priority != nil || ((isHovering || showPriorityPicker) && !isCompleted) {
             Button {
                 showPriorityPicker = true
             } label: {
@@ -4010,6 +4589,113 @@ struct PriorityBadgeInteractive: View {
                 }
                 .padding(8)
                 .frame(width: 180)
+            }
+        }
+    }
+}
+
+struct TagBadgeInteractive: View {
+    let tags: [String]
+    let isCompleted: Bool
+    let isRowHovering: Bool
+    @Binding var showTagPicker: Bool
+    let onUpdateTags: ([String]) -> Void
+
+    @State private var badgeHovering = false
+    @State private var editingTags: Set<String> = []
+
+    var body: some View {
+        if !tags.isEmpty || ((isRowHovering || showTagPicker) && !isCompleted) {
+            Button {
+                editingTags = Set(tags)
+                showTagPicker = true
+            } label: {
+                HStack(spacing: 3) {
+                    if tags.isEmpty {
+                        Image(systemName: "plus")
+                            .scaledFont(size: 8)
+                        Text("Tag")
+                            .scaledFont(size: 10, weight: .medium)
+                    } else {
+                        Image(systemName: "tag")
+                            .scaledFont(size: 8)
+                        Text(tags.compactMap { tag in TaskClassification(rawValue: tag)?.label }.prefix(2).joined(separator: ", "))
+                            .scaledFont(size: 10, weight: .medium)
+                        if tags.count > 2 {
+                            Text("+\(tags.count - 2)")
+                                .scaledFont(size: 9, weight: .medium)
+                        }
+                    }
+                    if badgeHovering && !tags.isEmpty {
+                        Image(systemName: "pencil")
+                            .scaledFont(size: 7)
+                    }
+                }
+                .foregroundColor(badgeHovering ? OmiColors.textPrimary : (tags.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                badgeHovering = hovering
+            }
+            .popover(isPresented: $showTagPicker) {
+                VStack(spacing: 8) {
+                    Text("Tags")
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    let allTags = TaskClassification.allCases
+                    LazyVGrid(columns: [
+                        GridItem(.adaptive(minimum: 85), spacing: 6)
+                    ], spacing: 6) {
+                        ForEach(allTags, id: \.rawValue) { classification in
+                            let isSelected = editingTags.contains(classification.rawValue)
+                            let tagColor = Color(hex: classification.color) ?? OmiColors.textSecondary
+                            Button {
+                                if isSelected {
+                                    editingTags.remove(classification.rawValue)
+                                } else {
+                                    editingTags.insert(classification.rawValue)
+                                }
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: classification.icon)
+                                        .scaledFont(size: 9)
+                                    Text(classification.label)
+                                        .scaledFont(size: 11, weight: isSelected ? .semibold : .medium)
+                                }
+                                .foregroundColor(isSelected ? .white : tagColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? tagColor : tagColor.opacity(0.1))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(isSelected ? Color.clear : tagColor.opacity(0.3), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Button {
+                        showTagPicker = false
+                        onUpdateTags(Array(editingTags))
+                    } label: {
+                        Text("Done")
+                            .scaledFont(size: 12, weight: .semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(OmiColors.purplePrimary))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .padding(12)
+                .frame(width: 280)
             }
         }
     }
@@ -4375,19 +5061,20 @@ struct KeyboardHintBar: View {
             } else if isAnyTaskEditing {
                 keyboardHint("esc", label: "Save & exit")
             } else if hasSelection {
-                keyboardHint("\u{2191}\u{2193}", label: "Navigate")
+                keyboardHint("\u{2191} \u{2193}", label: "Navigate")
                 keyboardHint("\u{21A9}", label: "New below")
-                keyboardHint("\u{21A9}\u{21A9}", label: "Edit")
+                keyboardHint("\u{21A9} \u{21A9}", label: "Edit")
+                keyboardHint("\u{2423}", label: "Done")
                 keyboardHint("esc", label: "Deselect")
                 keyboardHint("\u{2318}D", label: "Delete")
                 keyboardHint("\u{21E5}", label: "Indent")
-                keyboardHint("\u{21E7}\u{21E5}", label: "Outdent")
+                keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
             } else {
-                keyboardHint("\u{2191}\u{2193}", label: "Navigate")
+                keyboardHint("\u{2191} \u{2193}", label: "Navigate")
                 keyboardHint("\u{2318}N", label: "New")
                 keyboardHint("\u{2318}D", label: "Delete")
                 keyboardHint("\u{21E5}", label: "Indent")
-                keyboardHint("\u{21E7}\u{21E5}", label: "Outdent")
+                keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
             }
         }
         .padding(.horizontal, 16)
@@ -4400,17 +5087,17 @@ struct KeyboardHintBar: View {
     }
 
     private func keyboardHint(_ key: String, label: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             Text(key)
-                .scaledFont(size: 10, weight: .medium, design: .monospaced)
+                .scaledFont(size: 11, weight: .medium, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
                 .background(OmiColors.backgroundTertiary)
                 .cornerRadius(4)
 
             Text(label)
-                .scaledFont(size: 10)
+                .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
         }
     }

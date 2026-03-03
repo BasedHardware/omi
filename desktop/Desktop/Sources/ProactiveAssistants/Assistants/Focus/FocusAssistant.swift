@@ -32,7 +32,14 @@ actor FocusAssistant: ProactiveAssistant {
     private var lastProcessedFrameNum = 0
     private var processingTask: Task<Void, Never>?
     private var pendingTasks: Set<Task<Void, Never>> = []
+    private let maxPendingTasks = 3
     private var currentApp: String?
+
+    // MARK: - Context Cache
+    // Cached context from local DB (goals, tasks, memories) to enrich focus analysis
+    private var cachedContextString: String?
+    private var contextCacheTime: Date?
+    private let contextCacheDuration: TimeInterval = 120  // 2 minutes
 
     // MARK: - Smart Analysis Filtering
     // Skip analysis when user is focused on the same context (app + window title)
@@ -103,6 +110,12 @@ actor FocusAssistant: ProactiveAssistant {
 
         for await frame in frameStream {
             guard isRunning else { break }
+
+            // Backpressure: skip frame if too many analyses in flight
+            if pendingTasks.count >= maxPendingTasks {
+                continue
+            }
+
             // Fire off analysis in background (don't wait) - like Python version
             let task = Task { [weak self] () -> Void in
                 await self?.processFrame(frame)
@@ -132,6 +145,12 @@ actor FocusAssistant: ProactiveAssistant {
     }
 
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
+        // Skip lock screen / login screen — no useful content to analyze
+        let skipApps = ["loginwindow", "ScreenSaverEngine"]
+        if skipApps.contains(frame.appName) {
+            return nil
+        }
+
         // Skip apps excluded from focus analysis
         let excluded = await MainActor.run { FocusAssistantSettings.shared.isAppExcluded(frame.appName) }
         if excluded {
@@ -280,6 +299,8 @@ actor FocusAssistant: ProactiveAssistant {
         analysisCooldownEndTime = nil
         consecutiveErrorCount = 0
         errorBackoffEndTime = nil
+        cachedContextString = nil
+        contextCacheTime = nil
 
         // Clear cooldown in UI
         await MainActor.run {
@@ -325,6 +346,85 @@ actor FocusAssistant: ProactiveAssistant {
         Task {
             await clearPendingWork()
         }
+    }
+
+    // MARK: - Test API
+
+    /// Run analysis on a screenshot with no side effects (no saving, no state updates, no notifications).
+    /// Used by the test runner GUI and CLI.
+    func testAnalyze(jpegData: Data, appName: String) async throws -> ScreenAnalysis? {
+        return try await analyzeScreenshot(jpegData: jpegData)
+    }
+
+    /// Reset test history — call before starting a test run to get a clean slate.
+    func resetTestHistory() {
+        testAnalysisHistory.removeAll()
+    }
+
+    /// Run analysis with accumulating history across calls (simulates production behavior).
+    /// Each result is appended to a separate test history buffer so the model sees prior decisions.
+    func testAnalyzeWithHistory(jpegData: Data, appName: String) async throws -> ScreenAnalysis? {
+        let result = try await analyzeScreenshotWithHistory(jpegData: jpegData, history: testAnalysisHistory)
+        if let result = result {
+            testAnalysisHistory.append(result)
+            if testAnalysisHistory.count > maxHistorySize {
+                testAnalysisHistory.removeFirst()
+            }
+        }
+        return result
+    }
+
+    /// Separate history buffer for test runs (doesn't pollute production history)
+    private var testAnalysisHistory: [ScreenAnalysis] = []
+
+    /// Variant of analyzeScreenshot that accepts an explicit history array
+    private func analyzeScreenshotWithHistory(jpegData: Data, history: [ScreenAnalysis]) async throws -> ScreenAnalysis? {
+        let context = await refreshContext()
+
+        // Format provided history
+        var historyText = ""
+        if !history.isEmpty {
+            var lines = ["Recent activity (oldest to newest):"]
+            for (i, past) in history.enumerated() {
+                lines.append("\(i + 1). [\(past.status.rawValue)] \(past.appOrSite): \(past.description)")
+                if let message = past.message {
+                    lines.append("   Message: \(message)")
+                }
+            }
+            historyText = lines.joined(separator: "\n")
+        }
+
+        var promptParts: [String] = []
+        if !context.isEmpty {
+            promptParts.append(context)
+        }
+        if !historyText.isEmpty {
+            promptParts.append(historyText)
+        }
+        promptParts.append("Now analyze this new screenshot:")
+        let prompt = promptParts.joined(separator: "\n\n")
+
+        let currentSystemPrompt = await systemPrompt
+
+        let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
+            type: "object",
+            properties: [
+                "status": .init(type: "string", enum: ["focused", "distracted"], description: "Whether the user is focused or distracted"),
+                "app_or_site": .init(type: "string", enum: nil, description: "The app or website visible"),
+                "description": .init(type: "string", enum: nil, description: "Brief description of what's on screen"),
+                "message": .init(type: "string", enum: nil, description: "Coaching message")
+            ],
+            required: ["status", "app_or_site", "description"]
+        )
+
+        let responseText = try await geminiClient.sendRequest(
+            prompt: prompt,
+            imageData: jpegData,
+            systemPrompt: currentSystemPrompt,
+            responseSchema: responseSchema
+        )
+
+        return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
     }
 
     // MARK: - Analysis
@@ -485,10 +585,94 @@ actor FocusAssistant: ProactiveAssistant {
         }
     }
 
+    /// Refresh context from local DB (goals, tasks, memories) with caching
+    private func refreshContext() async -> String {
+        // Return cached context if fresh
+        if let cached = cachedContextString,
+           let cacheTime = contextCacheTime,
+           Date().timeIntervalSince(cacheTime) < contextCacheDuration {
+            return cached
+        }
+
+        var sections: [String] = []
+
+        // AI User Profile
+        do {
+            if let profile = await AIUserProfileService.shared.getLatestProfile() {
+                sections.append("USER PROFILE (who this user is):\n\(profile.profileText)")
+            }
+        }
+
+        // Time context
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+        sections.append("TIME CONTEXT:\n\(formatter.string(from: Date()))")
+
+        // Active goals
+        do {
+            let goals = try await GoalStorage.shared.getLocalGoals(activeOnly: true)
+            if !goals.isEmpty {
+                var lines = ["ACTIVE GOALS:"]
+                for (i, goal) in goals.prefix(10).enumerated() {
+                    let desc = goal.description.map { " - \($0)" } ?? ""
+                    lines.append("\(i + 1). \(goal.title)\(desc)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load goals for context", error: error)
+        }
+
+        // Top tasks by importance
+        do {
+            let tasks = try await ActionItemStorage.shared.getTopRelevanceTasks(limit: 50)
+            if !tasks.isEmpty {
+                var lines = ["CURRENT TASKS (by importance):"]
+                for (i, task) in tasks.enumerated() {
+                    let priority = task.priority ?? "medium"
+                    lines.append("\(i + 1). [\(priority)] \(task.description)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load tasks for context", error: error)
+        }
+
+        // Recent memories
+        do {
+            let memories = try await MemoryStorage.shared.getLocalMemories(limit: 50, category: "core")
+            if !memories.isEmpty {
+                var lines = ["RECENT MEMORIES:"]
+                for (i, memory) in memories.enumerated() {
+                    lines.append("\(i + 1). \(memory.content)")
+                }
+                sections.append(lines.joined(separator: "\n"))
+            }
+        } catch {
+            logError("Focus: Failed to load memories for context", error: error)
+        }
+
+        let contextString = sections.joined(separator: "\n\n")
+        cachedContextString = contextString
+        contextCacheTime = Date()
+        return contextString
+    }
+
     private func analyzeScreenshot(jpegData: Data) async throws -> ScreenAnalysis? {
-        // Build prompt with history context
+        // Refresh context from local DB
+        let context = await refreshContext()
+
+        // Build prompt with context + history
         let historyText = formatHistory()
-        let prompt = historyText.isEmpty ? "Analyze this screenshot:" : "\(historyText)\n\nNow analyze this new screenshot:"
+        var promptParts: [String] = []
+        if !context.isEmpty {
+            promptParts.append(context)
+        }
+        if !historyText.isEmpty {
+            promptParts.append(historyText)
+        }
+        promptParts.append("Now analyze this new screenshot:")
+        let prompt = promptParts.joined(separator: "\n\n")
 
         // Get current system prompt from settings
         let currentSystemPrompt = await systemPrompt
@@ -505,19 +689,14 @@ actor FocusAssistant: ProactiveAssistant {
             required: ["status", "app_or_site", "description"]
         )
 
-        do {
-            let responseText = try await geminiClient.sendRequest(
-                prompt: prompt,
-                imageData: jpegData,
-                systemPrompt: currentSystemPrompt,
-                responseSchema: responseSchema
-            )
+        let responseText = try await geminiClient.sendRequest(
+            prompt: prompt,
+            imageData: jpegData,
+            systemPrompt: currentSystemPrompt,
+            responseSchema: responseSchema
+        )
 
-            return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
-        } catch {
-            logError("Focus analysis error", error: error)
-            return nil
-        }
+        return try JSONDecoder().decode(ScreenAnalysis.self, from: Data(responseText.utf8))
     }
 
     // MARK: - Storage

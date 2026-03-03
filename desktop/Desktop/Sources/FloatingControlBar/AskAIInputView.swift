@@ -47,8 +47,15 @@ struct AskAIInputView: View {
                             .padding(.vertical, 8)
                     }
 
-                    ResizableTextEditor(
+                    OmiTextEditor(
                         text: $localInput,
+                        lineFragmentPadding: 8,
+                        onSubmit: {
+                            let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            onSend?(trimmed)
+                        },
+                        focusOnAppear: true,
                         minHeight: minHeight,
                         maxHeight: maxHeight,
                         onHeightChange: { newHeight in
@@ -56,13 +63,7 @@ struct AskAIInputView: View {
                                 textHeight = newHeight
                                 onHeightChange?(newHeight)
                             }
-                        },
-                        onSubmit: {
-                            let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            onSend?(trimmed)
-                        },
-                        focusOnAppear: true
+                        }
                     )
                     .onChange(of: localInput) { _, newValue in
                         userInput = newValue

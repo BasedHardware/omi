@@ -51,6 +51,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -983,395 +984,395 @@ function UsageSectionContent({
     <div className="space-y-6">
       {/* Tab Switcher */}
       <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
-          <button
-            onClick={() => setActiveTab('plan')}
-            className={cn(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-              activeTab === 'plan'
-                ? 'bg-purple-500 text-white shadow-md'
-                : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary'
-            )}
-          >
-            Plan
-          </button>
-          <button
-            onClick={() => setActiveTab('usage')}
-            className={cn(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
-              activeTab === 'usage'
-                ? 'bg-purple-500 text-white shadow-md'
-                : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary'
-            )}
-          >
-            Usage
-          </button>
+        <button
+          onClick={() => setActiveTab('plan')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'plan'
+              ? 'bg-purple-500 text-white shadow-md'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary'
+          )}
+        >
+          Plan
+        </button>
+        <button
+          onClick={() => setActiveTab('usage')}
+          className={cn(
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'usage'
+              ? 'bg-purple-500 text-white shadow-md'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary'
+          )}
+        >
+          Usage
+        </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'plan' ? (
         /* PLAN TAB - Different views for Basic vs Unlimited */
         <div className="space-y-6">
-            {!isUnlimited ? (
-              /* BASIC PLAN VIEW */
-              <>
-                {/* Current Plan Card */}
-                <Card className="relative overflow-hidden">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center">
-                        <Zap className="w-6 h-6 text-purple-400" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-semibold text-text-primary">Basic Plan</h3>
-                        <p className="text-sm text-text-tertiary">Free tier</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setShowUpgradeOptions(true)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
-                    >
-                      Upgrade to Unlimited
-                    </button>
-                  </div>
-
-                  {/* Monthly Listening Usage */}
-                  <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl mb-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Clock className="w-4 h-4 text-amber-400" />
-                      <span className="text-sm font-semibold text-amber-400">Monthly Listening Limit</span>
-                    </div>
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-2xl font-bold text-text-primary">
-                        {monthlyUsage ? Math.round(monthlyUsage.transcription_seconds / 60) : 0}
-                        <span className="text-sm font-normal text-text-tertiary ml-1">/ 1,200 min</span>
-                      </span>
-                      <span className="text-sm text-text-tertiary">
-                        {monthlyUsage ? (1200 - Math.round(monthlyUsage.transcription_seconds / 60)) : 1200} min left
-                      </span>
-                    </div>
-                    <div className="h-2.5 bg-bg-quaternary rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
-                        style={{ width: `${monthlyUsage ? getUsagePercent(monthlyUsage.transcription_seconds, limits.transcription_seconds) : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* What's Included - Checklist */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-text-secondary mb-3">What&apos;s included</h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                          <Clock className="w-3 h-3 text-amber-400" />
-                        </div>
-                        <span className="text-sm text-text-secondary">
-                          <span className="font-medium text-text-primary">1,200 minutes</span> of listening per month
-                          <span className="text-amber-400 text-xs ml-1">(limited)</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-3 h-3 text-green-400" />
-                        </div>
-                        <span className="text-sm text-text-secondary">
-                          <span className="font-medium text-text-primary">Unlimited</span> words transcribed
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-3 h-3 text-green-400" />
-                        </div>
-                        <span className="text-sm text-text-secondary">
-                          <span className="font-medium text-text-primary">Unlimited</span> insights
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-3 h-3 text-green-400" />
-                        </div>
-                        <span className="text-sm text-text-secondary">
-                          <span className="font-medium text-text-primary">Unlimited</span> memories
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Upgrade Options (shown when clicked) */}
-                {showUpgradeOptions && (
-                  <Card className="border-purple-500/20">
-                    <div className="flex items-center justify-between mb-5">
-                      <div>
-                        <h4 className="text-lg font-semibold text-text-primary">Choose a Plan</h4>
-                        <p className="text-sm text-text-tertiary">Unlock unlimited listening time</p>
-                      </div>
-                      <button
-                        onClick={() => setShowUpgradeOptions(false)}
-                        className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors"
-                      >
-                        <X className="w-5 h-5 text-text-quaternary" />
-                      </button>
-                    </div>
-
-                    {/* Plan Selection */}
-                    {sortedOptions.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-4 mb-5">
-                        {sortedOptions.map((option) => {
-                          const isSelected = selectedPriceId === option.id;
-                          const isAnnual = option.interval === 'year' || option.title?.toLowerCase().includes('annual');
-
-                          return (
-                            <button
-                              key={option.id}
-                              onClick={() => setSelectedPriceId(option.id)}
-                              className={cn(
-                                'relative p-5 rounded-2xl border-2 text-left transition-all',
-                                isSelected
-                                  ? 'border-purple-500 bg-purple-500/5 shadow-lg shadow-purple-500/10'
-                                  : 'border-bg-tertiary hover:border-purple-500/30 bg-bg-tertiary/30'
-                              )}
-                            >
-                              {isAnnual && (
-                                <span className="absolute -top-2.5 right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">
-                                  Best Value
-                                </span>
-                              )}
-                              <h4 className="font-semibold text-text-primary mb-1">{option.title}</h4>
-                              <p className="text-2xl font-bold text-text-primary">{option.price_string}</p>
-                              {option.description && (
-                                <p className="text-xs text-purple-400 mt-2 font-medium">{option.description}</p>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
-                      </div>
-                    )}
-
-                    {/* Error Message */}
-                    {error && (
-                      <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl mb-4 border border-red-500/20">
-                        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                        <p className="text-sm text-red-400">{error}</p>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={handleSubscribe}
-                      disabled={isLoading || !selectedPriceId}
-                      className={cn(
-                        'w-full py-3.5 rounded-xl font-semibold transition-all',
-                        'bg-gradient-to-r from-purple-500 to-purple-600 text-white',
-                        'hover:from-purple-600 hover:to-purple-700',
-                        'shadow-lg shadow-purple-500/20',
-                        'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none'
-                      )}
-                    >
-                      {isLoading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Processing...
-                        </span>
-                      ) : (
-                        'Continue to Payment'
-                      )}
-                    </button>
-                  </Card>
-                )}
-
-                {/* This Month Stats - Compact Single Row */}
-                <Card>
-                  <h4 className="text-sm font-semibold text-text-secondary mb-4">This month</h4>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="text-center">
-                      <div className="w-10 h-10 mx-auto rounded-xl bg-blue-500/10 flex items-center justify-center mb-2">
-                        <Mic className="w-5 h-5 text-blue-400" />
-                      </div>
-                      <p className="text-xl font-bold text-blue-400">
-                        {monthlyUsage ? formatDuration(monthlyUsage.transcription_seconds) : '0m'}
-                      </p>
-                      <p className="text-xs text-text-quaternary">Listening</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-10 h-10 mx-auto rounded-xl bg-green-500/10 flex items-center justify-center mb-2">
-                        <MessageSquare className="w-5 h-5 text-green-400" />
-                      </div>
-                      <p className="text-xl font-bold text-green-400">
-                        {monthlyUsage ? formatNumber(monthlyUsage.words_transcribed) : '0'}
-                      </p>
-                      <p className="text-xs text-text-quaternary">Words</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-10 h-10 mx-auto rounded-xl bg-orange-500/10 flex items-center justify-center mb-2">
-                        <Lightbulb className="w-5 h-5 text-orange-400" />
-                      </div>
-                      <p className="text-xl font-bold text-orange-400">
-                        {monthlyUsage?.insights_gained || 0}
-                      </p>
-                      <p className="text-xs text-text-quaternary">Insights</p>
-                    </div>
-                    <div className="text-center">
-                      <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
-                        <Brain className="w-5 h-5 text-purple-400" />
-                      </div>
-                      <p className="text-xl font-bold text-purple-400">
-                        {monthlyUsage?.memories_created || 0}
-                      </p>
-                      <p className="text-xs text-text-quaternary">Memories</p>
-                    </div>
-                  </div>
-                </Card>
-              </>
-            ) : (
-              /* UNLIMITED PLAN VIEW */
-              <>
+          {!isUnlimited ? (
+            /* BASIC PLAN VIEW */
+            <>
+              {/* Current Plan Card */}
+              <Card className="relative overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                    <Crown className="w-5 h-5 text-purple-400" />
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-text-primary">Basic Plan</h3>
+                      <p className="text-sm text-text-tertiary">Free tier</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-text-primary">
-                      {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
-                    </h3>
-                    {subscription?.current_period_end && (
-                      <p className="text-xs text-text-quaternary">
-                        {isCancelingSubscription
-                          ? `Cancels on ${formatDate(subscription.current_period_end)}`
-                          : `Renews ${formatDate(subscription.current_period_end)}`
-                        }
-                      </p>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setShowUpgradeOptions(true)}
+                    className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
+                  >
+                    Upgrade to Unlimited
+                  </button>
                 </div>
 
-                {/* Plan Selection */}
-                {sortedOptions.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {sortedOptions.map((option) => {
-                      const isSelected = selectedPriceId === option.id;
-                      const isCurrent = option.is_active;
-                      const isAnnual = option.interval === 'year' || option.title?.toLowerCase().includes('annual');
-
-                      return (
-                        <button
-                          key={option.id}
-                          onClick={() => setSelectedPriceId(option.id)}
-                          className={cn(
-                            'relative p-4 rounded-xl border-2 text-left transition-all',
-                            isSelected
-                              ? 'border-purple-500 bg-purple-500/5'
-                              : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50'
-                          )}
-                        >
-                          {isAnnual && (
-                            <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-medium rounded-full">
-                              POPULAR
-                            </span>
-                          )}
-
-                          <h4 className="font-medium text-text-primary mb-1">
-                            {option.title}
-                          </h4>
-                          <p className="text-lg font-bold text-text-primary">
-                            {option.price_string}
-                          </p>
-                          {option.description && (
-                            <p className="text-xs text-purple-400 mt-1">
-                              {option.description}
-                            </p>
-                          )}
-
-                          {isCurrent && (
-                            <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded-full">
-                              <Check className="w-3 h-3" />
-                              Current
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+                {/* Monthly Listening Usage */}
+                <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-semibold text-amber-400">Monthly Listening Limit</span>
                   </div>
-                ) : (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
-                  </div>
-                )}
-
-                {/* Features List */}
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-text-secondary">Features:</h4>
-                  <ul className="space-y-2">
-                    {defaultFeatures.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-text-tertiary">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Error Message */}
-                {error && (
-                  <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                    <p className="text-sm text-red-400">{error}</p>
-                  </div>
-                )}
-
-                {/* Primary Action Button */}
-                <button
-                  onClick={handleSubscribe}
-                  disabled={isLoading || !selectedPriceId || (!isCancelingSubscription && selectedOption?.is_active)}
-                  className={cn(
-                    'w-full py-3 rounded-xl font-medium transition-colors',
-                    'bg-purple-500 text-white',
-                    'hover:bg-purple-600',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
-                >
-                  {isLoading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processing...
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-2xl font-bold text-text-primary">
+                      {monthlyUsage ? Math.round(monthlyUsage.transcription_seconds / 60) : 0}
+                      <span className="text-sm font-normal text-text-tertiary ml-1">/ 1,200 min</span>
                     </span>
-                  ) : isCancelingSubscription ? (
-                    'Reactivate Subscription'
-                  ) : selectedOption?.is_active ? (
-                    'Current Plan'
+                    <span className="text-sm text-text-tertiary">
+                      {monthlyUsage ? (1200 - Math.round(monthlyUsage.transcription_seconds / 60)) : 1200} min left
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-bg-quaternary rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-500"
+                      style={{ width: `${monthlyUsage ? getUsagePercent(monthlyUsage.transcription_seconds, limits.transcription_seconds) : 0}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* What's Included - Checklist */}
+                <div>
+                  <h4 className="text-sm font-semibold text-text-secondary mb-3">What&apos;s included</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                      </div>
+                      <span className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">1,200 minutes</span> of listening per month
+                        <span className="text-amber-400 text-xs ml-1">(limited)</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-green-400" />
+                      </div>
+                      <span className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">Unlimited</span> words transcribed
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-green-400" />
+                      </div>
+                      <span className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">Unlimited</span> insights
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-3 h-3 text-green-400" />
+                      </div>
+                      <span className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">Unlimited</span> memories
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Upgrade Options (shown when clicked) */}
+              {showUpgradeOptions && (
+                <Card className="border-purple-500/20">
+                  <div className="flex items-center justify-between mb-5">
+                    <div>
+                      <h4 className="text-lg font-semibold text-text-primary">Choose a Plan</h4>
+                      <p className="text-sm text-text-tertiary">Unlock unlimited listening time</p>
+                    </div>
+                    <button
+                      onClick={() => setShowUpgradeOptions(false)}
+                      className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-text-quaternary" />
+                    </button>
+                  </div>
+
+                  {/* Plan Selection */}
+                  {sortedOptions.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-4 mb-5">
+                      {sortedOptions.map((option) => {
+                        const isSelected = selectedPriceId === option.id;
+                        const isAnnual = option.interval === 'year' || option.title?.toLowerCase().includes('annual');
+
+                        return (
+                          <button
+                            key={option.id}
+                            onClick={() => setSelectedPriceId(option.id)}
+                            className={cn(
+                              'relative p-5 rounded-2xl border-2 text-left transition-all',
+                              isSelected
+                                ? 'border-purple-500 bg-purple-500/5 shadow-lg shadow-purple-500/10'
+                                : 'border-bg-tertiary hover:border-purple-500/30 bg-bg-tertiary/30'
+                            )}
+                          >
+                            {isAnnual && (
+                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">
+                                Best Value
+                              </span>
+                            )}
+                            <h4 className="font-semibold text-text-primary mb-1">{option.title}</h4>
+                            <p className="text-2xl font-bold text-text-primary">{option.price_string}</p>
+                            {option.description && (
+                              <p className="text-xs text-purple-400 mt-2 font-medium">{option.description}</p>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   ) : (
-                    'Change Plan'
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                    </div>
                   )}
+
+                  {/* Error Message */}
+                  {error && (
+                    <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl mb-4 border border-red-500/20">
+                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                      <p className="text-sm text-red-400">{error}</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleSubscribe}
+                    disabled={isLoading || !selectedPriceId}
+                    className={cn(
+                      'w-full py-3.5 rounded-xl font-semibold transition-all',
+                      'bg-gradient-to-r from-purple-500 to-purple-600 text-white',
+                      'hover:from-purple-600 hover:to-purple-700',
+                      'shadow-lg shadow-purple-500/20',
+                      'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none'
+                    )}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Processing...
+                      </span>
+                    ) : (
+                      'Continue to Payment'
+                    )}
+                  </button>
+                </Card>
+              )}
+
+              {/* This Month Stats - Compact Single Row */}
+              <Card>
+                <h4 className="text-sm font-semibold text-text-secondary mb-4">This month</h4>
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="text-center">
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-blue-500/10 flex items-center justify-center mb-2">
+                      <Mic className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <p className="text-xl font-bold text-blue-400">
+                      {monthlyUsage ? formatDuration(monthlyUsage.transcription_seconds) : '0m'}
+                    </p>
+                    <p className="text-xs text-text-quaternary">Listening</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-green-500/10 flex items-center justify-center mb-2">
+                      <MessageSquare className="w-5 h-5 text-green-400" />
+                    </div>
+                    <p className="text-xl font-bold text-green-400">
+                      {monthlyUsage ? formatNumber(monthlyUsage.words_transcribed) : '0'}
+                    </p>
+                    <p className="text-xs text-text-quaternary">Words</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-orange-500/10 flex items-center justify-center mb-2">
+                      <Lightbulb className="w-5 h-5 text-orange-400" />
+                    </div>
+                    <p className="text-xl font-bold text-orange-400">
+                      {monthlyUsage?.insights_gained || 0}
+                    </p>
+                    <p className="text-xs text-text-quaternary">Insights</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
+                      <Brain className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <p className="text-xl font-bold text-purple-400">
+                      {monthlyUsage?.memories_created || 0}
+                    </p>
+                    <p className="text-xs text-text-quaternary">Memories</p>
+                  </div>
+                </div>
+              </Card>
+            </>
+          ) : (
+            /* UNLIMITED PLAN VIEW */
+            <>
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-text-primary">
+                    {isCancelingSubscription ? 'Your Plan' : 'Manage Your Plan'}
+                  </h3>
+                  {subscription?.current_period_end && (
+                    <p className="text-xs text-text-quaternary">
+                      {isCancelingSubscription
+                        ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                        : `Renews ${formatDate(subscription.current_period_end)}`
+                      }
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Plan Selection */}
+              {sortedOptions.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {sortedOptions.map((option) => {
+                    const isSelected = selectedPriceId === option.id;
+                    const isCurrent = option.is_active;
+                    const isAnnual = option.interval === 'year' || option.title?.toLowerCase().includes('annual');
+
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => setSelectedPriceId(option.id)}
+                        className={cn(
+                          'relative p-4 rounded-xl border-2 text-left transition-all',
+                          isSelected
+                            ? 'border-purple-500 bg-purple-500/5'
+                            : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50'
+                        )}
+                      >
+                        {isAnnual && (
+                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-medium rounded-full">
+                            POPULAR
+                          </span>
+                        )}
+
+                        <h4 className="font-medium text-text-primary mb-1">
+                          {option.title}
+                        </h4>
+                        <p className="text-lg font-bold text-text-primary">
+                          {option.price_string}
+                        </p>
+                        {option.description && (
+                          <p className="text-xs text-purple-400 mt-1">
+                            {option.description}
+                          </p>
+                        )}
+
+                        {isCurrent && (
+                          <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-green-500/10 text-green-400 text-xs rounded-full">
+                            <Check className="w-3 h-3" />
+                            Current
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                </div>
+              )}
+
+              {/* Features List */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-text-secondary">Features:</h4>
+                <ul className="space-y-2">
+                  {defaultFeatures.map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm text-text-tertiary">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
+
+              {/* Primary Action Button */}
+              <button
+                onClick={handleSubscribe}
+                disabled={isLoading || !selectedPriceId || (!isCancelingSubscription && selectedOption?.is_active)}
+                className={cn(
+                  'w-full py-3 rounded-xl font-medium transition-colors',
+                  'bg-purple-500 text-white',
+                  'hover:bg-purple-600',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </span>
+                ) : isCancelingSubscription ? (
+                  'Reactivate Subscription'
+                ) : selectedOption?.is_active ? (
+                  'Current Plan'
+                ) : (
+                  'Change Plan'
+                )}
+              </button>
+
+              {/* Secondary Actions */}
+              <div className="pt-4 border-t border-bg-tertiary space-y-3">
+                <button
+                  onClick={handleManagePayment}
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span className="text-sm">Manage Payment Method</span>
                 </button>
 
-                {/* Secondary Actions */}
-                <div className="pt-4 border-t border-bg-tertiary space-y-3">
+                {!isCancelingSubscription && (
                   <button
-                    onClick={handleManagePayment}
+                    onClick={() => setShowCancelConfirm(true)}
                     disabled={isLoading}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
+                    className="w-full py-2.5 text-sm text-red-400/70 hover:text-red-400 transition-colors"
                   >
-                    <CreditCard className="w-4 h-4" />
-                    <span className="text-sm">Manage Payment Method</span>
+                    Cancel Subscription
                   </button>
-
-                  {!isCancelingSubscription && (
-                    <button
-                      onClick={() => setShowCancelConfirm(true)}
-                      disabled={isLoading}
-                      className="w-full py-2.5 text-sm text-red-400/70 hover:text-red-400 transition-colors"
-                    >
-                      Cancel Subscription
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
+                )}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         /* USAGE TAB */
@@ -1914,6 +1915,7 @@ function DeveloperSection({
   onDeleteMcpKey,
   onWebhookChange,
   onExportData,
+  isExporting,
   onDeleteKnowledgeGraph,
 }: {
   apiKeys: DeveloperApiKey[];
@@ -1925,6 +1927,7 @@ function DeveloperSection({
   onDeleteMcpKey: (keyId: string) => void;
   onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
   onExportData: () => void;
+  isExporting?: boolean;
   onDeleteKnowledgeGraph: () => void;
 }) {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
@@ -2004,7 +2007,7 @@ function DeveloperSection({
     { id: 'day_summary', label: 'Day Summary', description: 'Summary generated', icon: Calendar },
   ];
 
-  const mcpServerUrl = 'https://api.omi.me/v1/mcp/sse';
+  const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
 
   const claudeDesktopConfig = `{
   "mcpServers": {
@@ -2029,10 +2032,10 @@ function DeveloperSection({
 
   return (
     <div className="space-y-8">
-        {/* Developer API Keys */}
-        <div id="api-keys" className="space-y-3 scroll-mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Developer API Keys</h3>
+      {/* Developer API Keys */}
+      <div id="api-keys" className="space-y-3 scroll-mt-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Developer API Keys</h3>
           <button
             onClick={() => setShowApiKeyDialog(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
@@ -2078,13 +2081,13 @@ function DeveloperSection({
         </Card>
       </div>
 
-        {/* MCP Section */}
-        <div id="mcp" className="space-y-3 scroll-mt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">MCP</h3>
+      {/* MCP Section */}
+      <div id="mcp" className="space-y-3 scroll-mt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">MCP</h3>
             <a href="https://docs.omi.me/doc/developer/MCP" target="_blank" rel="noopener noreferrer"
-               className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+              className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
               Docs ↗
             </a>
           </div>
@@ -2204,12 +2207,12 @@ function DeveloperSection({
         </Card>
       </div>
 
-        {/* Webhooks */}
-        <div id="webhooks" className="space-y-3 scroll-mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Webhooks</h3>
+      {/* Webhooks */}
+      <div id="webhooks" className="space-y-3 scroll-mt-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Webhooks</h3>
           <a href="https://docs.omi.me/doc/developer/apps/Introduction" target="_blank" rel="noopener noreferrer"
-             className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+            className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
             Docs ↗
           </a>
         </div>
@@ -2285,16 +2288,26 @@ function DeveloperSection({
         <Card>
           <button
             onClick={onExportData}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "w-full flex items-center gap-4 py-3 transition-colors",
+              isExporting ? "text-text-tertiary cursor-not-allowed" : "text-text-primary hover:text-purple-400"
+            )}
           >
             <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Download className="w-5 h-5 text-text-tertiary" />
+              {isExporting ? (
+                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+              ) : (
+                <Download className="w-5 h-5 text-text-tertiary" />
+              )}
             </div>
             <div className="flex-1 text-left">
-              <p className="font-medium">Export All Data</p>
-              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
+              <p className="font-medium">{isExporting ? 'Exporting...' : 'Export All Data'}</p>
+              <p className="text-xs text-text-tertiary">
+                {isExporting ? 'This may take a moment' : 'Export conversations to a JSON file'}
+              </p>
             </div>
-            <ExternalLink className="w-4 h-4 text-text-quaternary" />
+            {!isExporting && <ExternalLink className="w-4 h-4 text-text-quaternary" />}
           </button>
         </Card>
         <Card className="border-red-500/20">
@@ -2314,10 +2327,10 @@ function DeveloperSection({
         </Card>
       </div>
 
-        {/* Experimental Features */}
-        <div id="experimental" className="space-y-3 scroll-mt-4">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Experimental</h3>
+      {/* Experimental Features */}
+      <div id="experimental" className="space-y-3 scroll-mt-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Experimental</h3>
           <FlaskConical className="w-4 h-4 text-purple-400" />
         </div>
         <Card>
@@ -2578,6 +2591,8 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
+  const { showToast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'profile'
   const sectionParam = searchParams.get('section');
@@ -2830,10 +2845,10 @@ export function SettingsPage() {
   };
 
   const handleExportData = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
-      const data = await exportAllData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
+      const blob = await exportAllData();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -2842,8 +2857,12 @@ export function SettingsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('Data exported successfully', 'success');
     } catch (error) {
       console.error('Failed to export data:', error);
+      showToast('Failed to export data. Please try again.', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -2953,6 +2972,7 @@ export function SettingsPage() {
             onDeleteMcpKey={handleDeleteMcpKey}
             onWebhookChange={handleWebhookChange}
             onExportData={handleExportData}
+            isExporting={isExporting}
             onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
           />
         );
@@ -3007,6 +3027,30 @@ export function SettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Export in-progress dialog */}
+      {isExporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="p-3 rounded-full bg-purple-500/10">
+                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Exporting Your Data</h3>
+                <p className="text-text-secondary mt-2 text-sm">
+                  This may take a moment depending on the amount of data in your account.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-yellow-500/10 rounded-xl px-4 py-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                <span className="text-xs text-yellow-400">Please don&apos;t close this tab</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 
@@ -3019,25 +3063,25 @@ export function SettingsPage() {
               {renderSection()}
             </div>
 
-          {/* Quick Nav Sidebar - only show on desktop when there are sections */}
-          {quickNavSections.length > 0 && (
-            <div className="hidden lg:block w-32 flex-shrink-0">
-              <div className="sticky top-4">
-                <p className="text-xs font-medium text-text-quaternary uppercase tracking-wider mb-3">On this page</p>
-                <nav className="space-y-1">
-                  {quickNavSections.map((section) => (
-                    <a
-                      key={section.id}
-                      href={`#${section.id}`}
-                      className="block text-sm text-text-tertiary hover:text-text-primary transition-colors py-1"
-                    >
-                      {section.label}
-                    </a>
-                  ))}
-                </nav>
+            {/* Quick Nav Sidebar - only show on desktop when there are sections */}
+            {quickNavSections.length > 0 && (
+              <div className="hidden lg:block w-32 flex-shrink-0">
+                <div className="sticky top-4">
+                  <p className="text-xs font-medium text-text-quaternary uppercase tracking-wider mb-3">On this page</p>
+                  <nav className="space-y-1">
+                    {quickNavSections.map((section) => (
+                      <a
+                        key={section.id}
+                        href={`#${section.id}`}
+                        className="block text-sm text-text-tertiary hover:text-text-primary transition-colors py-1"
+                      >
+                        {section.label}
+                      </a>
+                    ))}
+                  </nav>
+                </div>
               </div>
-            </div>
-          )}
+            )}
           </div>
         </div>
       </main>

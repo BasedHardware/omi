@@ -7,9 +7,21 @@ from database import users as users_db
 from models.memories import Memory, MemoryCategory
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
+from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
 from .clients import llm_mini, llm_high
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
+    if language is None:
+        language = get_user_language_preference(uid)
+    if language and language != 'en':
+        return f'You MUST write all extracted memories/learnings in {language}. Do NOT write them in English.'
+    return 'Write all extracted memories/learnings in English.'
 
 
 class Memories(BaseModel):
@@ -46,7 +58,11 @@ LEGACY_TO_NEW_CATEGORY = {
 
 
 def new_memories_extractor(
-    uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, memories_str: Optional[str] = None
+    uid: str,
+    segments: List[TranscriptSegment],
+    user_name: Optional[str] = None,
+    memories_str: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
@@ -61,6 +77,8 @@ def new_memories_extractor(
     # TODO: include negative facts too? Things the user doesn't like?
     # TODO: make it more strict?
 
+    language_instruction = _get_language_instruction(uid, language)
+
     try:
         parser = PydanticOutputParser(pydantic_object=Memories)
         chain = extract_memories_prompt | llm_mini | parser
@@ -70,6 +88,7 @@ def new_memories_extractor(
                 'user_name': user_name,
                 'conversation': content,
                 'memories_str': memories_str,
+                'language_instruction': language_instruction,
                 'format_instructions': parser.get_format_instructions(),
             }
         )
@@ -81,12 +100,17 @@ def new_memories_extractor(
 
         return response.facts
     except Exception as e:
-        print(f'Error extracting new facts: {e}')
+        logger.error(f'Error extracting new facts: {e}')
         return []
 
 
 def extract_memories_from_text(
-    uid: str, text: str, text_source: str, user_name: Optional[str] = None, memories_str: Optional[str] = None
+    uid: str,
+    text: str,
+    text_source: str,
+    user_name: Optional[str] = None,
+    memories_str: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -94,6 +118,8 @@ def extract_memories_from_text(
 
     if not text or len(text) == 0:
         return []
+
+    language_instruction = _get_language_instruction(uid, language)
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
@@ -104,6 +130,7 @@ def extract_memories_from_text(
                 'text_content': text,
                 'text_source': text_source,
                 'memories_str': memories_str,
+                'language_instruction': language_instruction,
                 'format_instructions': parser.get_format_instructions(),
             }
         )
@@ -115,7 +142,7 @@ def extract_memories_from_text(
 
         return response.facts
     except Exception as e:
-        print(f'Error extracting facts from {text_source}: {e}')
+        logger.error(f'Error extracting facts from {text_source}: {e}')
         return []
 
 
@@ -129,7 +156,11 @@ class Learnings(BaseModel):
 
 
 def new_learnings_extractor(
-    uid: str, segments: List[TranscriptSegment], user_name: Optional[str] = None, learnings_str: Optional[str] = None
+    uid: str,
+    segments: List[TranscriptSegment],
+    user_name: Optional[str] = None,
+    learnings_str: Optional[str] = None,
+    language: Optional[str] = None,
 ) -> List[Memory]:
     if user_name is None or learnings_str is None:
         user_name, memories_str = get_prompt_memories(uid)
@@ -140,6 +171,8 @@ def new_learnings_extractor(
     if not content or len(content) < 100:
         return []
 
+    language_instruction = _get_language_instruction(uid, language)
+
     try:
         parser = PydanticOutputParser(pydantic_object=Learnings)
         chain = extract_learnings_prompt | llm_high | parser
@@ -148,12 +181,13 @@ def new_learnings_extractor(
                 'user_name': user_name,
                 'conversation': content,
                 'learnings_str': learnings_str,
+                'language_instruction': language_instruction,
                 'format_instructions': parser.get_format_instructions(),
             }
         )
         return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
-        print(f'Error extracting new facts: {e}')
+        logger.error(f'Error extracting new facts: {e}')
         return []
 
 
@@ -193,7 +227,7 @@ Respond with ONLY "system" or "interesting" - nothing else."""
             return MemoryCategory.interesting
         return MemoryCategory.system
     except Exception as e:
-        print(f'Error identifying category for memory: {e}')
+        logger.error(f'Error identifying category for memory: {e}')
         return MemoryCategory.system
 
 
@@ -212,6 +246,7 @@ class MemoryResolution(BaseModel):
 def resolve_memory_conflict(
     new_memory: str,
     similar_memories: List[dict],
+    language: Optional[str] = None,
 ) -> MemoryResolution:
     """
     Use LLM to decide how to handle a new memory that's similar to existing ones.
@@ -219,6 +254,7 @@ def resolve_memory_conflict(
     Args:
         new_memory: The newly extracted memory content
         similar_memories: List of similar existing memories with 'content' and 'score' keys
+        language: Language code for merged content output
 
     Returns:
         MemoryResolution with action and optional merged content
@@ -227,6 +263,12 @@ def resolve_memory_conflict(
         return MemoryResolution(action='keep_new', reasoning='No similar memories found')
 
     existing_str = "\n".join([f"- \"{m['content']}\" (similarity: {m['score']:.2f})" for m in similar_memories])
+
+    language_note = ""
+    if language and language != 'en':
+        language_note = (
+            f"\n5. If action is 'merge', write merged_content in {language} (same language as the memories)."
+        )
 
     prompt = f"""You are a memory management system. A new memory has been extracted that is similar to existing memories.
 Decide the best action to maintain an accurate, non-redundant knowledge base.
@@ -240,7 +282,7 @@ RULES:
 1. "keep_new" - The new memory adds genuinely NEW information not in existing memories
 2. "keep_existing" - The new memory is redundant; existing memories already capture this
 3. "merge" - The new memory REFINES or UPDATES existing knowledge (e.g., adds specificity, corrects, or combines info). Provide merged_content (max 10 words)
-4. "keep_both" - Both memories provide distinct, non-conflicting value (rare - only if truly different aspects)
+4. "keep_both" - Both memories provide distinct, non-conflicting value (rare - only if truly different aspects){language_note}
 
 EXAMPLES:
 - Existing: "Likes pancakes" + New: "Doesn't like blueberry pancakes" → merge: "Likes pancakes but not blueberry ones"
@@ -257,6 +299,6 @@ Respond with the action and reasoning."""
         response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
         return response
     except Exception as e:
-        print(f'Error resolving memory conflict: {e}')
+        logger.error(f'Error resolving memory conflict: {e}')
         # Default to keeping new if resolution fails
         return MemoryResolution(action='keep_new', reasoning=f'Resolution failed: {e}')

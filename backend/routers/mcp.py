@@ -18,6 +18,9 @@ from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -163,7 +166,7 @@ def get_conversations(
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
-    print("get_conversations", uid, limit, offset, start_date, end_date, categories)
+    logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -190,7 +193,7 @@ def get_conversations(
     tags=["mcp"],
 )
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    print("get_conversation_by_id", uid, conversation_id)
+    logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")

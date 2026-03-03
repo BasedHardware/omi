@@ -1,9 +1,9 @@
 import SwiftUI
 import Combine
 
-/// Manages task-scoped chat sessions using the shared ChatProvider.
-/// Saves/restores ChatProvider state when entering/leaving task chat
-/// so the main Chat tab remains unaffected.
+/// Manages task-scoped chat sessions using independent TaskChatState per task.
+/// Each task gets its own bridge process, messages, and sending state.
+/// The sidebar ChatProvider is completely untouched.
 @MainActor
 class TaskChatCoordinator: ObservableObject {
     @Published var activeTaskId: String?
@@ -18,68 +18,76 @@ class TaskChatCoordinator: ObservableObject {
 
     // MARK: - Chat Status Tracking
 
-    /// Which task currently has an active AI stream
-    @Published var streamingTaskId: String?
-    /// Tasks with unseen AI responses (finished while user wasn't viewing)
-    @Published var unreadTaskIds: Set<String> = []
-    /// Human-readable status text for the active stream (e.g. "Thinking...", "Querying database")
-    @Published var streamingStatus: String = ""
+    private static let unreadTaskIdsKey = "taskChat.unreadTaskIds"
+
+    /// Tasks that currently have an active AI stream (supports parallel agents)
+    @Published var streamingTaskIds: Set<String> = []
+    /// Tasks with unseen AI responses (finished while user wasn't viewing).
+    /// Persisted to UserDefaults so the "New reply" indicator survives app restarts.
+    @Published var unreadTaskIds: Set<String> = [] {
+        didSet {
+            UserDefaults.standard.set(Array(unreadTaskIds), forKey: Self.unreadTaskIdsKey)
+        }
+    }
+    /// Per-task human-readable status text for active streams
+    @Published var streamingStatuses: [String: String] = [:]
+
+    /// The currently active TaskChatState (drives the UI)
+    @Published var activeTaskState: TaskChatState?
+
+    /// Per-task chat states — each has its own bridge process and messages
+    private var taskStates: [String: TaskChatState] = [:]
 
     private let chatProvider: ChatProvider
     private var cancellables = Set<AnyCancellable>()
-
-    /// Saved state from before we switched to task chat
-    private var savedSession: ChatSession?
-    private var savedMessages: [ChatMessage] = []
-    private var savedIsInDefaultChat = true
-    private var savedWorkingDirectory: String?
-    private var savedOverrideAppId: String?
-
-    /// Per-task message cache so we don't lose in-flight streaming messages
-    private var taskMessagesCache: [String: [ChatMessage]] = [:]
-
-    /// App ID used to isolate task chat messages from the default chat
-    static let taskChatAppId = "task-chat"
+    /// Per-task Combine subscriptions for streaming observation
+    private var taskCancellables: [String: Set<AnyCancellable>] = [:]
 
     init(chatProvider: ChatProvider) {
         self.chatProvider = chatProvider
-        observeChatStatus()
+        // Restore persisted unread indicators so the "New reply" dot survives app restarts
+        if let saved = UserDefaults.standard.array(forKey: Self.unreadTaskIdsKey) as? [String] {
+            unreadTaskIds = Set(saved)
+        }
     }
 
-    // MARK: - Status Observation
+    // MARK: - Status Observation (per-task)
 
-    private func observeChatStatus() {
-        // Track when streaming starts/stops (only for task chat sessions)
-        chatProvider.$isSending
+    /// Subscribe to a TaskChatState's streaming changes for status tracking.
+    private func observeTaskState(_ state: TaskChatState) {
+        var subs = Set<AnyCancellable>()
+        let taskId = state.taskId
+
+        // Track when streaming starts/stops
+        state.$isSending
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isSending in
                 guard let self else { return }
-                // Only track when we're in task chat mode
-                guard self.chatProvider.overrideAppId == Self.taskChatAppId else { return }
                 if isSending {
-                    // Streaming started — record which task is streaming
-                    self.streamingTaskId = self.activeTaskId
-                } else if let taskId = self.streamingTaskId {
-                    // Streaming finished — mark unread if panel not showing this task
+                    self.streamingTaskIds.insert(taskId)
+                } else {
+                    // Streaming finished — remove from active set
+                    self.streamingTaskIds.remove(taskId)
+                    self.streamingStatuses.removeValue(forKey: taskId)
+                    // Mark unread if panel not showing this task
                     if !self.isPanelOpen || self.activeTaskId != taskId {
                         self.unreadTaskIds.insert(taskId)
                     }
-                    self.streamingTaskId = nil
-                    self.streamingStatus = ""
                 }
             }
-            .store(in: &cancellables)
+            .store(in: &subs)
 
         // Derive status text from the last AI message's content blocks
-        chatProvider.$messages
+        state.$messages
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] messages in
-                guard let self,
-                      self.chatProvider.isSending,
-                      self.streamingTaskId != nil else { return }
-                self.streamingStatus = self.deriveStreamingStatus(from: messages)
+            .sink { [weak self, weak state] messages in
+                guard let self, let state, state.isSending,
+                      self.streamingTaskIds.contains(taskId) else { return }
+                self.streamingStatuses[taskId] = self.deriveStreamingStatus(from: messages)
             }
-            .store(in: &cancellables)
+            .store(in: &subs)
+
+        taskCancellables[taskId] = subs
     }
 
     private func deriveStreamingStatus(from messages: [ChatMessage]) -> String {
@@ -88,7 +96,6 @@ class TaskChatCoordinator: ObservableObject {
             return "Responding..."
         }
 
-        // Check content blocks in reverse for most recent activity
         for block in lastAI.contentBlocks.reversed() {
             if case .toolCall(_, let name, .running, _, _, _) = block {
                 return ChatContentBlock.displayName(for: name)
@@ -105,34 +112,29 @@ class TaskChatCoordinator: ObservableObject {
         unreadTaskIds.remove(taskId)
     }
 
-    /// Open (or resume) a chat panel for a task.
-    /// Creates a new Firestore ChatSession if the task doesn't have one yet.
-    /// The initial prompt is placed in `pendingInputText` for the user to review before sending.
-    func openChat(for task: TaskActionItem) async {
-        log("TaskChatCoordinator: openChat for \(task.id), activeTaskId=\(activeTaskId ?? "nil"), isPanelOpen=\(isPanelOpen), isOpening=\(isOpening)")
-
-        // If already viewing this task's chat, re-establish ChatProvider state
-        // (another page may have changed the shared provider while we were away)
-        if activeTaskId == task.id {
-            log("TaskChatCoordinator: same task, restoring provider state")
-            markAsRead(task.id)
-            chatProvider.overrideAppId = Self.taskChatAppId
-
-            // If bridge is still streaming for this task, restore cached messages
-            // so the live updates continue showing. Otherwise reload from backend.
-            if chatProvider.isSending, let cached = taskMessagesCache[task.id] {
-                log("TaskChatCoordinator: restoring cached messages (bridge still streaming)")
-                chatProvider.messages = cached
-                taskMessagesCache.removeValue(forKey: task.id)
-            } else if let sessionId = task.chatSessionId {
-                let session = ChatSession(id: sessionId, title: taskChatTitle(for: task))
-                await chatProvider.selectSession(session, force: true)
-            }
-            isPanelOpen = true
-            return
+    /// Release memory held by a task's chat state.
+    /// Call when a task is permanently deleted to prevent unbounded memory growth.
+    func purgeState(for taskId: String) {
+        taskCancellables[taskId]?.removeAll()
+        taskCancellables.removeValue(forKey: taskId)
+        taskStates.removeValue(forKey: taskId)
+        if activeTaskId == taskId {
+            closeChat()
         }
+        streamingTaskIds.remove(taskId)
+        streamingStatuses.removeValue(forKey: taskId)
+        unreadTaskIds.remove(taskId)
+        log("TaskChatCoordinator: Purged state for task \(taskId)")
+    }
 
-        // Prevent duplicate open calls while one is in progress
+    // MARK: - Open / Close
+
+    /// Open (or resume) a chat panel for a task.
+    /// Gets or creates a TaskChatState, wires its system prompt, and activates it.
+    func openChat(for task: TaskActionItem) async {
+        log("TaskChatCoordinator: openChat for \(task.id), activeTaskId=\(activeTaskId ?? "nil"), isPanelOpen=\(isPanelOpen)")
+
+        // Prevent duplicate open calls
         guard !isOpening else {
             log("TaskChatCoordinator: already opening, skipping")
             return
@@ -140,75 +142,31 @@ class TaskChatCoordinator: ObservableObject {
         isOpening = true
         defer { isOpening = false }
 
-        // Cache current task's messages before switching (preserves in-flight streaming)
-        if let currentTaskId = activeTaskId, !chatProvider.messages.isEmpty {
-            taskMessagesCache[currentTaskId] = chatProvider.messages
-        }
-
-        // Save current ChatProvider state on first open
-        if activeTaskId == nil {
-            savedSession = chatProvider.currentSession
-            savedMessages = chatProvider.messages
-            savedIsInDefaultChat = chatProvider.isInDefaultChat
-            savedWorkingDirectory = chatProvider.workingDirectory
-            savedOverrideAppId = chatProvider.overrideAppId
-        }
-
         activeTaskId = task.id
         markAsRead(task.id)
 
-        // Set workspace path for file-system tools (only if explicitly configured)
-        let configuredPath = TaskAgentSettings.shared.workingDirectory
-        if !configuredPath.isEmpty {
-            workspacePath = configuredPath
-            chatProvider.workingDirectory = workspacePath
-        }
-        // Isolate task messages from the default chat
-        chatProvider.overrideAppId = Self.taskChatAppId
-
-        // Check if we have cached messages for this task (e.g. switching back while streaming)
-        if let cached = taskMessagesCache[task.id] {
-            log("TaskChatCoordinator: restoring \(cached.count) cached messages for task \(task.id)")
-            chatProvider.messages = cached
-            if let sessionId = task.chatSessionId {
-                chatProvider.currentSession = ChatSession(id: sessionId, title: taskChatTitle(for: task))
-                chatProvider.isInDefaultChat = false
+        // Get or create TaskChatState
+        let state: TaskChatState
+        if let existing = taskStates[task.id] {
+            state = existing
+        } else {
+            let configuredPath = TaskAgentSettings.shared.workingDirectory
+            let ws = configuredPath.isEmpty ? (FileManager.default.homeDirectoryForCurrentUser.path) : configuredPath
+            state = TaskChatState(taskId: task.id, workspacePath: ws)
+            // Wire system prompt builder to use ChatProvider's cached context (without history)
+            state.systemPromptBuilder = { [weak self] in
+                self?.chatProvider.buildTaskChatSystemPrompt() ?? ""
             }
-            taskMessagesCache.removeValue(forKey: task.id)
-            isPanelOpen = true
-            return
+            taskStates[task.id] = state
+            observeTaskState(state)
+
+            // Load persisted messages from GRDB
+            await state.loadPersistedMessages()
         }
 
-        // Check if task already has a chat session with messages
-        var needsNewSession = true
-        if let sessionId = task.chatSessionId {
-            // Try to resume existing session
-            let session = ChatSession(id: sessionId, title: taskChatTitle(for: task))
-            await chatProvider.selectSession(session)
+        activeTaskState = state
 
-            if !chatProvider.messages.isEmpty {
-                // Session has messages, resume it
-                needsNewSession = false
-            } else {
-                log("TaskChatCoordinator: session \(sessionId) is empty (previous attempt failed), creating new session")
-            }
-        }
-
-        if needsNewSession {
-            // Create a fresh session for this task
-            if let session = await chatProvider.createNewSession(title: taskChatTitle(for: task), skipGreeting: true, appId: "task-chat") {
-                // Persist the session ID to the task's local storage
-                try? await ActionItemStorage.shared.updateChatSessionId(
-                    taskId: task.id,
-                    sessionId: session.id
-                )
-                // Also update the in-memory task in the store
-                TasksStore.shared.updateChatSessionId(taskId: task.id, sessionId: session.id)
-
-                // Pre-fill the input with context so the user can review before sending
-                pendingInputText = buildInitialPrompt(for: task)
-            }
-        }
+        pendingInputText = ""
 
         isPanelOpen = true
     }
@@ -219,45 +177,67 @@ class TaskChatCoordinator: ObservableObject {
         await openChat(for: task)
     }
 
-    /// Close the task chat panel and restore previous ChatProvider state.
-    func closeChat() async {
-        // Cache current task's messages (preserves in-flight streaming)
-        if let currentTaskId = activeTaskId, !chatProvider.messages.isEmpty {
-            taskMessagesCache[currentTaskId] = chatProvider.messages
-        }
-
+    /// Close the task chat panel. States persist in dictionary for later resumption.
+    func closeChat() {
         isPanelOpen = false
         activeTaskId = nil
+        activeTaskState = nil
         pendingInputText = ""
-
-        // Restore previous ChatProvider state
-        chatProvider.workingDirectory = savedWorkingDirectory
-        chatProvider.overrideAppId = savedOverrideAppId
-        if savedIsInDefaultChat {
-            await chatProvider.switchToDefaultChat()
-        } else if let saved = savedSession {
-            await chatProvider.selectSession(saved)
-        }
-
-        savedSession = nil
-        savedMessages = []
-        savedIsInDefaultChat = true
-        savedWorkingDirectory = nil
-        savedOverrideAppId = nil
     }
 
-    /// Build the initial context prompt for a task chat session.
-    /// Uses the same shared prompt as the tmux agent (TaskAgentSettings.buildTaskPrompt).
+    // MARK: - Background Investigation
+
+    /// Run an AI investigation for a task without opening the panel.
+    /// Uses the ACP bridge via TaskChatState. Skips tasks already sending.
+    func investigateInBackground(for task: TaskActionItem) async {
+        log("TaskChatCoordinator: investigateInBackground for \(task.id)")
+
+        let state: TaskChatState
+        if let existing = taskStates[task.id] {
+            state = existing
+        } else {
+            let configuredPath = TaskAgentSettings.shared.workingDirectory
+            let ws = configuredPath.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.path : configuredPath
+            state = TaskChatState(taskId: task.id, workspacePath: ws)
+            state.systemPromptBuilder = { [weak self] in
+                self?.chatProvider.buildTaskChatSystemPrompt() ?? ""
+            }
+            taskStates[task.id] = state
+            observeTaskState(state)
+            await state.loadPersistedMessages()
+        }
+
+        guard !state.isSending else {
+            log("TaskChatCoordinator: task \(task.id) already sending, skipping investigate")
+            return
+        }
+
+        // Mark chat session as started before sending so the scheduler
+        // doesn't re-fire this task every 60 seconds (dedup check is chatSessionId != nil)
+        try? await ActionItemStorage.shared.updateChatSessionId(taskId: task.id, sessionId: task.id)
+
+        // Record investigation start time so shouldReinvestigateDaily() can throttle re-fires.
+        // Without this, agentStartedAt stays nil and the scheduler re-triggers every 60s.
+        try? await ActionItemStorage.shared.updateAgentState(
+            taskId: task.id, status: "running", sessionName: nil,
+            prompt: nil, plan: nil, startedAt: Date(),
+            completedAt: nil, editedFilesJson: nil
+        )
+
+        // Advance dueAt for recurring tasks so getDueRecurringTasks() won't keep returning them
+        if let currentDueAt = task.dueAt, task.recurrenceRule == "daily" {
+            let nextDueAt = currentDueAt.addingTimeInterval(86400) // +1 day
+            try? await ActionItemStorage.shared.updateActionItemFields(backendId: task.id, dueAt: nextDueAt)
+            log("TaskChatCoordinator: advanced dueAt for daily task \(task.id) to \(nextDueAt)")
+        }
+
+        let prompt = buildInitialPrompt(for: task)
+        await state.sendMessage(prompt)
+    }
+
+    // MARK: - Helpers
+
     private func buildInitialPrompt(for task: TaskActionItem) -> String {
         TaskAgentSettings.shared.buildTaskPrompt(for: task)
-    }
-
-    private func taskChatTitle(for task: TaskActionItem) -> String {
-        let desc = task.description
-        let maxLen = 40
-        if desc.count > maxLen {
-            return String(desc.prefix(maxLen)) + "..."
-        }
-        return desc
     }
 }

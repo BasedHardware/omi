@@ -20,7 +20,7 @@ enum SidebarNavItem: Int, CaseIterable {
         switch self {
         case .dashboard: return "Dashboard"
         case .conversations: return "Conversations"
-        case .chat: return "AI chat"
+        case .chat: return "Chat"
         case .memories: return "Memories"
         case .tasks: return "Tasks"
         case .focus: return "Focus"
@@ -36,15 +36,15 @@ enum SidebarNavItem: Int, CaseIterable {
 
     var icon: String {
         switch self {
-        case .dashboard: return "square.grid.2x2"
+        case .dashboard: return "house.fill"
         case .conversations: return "text.bubble.fill"
         case .chat: return "bubble.left.and.bubble.right.fill"
-        case .memories: return "brain.head.profile"
-        case .tasks: return "checkmark.square.fill"
+        case .memories: return "brain"
+        case .tasks: return "checklist"
         case .focus: return "eye.fill"
         case .advice: return "lightbulb.fill"
         case .rewind: return "clock.arrow.circlepath"
-        case .apps: return "square.grid.2x2.fill"
+        case .apps: return "puzzlepiece.fill"
         case .settings: return "gearshape.fill"
         case .permissions: return "exclamationmark.triangle.fill"
         case .device: return "wave.3.right.circle.fill"
@@ -97,6 +97,8 @@ struct SidebarView: View {
     @State private var isMonitoring = false
     @State private var isTogglingMonitoring = false
     @State private var isTogglingTranscription = false
+    @State private var monitoringAutoRestartAttempts = 0
+    private let maxAutoRestartAttempts = 3
 
     // Page loading states (show spinner in place of icon)
     @State private var isRewindPageLoading = false
@@ -217,7 +219,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        toggleMonitoring(enabled: !isMonitoring)
+                                        // Use combined state so toggle matches what's displayed
+                                        let isFullyOn = isMonitoring && appState.isTranscribing
+                                        toggleMonitoring(enabled: !isFullyOn)
                                     },
                                     showRewindIcon: true
                                 )
@@ -285,7 +289,7 @@ struct SidebarView: View {
                     if updaterViewModel.updateAvailable {
                         Spacer().frame(height: 12)
                         updateAvailableWidget
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .transition(.opacity)
                     }
 
                     Spacer().frame(height: 16)
@@ -316,21 +320,6 @@ struct SidebarView: View {
                             }
                         )
                     }
-
-                    // Help from Founder - navigates to Crisp chat page
-                    NavItemView(
-                        icon: SidebarNavItem.help.icon,
-                        label: SidebarNavItem.help.title,
-                        isSelected: selectedIndex == SidebarNavItem.help.rawValue,
-                        isCollapsed: isCollapsed,
-                        iconWidth: iconWidth,
-                        badge: crispManager.unreadCount,
-                        onTap: {
-                            selectedIndex = SidebarNavItem.help.rawValue
-                            crispManager.markAsRead()
-                            AnalyticsManager.shared.tabChanged(tabName: SidebarNavItem.help.title)
-                        }
-                    )
 
                     // Settings at the very bottom
                     NavItemView(
@@ -411,8 +400,31 @@ struct SidebarView: View {
                 await TierManager.shared.checkTierIfNeeded()
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { notification in
             syncMonitoringState()
+            let isNowMonitoring = (notification.userInfo?["isMonitoring"] as? Bool) ?? ProactiveAssistantsPlugin.shared.isMonitoring
+            if isNowMonitoring {
+                // Reset retry counter on successful start
+                monitoringAutoRestartAttempts = 0
+            } else if screenAnalysisEnabled && !isTogglingMonitoring && monitoringAutoRestartAttempts < maxAutoRestartAttempts {
+                // Auto-restart: monitoring stopped but user's setting says it should be on.
+                // Try to restart after a delay (handles transient failures, sleep/wake, etc.)
+                monitoringAutoRestartAttempts += 1
+                let attempt = monitoringAutoRestartAttempts
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    let plugin = ProactiveAssistantsPlugin.shared
+                    guard !plugin.isMonitoring && screenAnalysisEnabled else { return }
+                    plugin.refreshScreenRecordingPermission()
+                    if plugin.hasScreenRecordingPermission {
+                        log("SidebarView: Auto-restarting monitoring (attempt \(attempt)/\(maxAutoRestartAttempts))")
+                        plugin.startMonitoring { success, _ in
+                            if !success {
+                                log("SidebarView: Auto-restart attempt \(attempt) failed")
+                            }
+                        }
+                    }
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh permissions when app becomes active (user may have changed them in System Settings)
@@ -457,7 +469,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi")
+                Text(UpdateChannel.appDisplayName)
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
@@ -576,7 +588,7 @@ struct SidebarView: View {
                 if !isCollapsed {
                     // Text content
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Get Omi Device")
+                        Text("Get omi Device")
                             .scaledFont(size: 13, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -613,7 +625,7 @@ struct SidebarView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(isCollapsed ? "Get Omi Device" : "")
+        .help(isCollapsed ? "Get omi Device" : "")
     }
 
     // MARK: - Update Available Widget
@@ -786,7 +798,8 @@ struct SidebarView: View {
         VStack(spacing: 6) {
             // Screen Recording permission (primary for Rewind)
             // Also show if ScreenCaptureKit is broken (TCC says yes but SCK says no)
-            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken {
+            // or if permission is stale (developer signing changed)
+            if !appState.hasScreenRecordingPermission || appState.isScreenCaptureKitBroken || appState.isScreenRecordingStale {
                 screenRecordingPermissionRow
             }
 
@@ -828,18 +841,19 @@ struct SidebarView: View {
     private var screenRecordingPermissionRow: some View {
         let isDenied = appState.isScreenRecordingPermissionDenied()
         let isBroken = appState.isScreenCaptureKitBroken  // TCC yes but SCK no
-        let needsReset = isBroken  // Show reset when broken
-        let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
+        let isStale = appState.isScreenRecordingStale  // Developer signing changed
+        let needsReset = isBroken  // Show reset when broken (not stale — stale needs toggle off/on)
+        let color: Color = (isDenied || isBroken || isStale) ? .red : OmiColors.warning
 
         return HStack(spacing: 8) {
-            Image(systemName: (isDenied || isBroken) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+            Image(systemName: (isDenied || isBroken || isStale) ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
                 .scaledFont(size: 15)
                 .foregroundColor(color)
                 .frame(width: iconWidth)
-                .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
+                .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
             if !isCollapsed {
-                Text(isBroken ? "Screen Recording (Reset Required)" : "Screen Recording")
+                Text(isStale ? "Screen Recording (Re-enable)" : (isBroken ? "Screen Recording (Reset Required)" : "Screen Recording"))
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(color)
                     .lineLimit(1)
@@ -847,19 +861,26 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    if needsReset {
+                    if isStale {
+                        // Stale/corrupted TCC — navigate to Permissions page with full instructions
+                        selectedIndex = SidebarNavItem.permissions.rawValue
+                    } else if needsReset {
                         // Track reset button click
                         AnalyticsManager.shared.screenCaptureResetClicked(source: "sidebar_button")
                         // Reset and restart to fix broken ScreenCaptureKit state
                         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
                     } else {
-                        // Request both traditional TCC and ScreenCaptureKit permissions
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                        // Also open settings for manual grant if needed
+                        // Open Settings FIRST so it's visible before system dialog steals focus
                         ScreenCaptureService.openScreenRecordingPreferences()
+                        // Then request permissions (may show system dialog)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            ScreenCaptureService.requestAllScreenCapturePermissions()
+                        }
+                        // Track attempt — if still not granted on next check, show recovery instructions
+                        appState.screenRecordingGrantAttempts += 1
                     }
                 }) {
-                    Text(needsReset ? "Reset" : "Grant")
+                    Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
                         .scaledFont(size: 11, weight: .semibold)
                         .foregroundColor(.white)
                         .padding(.horizontal, 10)
@@ -876,13 +897,13 @@ struct SidebarView: View {
         .padding(.vertical, 9)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
+                .fill(color.opacity(permissionPulse && (isDenied || isBroken || isStale) ? 0.25 : 0.15))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
+                        .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken || isStale) ? 2 : 1)
                 )
         )
-        .help(isCollapsed ? (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required") : "")
+        .help(isCollapsed ? (isStale ? "Screen Recording needs re-enabling" : (isBroken ? "Screen Recording needs reset" : "Screen Recording permission required")) : "")
     }
 
     private var microphonePermissionRow: some View {
@@ -961,8 +982,18 @@ struct SidebarView: View {
                 Spacer()
 
                 Button(action: {
-                    // Always open settings - user needs to configure notification style
-                    appState.openNotificationPreferences()
+                    if isBannerDisabled {
+                        // Banners are off — user needs to change notification style in System Settings
+                        appState.openNotificationPreferences()
+                    } else {
+                        // Auth is not authorized — try lsregister repair first, then fall back to System Settings
+                        AnalyticsManager.shared.notificationRepairTriggered(
+                            reason: "sidebar_fix_button",
+                            previousStatus: "not_authorized",
+                            currentStatus: "not_authorized"
+                        )
+                        appState.repairNotificationAndFallback()
+                    }
                 }) {
                     Text("Fix")
                         .scaledFont(size: 11, weight: .semibold)
@@ -1076,11 +1107,18 @@ struct SidebarView: View {
     }
 
     private func toggleMonitoring(enabled: Bool) {
+        if enabled {
+            // Refresh permission cache before checking (may be stale after user granted access)
+            ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
+        }
+
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Request both traditional TCC and ScreenCaptureKit permissions
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 
@@ -1095,13 +1133,22 @@ struct SidebarView: View {
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
 
+        // Also toggle audio transcription to match (Rewind bundles both)
+        if enabled && !appState.isTranscribing {
+            appState.startTranscription()
+        } else if !enabled && appState.isTranscribing {
+            appState.stopTranscription()
+        }
+
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
                 DispatchQueue.main.async {
                     isTogglingMonitoring = false
                     if !success {
-                        // Revert on failure
+                        // Revert on failure including persistent setting
                         isMonitoring = false
+                        screenAnalysisEnabled = false
+                        AssistantSettings.shared.screenAnalysisEnabled = false
                     }
                 }
             }
@@ -1115,7 +1162,10 @@ struct SidebarView: View {
     }
 
     private func syncMonitoringState() {
-        isMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
+        let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
+        isMonitoring = pluginState
+        // Don't touch screenAnalysisEnabled here — it represents the user's preference,
+        // not the current monitoring state. Auto-restart below will handle recovery.
     }
 
     // MARK: - Page Loading Helpers
@@ -1491,9 +1541,11 @@ private struct SidebarAudioBar: View {
         let variation = 1.0 - (centerOffset * 0.3)
 
         let scaledLevel = clampedLevel * variation
-        let randomVariation = CGFloat.random(in: 0.9...1.1)
+        // Deterministic per-bar variation (avoid CGFloat.random which causes layout churn)
+        let hash = sin(CGFloat(index) * 1.618 + 0.5)
+        let deterministicVariation = 0.9 + 0.2 * (hash * 0.5 + 0.5)
 
-        let height = minHeight + (maxHeight - minHeight) * scaledLevel * randomVariation
+        let height = minHeight + (maxHeight - minHeight) * scaledLevel * deterministicVariation
         return max(minHeight, min(maxHeight, height))
     }
 
@@ -1515,7 +1567,6 @@ private struct SidebarAudioBar: View {
         RoundedRectangle(cornerRadius: 1)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            .animation(.easeOut(duration: 0.08), value: level)
     }
 }
 

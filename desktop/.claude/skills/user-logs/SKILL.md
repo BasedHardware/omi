@@ -10,7 +10,7 @@ argument-hint: "<email>"
 
 Look up user activity, errors, and analytics across Sentry and PostHog.
 
-**Default email:** `i@m13v.com` (use unless user specifies otherwise)
+**Default email:** See `scripts/test-accounts.md` for test account emails and UIDs (use primary account unless user specifies otherwise)
 
 ## Version Filtering (IMPORTANT)
 

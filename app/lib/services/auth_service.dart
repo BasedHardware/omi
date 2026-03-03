@@ -34,27 +34,26 @@ class AuthService {
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    Logger.debug('Using standard Google Sign In for mobile');
+    print('DEBUG_AUTH: Using standard Google Sign In for mobile');
 
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(
       scopes: ['profile', 'email'],
     ).signIn();
-    Logger.debug('Google User: $googleUser');
+    print('DEBUG_AUTH: Google User: $googleUser');
 
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    Logger.debug('Google Auth: $googleAuth');
+    print(
+        'DEBUG_AUTH: Google Auth accessToken=${googleAuth?.accessToken != null}, idToken=${googleAuth?.idToken != null}');
     if (googleAuth == null) {
-      Logger.debug('Failed to sign in with Google: googleAuth is NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40001)');
+      print('DEBUG_AUTH: Failed - googleAuth is NULL');
       return null;
     }
 
     // Create a new credential
     if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      Logger.debug('Failed to sign in with Google: accessToken, idToken are NULL');
-      Logger.error('An error occurred while signing in. Please try again later. (Error: 40002)');
+      print('DEBUG_AUTH: Failed - accessToken and idToken are both NULL');
       return null;
     }
     final credential = GoogleAuthProvider.credential(
@@ -63,9 +62,16 @@ class AuthService {
     );
 
     // Once signed in, return the UserCredential
-    var result = await FirebaseAuth.instance.signInWithCredential(credential);
-    await _updateUserPreferences(result, 'google');
-    return result;
+    try {
+      print('DEBUG_AUTH: Calling signInWithCredential...');
+      var result = await FirebaseAuth.instance.signInWithCredential(credential);
+      print('DEBUG_AUTH: signInWithCredential SUCCESS - uid=${result.user?.uid}');
+      await _updateUserPreferences(result, 'google');
+      return result;
+    } catch (e) {
+      print('DEBUG_AUTH: signInWithCredential FAILED: $e');
+      rethrow;
+    }
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a

@@ -347,7 +347,8 @@ class RewindSettings: ObservableObject {
     /// Default apps that should be excluded from screen capture for privacy
     static let defaultExcludedApps: Set<String> = [
         "Omi Computer",        // Our own app - no point capturing ourselves (legacy name)
-        "Omi Beta",            // Production app name
+        "Omi Beta",            // Legacy production app name
+        "omi",                 // Production app name
         "Omi Dev",             // Development app name
         "Passwords",           // macOS Passwords app
         "1Password",           // 1Password (various versions)
@@ -484,4 +485,11 @@ extension Screenshot {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: timestamp)
     }
+}
+
+// MARK: - TableDocumented
+
+extension Screenshot: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["screenshots"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["screenshots"] ?? [:] }
 }

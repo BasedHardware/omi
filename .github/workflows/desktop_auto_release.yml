@@ -1,0 +1,110 @@
+name: Auto Release Desktop on Main
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'desktop/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  tag-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version and consolidate changelog
+        id: version
+        run: |
+          # Get latest desktop release tag
+          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
+
+          if [ -z "$LATEST" ]; then
+            VERSION="0.0.1"
+          else
+            # Strip v prefix and +build-macos suffix  e.g. v0.11.11+11011-macos -> 0.11.11
+            VER=$(echo "$LATEST" | sed -E 's/^v([0-9.]+)\+[0-9]+-macos$/\1/')
+            MAJOR=$(echo "$VER" | cut -d. -f1)
+            MINOR=$(echo "$VER" | cut -d. -f2)
+            PATCH=$(echo "$VER" | cut -d. -f3)
+            PATCH=$((${PATCH:-0} + 1))
+            VERSION="$MAJOR.$MINOR.$PATCH"
+          fi
+
+          # Build number: 0.11.12 -> 11012  (each component * 1000, summed)
+          BUILD_NUMBER=$(echo "$VERSION" | tr '.' '\n' | awk '{s=s*1000+$1}END{print s}')
+          RELEASE_TAG="v${VERSION}+${BUILD_NUMBER}-macos"
+
+          echo "Latest tag : ${LATEST:-none}"
+          echo "New version: $VERSION"
+          echo "New tag    : $RELEASE_TAG"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+          # Consolidate unreleased changelog entries into a versioned release
+          TODAY=$(date -u +%Y-%m-%d)
+          python3 -c "
+          import json, sys
+
+          with open('desktop/CHANGELOG.json', 'r') as f:
+              data = json.load(f)
+
+          unreleased = data.get('unreleased', [])
+          if not unreleased:
+              unreleased = ['Bug fixes and improvements']
+
+          new_release = {
+              'version': '$VERSION',
+              'date': '$TODAY',
+              'changes': unreleased
+          }
+
+          data.setdefault('releases', []).insert(0, new_release)
+          data['unreleased'] = []
+
+          with open('desktop/CHANGELOG.json', 'w') as f:
+              json.dump(data, f, indent=2)
+              f.write('\n')
+
+          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
+          "
+
+      - name: Commit changelog and create tag
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add desktop/CHANGELOG.json
+          git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
+
+          # Tag the commit that includes the consolidated changelog
+          # NOTE: commit message must NOT contain [skip ci] — Codemagic uses this tag to trigger builds
+          git tag "$RELEASE_TAG"
+          git push origin "$RELEASE_TAG"
+
+      - name: Create PR to sync changelog back to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="changelog/v${VERSION}"
+
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
+            --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
+            --base main \
+            --head "$BRANCH"
+
+          gh pr merge "$BRANCH" --merge --admin || echo "PR merge requires manual approval"

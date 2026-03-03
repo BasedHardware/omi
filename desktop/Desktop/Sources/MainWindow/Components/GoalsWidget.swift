@@ -27,40 +27,25 @@ struct GoalsWidget: View {
                 Spacer()
 
                 // History button
-                Button(action: { showingHistory = true }) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
+                GoalHeaderButton(icon: "clock.arrow.circlepath", tooltip: "Goal history", color: OmiColors.textTertiary) {
+                    showingHistory = true
                 }
-                .buttonStyle(.plain)
 
                 // AI goal generation button (when there are goals but room for more)
                 if goals.count > 0 && goals.count < 3 {
-                    Button(action: { triggerGoalGeneration() }) {
-                        if isGeneratingGoal {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .frame(width: 14, height: 14)
-                        } else {
-                            Image(systemName: "sparkles")
-                                .scaledFont(size: 14, weight: .medium)
-                                .foregroundColor(OmiColors.purplePrimary.opacity(0.8))
-                        }
+                    GoalHeaderButton(icon: "sparkles", tooltip: "Generate AI goal", color: OmiColors.purplePrimary.opacity(0.8), isLoading: isGeneratingGoal) {
+                        triggerGoalGeneration()
                     }
-                    .buttonStyle(.plain)
-                    .disabled(isGeneratingGoal)
                 }
 
                 // Add goal button (only if less than 3 goals)
                 if goals.count < 3 {
-                    Button(action: { showingCreateSheet = true }) {
-                        Image(systemName: "plus")
-                            .scaledFont(size: 14, weight: .medium)
-                            .foregroundColor(OmiColors.textTertiary)
+                    GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
+                        showingCreateSheet = true
                     }
-                    .buttonStyle(.plain)
                 }
             }
+
 
             if goals.isEmpty {
                 // Empty state with AI suggestion
@@ -110,9 +95,10 @@ struct GoalsWidget: View {
             } else {
                 // Goals list
                 VStack(spacing: 12) {
-                    ForEach(goals) { goal in
+                    ForEach(Array(goals.enumerated()), id: \.element.id) { index, goal in
                         GoalRowView(
                             goal: goal,
+                            index: index,
                             onTap: { editingGoal = goal },
                             onUpdateProgress: { value in onUpdateProgress(goal, value) },
                             onDelete: { onDeleteGoal(goal) },
@@ -181,6 +167,7 @@ struct GoalsWidget: View {
 
 struct GoalRowView: View {
     let goal: Goal
+    let index: Int
     let onTap: () -> Void
     let onUpdateProgress: (Double) -> Void
     let onDelete: () -> Void
@@ -219,18 +206,12 @@ struct GoalRowView: View {
     private var dragProgressText: String {
         let currentVal: Double
         if let dv = dragValue {
-            let raw = goal.minValue + dv * (goal.maxValue - goal.minValue)
-            currentVal = max(goal.minValue, min(raw, goal.maxValue))
+            let raw = goal.minValue + dv * (goal.targetValue - goal.minValue)
+            currentVal = max(goal.minValue, min(raw, goal.targetValue))
         } else {
             currentVal = goal.currentValue
         }
-        let current = currentVal == currentVal.rounded()
-            ? String(format: "%.0f", currentVal)
-            : String(format: "%.1f", currentVal)
-        let target = goal.targetValue == goal.targetValue.rounded()
-            ? String(format: "%.0f", goal.targetValue)
-            : String(format: "%.1f", goal.targetValue)
-        return "\(current)/\(target)"
+        return "\(Int(currentVal.rounded()))/\(Int(goal.targetValue.rounded()))"
     }
 
     var body: some View {
@@ -322,9 +303,9 @@ struct GoalRowView: View {
                             }
                             .onEnded { _ in
                                 if let dv = dragValue {
-                                    let finalValue = goal.minValue + dv * (goal.maxValue - goal.minValue)
-                                    let clampedValue = max(goal.minValue, min(finalValue, goal.maxValue))
-                                    let roundedValue = (clampedValue * 10).rounded() / 10
+                                    let finalValue = goal.minValue + dv * (goal.targetValue - goal.minValue)
+                                    let clampedValue = max(goal.minValue, min(finalValue, goal.targetValue))
+                                    let roundedValue = clampedValue.rounded()
                                     onUpdateProgress(roundedValue)
                                 }
                                 isDragging = false
@@ -626,37 +607,7 @@ struct GoalEditSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Emoji selector (only for editing existing goals)
-                    if !isNewGoal {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Icon")
-                                .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textTertiary)
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(availableEmojis, id: \.self) { emoji in
-                                        Button(action: { selectedEmoji = emoji }) {
-                                            Text(emoji)
-                                                .scaledFont(size: 20)
-                                                .frame(width: 40, height: 40)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .fill(selectedEmoji == emoji
-                                                            ? OmiColors.purplePrimary.opacity(0.2)
-                                                            : OmiColors.backgroundTertiary.opacity(0.5))
-                                                )
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .stroke(selectedEmoji == emoji ? OmiColors.purplePrimary : Color.clear, lineWidth: 2)
-                                                )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     // Title field
                     VStack(alignment: .leading, spacing: 8) {
@@ -953,6 +904,56 @@ struct GoalAdviceSheet: View {
                     errorMessage = error.localizedDescription
                     isLoading = false
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Goal Header Button with Tooltip
+
+private struct GoalHeaderButton: View {
+    let icon: String
+    let tooltip: String
+    let color: Color
+    var isLoading: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 14, height: 14)
+            } else {
+                Image(systemName: icon)
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(color)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .overlay(alignment: .bottom) {
+            if isHovered {
+                Text(tooltip)
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(OmiColors.backgroundTertiary)
+                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                    )
+                    .fixedSize()
+                    .offset(y: 24)
+                    .transition(.opacity)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
             }
         }
     }

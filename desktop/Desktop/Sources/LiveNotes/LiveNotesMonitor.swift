@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import GRDB
 
 /// Dedicated monitor for live notes generation during recording sessions.
 /// Accumulates transcript words and triggers AI note generation at word thresholds.
@@ -28,6 +29,9 @@ class LiveNotesMonitor: ObservableObject {
 
     /// Current segment order being processed
     private var currentSegmentOrder: Int = 0
+
+    /// End time of the last segment we extracted words from (cursor for incremental processing)
+    private var lastProcessedSegmentEnd: Double?
 
     /// Minimum words before triggering AI generation
     private let wordThreshold = 50
@@ -78,14 +82,15 @@ class LiveNotesMonitor: ObservableObject {
         wordBuffer = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
         existingNotesContext = []
 
         // Initialize Gemini client if not already done
         if geminiClient == nil {
             do {
                 // Use Gemini 3 Pro for better note generation quality
-                geminiClient = try GeminiClient(model: "gemini-3-pro-preview")
-                log("LiveNotesMonitor: GeminiClient initialized with gemini-3-pro-preview")
+                geminiClient = try GeminiClient(model: "gemini-pro-latest")
+                log("LiveNotesMonitor: GeminiClient initialized with gemini-pro-latest")
             } catch {
                 logError("LiveNotesMonitor: Failed to initialize GeminiClient", error: error)
             }
@@ -104,6 +109,7 @@ class LiveNotesMonitor: ObservableObject {
         wordBuffer = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
     }
 
     /// Clear all notes (used when recording stops)
@@ -113,6 +119,7 @@ class LiveNotesMonitor: ObservableObject {
         existingNotesContext = []
         lastProcessedSegmentOrder = -1
         currentSegmentOrder = 0
+        lastProcessedSegmentEnd = nil
     }
 
     // MARK: - Note Operations
@@ -209,12 +216,27 @@ class LiveNotesMonitor: ObservableObject {
         // Track segment order
         currentSegmentOrder = segments.count
 
-        // Extract new words from segments
-        let allWords = segments.flatMap { $0.text.split(separator: " ").map(String.init) }
+        // Only extract words from segments we haven't processed yet.
+        // Use the last processed segment's end time as a cursor to find new content.
+        let newSegments: ArraySlice<SpeakerSegment>
+        if let lastEnd = lastProcessedSegmentEnd {
+            // Find segments that are new or were updated (end time > last processed)
+            if let startIdx = segments.firstIndex(where: { $0.end > lastEnd }) {
+                newSegments = segments[startIdx...]
+            } else {
+                return  // No new segments
+            }
+        } else {
+            newSegments = segments[...]
+        }
 
-        // Only process new words
-        let newWords = Array(allWords.dropFirst(wordBuffer.count))
+        let newWords = newSegments.flatMap { $0.text.split(separator: " ").map(String.init) }
         guard !newWords.isEmpty else { return }
+
+        // Update cursor to the end of the last segment we processed
+        if let lastSeg = segments.last {
+            lastProcessedSegmentEnd = lastSeg.end
+        }
 
         wordBuffer.append(contentsOf: newWords)
 
@@ -298,6 +320,10 @@ class LiveNotesMonitor: ObservableObject {
                 } else {
                     await MainActor.run { self.isGenerating = false }
                 }
+            } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                // Session was deleted during async AI generation — not an error
+                log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
+                await MainActor.run { self.isGenerating = false }
             } catch {
                 logError("LiveNotesMonitor: Failed to generate note", error: error)
                 await MainActor.run { self.isGenerating = false }

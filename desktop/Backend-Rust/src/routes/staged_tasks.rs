@@ -298,6 +298,8 @@ async fn promote_staged_task(
             top_task.category.as_deref(),
             top_task.relevance_score,
             Some(true), // from_staged: promoted from staged_tasks
+            None, // recurrence_rule
+            None, // recurrence_parent_id
         )
         .await
     {
@@ -435,6 +437,7 @@ async fn migrate_ai_tasks(
                     None,
                     None,
                     None,
+                    None, // recurrence_rule
                 )
                 .await
             {

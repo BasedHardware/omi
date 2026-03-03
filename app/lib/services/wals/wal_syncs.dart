@@ -10,6 +10,7 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class WalSyncs implements IWalSync {
@@ -159,8 +160,17 @@ class WalSyncs implements IWalSync {
     _isCancelled = false;
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
+    final allMissing = await getMissingWals();
+    DebugLogManager.logEvent('sync_started', {
+      'totalMissingWals': allMissing.length,
+      'sdcard': allMissing.where((w) => w.storage == WalStorage.sdcard).length,
+      'flashPage': allMissing.where((w) => w.storage == WalStorage.flashPage).length,
+      'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
+    });
+
     // Phase 1a: Download SD card data to phone
     Logger.debug("WalSyncs: Phase 1a - Downloading SD card data to phone");
+    DebugLogManager.logInfo('Sync Phase 1a: Downloading SD card data to phone');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
     final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
@@ -171,39 +181,47 @@ class WalSyncs implements IWalSync {
 
       if (preferredMethod == 'wifi' && wifiSupported) {
         usedWifi = true;
+        DebugLogManager.logInfo('SD card sync using WiFi', {'walCount': missingSDCardWals.length});
         await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
       } else {
+        DebugLogManager.logInfo('SD card sync using BLE', {'walCount': missingSDCardWals.length});
         await _sdcardSync.syncAll(progress: progress);
       }
     }
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after SD card phase");
+      DebugLogManager.logWarning('Sync cancelled after SD card phase');
       return resp;
     }
 
     // Phase 1b: Download flash page data to phone
     Logger.debug("WalSyncs: Phase 1b - Downloading flash page data to phone");
+    DebugLogManager.logInfo('Sync Phase 1b: Downloading flash page data to phone');
     await _flashPageSync.syncAll(progress: progress);
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");
+      DebugLogManager.logWarning('Sync cancelled after flash page phase');
       return resp;
     }
 
     if (usedWifi) {
       Logger.debug("WalSyncs: Waiting for internet after WiFi transfer...");
+      DebugLogManager.logInfo('Waiting for internet after WiFi transfer');
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.waitingForInternet);
       await _waitForInternet();
     }
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after waiting for internet");
+      DebugLogManager.logWarning('Sync cancelled while waiting for internet');
       return resp;
     }
 
     // Phase 2: Upload all phone files to cloud (includes SD card and flash page downloads)
     Logger.debug("WalSyncs: Phase 2 - Uploading phone files to cloud");
+    DebugLogManager.logInfo('Sync Phase 2: Uploading phone files to cloud');
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
     var partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
@@ -212,6 +230,11 @@ class WalSyncs implements IWalSync {
       resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
+
+    DebugLogManager.logEvent('sync_completed', {
+      'newConversations': resp.newConversationIds.length,
+      'updatedConversations': resp.updatedConversationIds.length,
+    });
 
     return resp;
   }
@@ -266,10 +289,12 @@ class WalSyncs implements IWalSync {
     for (int i = 0; i < 15; i++) {
       if (connectivity.isConnected) {
         Logger.debug("WalSyncs: Internet available after ${i * 2}s");
+        DebugLogManager.logInfo('Internet restored after ${i * 2}s');
         return;
       }
       await Future.delayed(const Duration(seconds: 2));
     }
     Logger.debug("WalSyncs: Internet not available after 30s, proceeding anyway");
+    DebugLogManager.logWarning('Internet not available after 30s, proceeding anyway');
   }
 }

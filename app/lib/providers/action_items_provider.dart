@@ -286,19 +286,19 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
+    // Remove immediately to prevent dismissed Dismissible from being rebuilt
+    _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
+    notifyListeners();
+
     try {
       final success = await api.deleteActionItem(
         item.id,
       );
 
-      if (success) {
-        _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
-        notifyListeners();
-        return true;
-      } else {
+      if (!success) {
         Logger.debug('Failed to delete action item on server');
-        return false;
       }
+      return success;
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
       return false;
@@ -396,9 +396,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final updates = Map<String, int>.from(_pendingSortUpdates);
     _pendingSortUpdates.clear();
 
-    final items = updates.entries
-        .map((e) => {'id': e.key, 'sort_order': e.value})
-        .toList();
+    final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
     await api.batchUpdateActionItems(items);
   }
 
@@ -407,9 +405,7 @@ class ActionItemsProvider extends ChangeNotifier {
     final updates = Map<String, int>.from(_pendingIndentUpdates);
     _pendingIndentUpdates.clear();
 
-    final items = updates.entries
-        .map((e) => {'id': e.key, 'indent_level': e.value})
-        .toList();
+    final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
     await api.batchUpdateActionItems(items);
   }
 

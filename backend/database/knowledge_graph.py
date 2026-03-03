@@ -96,8 +96,6 @@ class KnowledgeEdge:
         )
 
 
-
-
 def get_knowledge_nodes(uid: str) -> List[Dict[str, Any]]:
     user_ref = db.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
@@ -114,7 +112,7 @@ def get_knowledge_node(uid: str, node_id: str) -> Optional[Dict[str, Any]]:
 def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
     user_ref = db.collection(users_collection).document(uid)
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    
+
     node_id = node_data.get('id')
     if not node_id:
         existing_node = find_node_by_label_or_alias(uid, node_data.get('label', ''))
@@ -124,10 +122,10 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         else:
             node_id = str(uuid.uuid4())
         node_data['id'] = node_id
-    
+
     node_ref = nodes_ref.document(node_id)
     existing = node_ref.get()
-    
+
     if not existing.exists:
         existing_node_by_label = find_node_by_label_or_alias(uid, node_data.get('label', ''))
         if existing_node_by_label:
@@ -141,11 +139,11 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         existing_memory_ids = set(existing_data.get('memory_ids', []))
         new_memory_ids = set(node_data.get('memory_ids', []))
         merged_memory_ids = list(existing_memory_ids | new_memory_ids)
-        
+
         existing_aliases = set(existing_data.get('aliases', []))
         new_aliases = set(node_data.get('aliases', []))
         merged_aliases = list(existing_aliases | new_aliases)
-        
+
         node_data['memory_ids'] = merged_memory_ids
         node_data['aliases'] = merged_aliases
         node_data['updated_at'] = datetime.now(timezone.utc)
@@ -157,7 +155,7 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         node_data['updated_at'] = datetime.now(timezone.utc)
         node_data['label_lower'] = node_data.get('label', '').lower()
         node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
-    
+
     node_ref.set(node_data)
     return node_data
 
@@ -165,23 +163,21 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
 def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]]:
     if not label:
         return None
-        
+
     nodes_ref = db.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
     label_lower = label.lower()
-    
+
     query = nodes_ref.where(filter=FieldFilter('label_lower', '==', label_lower)).limit(1)
     results = list(query.stream())
     if results:
         return results[0].to_dict()
-    
+
     query = nodes_ref.where(filter=FieldFilter('aliases_lower', 'array_contains', label_lower)).limit(1)
     results = list(query.stream())
     if results:
         return results[0].to_dict()
-    
+
     return None
-
-
 
 
 def get_knowledge_edges(uid: str) -> List[Dict[str, Any]]:
@@ -193,30 +189,28 @@ def get_knowledge_edges(uid: str) -> List[Dict[str, Any]]:
 def upsert_knowledge_edge(uid: str, edge_data: Dict[str, Any]) -> Dict[str, Any]:
     user_ref = db.collection(users_collection).document(uid)
     edges_ref = user_ref.collection(knowledge_edges_collection)
-    
+
     edge_id = edge_data.get('id')
     if not edge_id:
         edge_id = f"{edge_data['source_id']}_{edge_data['label']}_{edge_data['target_id']}"
         edge_data['id'] = edge_id
-    
+
     edge_ref = edges_ref.document(edge_id)
     existing = edge_ref.get()
-    
+
     if existing.exists:
         existing_data = existing.to_dict()
         existing_memory_ids = set(existing_data.get('memory_ids', []))
         new_memory_ids = set(edge_data.get('memory_ids', []))
         merged_memory_ids = list(existing_memory_ids | new_memory_ids)
-        
+
         edge_data['memory_ids'] = merged_memory_ids
         edge_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
     else:
         edge_data['created_at'] = datetime.now(timezone.utc)
-    
+
     edge_ref.set(edge_data)
     return edge_data
-
-
 
 
 def get_knowledge_graph(uid: str) -> Dict[str, Any]:
@@ -228,7 +222,7 @@ def get_knowledge_graph(uid: str) -> Dict[str, Any]:
 
 def delete_knowledge_graph(uid: str) -> None:
     user_ref = db.collection(users_collection).document(uid)
-    
+
     def _batch_delete(coll_ref):
         while True:
             docs = list(coll_ref.limit(500).stream())
@@ -238,9 +232,9 @@ def delete_knowledge_graph(uid: str) -> None:
             for doc in docs:
                 batch.delete(doc.reference)
             batch.commit()
-    
+
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
     _batch_delete(nodes_ref)
-    
+
     edges_ref = user_ref.collection(knowledge_edges_collection)
     _batch_delete(edges_ref)

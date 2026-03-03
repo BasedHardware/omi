@@ -58,9 +58,9 @@ class CrispManager: ObservableObject {
             lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
         }
 
-        // Poll immediately, then every 30 seconds
+        // Poll immediately, then every 2 minutes
         pollForMessages()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pollForMessages()
             }

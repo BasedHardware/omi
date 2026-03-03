@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import mimetypes
 import re
 from pathlib import Path
@@ -10,6 +11,9 @@ from PIL import Image
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class File:
@@ -99,9 +103,47 @@ class FileChatTool:
 
     def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
         """Process chat with file attachments (streaming)"""
+        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
+        files = [FileChat(**f) for f in files_data]
+        all_images = all(f.is_image() for f in files) if files else False
+
+        if all_images and files:
+            logger.info(f"[FileChat] All {len(files)} files are images, using Chat Completions vision API")
+            answer = self._ask_vision_stream(question, files, callback)
+            return answer
+
         self._ensure_thread_and_assistant()
         answer = self.ask_stream(self.uid, question, file_ids, self.thread_id, self.assistant_id, callback)
         return answer
+
+    def _ask_vision_stream(self, question: str, files: list, callback=None):
+        """Use Chat Completions API with vision for image-only chats (streaming)"""
+        contents = [{"type": "text", "text": question}]
+        for file in files:
+            file_content = openai.files.content(file.openai_file_id)
+            b64 = base64.b64encode(file_content.read()).decode('utf-8')
+            mime = file.mime_type or 'image/png'
+            contents.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "auto"},
+                }
+            )
+
+        output_list = []
+        stream = openai.chat.completions.create(
+            model="gpt-4.1",
+            messages=[{"role": "user", "content": contents}],
+            stream=True,
+            max_tokens=2048,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                callback.put_data_nowait(delta.content)
+                output_list.append(delta.content)
+        callback.end_nowait()
+        return ''.join(output_list)
 
     def _ensure_thread_and_assistant(self):
         """Ensure thread and assistant exist, create if needed, and save to database"""
@@ -113,9 +155,9 @@ class FileChatTool:
             # Try to retrieve existing thread
             try:
                 thread = openai.beta.threads.retrieve(self.thread_id, timeout=timeout)
-                print(f"Retrieved existing thread: {thread.id}")
+                logger.info(f"Retrieved existing thread: {thread.id}")
             except Exception as e:
-                print(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
+                logger.error(f"Failed to retrieve thread {self.thread_id}, creating new one. Error: {e}")
                 self.thread_id = None
 
         if not self.thread_id:
@@ -123,7 +165,7 @@ class FileChatTool:
                 thread = openai.beta.threads.create(timeout=timeout)
                 self.thread_id = thread.id
                 created_new = True
-                print(f"Created new thread: {self.thread_id}")
+                logger.info(f"Created new thread: {self.thread_id}")
             except Exception as e:
                 raise Exception(f"Failed to create OpenAI thread: {e}")
 
@@ -132,9 +174,9 @@ class FileChatTool:
             # Try to retrieve existing assistant
             try:
                 assistant = openai.beta.assistants.retrieve(self.assistant_id, timeout=timeout)
-                print(f"Retrieved existing assistant: {assistant.id}")
+                logger.info(f"Retrieved existing assistant: {assistant.id}")
             except Exception as e:
-                print(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
+                logger.error(f"Failed to retrieve assistant {self.assistant_id}, creating new one. Error: {e}")
                 self.assistant_id = None
 
         if not self.assistant_id:
@@ -148,7 +190,7 @@ class FileChatTool:
                 )
                 self.assistant_id = assistant.id
                 created_new = True
-                print(f"Created new assistant: {self.assistant_id}")
+                logger.info(f"Created new assistant: {self.assistant_id}")
             except Exception as e:
                 raise Exception(f"Failed to create OpenAI assistant: {e}")
 
@@ -159,7 +201,7 @@ class FileChatTool:
                     self.uid, self.chat_session_id, self.thread_id, self.assistant_id
                 )
             except Exception as e:
-                print(f"Failed to save thread/assistant IDs to database: {e}")
+                logger.error(f"Failed to save thread/assistant IDs to database: {e}")
                 # Continue anyway - IDs will be recreated next time
 
     def _fill_question(self, uid, question, file_ids: List[str], thread_id: str):
@@ -235,7 +277,7 @@ class FileChatTool:
 
     def cleanup(self):
         """Cleanup chat session files, thread, and assistant"""
-        print("start cleanup thread chat with file")
+        logger.info("start cleanup thread chat with file")
         files = chat_db.get_chat_files(self.uid)
         # delete file in db
         if files:
@@ -247,15 +289,15 @@ class FileChatTool:
                 try:
                     openai.files.delete(file.openai_file_id, timeout=30.0)
                 except Exception as e:
-                    print(f"Failed to delete file {file.openai_file_id}: {e}")
+                    logger.error(f"Failed to delete file {file.openai_file_id}: {e}")
 
         if self.thread_id:
             try:
                 openai.beta.threads.delete(self.thread_id, timeout=30.0)
             except Exception as e:
-                print(f"Failed to delete thread {self.thread_id}: {e}")
+                logger.error(f"Failed to delete thread {self.thread_id}: {e}")
         if self.assistant_id:
             try:
                 openai.beta.assistants.delete(self.assistant_id, timeout=30.0)
             except Exception as e:
-                print(f"Failed to delete assistant {self.assistant_id}: {e}")
+                logger.error(f"Failed to delete assistant {self.assistant_id}: {e}")

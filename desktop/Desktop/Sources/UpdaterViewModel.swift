@@ -2,32 +2,70 @@ import Foundation
 import SwiftUI
 import Sparkle
 
+/// Update channel for staged releases
+enum UpdateChannel: String, CaseIterable {
+    case stable = "stable"
+    case beta = "beta"
+    case staging = "staging"
+
+    var displayName: String {
+        switch self {
+        case .stable: return "Stable"
+        case .beta: return "Beta"
+        case .staging: return "Beta"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .stable: return "Recommended for most users"
+        case .beta: return "Early access to new features"
+        case .staging: return "Get updates as soon as they're built"
+        }
+    }
+
+    /// Cases visible in the Settings picker (hides real .beta)
+    static var visibleCases: [UpdateChannel] {
+        [.stable, .staging]
+    }
+
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta/staging
+    static var appDisplayName: String {
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
+        return (channel == "staging" || channel == "beta") ? "Omi Beta" : "omi"
+    }
+}
+
+private let kUpdateChannelKey = "update_channel"
+
 /// Delegate to track Sparkle update events for analytics
 final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
     /// Back-reference to the view model (set after init)
     weak var viewModel: UpdaterViewModel?
 
+    // NOTE: All delegate methods use logSync() to write synchronously to disk.
+    // Sparkle may terminate the app immediately after willInstallUpdate / didAbortWithError,
+    // so async logging (Task + logQueue.async) would be lost.
+
     /// Called when Sparkle is about to check for updates (permission gate)
     func updater(_ updater: SPUUpdater, mayPerform check: SPUUpdateCheck) throws {
+        logSync("Sparkle: Starting update check")
         Task { @MainActor in
-            log("Sparkle: Starting update check")
             AnalyticsManager.shared.updateCheckStarted()
         }
     }
 
     /// Called when Sparkle finishes loading the appcast
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
-        Task { @MainActor in
-            log("Sparkle: Appcast loaded (\(appcast.items.count) items)")
-        }
+        logSync("Sparkle: Appcast loaded (\(appcast.items.count) items)")
     }
 
     /// Called when Sparkle finds a valid update
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         let version = item.displayVersionString
+        logSync("Sparkle: Found update v\(version)")
         Task { @MainActor in
-            log("Sparkle: Found update v\(version)")
             AnalyticsManager.shared.updateAvailable(version: version)
             self.viewModel?.updateAvailable = true
             self.viewModel?.availableVersion = version
@@ -36,8 +74,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
     /// Called when no update is available
     func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        logSync("Sparkle: No update available")
         Task { @MainActor in
-            log("Sparkle: No update available")
             AnalyticsManager.shared.updateNotFound()
             self.viewModel?.updateAvailable = false
         }
@@ -51,21 +89,116 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         let nsError = error as NSError
         let isUpToDate = nsError.domain == SUSparkleErrorDomain
             && nsError.code == 1001 /* SUNoUpdateError */
-        Task { @MainActor in
-            if isUpToDate {
-                log("Sparkle: Already up to date")
-            } else {
-                log("Sparkle: Update check failed - \(message)")
-                AnalyticsManager.shared.updateCheckFailed(error: message)
+        if isUpToDate {
+            logSync("Sparkle: Already up to date")
+        } else {
+            logSync("Sparkle: Update check failed - \(message) [domain=\(nsError.domain) code=\(nsError.code)]")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                logSync("Sparkle: Underlying error - \(underlying.localizedDescription) [domain=\(underlying.domain) code=\(underlying.code)]")
+            }
+            for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
+                logSync("Sparkle: Error info [\(key)] = \(value)")
+            }
+            // Build diagnostic properties for analytics
+            let errorDomain = nsError.domain
+            let errorCode = nsError.code
+            var underlyingMessage: String? = nil
+            var underlyingDomain: String? = nil
+            var underlyingCode: Int? = nil
+
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                underlyingMessage = underlying.localizedDescription
+                underlyingDomain = underlying.domain
+                underlyingCode = underlying.code
+            }
+
+            Task { @MainActor in
+                AnalyticsManager.shared.updateCheckFailed(
+                    error: message,
+                    errorDomain: errorDomain,
+                    errorCode: errorCode,
+                    underlyingError: underlyingMessage,
+                    underlyingDomain: underlyingDomain,
+                    underlyingCode: underlyingCode
+                )
+            }
+
+            // SUInstallationError (4005): Sparkle's installer failed to launch.
+            // On macOS 26, AuthorizationCreate/SMJobSubmit can fail due to stricter
+            // code signature validation or on-demand-only launchd mode.
+            // Fallback: open the download page so the user can install manually.
+            let isInstallationError = nsError.domain == SUSparkleErrorDomain && nsError.code == 4005
+            if isInstallationError {
+                logSync("Sparkle: Installation failed, opening download page as fallback")
+                if let url = URL(string: "https://macos.omi.me") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }
 
-    /// Called when an update will be installed
+    /// Tells Sparkle which non-default channels this client wants to see.
+    /// Channels are additive: the default (stable) channel is always included.
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        switch raw {
+        case "staging":
+            return Set(["staging", "beta"])
+        case "beta":
+            return Set(["beta"])
+        default:
+            return Set() // empty = default (stable) channel only
+        }
+    }
+
+    /// Called after Sparkle has launched the installer and submitted launchd jobs.
+    /// On macOS 26+, launchd may be in "on-demand-only mode" which prevents RunAtLoad
+    /// services from starting. We force-start them via launchctl kickstart as a backup
+    /// to Sparkle 2.9.0's built-in probe (PR #2852).
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        logSync("Sparkle: Installer launched for v\(item.displayVersionString), kickstarting services")
+        kickstartSparkleServices()
+    }
+
+    /// Force-start Sparkle's launchd services to work around macOS 26 on-demand-only mode.
+    /// Services submitted via SMJobSubmit with RunAtLoad=YES may not start immediately.
+    /// Using `launchctl kickstart` forces launchd to spawn them right away.
+    private func kickstartSparkleServices() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+
+        let updaterLabel = "\(bundleID)-sparkle-updater"
+        let progressLabel = "\(bundleID)-sparkle-progress"
+        let uid = getuid()
+
+        // Try multiple times to handle timing variance
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) {
+                for label in [progressLabel, updaterLabel] {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+                    process.arguments = ["kickstart", "-p", "gui/\(uid)/\(label)"]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
+                        if process.terminationStatus == 0 {
+                            logSync("Sparkle kickstart: started \(label) (delay=\(delay)s)")
+                        }
+                    } catch {
+                        // Best effort — service may not exist yet or already running
+                    }
+                }
+            }
+        }
+    }
+
+    /// Called when an update will be installed (app may terminate immediately after)
     func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
         let version = item.displayVersionString
+        logSync("Sparkle: Installing update v\(version)")
         Task { @MainActor in
-            log("Sparkle: Installing update v\(version)")
             AnalyticsManager.shared.updateInstalled(version: version)
             self.viewModel?.updateAvailable = false
         }
@@ -113,6 +246,17 @@ final class UpdaterViewModel: ObservableObject {
     /// Nonisolated snapshot for cross-actor reads
     private nonisolated(unsafe) static var _isUpdateInProgress: Bool = false
 
+    /// Selected update channel (persisted to UserDefaults)
+    @Published var updateChannel: UpdateChannel {
+        didSet {
+            UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
+            activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
+            if isInitialized {
+                AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
+            }
+        }
+    }
+
     /// Whether a new update is available (set by delegate callbacks)
     @Published var updateAvailable: Bool = false
 
@@ -135,6 +279,10 @@ final class UpdaterViewModel: ObservableObject {
         // Initialize published properties from updater state (must be before using `self`)
         automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
         automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
+
+        // Initialize update channel from UserDefaults
+        let storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
         // Wire up delegate back-reference
         updaterDelegate.viewModel = self
@@ -164,6 +312,11 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
+    /// Background update check (no UI). Used after channel changes.
+    func checkForUpdatesInBackground() {
+        updaterController.updater.checkForUpdatesInBackground()
+    }
+
     /// Get the current app version string
     var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
@@ -173,4 +326,14 @@ final class UpdaterViewModel: ObservableObject {
     var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
     }
+
+    /// The active channel label, including the hidden "staging" option
+    @Published var activeChannelLabel: String = {
+        let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        switch raw {
+        case "staging": return "Beta"
+        case "beta": return "Beta"
+        default: return ""
+        }
+    }()
 }

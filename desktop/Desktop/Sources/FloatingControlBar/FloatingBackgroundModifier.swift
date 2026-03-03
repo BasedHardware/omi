@@ -39,6 +39,10 @@ struct FloatingBackgroundModifier: ViewModifier {
                 }
             )
             .cornerRadius(cornerRadius)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
+            )
     }
 }
 

@@ -100,7 +100,11 @@ actor TaskPromotionService {
         }
 
         if !promotedTasks.isEmpty {
-            log("TaskPromotion: Promoted \(promotedTasks.count) tasks total")
+            let count = promotedTasks.count
+            log("TaskPromotion: Promoted \(count) tasks total")
+            await MainActor.run {
+                AnalyticsManager.shared.taskPromoted(taskCount: count)
+            }
         }
         return promotedTasks
     }

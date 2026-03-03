@@ -410,7 +410,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                                       _isUpdatingLanguage = true;
                                     });
                                     try {
-                                      final success = await homeProvider.updateUserPrimaryLanguage(entry.value);
+                                      final userProvider = Provider.of<UserProvider>(context, listen: false);
+                                      final success = await homeProvider.updateUserPrimaryLanguage(entry.value,
+                                          userProvider: userProvider);
                                       if (success) {
                                         captureProvider.onRecordProfileSettingChanged();
                                         MixpanelManager().languageChanged(entry.value);

@@ -14,6 +14,11 @@ import 'package:omi/utils/logger.dart';
 
 enum BottomSheetView { share, exportTranscript, exportSummary }
 
+void shareConversationLink(ServerConversation conversation, {Rect? sharePositionOrigin}) {
+  final content = 'https://h.omi.me/conversations/${conversation.id}';
+  Share.share(content, subject: conversation.structured.title, sharePositionOrigin: sharePositionOrigin);
+}
+
 enum ExportType { txt, pdf, markdown }
 
 void _copyTranscript(BuildContext context, ServerConversation conversation) {
