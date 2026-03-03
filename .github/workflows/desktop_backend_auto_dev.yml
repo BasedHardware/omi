@@ -1,0 +1,73 @@
+name: Auto Deploy Desktop Backend to Development
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'desktop/Backend-Rust/**'
+
+env:
+  SERVICE: desktop-backend
+  REGION: us-central1
+
+jobs:
+  deploy:
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Google Service Account
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./desktop/Backend-Rust
+          file: ./desktop/Backend-Rust/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Connect to GKE cluster
+        run: |
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
+          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy desktop-backend to GKE
+        run: |
+          helm -n dev-omi-backend upgrade --install \
+            dev-omi-desktop-backend \
+            ./desktop/Backend-Rust/charts/desktop-backend \
+            -f ./desktop/Backend-Rust/charts/desktop-backend/dev_values.yaml
+          kubectl -n dev-omi-backend rollout restart deployment/dev-omi-desktop-backend
+          kubectl -n dev-omi-backend rollout status deployment/dev-omi-desktop-backend --timeout=180s
+
+      - name: Show Output
+        run: echo "Desktop backend deployed to development environment"
