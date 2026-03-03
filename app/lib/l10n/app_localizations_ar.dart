@@ -8218,4 +8218,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'متأخرة';
+
+  @override
+  String get showDailyScoreOnHomepage => 'عرض النتيجة اليومية على الصفحة الرئيسية';
+
+  @override
+  String get showTasksOnHomepage => 'عرض المهام على الصفحة الرئيسية';
 }

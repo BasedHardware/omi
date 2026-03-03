@@ -2627,5 +2627,7 @@
     "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
     "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
     "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
-  "tasksOverdue": "متأخرة"
+  "tasksOverdue": "متأخرة",
+    "showDailyScoreOnHomepage": "عرض النتيجة اليومية على الصفحة الرئيسية",
+    "showTasksOnHomepage": "عرض المهام على الصفحة الرئيسية"
 }

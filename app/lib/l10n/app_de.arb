@@ -2628,5 +2628,7 @@
     "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen",
     "tasksCleanTodayTitle": "Heutige Aufgaben bereinigen?",
     "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt",
-  "tasksOverdue": "Überfällig"
+  "tasksOverdue": "Überfällig",
+    "showDailyScoreOnHomepage": "Tagespunktzahl auf der Startseite anzeigen",
+    "showTasksOnHomepage": "Aufgaben auf der Startseite anzeigen"
 }

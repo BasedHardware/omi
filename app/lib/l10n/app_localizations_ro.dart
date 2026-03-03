@@ -8318,4 +8318,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Întârziate';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
+
+  @override
+  String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
 }

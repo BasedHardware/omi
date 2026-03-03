@@ -8314,4 +8314,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Lejárt';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Napi pontszám megjelenítése a főoldalon';
+
+  @override
+  String get showTasksOnHomepage => 'Feladatok megjelenítése a főoldalon';
 }

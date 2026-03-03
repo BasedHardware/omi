@@ -8347,4 +8347,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Überfällig';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tagespunktzahl auf der Startseite anzeigen';
+
+  @override
+  String get showTasksOnHomepage => 'Aufgaben auf der Startseite anzeigen';
 }

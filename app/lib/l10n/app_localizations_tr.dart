@@ -8289,4 +8289,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Gecikmiş';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Ana sayfada günlük puanı göster';
+
+  @override
+  String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
 }

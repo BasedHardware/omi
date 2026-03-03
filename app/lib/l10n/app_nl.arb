@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
     "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
     "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
-  "tasksOverdue": "Achterstallig"
+  "tasksOverdue": "Achterstallig",
+    "showDailyScoreOnHomepage": "Dagelijkse score weergeven op startpagina",
+    "showTasksOnHomepage": "Taken weergeven op startpagina"
 }

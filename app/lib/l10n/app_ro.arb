@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza",
     "tasksCleanTodayTitle": "Curăți sarcinile de azi?",
     "tasksCleanTodayMessage": "Aceasta va elimina doar termenele limită",
-  "tasksOverdue": "Întârziate"
+  "tasksOverdue": "Întârziate",
+    "showDailyScoreOnHomepage": "Afișați scorul zilnic pe pagina principală",
+    "showTasksOnHomepage": "Afișați sarcinile pe pagina principală"
 }

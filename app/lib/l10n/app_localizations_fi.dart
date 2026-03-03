@@ -8275,4 +8275,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Myöhässä';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Näytä päivittäinen pistemäärä etusivulla';
+
+  @override
+  String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
 }

@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
     "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
     "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
-  "tasksOverdue": "เกินกำหนด"
+  "tasksOverdue": "เกินกำหนด",
+    "showDailyScoreOnHomepage": "แสดงคะแนนประจำวันบนหน้าหลัก",
+    "showTasksOnHomepage": "แสดงงานบนหน้าหลัก"
 }

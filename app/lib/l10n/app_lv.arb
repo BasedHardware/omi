@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
     "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
     "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
-  "tasksOverdue": "Nokavētas"
+  "tasksOverdue": "Nokavētas",
+    "showDailyScoreOnHomepage": "Rādīt dienas rezultātu sākumlapā",
+    "showTasksOnHomepage": "Rādīt uzdevumus sākumlapā"
 }

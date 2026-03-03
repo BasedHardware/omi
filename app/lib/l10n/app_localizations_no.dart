@@ -8271,4 +8271,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Forfalt';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Vis daglig poengsum på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis oppgaver på hjemmesiden';
 }

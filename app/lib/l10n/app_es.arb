@@ -2661,5 +2661,7 @@
     "anyoneWithLinkCanView": "Cualquier persona con el enlace puede ver",
     "tasksCleanTodayTitle": "¿Limpiar las tareas de hoy?",
     "tasksCleanTodayMessage": "Esto solo eliminará los plazos",
-  "tasksOverdue": "Vencidas"
+  "tasksOverdue": "Vencidas",
+    "showDailyScoreOnHomepage": "Mostrar puntuación diaria en la página de inicio",
+    "showTasksOnHomepage": "Mostrar tareas en la página de inicio"
 }

@@ -10086,5 +10086,13 @@
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
     },
-  "tasksOverdue": "Overdue"
+  "tasksOverdue": "Overdue",
+    "showDailyScoreOnHomepage": "Show Daily Score on homepage",
+    "@showDailyScoreOnHomepage": {
+        "description": "Description for show daily score toggle in developer settings"
+    },
+    "showTasksOnHomepage": "Show Tasks on homepage",
+    "@showTasksOnHomepage": {
+        "description": "Description for show tasks toggle in developer settings"
+    }
 }

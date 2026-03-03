@@ -8327,4 +8327,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Scadute';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra punteggio giornaliero nella homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra attività nella homepage';
 }

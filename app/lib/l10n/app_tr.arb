@@ -2695,5 +2695,7 @@
     "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
     "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
     "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
-  "tasksOverdue": "Gecikmiş"
+  "tasksOverdue": "Gecikmiş",
+    "showDailyScoreOnHomepage": "Ana sayfada günlük puanı göster",
+    "showTasksOnHomepage": "Ana sayfada görevleri göster"
 }

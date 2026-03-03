@@ -2661,5 +2661,7 @@
     "anyoneWithLinkCanView": "लिंक वाला कोई भी व्यक्ति देख सकता है",
     "tasksCleanTodayTitle": "आज के कार्य साफ़ करें?",
     "tasksCleanTodayMessage": "यह केवल समय-सीमाएँ हटाएगा",
-  "tasksOverdue": "अतिदेय"
+  "tasksOverdue": "अतिदेय",
+    "showDailyScoreOnHomepage": "होमपेज पर दैनिक स्कोर दिखाएं",
+    "showTasksOnHomepage": "होमपेज पर कार्य दिखाएं"
 }

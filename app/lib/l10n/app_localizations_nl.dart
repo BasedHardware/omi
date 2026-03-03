@@ -8304,4 +8304,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Achterstallig';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
 }

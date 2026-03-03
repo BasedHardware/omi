@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
     "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
     "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
-  "tasksOverdue": "Εκπρόθεσμα"
+  "tasksOverdue": "Εκπρόθεσμα",
+    "showDailyScoreOnHomepage": "Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα",
+    "showTasksOnHomepage": "Εμφάνιση εργασιών στην αρχική σελίδα"
 }

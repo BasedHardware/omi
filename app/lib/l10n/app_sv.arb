@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Alla med länken kan visa",
     "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
     "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
-  "tasksOverdue": "Försenade"
+  "tasksOverdue": "Försenade",
+    "showDailyScoreOnHomepage": "Visa dagligt poäng på hemsidan",
+    "showTasksOnHomepage": "Visa uppgifter på hemsidan"
 }

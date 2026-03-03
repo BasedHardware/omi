@@ -8280,4 +8280,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Försenade';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Visa dagligt poäng på hemsidan';
+
+  @override
+  String get showTasksOnHomepage => 'Visa uppgifter på hemsidan';
 }

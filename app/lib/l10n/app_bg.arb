@@ -2629,5 +2629,7 @@
     "anyoneWithLinkCanView": "Всеки с връзката може да преглежда",
     "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
     "tasksCleanTodayMessage": "Това само ще премахне крайните срокове",
-  "tasksOverdue": "Просрочени"
+  "tasksOverdue": "Просрочени",
+    "showDailyScoreOnHomepage": "Покажи дневния резултат на началната страница",
+    "showTasksOnHomepage": "Покажи задачите на началната страница"
 }

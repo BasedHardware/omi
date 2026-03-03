@@ -8136,4 +8136,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tasksOverdue => '期限切れ';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
 }

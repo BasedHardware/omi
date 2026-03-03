@@ -2756,5 +2756,7 @@
     "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link",
     "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
     "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
-  "tasksOverdue": "Lejárt"
+  "tasksOverdue": "Lejárt",
+    "showDailyScoreOnHomepage": "Napi pontszám megjelenítése a főoldalon",
+    "showTasksOnHomepage": "Feladatok megjelenítése a főoldalon"
 }

@@ -2665,5 +2665,7 @@
     "anyoneWithLinkCanView": "Bất kỳ ai có liên kết đều có thể xem",
     "tasksCleanTodayTitle": "Dọn các nhiệm vụ hôm nay?",
     "tasksCleanTodayMessage": "Thao tác này chỉ xóa thời hạn",
-  "tasksOverdue": "Quá hạn"
+  "tasksOverdue": "Quá hạn",
+    "showDailyScoreOnHomepage": "Hiển thị Điểm hàng ngày trên trang chủ",
+    "showTasksOnHomepage": "Hiển thị Nhiệm vụ trên trang chủ"
 }

@@ -2695,5 +2695,7 @@
     "anyoneWithLinkCanView": "Każdy, kto ma link, może wyświetlić",
     "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
     "tasksCleanTodayMessage": "To usunie tylko terminy",
-  "tasksOverdue": "Zaległe"
+  "tasksOverdue": "Zaległe",
+    "showDailyScoreOnHomepage": "Pokaż dzienny wynik na stronie głównej",
+    "showTasksOnHomepage": "Pokaż zadania na stronie głównej"
 }

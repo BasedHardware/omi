@@ -8138,4 +8138,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tasksOverdue => '기한 초과';
+
+  @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
 }

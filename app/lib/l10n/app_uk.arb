@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Будь-хто з посиланням може переглядати",
     "tasksCleanTodayTitle": "Очистити завдання на сьогодні?",
     "tasksCleanTodayMessage": "Це видалить лише дедлайни",
-  "tasksOverdue": "Прострочені"
+  "tasksOverdue": "Прострочені",
+    "showDailyScoreOnHomepage": "Показати щоденний рахунок на головній сторінці",
+    "showTasksOnHomepage": "Показати завдання на головній сторінці"
 }

@@ -2629,5 +2629,7 @@
     "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
     "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
     "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
-  "tasksOverdue": "Po termínu"
+  "tasksOverdue": "Po termínu",
+    "showDailyScoreOnHomepage": "Zobrazit denní skóre na domovské stránce",
+    "showTasksOnHomepage": "Zobrazit úkoly na domovské stránce"
 }

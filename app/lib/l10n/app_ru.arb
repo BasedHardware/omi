@@ -2695,5 +2695,7 @@
     "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать",
     "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
     "tasksCleanTodayMessage": "Это удалит только сроки",
-  "tasksOverdue": "Просроченные"
+  "tasksOverdue": "Просроченные",
+    "showDailyScoreOnHomepage": "Показать дневной счёт на главной странице",
+    "showTasksOnHomepage": "Показать задачи на главной странице"
 }

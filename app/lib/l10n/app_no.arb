@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Alle med lenken kan se",
     "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
     "tasksCleanTodayMessage": "Dette vil kun fjerne frister",
-  "tasksOverdue": "Forfalt"
+  "tasksOverdue": "Forfalt",
+    "showDailyScoreOnHomepage": "Vis daglig poengsum på hjemmesiden",
+    "showTasksOnHomepage": "Vis oppgaver på hjemmesiden"
 }

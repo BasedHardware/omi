@@ -8274,4 +8274,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Tähtaja ületanud';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Kuva päevapunktid avalehel';
+
+  @override
+  String get showTasksOnHomepage => 'Kuva ülesanded avalehel';
 }

@@ -8233,4 +8233,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'เกินกำหนด';
+
+  @override
+  String get showDailyScoreOnHomepage => 'แสดงคะแนนประจำวันบนหน้าหลัก';
+
+  @override
+  String get showTasksOnHomepage => 'แสดงงานบนหน้าหลัก';
 }

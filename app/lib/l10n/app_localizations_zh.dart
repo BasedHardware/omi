@@ -8126,4 +8126,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tasksOverdue => '逾期';
+
+  @override
+  String get showDailyScoreOnHomepage => '在首页显示每日评分';
+
+  @override
+  String get showTasksOnHomepage => '在首页显示任务';
 }

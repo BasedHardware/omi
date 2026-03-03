@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
     "tasksCleanTodayTitle": "Pulire le attività di oggi?",
     "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
-  "tasksOverdue": "Scadute"
+  "tasksOverdue": "Scadute",
+    "showDailyScoreOnHomepage": "Mostra punteggio giornaliero nella homepage",
+    "showTasksOnHomepage": "Mostra attività nella homepage"
 }

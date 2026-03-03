@@ -8340,4 +8340,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Εκπρόθεσμα';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα';
+
+  @override
+  String get showTasksOnHomepage => 'Εμφάνιση εργασιών στην αρχική σελίδα';
 }

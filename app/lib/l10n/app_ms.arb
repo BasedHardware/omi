@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
     "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
     "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
-  "tasksOverdue": "Tertunggak"
+  "tasksOverdue": "Tertunggak",
+    "showDailyScoreOnHomepage": "Tunjukkan Skor Harian di laman utama",
+    "showTasksOnHomepage": "Tunjukkan Tugasan di laman utama"
 }

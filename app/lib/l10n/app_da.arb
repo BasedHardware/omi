@@ -2669,5 +2669,7 @@
     "anyoneWithLinkCanView": "Alle med linket kan se",
     "tasksCleanTodayTitle": "Ryd dagens opgaver?",
     "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
-  "tasksOverdue": "Forfaldne"
+  "tasksOverdue": "Forfaldne",
+    "showDailyScoreOnHomepage": "Vis daglig score på hjemmesiden",
+    "showTasksOnHomepage": "Vis opgaver på hjemmesiden"
 }

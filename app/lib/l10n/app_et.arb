@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
     "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
     "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
-  "tasksOverdue": "Tähtaja ületanud"
+  "tasksOverdue": "Tähtaja ületanud",
+    "showDailyScoreOnHomepage": "Kuva päevapunktid avalehel",
+    "showTasksOnHomepage": "Kuva ülesanded avalehel"
 }

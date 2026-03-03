@@ -8266,4 +8266,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Po termíne';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobraziť denné skóre na domovskej stránke';
+
+  @override
+  String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
 }

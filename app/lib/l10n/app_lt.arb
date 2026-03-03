@@ -2660,5 +2660,7 @@
     "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
     "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
     "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
-  "tasksOverdue": "Vėluojančios"
+  "tasksOverdue": "Vėluojančios",
+    "showDailyScoreOnHomepage": "Rodyti dienos balą pagrindiniame puslapyje",
+    "showTasksOnHomepage": "Rodyti užduotis pagrindiniame puslapyje"
 }

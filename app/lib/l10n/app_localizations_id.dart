@@ -8287,4 +8287,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Terlambat';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tampilkan Skor Harian di beranda';
+
+  @override
+  String get showTasksOnHomepage => 'Tampilkan Tugas di beranda';
 }

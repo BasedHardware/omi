@@ -2661,5 +2661,7 @@
     "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます",
     "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
     "tasksCleanTodayMessage": "期限のみ削除されます",
-  "tasksOverdue": "期限切れ"
+  "tasksOverdue": "期限切れ",
+    "showDailyScoreOnHomepage": "ホームページにデイリースコアを表示",
+    "showTasksOnHomepage": "ホームページにタスクを表示"
 }

@@ -8272,4 +8272,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Po termínu';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobrazit denní skóre na domovské stránce';
+
+  @override
+  String get showTasksOnHomepage => 'Zobrazit úkoly na domovské stránce';
 }

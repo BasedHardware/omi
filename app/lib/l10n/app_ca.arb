@@ -2629,5 +2629,7 @@
     "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure",
     "tasksCleanTodayTitle": "Netejar les tasques d'avui?",
     "tasksCleanTodayMessage": "Això només eliminarà els terminis",
-  "tasksOverdue": "Endarrerits"
+  "tasksOverdue": "Endarrerits",
+    "showDailyScoreOnHomepage": "Mostra la puntuació diària a la pàgina principal",
+    "showTasksOnHomepage": "Mostra les tasques a la pàgina principal"
 }
