@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right"
+  ],
   "releases": [
     {
       "version": "0.11.48",
