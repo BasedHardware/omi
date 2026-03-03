@@ -156,20 +156,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
-        // Force macOS to use the correct app icon (bypasses icon cache)
-        // Load the pre-masked PNG (with squircle + transparent corners) so the
-        // Dock renders it with proper rounded shape. The .icns is used by Finder/LaunchServices;
-        // NSApp.applicationIconImage overrides the Dock icon in-memory.
+        // Force macOS to use the correct app icon (bypasses icon cache).
+        // Apply squircle mask with proper margins because NSApp.applicationIconImage
+        // renders the raw image without macOS auto-masking.
         // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
         // the .app bundle, which breaks the code signature and prevents Sparkle
         // auto-updates from working ("An error occurred while running the updater").
         if let iconURL = Bundle.resourceBundle.url(forResource: "omi_app_icon", withExtension: "png"),
            let icon = NSImage(contentsOf: iconURL) {
-            NSApp.applicationIconImage = icon
+            let size = icon.size
+            let maskedIcon = NSImage(size: size)
+            maskedIcon.lockFocus()
+            // Scale content to ~88% with 6% margin on each side (matches macOS Dock icon sizing)
+            let margin = size.width * 0.06
+            let contentRect = NSRect(x: margin, y: margin,
+                                     width: size.width - margin * 2,
+                                     height: size.height - margin * 2)
+            // Corner radius ≈ 22.37% of content size
+            let radius = contentRect.width * 0.2237
+            let path = NSBezierPath(roundedRect: contentRect, xRadius: radius, yRadius: radius)
+            path.addClip()
+            icon.draw(in: contentRect)
+            maskedIcon.unlockFocus()
+            NSApp.applicationIconImage = maskedIcon
             if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
-            log("AppDelegate: Set application icon from omi_app_icon.png")
+            log("AppDelegate: Set application icon with squircle mask")
         }
 
         // One-time icon cache reset: forces macOS to pick up the new squircle icon.
