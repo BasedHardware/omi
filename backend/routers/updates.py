@@ -10,7 +10,7 @@ from database.redis_db import delete_generic_cache
 
 router = APIRouter()
 
-VALID_CHANNELS = {"staging", "stable"}
+VALID_CHANNELS = {"beta", "stable"}
 
 
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
@@ -129,7 +129,7 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     Fetch and filter live desktop releases for a given platform.
     Returns list of releases sorted by published date (newest first).
     Each entry includes release, version_info, metadata (KEY_VALUE_START fields),
-    and channel (staging or stable).
+    and channel (beta or stable).
     """
     cache_key = "github_releases_desktop"
     releases = await get_omi_github_releases(cache_key)
@@ -161,9 +161,9 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         if not is_live:
             continue
 
-        channel = kv.get("channel", "staging").lower()
+        channel = kv.get("channel", "beta").lower()
         if channel not in VALID_CHANNELS:
-            channel = "staging"
+            channel = "beta"
 
         desktop_releases.append({
             "release": release,
@@ -198,7 +198,7 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
     """
     Generate Sparkle 2.0 appcast XML with channel support.
     Stable items get no <sparkle:channel> tag (Sparkle default).
-    Staging items get <sparkle:channel>staging</sparkle:channel>.
+    Beta items get <sparkle:channel>beta</sparkle:channel>.
     """
     lines = [
         '<?xml version="1.0" encoding="utf-8"?>',
@@ -216,7 +216,7 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         pub_date = release_item.get('date', '')
         url = release_item.get('url', '')
         ed_signature = release_item.get('edSignature', '').strip()
-        channel = release_item.get('channel', 'staging')
+        channel = release_item.get('channel', 'beta')
 
         if not url:
             continue
@@ -234,9 +234,9 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         enclosure += ' />'
         lines.append(enclosure)
 
-        # Stable = no channel tag (Sparkle default). Staging = explicit tag.
-        if channel == "staging":
-            lines.append('      <sparkle:channel>staging</sparkle:channel>')
+        # Stable = no channel tag (Sparkle default). Beta = explicit tag.
+        if channel == "beta":
+            lines.append('      <sparkle:channel>beta</sparkle:channel>')
 
         if release_item.get('mandatory'):
             lines.append('      <sparkle:criticalUpdate />')
@@ -252,7 +252,7 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
     """
     Sparkle appcast XML endpoint for desktop auto-updates.
-    Returns a single feed with both staging and stable channel items.
+    Returns a single feed with both beta and stable channel items.
     Sparkle clients filter by their configured allowed channels.
     """
     try:
@@ -314,12 +314,12 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 @router.get("/v2/desktop/download/latest")
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", regex="^(macos|windows|linux)$"),
-    channel: str = Query(default="stable", regex="^(staging|stable)$"),
+    channel: str = Query(default="stable", regex="^(beta|stable)$"),
 ):
     """
     Redirect to the latest desktop release DMG installer.
     Resolves from GitHub release assets filtered by channel.
-    Defaults to stable channel (for macos.omi.me). Use channel=staging for QA.
+    Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
     desktop_releases = await _get_live_desktop_releases(platform)
     if not desktop_releases:
@@ -333,7 +333,7 @@ async def download_latest_desktop_release(
         if dmg_url:
             return RedirectResponse(url=dmg_url, status_code=302)
 
-    # Fallback: if no stable release, try staging (for fresh installs before first promotion)
+    # Fallback: if no stable release, try beta (for fresh installs before first promotion)
     if channel == "stable":
         for entry in desktop_releases:
             dmg_url = _get_dmg_download_url(entry["release"])
