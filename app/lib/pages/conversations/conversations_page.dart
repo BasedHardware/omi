@@ -224,7 +224,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
                   return const SliverToBoxAdapter(child: SizedBox.shrink());
                 }
-                final showDailyScore = prefs.showGoalTrackerEnabled && prefs.showDailyScoreEnabled;
+                final showDailyScore = prefs.showDailyScoreEnabled;
                 final showTasks = prefs.showTasksEnabled;
                 final showGoals = prefs.showGoalTrackerEnabled;
                 if (!showDailyScore && !showTasks && !showGoals) {
@@ -236,7 +236,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       if (showDailyScore)
                         Padding(
                           padding: const EdgeInsets.only(left: 16, right: 16, top: 16),
-                          child: DailyScoreWidget(key: _dailyScoreWidgetKey, goalsWidgetKey: _goalsWidgetKey),
+                          child: DailyScoreWidget(
+                            key: _dailyScoreWidgetKey,
+                            goalsWidgetKey: showGoals ? _goalsWidgetKey : null,
+                          ),
                         ),
                       if (showTasks) const TodayTasksWidget(),
                       if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
