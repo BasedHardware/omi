@@ -81,8 +81,7 @@ struct OMIApp: App {
     /// Window title with version number (different for rewind mode)
     private var windowTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
-        let baseName = Self.launchMode == .rewind ? "omi Rewind" : displayName
+        let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
         return version.isEmpty ? baseName : "\(baseName) v\(version)"
     }
 
@@ -300,8 +299,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // One-time migration: Enable launch at login for existing users who haven't set it
         migrateLaunchAtLoginDefault()
 
-        // One-time migration: Rename app bundle from "Omi Computer.app" to "Omi Beta.app"
-        migrateAppNameToBeta()
+        // One-time migration: Rename app bundle from legacy names to "omi.app"
+        migrateAppName()
 
         // Track launch at login status once per app launch
         Task { @MainActor in
@@ -421,7 +420,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
     /// Includes a safety net to restart the Dock if it crashes during the reset.
     private func resetIconCacheIfNeeded() {
-        let key = "hasResetIconCache_v1"
+        let key = "hasResetIconCache_v2"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         log("AppDelegate: Running one-time icon cache reset")
@@ -991,22 +990,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func migrateAppNameToBeta() {
+    private func migrateAppName() {
         let currentPath = Bundle.main.bundlePath
 
-        // Case 1: Running as "Omi Computer.app" — rename self to "Omi Beta.app"
-        if currentPath.hasSuffix("Omi Computer.app") {
-            let key = "didMigrateAppNameToBetaV1"
-            guard !UserDefaults.standard.bool(forKey: key) else { return }
+        // Rename legacy app bundles ("Omi Computer.app" or "Omi Beta.app") to "omi.app"
+        let legacySuffixes = ["Omi Computer.app", "Omi Beta.app"]
+        for suffix in legacySuffixes {
+            guard currentPath.hasSuffix(suffix) else { continue }
+
+            let key = "didMigrateAppNameToOmiV1"
+            guard !UserDefaults.standard.bool(forKey: key) else { break }
             UserDefaults.standard.set(true, forKey: key)
 
             let dir = (currentPath as NSString).deletingLastPathComponent
-            let newPath = dir + "/Omi Beta.app"
-            guard !FileManager.default.fileExists(atPath: newPath) else { return }
+            let newPath = dir + "/omi.app"
+            guard !FileManager.default.fileExists(atPath: newPath) else { break }
 
             do {
                 try FileManager.default.moveItem(atPath: currentPath, toPath: newPath)
-                log("App rename migration: moved to \(newPath)")
+                log("App rename migration: moved \(suffix) to omi.app")
 
                 // Re-register with Launch Services and relaunch from new path (off main thread)
                 DispatchQueue.global(qos: .utility).async {
@@ -1033,7 +1035,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        // Case 2: Running as "Omi Beta.app" — kill and delete old "Omi Computer.app" if it exists
+        // Running as "omi.app" — clean up old app bundles if they exist
         cleanupOldOmiComputerApp()
     }
 
@@ -1041,12 +1043,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let oldAppPaths = [
             "/Applications/Omi Computer.app",
             NSHomeDirectory() + "/Applications/Omi Computer.app",
+            "/Applications/Omi Beta.app",
+            NSHomeDirectory() + "/Applications/Omi Beta.app",
         ]
 
         for oldPath in oldAppPaths {
             guard FileManager.default.fileExists(atPath: oldPath) else { continue }
 
-            log("Found old Omi Computer.app at \(oldPath), cleaning up...")
+            log("Found old app at \(oldPath), cleaning up...")
 
             // Kill the old app if it's running
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.omi.computer-macos")

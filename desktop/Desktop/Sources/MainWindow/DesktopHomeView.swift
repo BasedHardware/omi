@@ -271,7 +271,7 @@ struct DesktopHomeView: View {
             // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title.hasPrefix("Omi") {
+                    if window.title.lowercased().hasPrefix("omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
                         // Remove .minSize from hosting view's sizingOptions.

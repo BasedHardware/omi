@@ -469,7 +469,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi")
+                Text(UpdateChannel.appDisplayName)
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
