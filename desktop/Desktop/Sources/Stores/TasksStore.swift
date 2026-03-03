@@ -533,10 +533,9 @@ class TasksStore: ObservableObject {
 
         // Force reconciliation on initial load to clean up tasks deleted on other devices.
         // This bypasses the 5-minute throttle since the first load should always reconcile.
+        // Awaited inline (not in a detached Task) so loadDashboardTasks() sees clean data.
         if lastReconciliationDate == nil {
-            Task {
-                await forceReconcileOnLoad()
-            }
+            await forceReconcileOnLoad()
         }
     }
 
@@ -1131,7 +1130,10 @@ class TasksStore: ObservableObject {
             incompleteTasks.insert(updatedTask, at: 0)
         }
 
-        // 4. Call API in background, revert on failure
+        // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
+        await loadDashboardTasks()
+
+        // 6. Call API in background, revert on failure
         do {
             let apiResult = try await APIClient.shared.updateActionItem(
                 id: task.id,
