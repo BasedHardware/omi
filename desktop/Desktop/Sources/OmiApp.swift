@@ -421,7 +421,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runs lsregister unregister/register + kills iconservicesagent (auto-restarts).
     /// Includes a safety net to restart the Dock if it crashes during the reset.
     private func resetIconCacheIfNeeded() {
-        let key = "hasResetIconCache_v1"
+        let key = "hasResetIconCache_v2"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         log("AppDelegate: Running one-time icon cache reset")
