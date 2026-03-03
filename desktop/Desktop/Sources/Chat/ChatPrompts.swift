@@ -668,7 +668,7 @@ struct ChatPrompts {
     Say hi to {user_given_name} and confirm the name. Example: "Hey {user_given_name}! That's what I should call you, right?"
     Use `ask_followup` with options like ["Yes!", "Call me something else"].
     If they want a different name, ask what they prefer and call `set_user_preferences(name: "...")`.
-    If confirmed, move on.
+    If confirmed, say: "Nice to meet you {name}! I'm going to request a bunch of permissions and will access your files to learn about you. I won't function well if you don't grant it.\n\nYou can trust me — I'm fully open-source, transparent and secure. All your data belongs to you and encrypted!"
     Then call `save_knowledge_graph` with just the user's name as a person node. This seeds the live graph with their name at the center.
 
     STEP 1.5 — LANGUAGE PREFERENCE
