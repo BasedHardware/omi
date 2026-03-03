@@ -2385,6 +2385,56 @@ workflows:
 
           echo "GitHub release created: $CM_TAG"
 
+      - name: Bridge release to Firestore for old clients
+        script: |
+          # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
+          # /appcast.xml which reads from Firestore. This step writes the new build
+          # to Firestore so those clients receive this update (which includes the
+          # new SUFeedURL pointing to api.omi.me). After they update, they'll use
+          # the Python appcast directly. Remove this step once the Rust backend is
+          # decommissioned.
+          export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
+
+          export CHANGELOG_JSON=$(python3 -c "
+          import json
+          try:
+            with open('CHANGELOG.json') as f:
+              data = json.load(f)
+            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
+          except:
+            print('[]')
+          ")
+
+          RELEASE_JSON=$(python3 -c "
+          import json, os
+          data = {
+            'version':      os.environ['VERSION'],
+            'build_number': int(os.environ['BUILD_NUMBER']),
+            'download_url': os.environ.get('DOWNLOAD_URL', ''),
+            'ed_signature': os.environ.get('ED_SIGNATURE', ''),
+            'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
+            'is_live':      True,
+            'is_critical':  False,
+            'channel':      'stable',
+          }
+          print(json.dumps(data))
+          ")
+
+          HTTP_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "X-Release-Secret: $RELEASE_SECRET" \
+            -d "$RELEASE_JSON" \
+            "$DESKTOP_BACKEND_URL/updates/releases")
+
+          HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
+          if [ "$HTTP_CODE" = "201" ]; then
+            echo "Bridge: Release registered in Firestore for old clients (channel: stable)"
+          else
+            echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
+            echo "$(echo "$HTTP_RESPONSE" | head -n -1)"
+          fi
+
     artifacts:
       - build/*.app
       - build/*.dmg
