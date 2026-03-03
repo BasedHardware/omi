@@ -81,6 +81,7 @@ def _get_structured(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     force_process: bool = False,
     people: List[Person] = None,
+    user_name: str = None,
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
@@ -139,7 +140,7 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False, people=people)
+        transcript_text = conversation.get_transcript(False, people=people, user_name=user_name)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -345,7 +346,7 @@ def _trigger_apps(
     def execute_app(app):
         with track_usage(uid, Features.CONVERSATION_APPS):
             result = get_app_result(
-                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
+                conversation.get_transcript(False, people=people, user_name=user_name), conversation.photos, app, language_code=language_code
             ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
@@ -631,7 +632,10 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
+    from database.auth import get_user_name
+    user_name = get_user_name(uid)
+
+    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people, user_name=user_name)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     # AI-based folder assignment
