@@ -157,17 +157,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
         // Force macOS to use the correct app icon (bypasses icon cache)
-        // NOTE: Only set NSApp.applicationIconImage (in-memory).
+        // Load the pre-masked PNG (with squircle + transparent corners) so the
+        // Dock renders it with proper rounded shape. The .icns is used by Finder/LaunchServices;
+        // NSApp.applicationIconImage overrides the Dock icon in-memory.
         // Do NOT call NSWorkspace.setIcon(forFile:) — it writes a resource fork onto
         // the .app bundle, which breaks the code signature and prevents Sparkle
         // auto-updates from working ("An error occurred while running the updater").
-        if let iconURL = Bundle.main.url(forResource: "OmiIcon", withExtension: "icns"),
+        if let iconURL = Bundle.resourceBundle.url(forResource: "omi_app_icon", withExtension: "png"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApp.applicationIconImage = icon
             if let cfURL = Bundle.main.bundleURL as CFURL? {
                 LSRegisterURL(cfURL, true)
             }
-            log("AppDelegate: Set application icon from OmiIcon.icns")
+            log("AppDelegate: Set application icon from omi_app_icon.png")
         }
 
         // One-time icon cache reset: forces macOS to pick up the new squircle icon.
