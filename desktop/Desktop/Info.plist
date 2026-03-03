@@ -56,7 +56,7 @@
     </array>
     <!-- Sparkle Auto-Update Configuration -->
     <key>SUFeedURL</key>
-    <string>https://desktop-backend-hhibjajaja-uc.a.run.app/appcast.xml</string>
+    <string>https://api.omi.me/v2/desktop/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>vWleho4gIOl932wM4v9Gz+FTCt90+vUVdPHsRReFX40=</string>
     <key>SUEnableAutomaticChecks</key>
