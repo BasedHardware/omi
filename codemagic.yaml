@@ -2377,7 +2377,13 @@ workflows:
 
           ### Downloads
           - **DMG Installer**: For fresh installs, download the DMG below
-          - **Auto-Update**: Existing users will receive this update automatically via Sparkle"
+          - **Auto-Update**: Existing users will receive this update automatically via Sparkle
+
+          <!-- KEY_VALUE_START
+          isLive: true
+          edSignature: ${ED_SIGNATURE}
+          changelog: $(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
+          KEY_VALUE_END -->"
 
           # Safe re-run: delete existing release if it exists
           gh release view "$CM_TAG" --repo "$GITHUB_REPO" &>/dev/null && \
@@ -2403,7 +2409,10 @@ workflows:
           gsutil -h "Content-Disposition:attachment; filename=\"Omi Beta.dmg\"" \
             cp "$DMG_PATH" "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
           echo "Uploaded: $GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg"
-          echo "(Run promote_release.sh to update the latest/ pointer when promoting to stable)"
+
+          # Always update latest/ pointer so macos.omi.me serves the newest build
+          gsutil cp "$GCS_BUCKET/releases/v${VERSION}/Omi.Beta.dmg" "$GCS_BUCKET/latest/Omi.Beta.dmg"
+          echo "Updated: $GCS_BUCKET/latest/Omi.Beta.dmg"
 
       - name: Register release in Firestore
         script: |
