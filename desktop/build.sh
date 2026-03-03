@@ -3,7 +3,7 @@ set -e
 
 # Build configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, CFBundleExecutable
-APP_NAME="Omi Beta"
+APP_NAME="omi"
 BUNDLE_ID="com.omi.computer-macos"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
