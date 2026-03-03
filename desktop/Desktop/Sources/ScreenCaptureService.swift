@@ -6,7 +6,7 @@ import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
   private let maxSize: CGFloat = 3000
-  private let jpegQuality: CGFloat = 1.0
+  private let jpegQuality: CGFloat = 0.8
 
   /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
   /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
