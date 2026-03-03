@@ -5,26 +5,26 @@ import Sparkle
 /// Update channel for staged releases
 enum UpdateChannel: String, CaseIterable {
     case stable = "stable"
-    case staging = "staging"
+    case beta = "beta"
 
     var displayName: String {
         switch self {
         case .stable: return "Stable"
-        case .staging: return "Beta"
+        case .beta: return "Beta"
         }
     }
 
     var description: String {
         switch self {
         case .stable: return "Recommended for most users"
-        case .staging: return "Get updates as soon as they're built"
+        case .beta: return "Early access to new features"
         }
     }
 
-    /// App display name based on update channel: "omi" for stable, "Omi Beta" for staging
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
     static var appDisplayName: String {
         let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-        return channel == "staging" ? "Omi Beta" : "omi"
+        return channel == "beta" ? "Omi Beta" : "omi"
     }
 }
 
@@ -133,8 +133,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Channels are additive: the default (stable) channel is always included.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        if raw == "staging" {
-            return Set(["staging"])
+        if raw == "beta" {
+            return Set(["beta"])
         }
         return Set() // empty = default (stable) channel only
     }
@@ -318,6 +318,6 @@ final class UpdaterViewModel: ObservableObject {
     /// The active channel label
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        return raw == "staging" ? "Beta" : ""
+        return raw == "beta" ? "Beta" : ""
     }()
 }
