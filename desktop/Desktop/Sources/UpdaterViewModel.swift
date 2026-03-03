@@ -63,11 +63,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
                 bestStableVersion = item.displayVersionString
             }
         }
-        if let build = bestStableBuild {
-            Task { @MainActor in
-                self.viewModel?.latestStableBuildNumber = build
-                self.viewModel?.latestStableVersionString = bestStableVersion
-            }
+        // Always update (including nil) so stale data doesn't produce false downgrade alerts
+        Task { @MainActor in
+            self.viewModel?.latestStableBuildNumber = bestStableBuild
+            self.viewModel?.latestStableVersionString = bestStableVersion
         }
     }
 
