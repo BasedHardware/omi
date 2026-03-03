@@ -20,7 +20,7 @@ abstract class IDeviceService {
   void stop();
   Future<void> discover({String? desirableDeviceId, int timeout = 5});
 
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false});
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, DeviceType? deviceType});
 
   void subscribe(IDeviceServiceSubsciption subscription, Object context);
   void unsubscribe(Object context);
@@ -29,7 +29,7 @@ abstract class IDeviceService {
 
   // WiFi sync support - pause BLE reconnection during WiFi transfer
   void setWifiSyncInProgress(bool value);
-  Future<void> disconnectDevice();
+  Future<void> disconnectDevice({DeviceType? deviceType});
 }
 
 enum DeviceServiceStatus {
@@ -76,10 +76,23 @@ class DeviceService implements IDeviceService {
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
-  DeviceConnection? _connection;
-  List<BtDevice> get devices => _devices;
+  final Map<DeviceType, DeviceConnection> _connection = {}; 
 
+  List<BtDevice> get devices => _devices;
   DeviceServiceStatus get status => _status;
+
+  DeviceConnection? get omiConnection => _connection[DeviceType.omi];
+
+  
+  DeviceConnection? get glassConnection => _connection[DeviceType.openglass];
+
+  
+  DeviceConnection? get connection => omiConnection ?? _connection.values.firstOrNull;
+
+  
+  bool get isMultiModalConnected =>
+      omiConnection?.status == DeviceConnectionState.connected &&
+      glassConnection?.status == DeviceConnectionState.connected;  
 
   DateTime? _firstConnectedAt;
 
@@ -131,11 +144,29 @@ class DeviceService implements IDeviceService {
   }
 
   Future<void> _connectToDevice(String id) async {
-    // Drop existing connection first
-    if (_connection?.status == DeviceConnectionState.connected) {
+
+    var device = _devices.firstWhereOrNull((f) => f.id == id);
+
+    if (device == null) {
+      Logger.debug("Device not in discovered list, checking stored device");
+      device = _getStoredDevice(id);
+      if (device != null) {
+        Logger.debug("Using stored device for direct reconnection: ${device.name}");
+        if (!_devices.any((d) => d.id == device!.id)) {
+          _devices.add(device);
+        }
+      } else {
+        Logger.debug("No stored device available for $id");
+        return;
+      }
+    }
+
+    //only drops sametype of device
+    final existing = _connection[device.type];
+    if (_existing?.status == DeviceConnectionState.connected) {
       await _connection?.disconnect();
     }
-    _connection = null;
+    _connection.remove(device.type);
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
 
@@ -156,7 +187,7 @@ class DeviceService implements IDeviceService {
       }
     }
 
-    _connection = DeviceConnectionFactory.create(device);
+    _connection[device.type] = DeviceConnectionFactory.create(device);
     if (_connection != null) {
       await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
     } else {
@@ -226,9 +257,15 @@ class DeviceService implements IDeviceService {
   // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
   @override
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false,DeviceType? deviceType}) async {
     await _mutex.acquire();
     try {
+
+      //Look all devices
+      final existing = _connection.values.firstWhereOrNull(
+        (c) => c.device.id == deviceId,
+      );
+
       Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
       // Not force
@@ -255,7 +292,11 @@ class DeviceService implements IDeviceService {
       }
 
       _firstConnectedAt ??= DateTime.now();
-      return _connection;
+
+      return _connection.values.firstWhereOrNull(
+        (c) => c.device.id == deviceId,
+      );
+
     } finally {
       _mutex.release();
     }
@@ -289,11 +330,21 @@ class DeviceService implements IDeviceService {
   }
 
   @override
-  Future<void> disconnectDevice() async {
-    if (_connection != null) {
-      Logger.debug("DeviceService: Disconnecting device...");
-      await _connection?.disconnect();
-      _connection = null;
+  Future<void> disconnectDevice({DeviceType? deviceType}) async {
+    // FIX 8: Disconnect one type if specified, otherwise disconnect ALL.
+    if (deviceType != null) {
+      final conn = _connection[deviceType];
+      if (conn != null) {
+        Logger.debug("DeviceService: Disconnecting ${deviceType.name} device...");
+        await conn.disconnect();
+        _connection.remove(deviceType);
+      }
+    } else {
+      Logger.debug("DeviceService: Disconnecting all devices...");
+      for (final conn in _connection.values) {
+        await conn.disconnect();
+      }
+      _connection.clear();
     }
   }
 }
