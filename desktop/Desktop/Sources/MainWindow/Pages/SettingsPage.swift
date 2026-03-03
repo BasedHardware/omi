@@ -130,6 +130,9 @@ struct SettingsContentView: View {
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
 
+    // Downgrade confirmation alert
+    @State private var showDowngradeAlert = false
+
     // Tier gating (0 = show all, 1-6 = sequential tiers)
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
 
@@ -4101,7 +4104,17 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
-                        Picker("", selection: $updaterViewModel.updateChannel) {
+                        Picker("", selection: Binding(
+                            get: { updaterViewModel.updateChannel },
+                            set: { newChannel in
+                                // Switching beta → stable with a newer build: confirm first
+                                if updaterViewModel.updateChannel == .beta && newChannel == .stable && updaterViewModel.isDowngradeToStable {
+                                    showDowngradeAlert = true
+                                } else {
+                                    updaterViewModel.updateChannel = newChannel
+                                }
+                            }
+                        )) {
                             ForEach(UpdateChannel.allCases, id: \.self) { channel in
                                 Text(channel.displayName).tag(channel)
                             }
@@ -4111,6 +4124,18 @@ struct SettingsContentView: View {
                         .frame(width: 100)
                     }
                 }
+            }
+            .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
+                Button("Stay on Beta", role: .cancel) { }
+                Button("Switch to Stable") {
+                    updaterViewModel.updateChannel = .stable
+                    if let url = URL(string: "https://macos.omi.me") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } message: {
+                let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
+                Text("You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now.")
             }
 
             settingsCard(settingId: "about.reportissue") {
