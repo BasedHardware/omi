@@ -145,14 +145,14 @@ def build_channel_config(source: str) -> List[ChannelConfig]:
 
 
 def mix_n_channel_buffers(buffers: List[bytearray]) -> bytes:
-    """Mix N 16-bit PCM mono buffers sample-by-sample, clamping to int16 range."""
-    max_len = max((len(b) for b in buffers), default=0)
-    if max_len == 0:
+    """Mix N 16-bit PCM mono buffers sample-by-sample into one mono stream, clamping to int16 range."""
+    min_len = min((len(b) for b in buffers), default=0)
+    if min_len < 2:
         return b''
-    max_len = max_len - (max_len % 2)
-    padded = [b + bytearray(max_len - len(b)) for b in buffers]
-    num_samples = max_len // 2
-    channel_samples = [struct.unpack(f'<{num_samples}h', p[:max_len]) for p in padded]
+    # Align to sample boundary (2 bytes per sample)
+    min_len = min_len - (min_len % 2)
+    num_samples = min_len // 2
+    channel_samples = [struct.unpack(f'<{num_samples}h', b[:min_len]) for b in buffers]
     mixed = []
     for i in range(num_samples):
         s = sum(ch[i] for ch in channel_samples)
@@ -216,8 +216,7 @@ async def _stream_handler(
     channel_id_to_index: Dict[int, int] = {}
     stt_sockets_multi: list = []
     multi_opus_decoders: list = []
-    channel_chunk_buffers: List[bytearray] = []
-
+    channel_mix_buffers: List[bytearray] = []
     if is_multi_channel:
         channel_configs = build_channel_config(source or 'phone_call')
         channel_id_to_index = {ch.channel_id: i for i, ch in enumerate(channel_configs)}
@@ -226,7 +225,7 @@ async def _stream_handler(
             multi_opus_decoders = [opuslib.Decoder(sample_rate, 1) for _ in channel_configs]
         else:
             multi_opus_decoders = [None] * len(channel_configs)
-        channel_chunk_buffers = [bytearray() for _ in channel_configs]
+        channel_mix_buffers = [bytearray() for _ in channel_configs]
         # Multi-channel doesn't use speech profiles or onboarding
         include_speech_profile = False
 
@@ -1150,8 +1149,10 @@ async def _stream_handler(
                 try:
                     # Calculate buffer start time:
                     # buffer_start = last_received_time - buffer_duration
-                    # buffer_duration = buffer_length_bytes / (sample_rate * 2 bytes per sample)
-                    buffer_duration_seconds = audio_total_size / (sample_rate * 2)
+                    # buffer_duration = buffer_length_bytes / (rate * 2 bytes per sample)
+                    # Multi-channel audio is resampled to TARGET_SAMPLE_RATE before reaching the pusher
+                    effective_rate = TARGET_SAMPLE_RATE if is_multi_channel else sample_rate
+                    buffer_duration_seconds = audio_total_size / (effective_rate * 2)
                     buffer_start_time = (audio_buffer_last_received or time.time()) - buffer_duration_seconds
 
                     # Join chunks into contiguous bytes for sending
@@ -1263,8 +1264,9 @@ async def _stream_handler(
             nonlocal current_conversation_id
 
             try:
+                pusher_sample_rate = TARGET_SAMPLE_RATE if is_multi_channel else sample_rate
                 pusher_ws = await connect_to_trigger_pusher(
-                    uid, sample_rate, retries=5, is_active=lambda: websocket_active
+                    uid, pusher_sample_rate, retries=5, is_active=lambda: websocket_active
                 )
                 if pusher_ws is None:
                     # Session ended during connection attempt
@@ -2045,12 +2047,21 @@ async def _stream_handler(
                             except Exception as e:
                                 logger.error(f"[MC-STT] ch={ch_idx} send error: {e} {uid} {session_id}")
 
-                        # Buffer for mixed audio chunk upload
-                        channel_chunk_buffers[ch_idx].extend(pcm_16k)
+                        # Accumulate per-channel audio for mixing before sending to pusher
+                        channel_mix_buffers[ch_idx].extend(pcm_16k)
 
-                        # Send to pusher
-                        if audio_bytes_send is not None:
-                            audio_bytes_send(pcm_16k, last_audio_received_time)
+                        # Mix when all channels have data, send mixed mono to pusher
+                        if audio_bytes_send is not None and all(len(b) > 0 for b in channel_mix_buffers):
+                            min_len = min(len(b) for b in channel_mix_buffers)
+                            min_len = min_len - (min_len % 2)  # align to sample boundary
+                            if min_len > 0:
+                                trim_bufs = [bytearray(b[:min_len]) for b in channel_mix_buffers]
+                                mixed = mix_n_channel_buffers(trim_bufs)
+                                if mixed:
+                                    audio_bytes_send(mixed, last_audio_received_time)
+                                # Remove consumed bytes from each buffer
+                                for buf in channel_mix_buffers:
+                                    del buf[:min_len]
 
                     else:
                         # Single-channel: existing logic
@@ -2330,11 +2341,16 @@ async def _stream_handler(
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
         bg_tasks.clear()
 
-        # Clean up multi-channel buffers
-        if is_multi_channel:
-            for buf in channel_chunk_buffers:
+        # Flush any remaining mixed audio to pusher
+        if is_multi_channel and audio_bytes_send is not None and any(len(b) > 0 for b in channel_mix_buffers):
+            try:
+                mixed = mix_n_channel_buffers(channel_mix_buffers)
+                if mixed:
+                    audio_bytes_send(mixed, time.time())
+            except Exception:
+                pass
+            for buf in channel_mix_buffers:
                 buf.clear()
-            channel_chunk_buffers.clear()
 
         # Clean up collections to aid garbage collection
         try:
