@@ -76,16 +76,8 @@ struct SignInView: View {
                         }
                     }) {
                         HStack(spacing: 8) {
-                            // Google "G" logo using SF Symbol or text
-                            Text("G")
-                                .scaledFont(size: 20, weight: .bold)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .green, .yellow, .red],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                            GoogleLogo()
+                                .frame(width: 18, height: 18)
                             Text("Sign in with Google")
                                 .scaledFont(size: 17, weight: .medium)
                         }
@@ -124,6 +116,69 @@ struct SignInView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+}
+
+// MARK: - Google Logo
+
+/// Standard multicolor Google "G" logo
+struct GoogleLogo: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            let center = CGPoint(x: size / 2, y: size / 2)
+            let outer = size / 2
+            let inner = size * 0.28
+            let barHeight = size * 0.16
+
+            ZStack {
+                // Blue (right arc: -45° to 90° clockwise, i.e. 1:30 to 4:30)
+                ArcWedge(center: center, outerRadius: outer, innerRadius: inner,
+                         startAngle: .degrees(-45), endAngle: .degrees(90))
+                    .fill(Color(red: 66/255, green: 133/255, blue: 244/255))
+
+                // Green (bottom-right arc: 90° to 180°)
+                ArcWedge(center: center, outerRadius: outer, innerRadius: inner,
+                         startAngle: .degrees(90), endAngle: .degrees(180))
+                    .fill(Color(red: 52/255, green: 168/255, blue: 83/255))
+
+                // Yellow (bottom-left arc: 180° to 270°)
+                ArcWedge(center: center, outerRadius: outer, innerRadius: inner,
+                         startAngle: .degrees(180), endAngle: .degrees(270))
+                    .fill(Color(red: 251/255, green: 188/255, blue: 5/255))
+
+                // Red (top-left arc: 270° to 360° - 45° = 315°)
+                ArcWedge(center: center, outerRadius: outer, innerRadius: inner,
+                         startAngle: .degrees(270), endAngle: .degrees(315))
+                    .fill(Color(red: 234/255, green: 67/255, blue: 53/255))
+
+                // Horizontal bar (blue, extends from center to right edge)
+                Rectangle()
+                    .fill(Color(red: 66/255, green: 133/255, blue: 244/255))
+                    .frame(width: size * 0.52, height: barHeight)
+                    .offset(x: size * 0.05)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
+/// Arc wedge shape for the Google "G" segments
+struct ArcWedge: Shape {
+    let center: CGPoint
+    let outerRadius: CGFloat
+    let innerRadius: CGFloat
+    let startAngle: Angle
+    let endAngle: Angle
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(center: center, radius: outerRadius,
+                     startAngle: startAngle, endAngle: endAngle, clockwise: false)
+        path.addArc(center: center, radius: innerRadius,
+                     startAngle: endAngle, endAngle: startAngle, clockwise: true)
+        path.closeSubpath()
+        return path
     }
 }
 
