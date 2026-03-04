@@ -56,7 +56,7 @@ class AuthService {
            let scheme = schemes.first {
             return scheme
         }
-        return "omi-computer"
+        return "nooto-desktop"
     }
 
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing)
@@ -71,7 +71,7 @@ class AuthService {
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
     // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    private let firebaseApiKey = "AIzaSyAp4itVWrAPafKVGN7PYOP7_DPwWrzj5tU"
 
     // MARK: - User Name Properties
 
