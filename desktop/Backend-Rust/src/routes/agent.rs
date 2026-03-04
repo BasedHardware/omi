@@ -475,7 +475,7 @@ async fn create_gce_vm(
             }]
         }],
         "tags": {
-            "items": ["omi-agent-vm"]
+            "items": ["http-server"]
         },
         "metadata": {
             "items": [{
