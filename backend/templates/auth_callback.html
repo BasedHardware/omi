@@ -108,8 +108,9 @@
             spinnerElement.style.display = 'none';
             messageElement.textContent = 'Please close this window and try again.';
         } else if (code) {
-            // Build the custom scheme redirect URL
-            let redirectUrl = 'omi://auth/callback?code=' + encodeURIComponent(code);
+            // Build the custom scheme redirect URL using the redirect_uri from the auth session
+            const redirectUri = "{{ redirect_uri }}";
+            let redirectUrl = redirectUri + '?code=' + encodeURIComponent(code);
             if (state) {
                 redirectUrl += '&state=' + encodeURIComponent(state);
             }
