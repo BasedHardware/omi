@@ -244,10 +244,9 @@ struct OnboardingChatView: View {
                             }
                         }
 
-                        // "Continue" button — shown after AI calls complete_onboarding,
-                        // or while exploration is running so user can proceed.
-                        // Hidden when quick reply buttons are showing to avoid confusing the user.
-                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending && quickReplyOptions.isEmpty {
+                        // "Continue" button — shown only after AI calls complete_onboarding
+                        // and no pending questions or permissions remain.
+                        if onboardingCompleted && !chatProvider.isSending && quickReplyOptions.isEmpty && pendingPermissionType == nil {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
@@ -914,14 +913,9 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Combine all text blocks into one bubble, render tool indicators separately
-                            let allText = message.contentBlocks.compactMap { block -> String? in
-                                if case .text(_, let text) = block {
-                                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    return trimmed.isEmpty ? nil : trimmed
-                                }
-                                return nil
-                            }.joined(separator: "\n\n")
+                            // Use the full message text (which streams continuously) for a single bubble.
+                            // contentBlocks splits text around tool calls, but message.text is uninterrupted.
+                            let allText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
                             if !allText.isEmpty {
                                 Markdown(allText)
