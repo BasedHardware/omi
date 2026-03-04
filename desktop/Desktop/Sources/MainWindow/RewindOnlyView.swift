@@ -47,7 +47,7 @@ struct RewindOnlyView: View {
             // Force dark appearance on the window
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title.contains("Rewind") || window.title.hasPrefix("Omi") {
+                    if window.title.contains("Rewind") || window.title.hasPrefix("Nooto") {
                         window.appearance = NSAppearance(named: .darkAqua)
                     }
                 }
@@ -303,7 +303,7 @@ struct RewindSettingsView: View {
 
                 Button("Show in Finder") {
                     let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                        .appendingPathComponent("Omi")
+                        .appendingPathComponent("Nooto")
                     if let url = url {
                         NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
                     }
