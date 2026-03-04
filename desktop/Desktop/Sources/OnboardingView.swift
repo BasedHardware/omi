@@ -13,7 +13,7 @@ struct OnboardingView: View {
     @State private var showGraphHints = false
     @State private var hintsHovered = false
 
-    let steps = ["Video", "Chat", "Notifications", "FloatingBar"]
+    let steps = ["Video", "Chat", "Notifications", "FloatingBar", "Tasks"]
 
     var body: some View {
         ZStack {
@@ -44,8 +44,8 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // If currentStep is beyond the 4-step flow, clamp to last step
-            if currentStep > 3 {
-                currentStep = 3
+            if currentStep > 4 {
+                currentStep = 4
             }
         }
         .task {
@@ -169,17 +169,25 @@ struct OnboardingView: View {
                         currentStep = 3
                     }
                 )
-            } else {
+            } else if currentStep == 3 {
                 // Step 3: Floating Bar Demo
                 OnboardingFloatingBarDemoView(
                     appState: appState,
                     chatProvider: chatProvider,
                     onComplete: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar")
-                        handleOnboardingComplete()
+                        currentStep = 4
                     },
                     onSkip: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar_Skipped")
+                        currentStep = 4
+                    }
+                )
+            } else {
+                // Step 4: Tasks
+                OnboardingTasksStepView(
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
                         handleOnboardingComplete()
                     }
                 )
