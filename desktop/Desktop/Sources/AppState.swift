@@ -2465,13 +2465,18 @@ class AppState: ObservableObject {
             "hasTriggeredMicrophone",
             "hasTriggeredSystemAudio",
             "hasTriggeredAccessibility",
-            "hasTriggeredBluetooth"
+            "hasTriggeredBluetooth",
+            "onboardingJustCompleted"
         ]
         for key in onboardingKeys {
             UserDefaults.standard.removeObject(forKey: key)
         }
         UserDefaults.standard.synchronize()
         log("Cleared onboarding UserDefaults keys")
+
+        // Clear onboarding chat persistence and messages
+        OnboardingChatPersistence.clear()
+        log("Cleared onboarding chat persistence")
 
         // Also clear UserDefaults for both bundle IDs
         if let prodDefaults = UserDefaults(suiteName: "com.omi.computer-macos") {
