@@ -245,8 +245,9 @@ struct OnboardingChatView: View {
                         }
 
                         // "Continue" button — shown after AI calls complete_onboarding,
-                        // or while exploration is running so user can proceed
-                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending {
+                        // or while exploration is running so user can proceed.
+                        // Hidden when quick reply buttons are showing to avoid confusing the user.
+                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending && quickReplyOptions.isEmpty {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
@@ -913,8 +914,9 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Render content blocks in order — interleaving tool indicators with text
-                            ForEach(message.contentBlocks) { block in
+                            // Merge consecutive text blocks into single bubbles, render tool calls separately
+                            let mergedBlocks = mergeConsecutiveTextBlocks(message.contentBlocks)
+                            ForEach(mergedBlocks) { block in
                                 switch block {
                                 case .toolCall(_, let name, let status, _, let input, _):
                                     let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
@@ -963,6 +965,35 @@ struct OnboardingChatBubble: View {
             }
             .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         }
+    }
+
+    /// Merge consecutive `.text` blocks into single blocks so sentences aren't split across bubbles
+    private func mergeConsecutiveTextBlocks(_ blocks: [ChatContentBlock]) -> [ChatContentBlock] {
+        var result: [ChatContentBlock] = []
+        var pendingText = ""
+        var pendingId = ""
+
+        for block in blocks {
+            switch block {
+            case .text(let id, let text):
+                if pendingText.isEmpty {
+                    pendingId = id
+                    pendingText = text
+                } else {
+                    pendingText += "\n\n" + text
+                }
+            default:
+                if !pendingText.isEmpty {
+                    result.append(.text(id: pendingId, text: pendingText))
+                    pendingText = ""
+                }
+                result.append(block)
+            }
+        }
+        if !pendingText.isEmpty {
+            result.append(.text(id: pendingId, text: pendingText))
+        }
+        return result
     }
 }
 
