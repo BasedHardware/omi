@@ -58,12 +58,16 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
+            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
             REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
             FIREBASE_API_KEY=FIREBASE_API_KEY:latest
             PINECONE_API_KEY=PINECONE_API_KEY:latest
+            REDIS_DB_HOST=REDIS_DB_HOST:latest
+            REDIS_DB_PORT=REDIS_DB_PORT:latest
+            PINECONE_HOST=PINECONE_HOST:latest
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"
