@@ -2080,6 +2080,20 @@ workflows:
           fi
           cp -R "$SPARKLE_FW" "$APP_BUNDLE/Contents/Frameworks/"
 
+          # HeapSwiftCore: binary xcframework, copy the macOS slice + its dependency
+          HEAP_FW="Desktop/.build/artifacts/heap-swift-core-sdk/HeapSwiftCore/HeapSwiftCore.xcframework/macos-arm64_x86_64/HeapSwiftCore.framework"
+          if [ -d "$HEAP_FW" ]; then
+            cp -R "$HEAP_FW" "$APP_BUNDLE/Contents/Frameworks/"
+          else
+            echo "WARNING: HeapSwiftCore.framework not found (non-fatal)"
+          fi
+          CSPB_FW="Desktop/.build/artifacts/csswiftprotobuf/CSSwiftProtobuf/CSSwiftProtobuf.xcframework/macos-arm64_x86_64/CSSwiftProtobuf.framework"
+          if [ -d "$CSPB_FW" ]; then
+            cp -R "$CSPB_FW" "$APP_BUNDLE/Contents/Frameworks/"
+          else
+            echo "WARNING: CSSwiftProtobuf.framework not found (non-fatal)"
+          fi
+
           # Add rpath so Sparkle can be found at runtime
           install_name_tool -add_rpath "@executable_path/../Frameworks" \
             "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
@@ -2200,6 +2214,16 @@ workflows:
             "$SPARKLE_FW/Versions/B/Updater.app"
           codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
             "$SPARKLE_FW"
+
+          # Sign Heap frameworks (CSSwiftProtobuf first — dependency of HeapSwiftCore)
+          CSPB_FW="$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
+          if [ -d "$CSPB_FW" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$CSPB_FW"
+          fi
+          HEAP_FW="$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
+          if [ -d "$HEAP_FW" ]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$HEAP_FW"
+          fi
 
           # Sign the main app bundle with release entitlements
           codesign --force --options runtime --timestamp \
