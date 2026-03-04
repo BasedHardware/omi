@@ -1,30 +1,25 @@
 import SwiftUI
+import AppKit
 import MarkdownUI
 
-/// Onboarding step that demonstrates the floating control bar.
-/// Shows an embedded mock of the bar, suggests "Who am I?", and displays
-/// a personalized AI response to demonstrate the feature.
+/// Onboarding step: prompts user to press ⌘ Enter, then reveals an embedded
+/// floating bar inside the onboarding where they can ask a question.
 struct OnboardingFloatingBarDemoView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
 
-    @State private var demoState: DemoState = .initial
-    @State private var inputText: String = ""
-    @State private var responseText: String = ""
+    @State private var showBar = false
+    @State private var inputText = ""
+    @State private var responseText = ""
     @State private var isLoading = false
     @State private var showResponse = false
     @State private var querySubmitted = false
+    @State private var doneResponding = false
     @State private var pulseAnimation = false
+    @State private var keyMonitor: Any?
     @FocusState private var isInputFocused: Bool
-
-    private enum DemoState {
-        case initial    // Showing the bar in collapsed state with suggestion
-        case expanded   // Bar expanded, user can type or click suggestion
-        case responding // AI is responding
-        case done       // Response complete, show finish button
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,25 +74,42 @@ struct OnboardingFloatingBarDemoView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Press \(Text("⌘ Enter").fontWeight(.medium)) anywhere to summon it. Ask anything\nand it responds using everything it knows about you.")
+                    Text("Ask anything and it responds using\neverything it knows about you.")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
 
-                // Embedded floating bar mockup
-                embeddedBarView
-                    .frame(maxWidth: 480)
+                if showBar {
+                    // Embedded floating bar
+                    embeddedBarView
+                        .frame(maxWidth: 480)
+                        .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.95)))
+                } else {
+                    // Keyboard shortcut hint
+                    VStack(spacing: 12) {
+                        Text("Try it now")
+                            .font(.system(size: 13))
+                            .foregroundColor(OmiColors.textTertiary)
+
+                        HStack(spacing: 8) {
+                            keyCap("⌘")
+                            keyCap("Enter")
+                        }
+                    }
+                    .padding(.top, 4)
+                    .transition(.opacity)
+                }
             }
             .padding(.horizontal, 40)
 
             Spacer()
 
-            // Bottom button — shown after AI responds
-            if demoState == .done {
+            // Bottom button
+            if doneResponding {
                 Button(action: onComplete) {
-                    Text("Start using omi")
+                    Text("Continue")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: 280)
@@ -112,94 +124,83 @@ struct OnboardingFloatingBarDemoView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
-        .onAppear {
-            // Auto-expand after a brief delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    demoState = .expanded
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    isInputFocused = true
+        .onAppear { installKeyMonitor() }
+        .onDisappear { removeKeyMonitor() }
+    }
+
+    // MARK: - Key Monitor
+
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let mods = event.modifierFlags.intersection(NSEvent.ModifierFlags.deviceIndependentFlagsMask)
+            if mods == .command && event.keyCode == 36 { // 36 = Return
+                if !showBar {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        showBar = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        isInputFocused = true
+                    }
+                    return nil
                 }
             }
+            return event
         }
     }
 
-    // MARK: - Embedded Bar Mockup
+    private func removeKeyMonitor() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+    }
+
+    // MARK: - Embedded Bar
 
     private var embeddedBarView: some View {
         VStack(spacing: 0) {
-            switch demoState {
-            case .initial:
-                // Collapsed bar
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white.opacity(0.5))
-                    .frame(width: 28, height: 4)
-                    .padding(.vertical, 16)
-
-            case .expanded:
+            if !querySubmitted {
                 // Input view
-                VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        HStack(spacing: 4) {
-                            Text("esc")
-                                .scaledFont(size: 11)
-                                .foregroundColor(.secondary)
-                                .frame(width: 30, height: 16)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(4)
-                            Text("to close")
-                                .scaledFont(size: 11)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.top, 8)
-                    .padding(.trailing, 16)
-
-                    HStack(spacing: 6) {
-                        ZStack(alignment: .topLeading) {
-                            if inputText.isEmpty {
-                                Text("Try asking: \"Who am I?\"")
-                                    .scaledFont(size: 13)
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 8)
-                            }
-
-                            TextField("", text: $inputText)
-                                .textFieldStyle(.plain)
+                HStack(spacing: 6) {
+                    ZStack(alignment: .topLeading) {
+                        if inputText.isEmpty {
+                            Text("Try asking: \"Who am I?\"")
                                 .scaledFont(size: 13)
-                                .foregroundColor(.white)
+                                .foregroundColor(.secondary)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 8)
-                                .focused($isInputFocused)
-                                .onSubmit {
-                                    submitQuery()
-                                }
                         }
-                        .padding(.horizontal, 4)
-                        .frame(height: 40)
 
-                        Button(action: submitQuery) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .scaledFont(size: 24)
-                                .foregroundColor(
-                                    inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                        ? .secondary : .white
-                                )
-                        }
-                        .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .buttonStyle(.plain)
+                        TextField("", text: $inputText)
+                            .textFieldStyle(.plain)
+                            .scaledFont(size: 13)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 8)
+                            .focused($isInputFocused)
+                            .onSubmit {
+                                submitQuery()
+                            }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
+                    .padding(.horizontal, 4)
+                    .frame(height: 40)
 
-            case .responding, .done:
+                    Button(action: submitQuery) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .scaledFont(size: 24)
+                            .foregroundColor(
+                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    ? .secondary : .white
+                            )
+                    }
+                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            } else {
                 // Response view
                 VStack(alignment: .leading, spacing: 12) {
-                    // Header
                     HStack(spacing: 12) {
                         if isLoading {
                             ProgressView()
@@ -218,7 +219,7 @@ struct OnboardingFloatingBarDemoView: View {
 
                     // Question
                     HStack(alignment: .top, spacing: 8) {
-                        Text(querySubmitted ? (inputText.isEmpty ? "Who am I?" : inputText) : "")
+                        Text(inputText.isEmpty ? "Who am I?" : inputText)
                             .scaledFont(size: 13)
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -260,50 +261,35 @@ struct OnboardingFloatingBarDemoView: View {
         )
     }
 
-    // MARK: - Query Submission
+    // MARK: - Query
 
     private func submitQuery() {
         let query = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
         querySubmitted = true
-
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-            demoState = .responding
-            isLoading = true
-        }
+        isLoading = true
 
         Task {
-            await sendQuery(query)
+            let systemPrompt = """
+            You are omi, a personal AI that knows the user well from analyzing their screen activity. \
+            The user is trying the floating bar for the first time during onboarding. \
+            Give a warm, personalized response. If they ask "Who am I?", respond with what you know \
+            about them from the onboarding conversation — their name, interests, what they've been working on. \
+            Keep it brief (2-4 sentences) and friendly. If you don't know much yet, be honest but encouraging.
+            """
+
+            await chatProvider.sendMessage(query, systemPromptPrefix: systemPrompt)
+            await observeResponse()
         }
-    }
-
-    private func sendQuery(_ query: String) async {
-        // Use ChatProvider to send the query through the ACP bridge
-        // This gives a real AI response with full user context
-        let systemPrompt = """
-        You are omi, a personal AI that knows the user well from analyzing their screen activity. \
-        The user is trying the floating bar for the first time during onboarding. \
-        Give a warm, personalized response. If they ask "Who am I?", respond with what you know \
-        about them from the onboarding conversation — their name, interests, what they've been working on. \
-        Keep it brief (2-4 sentences) and friendly. If you don't know much yet, be honest but encouraging.
-        """
-
-        // Stream the response via ChatProvider
-        await chatProvider.sendMessage(query, systemPromptPrefix: systemPrompt)
-
-        // Monitor ChatProvider messages for the response
-        await observeResponse()
     }
 
     @MainActor
     private func observeResponse() async {
-        // Poll for the AI response from ChatProvider
         var attempts = 0
-        while attempts < 60 { // Max 30 seconds
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        while attempts < 60 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
             attempts += 1
 
-            // Check if the last message is from AI and is no longer streaming
             if let lastMessage = chatProvider.messages.last,
                lastMessage.sender == .ai {
                 let text = lastMessage.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -317,22 +303,37 @@ struct OnboardingFloatingBarDemoView: View {
                 }
 
                 if !lastMessage.isStreaming && !chatProvider.isSending {
-                    // Response complete
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isLoading = false
-                        demoState = .done
+                        doneResponding = true
                     }
                     return
                 }
             }
         }
 
-        // Timeout — show what we have
-        await MainActor.run {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isLoading = false
-                demoState = .done
-            }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isLoading = false
+            doneResponding = true
         }
+    }
+
+    // MARK: - Key Cap
+
+    private func keyCap(_ key: String) -> some View {
+        Text(key)
+            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .foregroundColor(OmiColors.textPrimary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(OmiColors.backgroundTertiary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
+            )
     }
 }

@@ -102,6 +102,7 @@ struct OnboardingChatView: View {
     @State private var explorationCompleted = false
     @State private var explorationText = ""
     @State private var explorationTask: Task<Void, Never>?
+    @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -116,12 +117,18 @@ struct OnboardingChatView: View {
 
                 Spacer()
 
-                Button(action: onSkip) {
+                Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
                         .font(.system(size: 13))
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .alert("Are you sure?", isPresented: $showSkipConfirmation) {
+                    Button("Skip anyway", role: .destructive) { onSkip() }
+                    Button("Continue setup", role: .cancel) { }
+                } message: {
+                    Text("Omi won't be useful for you if it doesn't know enough about you.")
+                }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -134,8 +141,11 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                            OnboardingChatBubble(message: message)
-                                .id(message.id)
+                            // Hide the initial "Hi, I just installed omi!" message
+                            if !(message.sender == .user && message.text == "Hi, I just installed omi!") {
+                                OnboardingChatBubble(message: message)
+                                    .id(message.id)
+                            }
                         }
 
                         // Parallel exploration card (appears after scan_files)
@@ -237,12 +247,13 @@ struct OnboardingChatView: View {
                             }
                         }
 
-                        // "Continue to App" button — shown after AI calls complete_onboarding
-                        if onboardingCompleted && !chatProvider.isSending && !explorationRunning {
+                        // "Continue" button — shown after AI calls complete_onboarding,
+                        // or while exploration is running so user can proceed
+                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
-                                Text("Continue to App")
+                                Text("Continue")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
@@ -438,7 +449,14 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onCompleteOnboarding = {
             onboardingCompleted = true
         }
-        ChatToolExecutor.onQuickReplyOptions = { options in
+        ChatToolExecutor.onQuickReplyOptions = { question, options in
+            // If the AI's question isn't already in the last message, add it
+            if !question.isEmpty {
+                let lastAIText = chatProvider.messages.last(where: { $0.sender == .ai })?.text ?? ""
+                if !lastAIText.contains(question) {
+                    chatProvider.messages.append(ChatMessage(text: question, sender: .ai))
+                }
+            }
             quickReplyOptions = options
         }
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
@@ -509,9 +527,8 @@ struct OnboardingChatView: View {
                     resume: savedSessionId
                 )
             }
-        } else {
+        } else if chatProvider.messages.isEmpty {
             // Fresh start — clear stale messages, mark mid-onboarding, begin
-            chatProvider.messages.removeAll()
             OnboardingChatPersistence.saveMidOnboarding()
 
             Task {
@@ -521,6 +538,7 @@ struct OnboardingChatView: View {
                 )
             }
         }
+        // else: messages already preloaded from OnboardingView.task{}
     }
 
     private func stopAgent() {
@@ -590,51 +608,7 @@ struct OnboardingChatView: View {
     }
 
     private func handleOnboardingComplete() {
-        log("OnboardingChatView: Completing onboarding")
-
-        // Set flag so DesktopHomeView navigates to Chat page after transition
-        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        // Mark onboarding as done
-        appState.hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-
-        // Start cloud agent VM pipeline
-        Task {
-            await AgentVMService.shared.startPipeline()
-        }
-
-        // Enable launch at login
-        if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-        }
-
-        // Start proactive monitoring
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-
-        // Start transcription if microphone is available
-        appState.startTranscription()
-
-        // Create welcome task (skip if it already exists from a previous onboarding)
-        Task {
-            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
-            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
-            if !alreadyExists {
-                await TasksStore.shared.createTask(
-                    description: welcomeDescription,
-                    dueAt: Date(),
-                    priority: "low"
-                )
-            }
-        }
-
-        // Send welcome notification
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            NotificationService.shared.sendNotification(
-                title: "You're all set!",
-                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
-            )
-        }
+        log("OnboardingChatView: Chat step complete, advancing to next onboarding step")
 
         // Clean up parallel exploration
         explorationTask?.cancel()
@@ -644,14 +618,7 @@ struct OnboardingChatView: View {
         }
         explorationBridge = nil
 
-        // Clean up onboarding state and persisted chat data
-        chatProvider.isOnboarding = false
-        OnboardingChatPersistence.clear()
-
-        // Log analytics
-        AnalyticsManager.shared.onboardingCompleted()
-
-        // Notify parent
+        // Notify parent to advance to next step
         onComplete()
     }
 

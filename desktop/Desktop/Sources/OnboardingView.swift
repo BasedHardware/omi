@@ -13,7 +13,7 @@ struct OnboardingView: View {
     @State private var showGraphHints = false
     @State private var hintsHovered = false
 
-    let steps = ["Video", "Chat", "Notifications", "FloatingBar"]
+    let steps = ["Video", "Chat", "Notifications", "FloatingBar", "Tasks"]
 
     var body: some View {
         ZStack {
@@ -44,16 +44,36 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             // If currentStep is beyond the 4-step flow, clamp to last step
-            if currentStep > 3 {
-                currentStep = 3
+            if currentStep > 4 {
+                currentStep = 4
             }
         }
         .task {
-            // Pre-warm the ACP bridge while the user watches the intro video.
-            // Without this, the first chat message waits 4-6s for the Node.js
-            // bridge to cold-start. By starting it here, it's ready by the time
-            // the user clicks "Continue" and reaches the chat step.
+            // Pre-warm the ACP bridge and send the first onboarding message
+            // while the user watches the intro video, so the AI response is
+            // ready by the time they reach the chat step.
             await chatProvider.warmupBridge()
+
+            if !appState.hasCompletedOnboarding && currentStep == 0 && chatProvider.messages.isEmpty {
+                // Clear stale mid-onboarding state from previous runs
+                OnboardingChatPersistence.clear()
+                let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
+                let givenName = AuthService.shared.givenName.isEmpty ? userName : AuthService.shared.givenName
+                let email = AuthState.shared.userEmail ?? ""
+
+                let systemPrompt = ChatPromptBuilder.buildOnboardingChat(
+                    userName: userName,
+                    givenName: givenName,
+                    email: email
+                )
+                chatProvider.isOnboarding = true
+                OnboardingChatPersistence.saveMidOnboarding()
+
+                await chatProvider.sendMessage(
+                    "Hi, I just installed omi!",
+                    systemPromptPrefix: systemPrompt
+                )
+            }
         }
     }
 
@@ -169,17 +189,25 @@ struct OnboardingView: View {
                         currentStep = 3
                     }
                 )
-            } else {
+            } else if currentStep == 3 {
                 // Step 3: Floating Bar Demo
                 OnboardingFloatingBarDemoView(
                     appState: appState,
                     chatProvider: chatProvider,
                     onComplete: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar")
-                        handleOnboardingComplete()
+                        currentStep = 4
                     },
                     onSkip: {
                         AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar_Skipped")
+                        currentStep = 4
+                    }
+                )
+            } else {
+                // Step 4: Tasks
+                OnboardingTasksStepView(
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
                         handleOnboardingComplete()
                     }
                 )
@@ -227,6 +255,19 @@ struct OnboardingView: View {
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
+
+        // Create welcome task
+        Task {
+            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
+            if !alreadyExists {
+                await TasksStore.shared.createTask(
+                    description: welcomeDescription,
+                    dueAt: Date(),
+                    priority: "low"
+                )
+            }
+        }
 
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
