@@ -39,7 +39,7 @@ actor RewindStorage {
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = RewindDatabase.currentUserId ?? "anonymous"
         let omiDir = appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
+            .appendingPathComponent("Nooto", isDirectory: true)
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
 
