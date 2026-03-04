@@ -100,7 +100,7 @@ enum ViewExporter {
              CGSize(width: 250, height: 500)),
 
             ("15-settings",
-             { AnyView(SettingsPage(appState: AppState(), selectedSection: .constant(.general), selectedAdvancedSubsection: .constant(nil), highlightedSettingId: .constant(nil))) },
+             { AnyView(SettingsPage(appState: AppState(), selectedSection: .constant(.general), highlightedSettingId: .constant(nil))) },
              CGSize(width: 900, height: 700)),
         ]
 
@@ -207,7 +207,7 @@ enum ViewExporter {
             ("full-advice",       6,  { AnyView(AdvicePage()) }),
             ("full-rewind",       7,  { AnyView(RewindPage()) }),
             ("full-apps",         8,  { AnyView(AppsPage(appProvider: AppProvider())) }),
-            ("full-settings",     9,  { AnyView(SettingsPage(appState: AppState(), selectedSection: .constant(.general), selectedAdvancedSubsection: .constant(nil), highlightedSettingId: .constant(nil))) }),
+            ("full-settings",     9,  { AnyView(SettingsPage(appState: AppState(), selectedSection: .constant(.general), highlightedSettingId: .constant(nil))) }),
             ("full-permissions",  10, { AnyView(PermissionsPage(appState: AppState())) }),
             ("full-device",       11, { AnyView(DeviceSettingsPage()) }),
         ]
