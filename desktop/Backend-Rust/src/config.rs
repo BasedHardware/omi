@@ -106,12 +106,21 @@ impl Config {
             crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
             pinecone_api_key: env::var("PINECONE_API_KEY").ok(),
             pinecone_host: env::var("PINECONE_HOST").ok(),
-            gce_project_id: env::var("GCE_PROJECT_ID")
-                .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
-                .or_else(|_| env::var("GCP_PROJECT_ID"))
-                .unwrap_or_else(|_| "based-hardware".to_string()),
-            gce_source_image: env::var("GCE_SOURCE_IMAGE")
-                .unwrap_or_else(|_| "projects/based-hardware/global/images/family/omi-agent".to_string()),
+            gce_project_id: {
+                let p = env::var("GCE_PROJECT_ID")
+                    .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                    .or_else(|_| env::var("GCP_PROJECT_ID"))
+                    .unwrap_or_else(|_| "based-hardware".to_string());
+                p
+            },
+            gce_source_image: {
+                let gce_proj = env::var("GCE_PROJECT_ID")
+                    .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                    .or_else(|_| env::var("GCP_PROJECT_ID"))
+                    .unwrap_or_else(|_| "based-hardware".to_string());
+                env::var("GCE_SOURCE_IMAGE")
+                    .unwrap_or_else(|_| format!("projects/{}/global/images/family/omi-agent", gce_proj))
+            },
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET")
                 .unwrap_or_else(|_| "based-hardware-agent".to_string()),
         }
