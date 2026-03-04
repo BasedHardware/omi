@@ -327,7 +327,7 @@ struct ShortcutsSettingsSection: View {
                 .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            shortcutRow(label: "Ask omi", keys: settings.askOmiKey.rawValue)
+            shortcutRow(label: "Ask Nooto", keys: settings.askOmiKey.rawValue)
             shortcutRow(label: "Toggle floating bar", keys: "\u{2318}\\")
             shortcutRow(label: "Push to talk", keys: settings.pttKey.symbol + " hold")
             if settings.doubleTapForLock {
