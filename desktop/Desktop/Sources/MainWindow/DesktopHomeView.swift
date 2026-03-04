@@ -29,6 +29,13 @@ struct DesktopHomeView: View {
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
 
+    // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
+    private static let heroLogoImage: NSImage? = {
+        guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return NSImage(data: data)
+    }()
+
 
     /// Whether we're currently viewing the settings page
     private var isInSettings: Bool {
@@ -40,8 +47,7 @@ struct DesktopHomeView: View {
             if authState.isRestoringAuth {
                 // State 0: Restoring auth session - show loading
                 VStack(spacing: 16) {
-                    if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                       let nsImage = NSImage(contentsOf: iconURL) {
+                    if let nsImage = Self.heroLogoImage {
                         Image(nsImage: nsImage)
                             .resizable()
                             .scaledToFit()
@@ -226,8 +232,7 @@ struct DesktopHomeView: View {
 
                     if !viewModelContainer.isInitialLoadComplete {
                         VStack(spacing: 24) {
-                            if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                               let nsImage = NSImage(contentsOf: iconURL) {
+                            if let nsImage = Self.heroLogoImage {
                                 Image(nsImage: nsImage)
                                     .resizable()
                                     .scaledToFit()
