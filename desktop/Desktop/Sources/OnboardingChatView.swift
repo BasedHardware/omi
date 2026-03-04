@@ -102,6 +102,7 @@ struct OnboardingChatView: View {
     @State private var explorationCompleted = false
     @State private var explorationText = ""
     @State private var explorationTask: Task<Void, Never>?
+    @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -116,12 +117,18 @@ struct OnboardingChatView: View {
 
                 Spacer()
 
-                Button(action: onSkip) {
+                Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
                         .font(.system(size: 13))
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .alert("Are you sure?", isPresented: $showSkipConfirmation) {
+                    Button("Skip anyway", role: .destructive) { onSkip() }
+                    Button("Continue setup", role: .cancel) { }
+                } message: {
+                    Text("Omi won't be useful for you if it doesn't know enough about you.")
+                }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -237,12 +244,13 @@ struct OnboardingChatView: View {
                             }
                         }
 
-                        // "Continue to App" button — shown after AI calls complete_onboarding
-                        if onboardingCompleted && !chatProvider.isSending && !explorationRunning {
+                        // "Continue" button — shown after AI calls complete_onboarding,
+                        // or while exploration is running so user can proceed
+                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
-                                Text("Continue to App")
+                                Text("Continue")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
