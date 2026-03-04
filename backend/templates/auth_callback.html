@@ -109,17 +109,28 @@
             messageElement.textContent = 'Please close this window and try again.';
         } else if (code) {
             // Build the custom scheme redirect URL using the redirect_uri from the auth session
-            const redirectUri = "{{ redirect_uri }}";
+            const redirectUri = {{ redirect_uri|tojson }};
+
+            // Validate redirect scheme before use (defense-in-depth; server also validates)
+            const ALLOWED_SCHEMES = ['omi://', 'omi-computer://', 'omi-computer-dev://'];
+            const isAllowedScheme = ALLOWED_SCHEMES.some(s => redirectUri.startsWith(s));
+            if (!isAllowedScheme) {
+                errorElement.textContent = 'Invalid redirect scheme.';
+                spinnerElement.style.display = 'none';
+                messageElement.textContent = 'Please close this window and try again.';
+            }
+
             let redirectUrl = redirectUri + '?code=' + encodeURIComponent(code);
             if (state) {
                 redirectUrl += '&state=' + encodeURIComponent(state);
             }
 
             // Set up manual link
-            manualLinkElement.href = redirectUrl;
+            manualLinkElement.href = isAllowedScheme ? redirectUrl : '#';
 
             // Attempt automatic redirect
             try {
+                if (!isAllowedScheme) throw new Error('Blocked redirect to disallowed scheme');
                 console.log('Redirecting to:', redirectUrl);
                 window.location.href = redirectUrl;
 
