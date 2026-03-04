@@ -60,6 +60,10 @@ pub struct Config {
     pub pinecone_host: Option<String>,
     /// GCE project ID for AgentVM provisioning (defaults to "based-hardware")
     pub gce_project_id: String,
+    /// GCE source image for AgentVM (defaults to "projects/based-hardware/global/images/family/omi-agent")
+    pub gce_source_image: String,
+    /// GCS bucket for agent startup script (defaults to "based-hardware-agent")
+    pub agent_gcs_bucket: String,
 }
 
 impl Config {
@@ -106,6 +110,10 @@ impl Config {
                 .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
                 .or_else(|_| env::var("GCP_PROJECT_ID"))
                 .unwrap_or_else(|_| "based-hardware".to_string()),
+            gce_source_image: env::var("GCE_SOURCE_IMAGE")
+                .unwrap_or_else(|_| "projects/based-hardware/global/images/family/omi-agent".to_string()),
+            agent_gcs_bucket: env::var("AGENT_GCS_BUCKET")
+                .unwrap_or_else(|_| "based-hardware-agent".to_string()),
         }
     }
 
