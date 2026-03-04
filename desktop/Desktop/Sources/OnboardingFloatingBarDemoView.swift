@@ -109,7 +109,7 @@ struct OnboardingFloatingBarDemoView: View {
             // Bottom button
             if doneResponding {
                 Button(action: onComplete) {
-                    Text("Start using omi")
+                    Text("Continue")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: 280)

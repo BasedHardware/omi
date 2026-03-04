@@ -49,11 +49,29 @@ struct OnboardingView: View {
             }
         }
         .task {
-            // Pre-warm the ACP bridge while the user watches the intro video.
-            // Without this, the first chat message waits 4-6s for the Node.js
-            // bridge to cold-start. By starting it here, it's ready by the time
-            // the user clicks "Continue" and reaches the chat step.
+            // Pre-warm the ACP bridge and send the first onboarding message
+            // while the user watches the intro video, so the AI response is
+            // ready by the time they reach the chat step.
             await chatProvider.warmupBridge()
+
+            if !appState.hasCompletedOnboarding && !OnboardingChatPersistence.isMidOnboarding && chatProvider.messages.isEmpty {
+                let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.displayName
+                let givenName = AuthService.shared.givenName.isEmpty ? userName : AuthService.shared.givenName
+                let email = AuthState.shared.userEmail ?? ""
+
+                let systemPrompt = ChatPromptBuilder.buildOnboardingChat(
+                    userName: userName,
+                    givenName: givenName,
+                    email: email
+                )
+                chatProvider.isOnboarding = true
+                OnboardingChatPersistence.saveMidOnboarding()
+
+                await chatProvider.sendMessage(
+                    "Hi, I just installed omi!",
+                    systemPromptPrefix: systemPrompt
+                )
+            }
         }
     }
 

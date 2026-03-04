@@ -141,8 +141,11 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                            OnboardingChatBubble(message: message)
-                                .id(message.id)
+                            // Hide the initial "Hi, I just installed omi!" message
+                            if !(message.sender == .user && message.text == "Hi, I just installed omi!") {
+                                OnboardingChatBubble(message: message)
+                                    .id(message.id)
+                            }
                         }
 
                         // Parallel exploration card (appears after scan_files)
@@ -517,9 +520,8 @@ struct OnboardingChatView: View {
                     resume: savedSessionId
                 )
             }
-        } else {
+        } else if chatProvider.messages.isEmpty {
             // Fresh start — clear stale messages, mark mid-onboarding, begin
-            chatProvider.messages.removeAll()
             OnboardingChatPersistence.saveMidOnboarding()
 
             Task {
@@ -529,6 +531,7 @@ struct OnboardingChatView: View {
                 )
             }
         }
+        // else: messages already preloaded from OnboardingView.task{}
     }
 
     private func stopAgent() {
