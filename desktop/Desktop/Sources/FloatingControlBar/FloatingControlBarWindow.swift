@@ -189,9 +189,6 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
     }
 
     private func checkCursorScreen() {
-        // Skip if an AI conversation is open (don't jump while reading)
-        guard !state.showingAIConversation else { return }
-
         // Only follow when there are multiple screens
         guard NSScreen.screens.count > 1 else { return }
 
