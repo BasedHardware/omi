@@ -528,7 +528,6 @@ struct OnboardingChatView: View {
                 )
             }
         }
-        // else: messages already preloaded from OnboardingView.task{}
     }
 
     private func stopAgent() {
@@ -541,8 +540,9 @@ struct OnboardingChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
 
-        // Clear quick replies when user types their own message
+        // Clear quick replies and unblock any pending ask_followup
         quickReplyOptions = []
+        ChatToolExecutor.resumeFollowup(with: text)
 
         Task {
             await chatProvider.sendMessage(text)
@@ -590,7 +590,8 @@ struct OnboardingChatView: View {
                 }
             }
         } else {
-            // Regular quick reply — just send as message
+            // Regular quick reply — resume the blocked ask_followup tool, then send as message
+            ChatToolExecutor.resumeFollowup(with: option)
             Task {
                 await chatProvider.sendMessage(option)
             }

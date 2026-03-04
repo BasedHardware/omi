@@ -2478,19 +2478,50 @@ class AppState: ObservableObject {
         OnboardingChatPersistence.clear()
         log("Cleared onboarding chat persistence")
 
-        // Clear local knowledge graph data so it doesn't show stale nodes
+        // Clear all local user data: database, screenshots, videos, knowledge graph, etc.
+        let dataKeys = [
+            "omi.focus.sessions",
+            "omi.advice.history",
+            "TasksSavedFilterViews",
+        ]
+        for key in dataKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        log("Cleared local data UserDefaults keys")
+
+        // Close database and delete entire user data directory
         Task {
-            await KnowledgeGraphStorage.shared.clearAll()
+            await RewindDatabase.shared.close()
+            await RewindStorage.shared.reset()
+            await KnowledgeGraphStorage.shared.invalidateCache()
+
+            let fileManager = FileManager.default
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "anonymous"
+            let userDir = appSupport
+                .appendingPathComponent("Omi", isDirectory: true)
+                .appendingPathComponent("users", isDirectory: true)
+                .appendingPathComponent(userId, isDirectory: true)
+
+            if fileManager.fileExists(atPath: userDir.path) {
+                do {
+                    try fileManager.removeItem(at: userDir)
+                    log("Deleted user data directory: \(userDir.path)")
+                } catch {
+                    log("Failed to delete user data directory: \(error)")
+                }
+            }
         }
 
         // Also clear UserDefaults for both bundle IDs
+        let allKeys = onboardingKeys + dataKeys
         if let prodDefaults = UserDefaults(suiteName: "com.omi.computer-macos") {
-            for key in onboardingKeys {
+            for key in allKeys {
                 prodDefaults.removeObject(forKey: key)
             }
         }
         if let devDefaults = UserDefaults(suiteName: "com.omi.desktop-dev") {
-            for key in onboardingKeys {
+            for key in allKeys {
                 devDefaults.removeObject(forKey: key)
             }
         }
