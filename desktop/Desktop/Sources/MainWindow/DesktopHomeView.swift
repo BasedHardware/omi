@@ -25,7 +25,6 @@ struct DesktopHomeView: View {
 
     // Settings sidebar state
     @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
-    @State private var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection? = nil
     @State private var highlightedSettingId: String? = nil
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
@@ -389,7 +388,6 @@ struct DesktopHomeView: View {
                 if isInSettings {
                     SettingsSidebar(
                         selectedSection: $selectedSettingsSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         onBack: {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -421,7 +419,6 @@ struct DesktopHomeView: View {
                     appState: appState,
                     viewModelContainer: viewModelContainer,
                     selectedSettingsSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
                     highlightedSettingId: $highlightedSettingId,
                     selectedTabIndex: $selectedIndex
                 )
@@ -445,7 +442,6 @@ struct DesktopHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
             // Set the section directly and navigate to settings
-            selectedSettingsSection = .device
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
@@ -453,14 +449,12 @@ struct DesktopHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             // Navigate to settings > advanced > task assistant subsection
             selectedSettingsSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
             selectedSettingsSection = .advanced
-            selectedAdvancedSubsection = .askOmiFloatingBar
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
@@ -522,7 +516,6 @@ private struct PageContentView: View {
     let appState: AppState
     let viewModelContainer: ViewModelContainer
     @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
     @Binding var selectedTabIndex: Int
 
@@ -552,7 +545,6 @@ private struct PageContentView: View {
                 SettingsPage(
                     appState: appState,
                     selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
                     highlightedSettingId: $highlightedSettingId,
                     chatProvider: viewModelContainer.chatProvider
                 )
