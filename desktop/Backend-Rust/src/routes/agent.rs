@@ -84,6 +84,8 @@ async fn provision_agent_vm(
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
     let gce_project = state.config.gce_project_id.clone();
+    let gce_source_image = state.config.gce_source_image.clone();
+    let agent_gcs_bucket = state.config.agent_gcs_bucket.clone();
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -92,6 +94,8 @@ async fn provision_agent_vm(
             &vm_name_clone,
             &auth_token_clone,
             &gce_project,
+            &gce_source_image,
+            &agent_gcs_bucket,
         )
         .await
         {
@@ -436,15 +440,14 @@ async fn create_gce_vm(
     vm_name: &str,
     auth_token: &str,
     project: &str,
+    source_image: &str,
+    gcs_bucket: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let zone = "us-central1-a";
 
     // Startup script: pull the real startup.sh from GCS and run it.
     // All logic lives in GCS so it can be updated without reprovisioning VMs.
-    let startup_script = r#"#!/bin/bash
-curl -sf https://storage.googleapis.com/based-hardware-agent/startup.sh -o /tmp/omi-startup.sh \
-  && bash /tmp/omi-startup.sh
-"#.to_string();
+    let startup_script = format!("#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n", gcs_bucket);
 
     // GCE instances.insert REST API
     let url = format!(
@@ -459,7 +462,7 @@ curl -sf https://storage.googleapis.com/based-hardware-agent/startup.sh -o /tmp/
             "boot": true,
             "autoDelete": true,
             "initializeParams": {
-                "sourceImage": format!("projects/{}/global/images/family/omi-agent", project),
+                "sourceImage": source_image,
                 "diskSizeGb": "50",
                 "diskType": format!("zones/{}/diskTypes/pd-ssd", zone)
             }
