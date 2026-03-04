@@ -20,7 +20,7 @@ struct PermissionsPage: View {
                             .foregroundColor(OmiColors.textPrimary)
                     }
 
-                    Text("Omi needs the following permissions to work properly.")
+                    Text("Nooto needs the following permissions to work properly.")
                         .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textSecondary)
                 }
@@ -317,7 +317,7 @@ struct MicrophonePermissionSection: View {
                         .foregroundColor(OmiColors.textSecondary)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Find \"Omi\" and toggle it ON")
+                        Text("Find \"Nooto\" and toggle it ON")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textSecondary)
 
