@@ -96,6 +96,7 @@ async def auth_callback_google(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": session_data.get('redirect_uri', 'omi://auth/callback'),
         },
     )
 
@@ -134,6 +135,7 @@ async def auth_callback_apple_post(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": session_data.get('redirect_uri', 'omi://auth/callback'),
         },
     )
 
