@@ -77,8 +77,9 @@ struct OnboardingFloatingBarDemoView: View {
                         .foregroundColor(OmiColors.textTertiary)
 
                     HStack(spacing: 8) {
-                        keyCap("⌘")
-                        keyCap("Enter")
+                        ForEach(ShortcutSettings.shared.askOmiKey.hintKeys, id: \.self) { key in
+                            keyCap(key)
+                        }
                     }
                 }
                 .padding(.top, 4)
