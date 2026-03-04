@@ -1644,7 +1644,7 @@ struct SettingsContentView: View {
                         Spacer()
 
                         Picker("", selection: $chatBridgeMode) {
-                            Text("Omi account").tag("agentSDK")
+                            Text("Nooto account").tag("agentSDK")
                             Text("Your Claude Account").tag("claudeCode")
                         }
                         .pickerStyle(.menu)
@@ -3992,7 +3992,7 @@ struct SettingsContentView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("Omi")
+                                Text("Nooto")
                                     .scaledFont(size: 18, weight: .bold)
                                     .foregroundColor(OmiColors.textPrimary)
 
@@ -4025,8 +4025,8 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     // Links
-                    linkRow(title: "Visit Website", url: "https://omi.me")
-                    linkRow(title: "Help Center", url: "https://help.omi.me")
+                    linkRow(title: "Visit Website", url: "https://nooto.togodynamics.com")
+                    linkRow(title: "Help Center", url: "https://nooto.togodynamics.com/help")
                     Button(action: {
                         selectedSection = .privacy
                     }) {
@@ -4043,7 +4043,7 @@ struct SettingsContentView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    linkRow(title: "Terms of Service", url: "https://omi.me/terms")
+                    linkRow(title: "Terms of Service", url: "https://nooto.togodynamics.com/terms")
                 }
             }
 
