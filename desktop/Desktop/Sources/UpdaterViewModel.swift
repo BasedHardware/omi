@@ -51,6 +51,23 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Called when Sparkle finishes loading the appcast
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         logSync("Sparkle: Appcast loaded (\(appcast.items.count) items)")
+
+        // Capture latest stable build metadata for downgrade detection
+        var bestStableBuild: Int?
+        var bestStableVersion: String?
+        for item in appcast.items {
+            let isStable = item.channel == nil || item.channel?.isEmpty == true
+            guard isStable, let build = Int(item.versionString) else { continue }
+            if bestStableBuild == nil || build > bestStableBuild! {
+                bestStableBuild = build
+                bestStableVersion = item.displayVersionString
+            }
+        }
+        // Always update (including nil) so stale data doesn't produce false downgrade alerts
+        Task { @MainActor in
+            self.viewModel?.latestStableBuildNumber = bestStableBuild
+            self.viewModel?.latestStableVersionString = bestStableVersion
+        }
     }
 
     /// Called when Sparkle finds a valid update
@@ -237,10 +254,15 @@ final class UpdaterViewModel: ObservableObject {
     /// Selected update channel (persisted to UserDefaults)
     @Published var updateChannel: UpdateChannel {
         didSet {
+            guard oldValue != updateChannel else { return }
+
+            // Must happen before check; Sparkle delegate reads from UserDefaults
             UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
             activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
+
             if isInitialized {
                 AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
+                checkForUpdatesInBackground()
             }
         }
     }
@@ -250,6 +272,12 @@ final class UpdaterViewModel: ObservableObject {
 
     /// Version string of the available update
     @Published var availableVersion: String = ""
+
+    /// Latest stable build number from the appcast (for downgrade detection)
+    @Published var latestStableBuildNumber: Int?
+
+    /// Latest stable version string from the appcast (e.g. "0.11.48+11048")
+    @Published var latestStableVersionString: String?
 
     /// The date of the last update check
     var lastUpdateCheckDate: Date? {
@@ -322,4 +350,13 @@ final class UpdaterViewModel: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
         return (raw == "beta" || raw == "staging") ? "Beta" : ""
     }()
+
+    /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
+    var isDowngradeToStable: Bool {
+        guard let currentBuild = Int(buildNumber),
+              let stableBuild = latestStableBuildNumber else {
+            return false
+        }
+        return currentBuild > stableBuild
+    }
 }

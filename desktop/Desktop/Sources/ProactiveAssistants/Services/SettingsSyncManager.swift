@@ -93,15 +93,11 @@ class SettingsSyncManager {
         }
 
         // Update channel (server-authoritative override)
+        // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
         if let channel = remote.updateChannel, let parsed = UpdateChannel(rawValue: channel) {
             if UpdaterViewModel.shared.updateChannel != parsed {
                 log("SettingsSyncManager: Server assigned update channel: \(channel)")
                 UpdaterViewModel.shared.updateChannel = parsed
-                // Trigger an immediate update check so the new channel takes effect
-                Task {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    UpdaterViewModel.shared.checkForUpdatesInBackground()
-                }
             }
         }
     }
