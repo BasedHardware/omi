@@ -58,6 +58,8 @@ pub struct Config {
     pub pinecone_api_key: Option<String>,
     /// Pinecone host URL (e.g. https://index-name-xxx.svc.environment.pinecone.io)
     pub pinecone_host: Option<String>,
+    /// GCE project ID for AgentVM provisioning (defaults to "based-hardware")
+    pub gce_project_id: String,
 }
 
 impl Config {
@@ -100,6 +102,10 @@ impl Config {
             crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
             pinecone_api_key: env::var("PINECONE_API_KEY").ok(),
             pinecone_host: env::var("PINECONE_HOST").ok(),
+            gce_project_id: env::var("GCE_PROJECT_ID")
+                .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                .or_else(|_| env::var("GCP_PROJECT_ID"))
+                .unwrap_or_else(|_| "based-hardware".to_string()),
         }
     }
 
