@@ -449,7 +449,14 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onCompleteOnboarding = {
             onboardingCompleted = true
         }
-        ChatToolExecutor.onQuickReplyOptions = { options in
+        ChatToolExecutor.onQuickReplyOptions = { question, options in
+            // If the AI's question isn't already in the last message, add it
+            if !question.isEmpty {
+                let lastAIText = chatProvider.messages.last(where: { $0.sender == .ai })?.text ?? ""
+                if !lastAIText.contains(question) {
+                    chatProvider.messages.append(ChatMessage(text: question, sender: .ai))
+                }
+            }
             quickReplyOptions = options
         }
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
