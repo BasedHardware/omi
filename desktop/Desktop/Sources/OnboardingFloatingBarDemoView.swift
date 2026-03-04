@@ -160,7 +160,7 @@ struct OnboardingFloatingBarDemoView: View {
                     HStack(spacing: 6) {
                         ZStack(alignment: .topLeading) {
                             if inputText.isEmpty {
-                                Text("Ask a question...")
+                                Text("Try asking: \"Who am I?\"")
                                     .scaledFont(size: 13)
                                     .foregroundColor(.secondary)
                                     .padding(.horizontal, 8)
@@ -194,39 +194,6 @@ struct OnboardingFloatingBarDemoView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-
-                    // Suggestion chip
-                    if !querySubmitted {
-                        HStack {
-                            Button(action: {
-                                inputText = "Who am I?"
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    submitQuery()
-                                }
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 11))
-                                    Text("Try: \"Who am I?\"")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .foregroundColor(OmiColors.purplePrimary)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(OmiColors.purplePrimary.opacity(0.1))
-                                .cornerRadius(16)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
-                    }
                 }
 
             case .responding, .done:

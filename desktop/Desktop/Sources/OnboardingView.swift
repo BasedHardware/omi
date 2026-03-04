@@ -212,7 +212,7 @@ struct OnboardingView: View {
         // Stop the AI if it's still running
         chatProvider.stopAgent()
 
-        // Navigate to Chat page after transition (not Dashboard)
+        // Navigate to Tasks page after transition
         UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
 
         appState.hasCompletedOnboarding = true
