@@ -2478,6 +2478,11 @@ class AppState: ObservableObject {
         OnboardingChatPersistence.clear()
         log("Cleared onboarding chat persistence")
 
+        // Clear local knowledge graph data so it doesn't show stale nodes
+        Task {
+            await KnowledgeGraphStorage.shared.clearAll()
+        }
+
         // Also clear UserDefaults for both bundle IDs
         if let prodDefaults = UserDefaults(suiteName: "com.omi.computer-macos") {
             for key in onboardingKeys {
