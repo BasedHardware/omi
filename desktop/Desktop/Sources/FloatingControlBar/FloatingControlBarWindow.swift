@@ -170,6 +170,90 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.validatePositionOnScreenChange()
             }
         }
+
+        // Follow the focused app across monitors
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleAppActivated(notification)
+            }
+        }
+    }
+
+    /// Move the floating bar to the screen of the newly-activated app.
+    private func handleAppActivated(_ notification: Notification) {
+        // Skip if an AI conversation is open (don't jump while user is reading)
+        guard !state.showingAIConversation else { return }
+
+        // Skip if the activated app is our own app
+        if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+           let activatedBundle = app.bundleIdentifier,
+           let ownBundle = Bundle.main.bundleIdentifier,
+           activatedBundle == ownBundle {
+            return
+        }
+
+        // Find which screen the frontmost app's main window is on
+        guard let targetScreen = screenOfFrontmostApp() else { return }
+
+        // Already on the same screen — nothing to do
+        let currentScreen = self.screen ?? NSScreen.main
+        if targetScreen == currentScreen { return }
+
+        // Move to the equivalent position on the target screen
+        let currentVisible = currentScreen?.visibleFrame ?? .zero
+        let targetVisible = targetScreen.visibleFrame
+
+        if ShortcutSettings.shared.draggableBarEnabled {
+            // Translate position proportionally
+            let relX = currentVisible.width > 0 ? (frame.origin.x - currentVisible.origin.x) / currentVisible.width : 0.5
+            let relY = currentVisible.height > 0 ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
+            let newX = targetVisible.origin.x + relX * targetVisible.width
+            let newY = targetVisible.origin.y + relY * targetVisible.height
+            setFrameOrigin(NSPoint(x: newX, y: newY))
+            UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
+        } else {
+            // Non-draggable: center on new screen
+            let x = targetVisible.midX - frame.width / 2
+            let y = targetVisible.maxY - frame.height - 20
+            setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        log("FloatingControlBarWindow: followed app to screen \(targetScreen.localizedName)")
+    }
+
+    /// Returns the NSScreen that contains the frontmost application's main window.
+    private func screenOfFrontmostApp() -> NSScreen? {
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return nil }
+        let pid = frontApp.processIdentifier
+
+        // Get window list for this PID
+        guard let windowInfoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        for info in windowInfoList {
+            guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
+                  ownerPID == pid,
+                  let boundsDict = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let winX = boundsDict["X"], let winY = boundsDict["Y"],
+                  let winW = boundsDict["Width"], let winH = boundsDict["Height"],
+                  winW > 0, winH > 0 else { continue }
+
+            // CGWindowList uses top-left origin; convert center to NSScreen (bottom-left) coords
+            let screenHeight = NSScreen.screens.first?.frame.height ?? 0
+            let centerX = winX + winW / 2
+            let centerY = screenHeight - (winY + winH / 2)
+            let point = NSPoint(x: centerX, y: centerY)
+
+            for screen in NSScreen.screens {
+                if screen.frame.contains(point) {
+                    return screen
+                }
+            }
+        }
+        return nil
     }
 
     // MARK: - AI Actions
