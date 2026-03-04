@@ -404,46 +404,79 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Rewind toggle (controls both screen + audio)
-            settingsCard(settingId: "general.rewind") {
+            // Screen Capture toggle
+            settingsCard(settingId: "general.screencapture") {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "rectangle.dashed.badge.record")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Rewind")
+                        Text("Screen Capture")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? transcriptionError ?? {
-                            if isMonitoring && isTranscribing {
-                                return "Screen capture and audio are active"
-                            } else if !isMonitoring && !isTranscribing {
-                                return "Screen capture and audio are paused"
-                            } else if isMonitoring {
-                                return "Screen capture is active, audio is paused"
-                            } else {
-                                return "Audio is active, screen capture is paused"
-                            }
-                        }())
+                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
                             .scaledFont(size: 13)
-                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
+                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isToggling || isTogglingTranscription {
+                    if isToggling {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
                         Toggle("", isOn: Binding(
-                            get: { isMonitoring || isTranscribing },
+                            get: { isMonitoring },
                             set: { newValue in
                                 isMonitoring = newValue
-                                isTranscribing = newValue
                                 toggleMonitoring(enabled: newValue)
+                            }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                }
+            }
+
+            // Audio Recording toggle
+            settingsCard(settingId: "general.audiorecording") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "mic.fill")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Audio Recording")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
+                            .scaledFont(size: 13)
+                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isTogglingTranscription {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { isTranscribing },
+                            set: { newValue in
+                                isTranscribing = newValue
                                 toggleTranscription(enabled: newValue)
                             }
                         ))
@@ -667,88 +700,6 @@ struct SettingsContentView: View {
 
     private var rewindSection: some View {
         VStack(spacing: 20) {
-            // Screen Capture toggle
-            settingsCard(settingId: "rewind.screencapture") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    Image(systemName: "rectangle.dashed.badge.record")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Capture")
-                            .scaledFont(size: 15, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isToggling {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: Binding(
-                            get: { isMonitoring },
-                            set: { newValue in
-                                isMonitoring = newValue
-                                toggleMonitoring(enabled: newValue)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                }
-            }
-
-            // Audio Recording toggle
-            settingsCard(settingId: "rewind.audiorecording") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    Image(systemName: "mic.fill")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Audio Recording")
-                            .scaledFont(size: 15, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isTogglingTranscription {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: Binding(
-                            get: { isTranscribing },
-                            set: { newValue in
-                                isTranscribing = newValue
-                                toggleTranscription(enabled: newValue)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                }
-            }
-
             // Storage Stats
             settingsCard(settingId: "rewind.storage") {
                 VStack(alignment: .leading, spacing: 16) {
