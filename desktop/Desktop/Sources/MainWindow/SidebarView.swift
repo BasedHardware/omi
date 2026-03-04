@@ -199,7 +199,7 @@ struct SidebarView: View {
                                     isSelected: selectedIndex == item.rawValue,
                                     isCollapsed: isCollapsed,
                                     iconWidth: iconWidth,
-                                    isOn: isMonitoring && appState.isTranscribing,
+                                    isOn: isMonitoring || appState.isTranscribing,
                                     isToggling: isTogglingMonitoring,
                                     isPageLoading: isRewindPageLoading,
                                     onTap: {
@@ -219,9 +219,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        // Use combined state so toggle matches what's displayed
-                                        let isFullyOn = isMonitoring && appState.isTranscribing
-                                        toggleMonitoring(enabled: !isFullyOn)
+                                        // Toggle both — on if either is off, off if both are on
+                                        let isAnyOn = isMonitoring || appState.isTranscribing
+                                        toggleMonitoring(enabled: !isAnyOn)
                                     },
                                     showRewindIcon: true
                                 )
@@ -1132,13 +1132,6 @@ struct SidebarView: View {
         // Persist the setting
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
-
-        // Also toggle audio transcription to match (Rewind bundles both)
-        if enabled && !appState.isTranscribing {
-            appState.startTranscription()
-        } else if !enabled && appState.isTranscribing {
-            appState.stopTranscription()
-        }
 
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
