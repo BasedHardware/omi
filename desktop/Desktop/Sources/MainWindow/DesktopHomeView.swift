@@ -271,7 +271,7 @@ struct DesktopHomeView: View {
             // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title.hasPrefix("Omi") {
+                    if window.title.hasPrefix("Nooto") {
                         window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
                         // Remove .minSize from hosting view's sizingOptions.
@@ -353,7 +353,7 @@ struct DesktopHomeView: View {
         UserDefaults.standard.set(Double(0), forKey: key)
         // Delay slightly so the window is fully visible
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+            guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Nooto") && $0.isVisible }) else { return }
             var frame = window.frame
             frame.size.width = saved
             window.setFrame(frame, display: true)
