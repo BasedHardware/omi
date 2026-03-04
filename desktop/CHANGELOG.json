@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.63",
+      "date": "2026-03-04",
+      "changes": [
+        "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right"
+      ]
+    },
     {
       "version": "0.11.48",
       "date": "2026-03-03",
