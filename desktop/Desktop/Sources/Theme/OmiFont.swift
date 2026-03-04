@@ -89,7 +89,7 @@ extension View {
 // MARK: - Window Size Reset
 
 func resetWindowToDefaultSize() {
-    guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title.contains("omi") || $0.title.contains("Omi") }) else { return }
+    guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title.contains("nooto") || $0.title.contains("Nooto") }) else { return }
     let defaultSize = NSSize(width: 1200, height: 800)
     let frame = window.frame
     let newOrigin = NSPoint(
