@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right"
+    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
+    "Consolidated Advanced settings into a single scrollable page and removed Device section from settings"
   ],
   "releases": [
     {
