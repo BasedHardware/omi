@@ -20,6 +20,12 @@ class ChatToolExecutor {
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
 
     private static var fileScanFileCount = 0
+    private static var followupContinuation: CheckedContinuation<String, Never>?
+
+    static func resumeFollowup(with reply: String) {
+        followupContinuation?.resume(returning: reply)
+        followupContinuation = nil
+    }
 
     /// Execute a tool call and return the result as a string
     static func execute(_ toolCall: ToolCall) async -> String {
