@@ -228,6 +228,19 @@ struct OnboardingView: View {
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
 
+        // Create welcome task
+        Task {
+            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
+            if !alreadyExists {
+                await TasksStore.shared.createTask(
+                    description: welcomeDescription,
+                    dueAt: Date(),
+                    priority: "low"
+                )
+            }
+        }
+
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
         OnboardingChatPersistence.clear()

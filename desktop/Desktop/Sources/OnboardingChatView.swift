@@ -590,51 +590,7 @@ struct OnboardingChatView: View {
     }
 
     private func handleOnboardingComplete() {
-        log("OnboardingChatView: Completing onboarding")
-
-        // Set flag so DesktopHomeView navigates to Chat page after transition
-        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        // Mark onboarding as done
-        appState.hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-
-        // Start cloud agent VM pipeline
-        Task {
-            await AgentVMService.shared.startPipeline()
-        }
-
-        // Enable launch at login
-        if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-        }
-
-        // Start proactive monitoring
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-
-        // Start transcription if microphone is available
-        appState.startTranscription()
-
-        // Create welcome task (skip if it already exists from a previous onboarding)
-        Task {
-            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
-            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
-            if !alreadyExists {
-                await TasksStore.shared.createTask(
-                    description: welcomeDescription,
-                    dueAt: Date(),
-                    priority: "low"
-                )
-            }
-        }
-
-        // Send welcome notification
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            NotificationService.shared.sendNotification(
-                title: "You're all set!",
-                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
-            )
-        }
+        log("OnboardingChatView: Chat step complete, advancing to next onboarding step")
 
         // Clean up parallel exploration
         explorationTask?.cancel()
@@ -644,14 +600,7 @@ struct OnboardingChatView: View {
         }
         explorationBridge = nil
 
-        // Clean up onboarding state and persisted chat data
-        chatProvider.isOnboarding = false
-        OnboardingChatPersistence.clear()
-
-        // Log analytics
-        AnalyticsManager.shared.onboardingCompleted()
-
-        // Notify parent
+        // Notify parent to advance to next step
         onComplete()
     }
 
