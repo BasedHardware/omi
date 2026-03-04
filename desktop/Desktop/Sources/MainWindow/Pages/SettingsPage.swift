@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
     var chatProvider: ChatProvider? = nil
 
@@ -16,9 +15,7 @@ struct SettingsPage: View {
                 VStack(spacing: 0) {
                     // Section header
                     HStack {
-                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                             ? selectedAdvancedSubsection!.rawValue
-                             : selectedSection.rawValue)
+                        Text(selectedSection.rawValue)
                             .scaledFont(size: 28, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
                             .id(selectedSection)
@@ -35,7 +32,6 @@ struct SettingsPage: View {
                     SettingsContentView(
                         appState: appState,
                         selectedSection: $selectedSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         chatProvider: chatProvider
                     )
@@ -56,11 +52,6 @@ struct SettingsPage: View {
         .background(OmiColors.backgroundSecondary.opacity(0.3))
         .onAppear {
             AnalyticsManager.shared.settingsPageOpened()
-        }
-        .onChange(of: selectedSection) { _, newValue in
-            if newValue == .advanced && selectedAdvancedSubsection == nil {
-                selectedAdvancedSubsection = .aiUserProfile
-            }
         }
     }
 }
@@ -153,7 +144,6 @@ struct SettingsContentView: View {
 
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
-    @Binding var selectedAdvancedSubsection: AdvancedSubsection?
     @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
@@ -236,8 +226,6 @@ struct SettingsContentView: View {
 
     enum SettingsSection: String, CaseIterable {
         case general = "General"
-        case device = "Device"
-        case focus = "Focus"
         case rewind = "Rewind"
         case transcription = "Transcription"
         case notifications = "Notifications"
@@ -286,13 +274,11 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
         highlightedSettingId: Binding<String?> = .constant(nil),
         chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
-        self._selectedAdvancedSubsection = selectedAdvancedSubsection
         self._highlightedSettingId = highlightedSettingId
         self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
@@ -346,10 +332,6 @@ struct SettingsContentView: View {
                 switch selectedSection {
                 case .general:
                     generalSection
-                case .device:
-                    DeviceSettingsPage()
-                case .focus:
-                    FocusPage()
                 case .rewind:
                     rewindSection
                 case .transcription:
@@ -391,11 +373,15 @@ struct SettingsContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.taskassistant"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .askOmiFloatingBar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.askomifloatingbar"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -2308,34 +2294,43 @@ struct SettingsContentView: View {
         let memoriesTotal: Int
     }
 
+    private func advancedCategoryHeader(title: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .scaledFont(size: 16)
+                .foregroundColor(OmiColors.purplePrimary)
+            Text(title)
+                .scaledFont(size: 18, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+        }
+        .padding(.top, 16)
+    }
+
     private var advancedSection: some View {
-        Group {
-            switch selectedAdvancedSubsection {
-            case .aiUserProfile, .none:
-                aiUserProfileSubsection
-            case .stats:
-                statsSubsection
-            case .featureTiers:
-                featureTiersSubsection
-            case .focusAssistant:
-                focusAssistantSubsection
-            case .taskAssistant:
-                taskAssistantSubsection
-            case .adviceAssistant:
-                adviceAssistantSubsection
-            case .memoryAssistant:
-                memoryAssistantSubsection
-            case .analysisThrottle:
-                analysisThrottleSubsection
-            case .goals:
-                goalsSubsection
-            case .askOmiFloatingBar:
-                askOmiFloatingBarSubsection
-            case .preferences:
-                preferencesSubsection
-            case .troubleshooting:
-                troubleshootingSubsection
-            }
+        VStack(spacing: 24) {
+            advancedCategoryHeader(title: "AI User Profile", icon: "brain")
+            aiUserProfileSubsection
+            advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
+            statsSubsection
+            advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
+            featureTiersSubsection
+            advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+            taskAssistantSubsection
+            advancedCategoryHeader(title: "Advice Assistant", icon: "lightbulb.fill")
+            adviceAssistantSubsection
+            advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+            memoryAssistantSubsection
+            advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+            analysisThrottleSubsection
+            advancedCategoryHeader(title: "Goals", icon: "target")
+            goalsSubsection
+            advancedCategoryHeader(title: "Ask omi Floating Bar", icon: "sparkles")
+            askOmiFloatingBarSubsection
+            advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+            preferencesSubsection
+            advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+            troubleshootingSubsection
         }
     }
 
@@ -4928,7 +4923,6 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile),
         highlightedSettingId: .constant(nil)
     )
 }
