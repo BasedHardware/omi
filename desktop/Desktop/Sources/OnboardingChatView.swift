@@ -141,11 +141,8 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                            // Hide the initial "Hi, I just installed omi!" message
-                            if !(message.sender == .user && message.text == "Hi, I just installed omi!") {
                                 OnboardingChatBubble(message: message)
                                     .id(message.id)
-                            }
                         }
 
                         // Parallel exploration card (appears after scan_files)
@@ -449,14 +446,7 @@ struct OnboardingChatView: View {
         ChatToolExecutor.onCompleteOnboarding = {
             onboardingCompleted = true
         }
-        ChatToolExecutor.onQuickReplyOptions = { question, options in
-            // If the AI's question isn't already in the last message, add it
-            if !question.isEmpty {
-                let lastAIText = chatProvider.messages.last(where: { $0.sender == .ai })?.text ?? ""
-                if !lastAIText.contains(question) {
-                    chatProvider.messages.append(ChatMessage(text: question, sender: .ai))
-                }
-            }
+        ChatToolExecutor.onQuickReplyOptions = { options in
             quickReplyOptions = options
         }
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
