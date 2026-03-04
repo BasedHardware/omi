@@ -365,7 +365,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var foundOmiWindow = false
             for window in NSApp.windows {
                 log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-                if window.title.hasPrefix("Omi") {
+                if window.title.hasPrefix("Nooto") {
                     foundOmiWindow = true
                     window.makeKeyAndOrderFront(nil)
                     window.appearance = NSAppearance(named: .darkAqua)
@@ -506,7 +506,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     NSApp.activate(ignoringOtherApps: true)
                     // Find and show main window
                     for window in NSApp.windows {
-                        if window.title.hasPrefix("Omi") {
+                        if window.title.hasPrefix("Nooto") {
                             window.makeKeyAndOrderFront(nil)
                             break
                         }
@@ -731,7 +731,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         var foundWindow = false
         for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
+            if window.title.hasPrefix("Nooto") {
                 foundWindow = true
                 window.makeKeyAndOrderFront(nil)
                 window.appearance = NSAppearance(named: .darkAqua)
@@ -877,8 +877,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // Always try to show the main Omi window when dock icon is clicked
-        for window in sender.windows where window.title.hasPrefix("Omi") {
+        // Always try to show the main Nooto window when dock icon is clicked
+        for window in sender.windows where window.title.hasPrefix("Nooto") {
             if window.isMiniaturized {
                 window.deminiaturize(nil)
             }
@@ -991,6 +991,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func migrateAppNameToBeta() {
         let currentPath = Bundle.main.bundlePath
+        // Only run migration for Omi-branded bundles (skip for Nooto)
+        guard Bundle.main.bundleIdentifier?.contains("omi") == true else { return }
 
         // Case 1: Running as "Omi Computer.app" — rename self to "Omi Beta.app"
         if currentPath.hasSuffix("Omi Computer.app") {
