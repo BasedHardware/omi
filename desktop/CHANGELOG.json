@@ -1,7 +1,9 @@
 {
   "unreleased": [
     "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
-    "Consolidated Advanced settings into a single scrollable page and removed Device section from settings"
+    "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
+    "Floating bar now follows your active app across monitors",
+    "Screenshots now capture the screen where your cursor is, not just the primary display"
   ],
   "releases": [
     {

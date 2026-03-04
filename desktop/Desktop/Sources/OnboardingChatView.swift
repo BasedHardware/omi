@@ -245,8 +245,9 @@ struct OnboardingChatView: View {
                         }
 
                         // "Continue" button — shown after AI calls complete_onboarding,
-                        // or while exploration is running so user can proceed
-                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending {
+                        // or while exploration is running so user can proceed.
+                        // Hidden when quick reply buttons are showing to avoid confusing the user.
+                        if (onboardingCompleted || explorationRunning) && !chatProvider.isSending && quickReplyOptions.isEmpty {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
@@ -913,7 +914,25 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Render content blocks in order — interleaving tool indicators with text
+                            // Combine all text blocks into one bubble, render tool indicators separately
+                            let allText = message.contentBlocks.compactMap { block -> String? in
+                                if case .text(_, let text) = block {
+                                    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    return trimmed.isEmpty ? nil : trimmed
+                                }
+                                return nil
+                            }.joined(separator: "\n\n")
+
+                            if !allText.isEmpty {
+                                Markdown(allText)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+
                             ForEach(message.contentBlocks) { block in
                                 switch block {
                                 case .toolCall(_, let name, let status, _, let input, _):
@@ -921,20 +940,10 @@ struct OnboardingChatBubble: View {
                                     if !indicator.isHidden {
                                         indicator
                                     }
-                                case .text(_, let text):
-                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Markdown(text)
-                                            .markdownTheme(.aiMessage())
-                                            .textSelection(.enabled)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 10)
-                                            .background(OmiColors.backgroundSecondary)
-                                            .cornerRadius(18)
-                                    }
-                                case .thinking:
-                                    EmptyView()
                                 case .discoveryCard(_, let title, let summary, let fullText):
                                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                                default:
+                                    EmptyView()
                                 }
                             }
                         }
@@ -964,6 +973,7 @@ struct OnboardingChatBubble: View {
             .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         }
     }
+
 }
 
 // MARK: - Tool Activity Indicator

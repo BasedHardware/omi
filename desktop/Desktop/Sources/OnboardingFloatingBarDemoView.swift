@@ -124,8 +124,17 @@ struct OnboardingFloatingBarDemoView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
-        .onAppear { installKeyMonitor() }
-        .onDisappear { removeKeyMonitor() }
+        .onAppear {
+            // Temporarily unregister the global Ask Omi shortcut so it doesn't
+            // open the real floating bar on another monitor during onboarding
+            GlobalShortcutManager.shared.unregisterShortcuts()
+            installKeyMonitor()
+        }
+        .onDisappear {
+            removeKeyMonitor()
+            // Re-register global shortcuts
+            GlobalShortcutManager.shared.registerShortcuts()
+        }
     }
 
     // MARK: - Key Monitor
