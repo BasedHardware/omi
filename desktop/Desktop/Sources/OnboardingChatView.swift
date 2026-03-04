@@ -742,7 +742,7 @@ struct OnboardingChatView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             NSApp.activate(ignoringOtherApps: true)
             for window in NSApp.windows {
-                if window.title.hasPrefix("Omi") {
+                if window.title.hasPrefix("Nooto") {
                     window.makeKeyAndOrderFront(nil)
                     window.orderFrontRegardless()
                 }
