@@ -44,6 +44,11 @@ async def auth_authorize(
     if provider not in ['google', 'apple']:
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
+    # Validate redirect_uri against allowed app URL schemes
+    ALLOWED_REDIRECT_SCHEMES = ('omi://', 'omi-computer://', 'omi-computer-dev://')
+    if not redirect_uri or not any(redirect_uri.startswith(s) for s in ALLOWED_REDIRECT_SCHEMES):
+        raise HTTPException(status_code=400, detail="Invalid redirect_uri: must use an allowed app URL scheme")
+
     # Store session for auth flow
     session_id = str(uuid.uuid4())
     session_data = {
@@ -96,7 +101,7 @@ async def auth_callback_google(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
-            "redirect_uri": session_data.get('redirect_uri', 'omi://auth/callback'),
+            "redirect_uri": session_data.get('redirect_uri') or 'omi://auth/callback',
         },
     )
 
@@ -135,7 +140,7 @@ async def auth_callback_apple_post(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
-            "redirect_uri": session_data.get('redirect_uri', 'omi://auth/callback'),
+            "redirect_uri": session_data.get('redirect_uri') or 'omi://auth/callback',
         },
     )
 
