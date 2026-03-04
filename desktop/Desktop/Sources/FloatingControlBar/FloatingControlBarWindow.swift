@@ -171,31 +171,33 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             }
         }
 
-        // Follow the focused app across monitors
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor in
-                self?.handleAppActivated(notification)
-            }
-        }
+        // Follow cursor across monitors — poll mouse position to move bar instantly
+        startCursorScreenTracking()
     }
 
-    /// Move the floating bar to the screen of the newly-activated app.
-    private func handleAppActivated(_ notification: Notification) {
-        // Skip if an AI conversation is open (don't jump while user is reading)
+    private var cursorTrackingTimer: DispatchSourceTimer?
+
+    /// Poll mouse position at ~250ms to move the bar when the cursor enters a different screen.
+    private func startCursorScreenTracking() {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            self?.checkCursorScreen()
+        }
+        timer.resume()
+        cursorTrackingTimer = timer
+    }
+
+    private func checkCursorScreen() {
+        // Skip if an AI conversation is open (don't jump while reading)
         guard !state.showingAIConversation else { return }
 
-        // Skip if the activated app is our own app
-        if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-           let activatedBundle = app.bundleIdentifier,
-           let ownBundle = Bundle.main.bundleIdentifier,
-           activatedBundle == ownBundle {
-            return
-        }
+        // Only follow when there are multiple screens
+        guard NSScreen.screens.count > 1 else { return }
 
-        // Find which screen the frontmost app's main window is on
-        guard let targetScreen = screenOfFrontmostApp() else { return }
+        // Find which screen the cursor is on
+        let mouseLocation = NSEvent.mouseLocation
+        guard let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) else { return }
 
         // Already on the same screen — nothing to do
         let currentScreen = self.screen ?? NSScreen.main
@@ -220,40 +222,7 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
             setFrameOrigin(NSPoint(x: x, y: y))
         }
 
-        log("FloatingControlBarWindow: followed app to screen \(targetScreen.localizedName)")
-    }
-
-    /// Returns the NSScreen that contains the frontmost application's main window.
-    private func screenOfFrontmostApp() -> NSScreen? {
-        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return nil }
-        let pid = frontApp.processIdentifier
-
-        // Get window list for this PID
-        guard let windowInfoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            return nil
-        }
-
-        for info in windowInfoList {
-            guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
-                  ownerPID == pid,
-                  let boundsDict = info[kCGWindowBounds as String] as? [String: CGFloat],
-                  let winX = boundsDict["X"], let winY = boundsDict["Y"],
-                  let winW = boundsDict["Width"], let winH = boundsDict["Height"],
-                  winW > 0, winH > 0 else { continue }
-
-            // CGWindowList uses top-left origin; convert center to NSScreen (bottom-left) coords
-            let screenHeight = NSScreen.screens.first?.frame.height ?? 0
-            let centerX = winX + winW / 2
-            let centerY = screenHeight - (winY + winH / 2)
-            let point = NSPoint(x: centerX, y: centerY)
-
-            for screen in NSScreen.screens {
-                if screen.frame.contains(point) {
-                    return screen
-                }
-            }
-        }
-        return nil
+        log("FloatingControlBarWindow: followed cursor to screen \(targetScreen.localizedName)")
     }
 
     // MARK: - AI Actions
