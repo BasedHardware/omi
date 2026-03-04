@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Premium color system matching Flutter's ResponsiveHelper
-/// Sophisticated dark theme with purple accent system
+/// Sophisticated dark theme with blue accent system
 enum OmiColors {
     // MARK: - Background Colors
     static let backgroundPrimary = Color(hex: 0x0F0F0F)    // Deep black
@@ -12,11 +12,11 @@ enum OmiColors {
     // MARK: - Border Colors
     static let border = Color(hex: 0x333333)               // Subtle border
 
-    // MARK: - Purple Accent System
-    static let purplePrimary = Color(hex: 0x8B5CF6)    // Main purple
-    static let purpleSecondary = Color(hex: 0xA855F7)  // Lighter purple
-    static let purpleAccent = Color(hex: 0x7C3AED)     // Darker purple
-    static let purpleLight = Color(hex: 0xD946EF)      // Pink-purple
+    // MARK: - Blue Accent System (Nooto brand)
+    static let purplePrimary = Color(hex: 0x3B82F6)    // Main blue
+    static let purpleSecondary = Color(hex: 0x60A5FA)  // Lighter blue
+    static let purpleAccent = Color(hex: 0x2563EB)     // Darker blue
+    static let purpleLight = Color(hex: 0x93C5FD)      // Light blue
 
     // MARK: - Text Colors
     static let textPrimary = Color(hex: 0xFFFFFF)      // Pure white for headers
