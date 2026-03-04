@@ -320,8 +320,8 @@ struct ChatPage: View {
                                 .foregroundColor(OmiColors.textTertiary)
                         }
                     } else {
-                        // Default OMI assistant
-                        Text("Omi")
+                        // Default Nooto assistant
+                        Text("Nooto")
                             .scaledFont(size: 14, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
                     }
@@ -1322,7 +1322,7 @@ struct DefaultOmiRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
-                Text("Omi")
+                Text("Nooto")
                     .scaledFont(size: 13, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
 
