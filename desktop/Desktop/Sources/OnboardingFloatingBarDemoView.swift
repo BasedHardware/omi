@@ -79,7 +79,7 @@ struct OnboardingFloatingBarDemoView: View {
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Press \(Text("⌥ Space").fontWeight(.medium)) anywhere to summon it. Ask anything\nand it responds using everything it knows about you.")
+                    Text("Press \(Text("⌘ Enter").fontWeight(.medium)) anywhere to summon it. Ask anything\nand it responds using everything it knows about you.")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
