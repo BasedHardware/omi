@@ -3935,7 +3935,7 @@ extension APIClient {
             let metadata: String?
         }
         let body = SaveRequest(text: text, sender: sender, app_id: appId, session_id: sessionId, metadata: metadata)
-        return try await post("v2/messages", body: body)
+        return try await post("v2/messages/save", body: body)
     }
 
     /// Fetch chat message history
