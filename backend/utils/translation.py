@@ -327,6 +327,7 @@ class TranslationService:
             if cached:
                 results[i] = cached[0]
                 detected_langs.append(cached[1])
+                logger.info(f"translate_cache [memory_hit] sentence={i}")
                 continue
 
             # Check Redis cache
@@ -336,6 +337,7 @@ class TranslationService:
                 detected_lang = redis_cached.get("detected_lang", "")
                 detected_langs.append(detected_lang)
                 self._set_memory_cache(text_hash, dest_language, redis_cached["text"], detected_lang)
+                logger.info(f"translate_cache [redis_hit] sentence={i}")
                 continue
 
             uncached_indices.append(i)
@@ -343,6 +345,10 @@ class TranslationService:
         # Phase 2: Batch translate uncached sentences
         if uncached_indices:
             uncached_sentences = [sentences[i] for i in uncached_indices]
+            logger.info(
+                f"translate_batch api_call sentences={len(uncached_sentences)} "
+                f"cached={len(sentences) - len(uncached_sentences)}/{len(sentences)}"
+            )
 
             # Batch in chunks of MAX_BATCH_SIZE
             for chunk_start in range(0, len(uncached_sentences), MAX_BATCH_SIZE):
