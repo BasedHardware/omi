@@ -72,9 +72,10 @@
         ]
       },
       {
-        "group": "MCP Integration",
+        "group": "Integrations",
         "pages": [
-          "doc/developer/MCP"
+          "doc/developer/MCP",
+          "docs/developer/Integrations/openclaw"
         ]
       },
       {

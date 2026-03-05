@@ -1,0 +1,49 @@
+{
+  "id": "omi",
+  "kind": "memory",
+  "uiHints": {
+    "apiKey": {
+      "label": "Omi API Key",
+      "sensitive": true,
+      "placeholder": "omi_dev_...",
+      "help": "Your Omi Developer API key from https://api.omi.me"
+    },
+    "baseUrl": {
+      "label": "Base URL",
+      "placeholder": "https://api.omi.me",
+      "advanced": true,
+      "help": "Omi API base URL (leave default unless using custom instance)"
+    },
+    "cacheTtlMs": {
+      "label": "Cache TTL (ms)",
+      "placeholder": "300000",
+      "advanced": true,
+      "help": "Time-to-live for cached API responses (default: 5 minutes)"
+    },
+    "autoInject": {
+      "label": "Auto-Inject Memories",
+      "help": "Automatically inject recent memories and conversations into agent context on session start"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string"
+      },
+      "baseUrl": {
+        "type": "string"
+      },
+      "cacheTtlMs": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 3600000
+      },
+      "autoInject": {
+        "type": "boolean"
+      }
+    },
+    "required": ["apiKey"]
+  }
+}
