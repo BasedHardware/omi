@@ -183,19 +183,22 @@ class TestStagedTaskEndpoints:
     def test_delete_staged_task(self, client):
         with (
             patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task', return_value=True),
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task') as mock_del,
         ):
             response = client.delete('/v1/staged-tasks/st-1', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 200
             assert response.json()['status'] == 'ok'
+            assert mock_del.called
 
-    def test_delete_staged_task_not_found_404(self, client):
+    def test_delete_staged_task_idempotent(self, client):
+        """Delete returns 200 even for non-existent task (matches Rust behavior)."""
         with (
             patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task', return_value=False),
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task'),
         ):
             response = client.delete('/v1/staged-tasks/missing', headers={'Authorization': 'Bearer test'})
-            assert response.status_code == 404
+            assert response.status_code == 200
+            assert response.json()['status'] == 'ok'
 
     def test_batch_update_scores(self, client):
         with (
@@ -418,3 +421,43 @@ class TestDailyScoreEndpoints:
             assert data['daily']['score'] == 0.0
             assert data['weekly']['score'] == 0.0
             assert data['overall']['score'] == 0.0
+
+    def test_create_dedup_returns_existing(self, client):
+        """Create returns existing task if description matches (case-insensitive)."""
+        now = datetime.now(timezone.utc)
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.create_staged_task') as mock_create,
+        ):
+            # Simulate dedup returning existing task
+            mock_create.return_value = {
+                'id': 'existing-1',
+                'description': 'Buy milk',
+                'completed': False,
+                'created_at': now,
+                'updated_at': now,
+            }
+            response = client.post(
+                '/v1/staged-tasks',
+                json={'description': 'buy milk'},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+            assert response.json()['id'] == 'existing-1'
+
+    def test_weekly_score_uses_created_at(self, client):
+        """Weekly score filters by created_at range, not due_at."""
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.get_action_items_for_daily_score', return_value=(1, 2)),
+            patch(
+                'routers.staged_tasks.staged_tasks_db.get_action_items_for_weekly_score', return_value=(7, 14)
+            ) as mock_weekly,
+            patch('routers.staged_tasks.staged_tasks_db.get_action_items_for_overall_score', return_value=(20, 40)),
+        ):
+            response = client.get('/v1/scores?date=2026-03-05', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 200
+            assert mock_weekly.called
+            # Weekly should use a 7-day window ending today
+            week_start_arg = mock_weekly.call_args[0][1]
+            assert '2026-02-26' in week_start_arg
