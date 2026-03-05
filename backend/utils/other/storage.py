@@ -309,7 +309,9 @@ def delete_syncing_temporal_file(file_path: str):
 # ************************************************
 
 
-def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float) -> str:
+def upload_audio_chunk(
+    chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: str = None
+) -> str:
     """
     Upload an audio chunk to Google Cloud Storage with optional encryption.
 
@@ -318,12 +320,16 @@ def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timest
         uid: User ID
         conversation_id: Conversation ID
         timestamp: Unix timestamp when chunk was recorded
+        data_protection_level: Optional cached protection level. When provided,
+            skips the per-chunk Firestore read. Falls back to DB read when None.
 
     Returns:
         GCS path of the uploaded chunk
     """
     bucket = storage_client.bucket(private_cloud_sync_bucket)
-    protection_level = users_db.get_data_protection_level(uid)
+    protection_level = (
+        data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
+    )
 
     # Format timestamp to 3 decimal places for cleaner filenames
     formatted_timestamp = f'{timestamp:.3f}'
