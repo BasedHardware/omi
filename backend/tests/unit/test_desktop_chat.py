@@ -136,9 +136,9 @@ class TestChatSessionEndpoints:
             response = client.get('/v2/chat-sessions/missing', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 404
 
-    def test_update_session(self, client):
+    def test_update_session_returns_full_session(self, client):
         now = datetime.now(timezone.utc)
-        mock_session = {'id': 's1', 'title': 'Old', 'created_at': now, 'updated_at': now}
+        mock_session = {'id': 's1', 'title': 'Old', 'created_at': now, 'updated_at': now, 'message_count': 0, 'starred': False}
         with (
             patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
             patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=mock_session),
@@ -150,20 +150,24 @@ class TestChatSessionEndpoints:
                 headers={'Authorization': 'Bearer test'},
             )
             assert response.status_code == 200
-            call_data = mock_update.call_args[0][2]
-            assert call_data['title'] == 'Renamed'
-            assert call_data['starred'] is True
+            data = response.json()
+            assert data['title'] == 'Renamed'
+            assert data['starred'] is True
+            assert data['id'] == 's1'
 
-    def test_delete_session(self, client):
+    def test_delete_session_cascades_messages(self, client):
         now = datetime.now(timezone.utc)
         mock_session = {'id': 's1', 'title': 'Del', 'created_at': now, 'updated_at': now}
         with (
             patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
             patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=mock_session),
+            patch('routers.desktop_chat.chat_db.delete_chat_session_messages') as mock_del_msgs,
             patch('routers.desktop_chat.chat_db.delete_chat_session') as mock_del,
         ):
             response = client.delete('/v2/chat-sessions/s1', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 200
+            assert mock_del_msgs.called
+            assert mock_del_msgs.call_args[0][1] == 's1'
             assert mock_del.called
             assert mock_del.call_args[0][1] == 's1'
 
