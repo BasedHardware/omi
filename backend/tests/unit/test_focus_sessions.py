@@ -1,22 +1,55 @@
+import sys
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
+
+for mod_name in [
+    'firebase_admin',
+    'firebase_admin.auth',
+    'firebase_admin.firestore',
+    'firebase_admin.messaging',
+    'google.cloud',
+    'google.cloud.exceptions',
+    'google.cloud.firestore',
+    'google.cloud.firestore_v1',
+    'google.cloud.firestore_v1.base_query',
+    'google.cloud.firestore_v1.query',
+    'google.cloud.storage',
+    'google.cloud.storage.blob',
+    'google.cloud.storage.bucket',
+    'google.auth',
+    'google.auth.transport',
+    'google.auth.transport.requests',
+    'google.oauth2',
+    'google.oauth2.service_account',
+    'pinecone',
+    'typesense',
+]:
+    sys.modules.setdefault(mod_name, MagicMock())
+
+from routers.focus_sessions import router
+
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture
 def client():
-    with patch('database.screen_activity.db'), \
-         patch('database.focus_sessions.db'), \
-         patch('database.advice.db'), \
-         patch('database.vector_db.Pinecone'), \
-         patch('database.vector_db.pc'), \
-         patch('database.vector_db.index'), \
-         patch('utils.llm.clients.embeddings'):
-        from main import app
+    with patch('routers.focus_sessions.auth.get_current_user_uid', return_value='uid-1'):
+        app = FastAPI()
+        app.include_router(router)
         with TestClient(app) as c:
             yield c
+
+
+@pytest.fixture
+def client_no_auth():
+    """Client without auth mock — for testing 401 responses."""
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as c:
+        yield c
 
 
 AUTH = {"Authorization": "Bearer 123testuser"}
@@ -66,9 +99,13 @@ class TestCreateFocusSession:
         assert resp.json()["message"] == "Keep going!"
         assert resp.json()["duration_seconds"] == 300
 
-    def test_create_no_auth_returns_401(self, client):
+    def test_create_no_auth_returns_401(self, client_no_auth):
         data = {"status": "focused", "app_or_site": "X", "description": "Y"}
-        resp = client.post("/v1/focus-sessions", json=data)
+        with patch(
+            'routers.focus_sessions.auth.get_current_user_uid',
+            side_effect=HTTPException(status_code=401, detail='Not authenticated'),
+        ):
+            resp = client_no_auth.post("/v1/focus-sessions", json=data)
         assert resp.status_code == 401
 
     def test_create_firestore_error_returns_500(self, client):
