@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:intl_phone_field/countries.dart';
 import 'package:provider/provider.dart';
 
@@ -173,7 +174,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
               const SizedBox(height: 24),
               GestureDetector(
                 onTap: () async {
-                  await FlutterContacts.requestPermission(readonly: true);
+                  var status = await Permission.contacts.status;
+                  if (status.isPermanentlyDenied || status.isDenied) {
+                    await openAppSettings();
+                  } else {
+                    await FlutterContacts.requestPermission(readonly: true);
+                  }
                   _loadContacts();
                 },
                 child: Container(
