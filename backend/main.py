@@ -45,7 +45,6 @@ from routers import (
     announcements,
     phone_calls,
     agent_tools,
-    desktop_chat,
     screen_activity,
 )
 
@@ -106,7 +105,6 @@ app.include_router(goals.router)
 app.include_router(announcements.router)
 app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
-app.include_router(desktop_chat.router)
 app.include_router(screen_activity.router)
 
 
