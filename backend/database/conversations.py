@@ -900,7 +900,11 @@ def update_conversation_segments(
     if finished_at:
         update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    doc_ref.update(prepared_payload)
+    try:
+        doc_ref.update(prepared_payload)
+    except Exception:
+        # Document may have been deleted between cache read and write — safe to skip
+        return
 
 
 # ***********************************
