@@ -75,7 +75,12 @@ def update_advice(uid: str, advice_id: str, data: Dict[str, Any]) -> Optional[Di
     if 'is_dismissed' in data:
         update_data['is_dismissed'] = data['is_dismissed']
 
-    doc_ref.update(update_data)
+    try:
+        doc_ref.update(update_data)
+    except Exception as e:
+        if hasattr(e, 'code') and e.code == 404:
+            return None
+        raise
 
     doc = doc_ref.get()
     if doc.exists:
