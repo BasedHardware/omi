@@ -1187,8 +1187,6 @@ extension APIClient {
         let startedAt: String
         let finishedAt: String
         let language: String
-        let timezone: String
-        let inputDeviceName: String?
 
         enum CodingKeys: String, CodingKey {
             case transcriptSegments = "transcript_segments"
@@ -1196,8 +1194,6 @@ extension APIClient {
             case startedAt = "started_at"
             case finishedAt = "finished_at"
             case language
-            case timezone
-            case inputDeviceName = "input_device_name"
         }
     }
 
@@ -1233,16 +1229,12 @@ extension APIClient {
     ///   - finishedAt: When the recording finished
     ///   - source: Source of the conversation (e.g., "desktop", "omi", "bee")
     ///   - language: Language code for transcription
-    ///   - timezone: User's timezone
-    ///   - inputDeviceName: Name of the input device (microphone or BLE device)
     func createConversationFromSegments(
         segments: [TranscriptSegmentRequest],
         startedAt: Date,
         finishedAt: Date,
         source: ConversationSource = .desktop,
-        language: String = "en",
-        timezone: String = "UTC",
-        inputDeviceName: String? = nil
+        language: String = "en"
     ) async throws -> CreateConversationResponse {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -1252,9 +1244,7 @@ extension APIClient {
             source: source.rawValue,
             startedAt: formatter.string(from: startedAt),
             finishedAt: formatter.string(from: finishedAt),
-            language: language,
-            timezone: timezone,
-            inputDeviceName: inputDeviceName
+            language: language
         )
 
         return try await post("v1/conversations/from-segments", body: request)
