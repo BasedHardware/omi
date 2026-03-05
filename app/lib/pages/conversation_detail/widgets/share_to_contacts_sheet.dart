@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:provider/provider.dart';
@@ -458,7 +457,12 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () async {
-                await openAppSettings();
+                // Open app settings
+                if (Platform.isIOS) {
+                  await launchUrl(Uri.parse('app-settings:'));
+                } else {
+                  await launchUrl(Uri.parse('package:com.friend.ios'));
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
