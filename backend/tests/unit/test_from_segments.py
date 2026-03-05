@@ -227,6 +227,26 @@ class TestFromSegmentsEndpoint:
             )
             assert response.status_code == 422
 
+    def test_exactly_500_segments_succeeds(self, client):
+        with (
+            patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'),
+            patch('routers.conversations.process_conversation') as mock_process,
+            patch('routers.conversations.get_google_maps_location'),
+        ):
+            mock_conv = MagicMock()
+            mock_conv.id = 'conv-500'
+            mock_conv.status.value = 'completed'
+            mock_conv.discarded = False
+            mock_process.return_value = mock_conv
+
+            segments = [{'text': f'seg {i}', 'start': float(i), 'end': float(i + 1)} for i in range(500)]
+            response = client.post(
+                '/v1/conversations/from-segments',
+                json={'transcript_segments': segments},
+                headers={'Authorization': 'Bearer test-token'},
+            )
+            assert response.status_code == 200
+
     def test_over_500_segments_returns_422(self, client):
         with patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'):
             segments = [{'text': f'seg {i}', 'start': float(i), 'end': float(i + 1)} for i in range(501)]
