@@ -1312,16 +1312,23 @@ async def _stream_handler(
 
             # Persist with lock to prevent concurrent read-modify-write clobbering
             async with translation_persist_lock:
-                conversation = _get_cached_conversation()
+                # Use cache only if conversation_id matches current; fall back to DB otherwise
+                if conversation_id == current_conversation_id:
+                    conversation = _get_cached_conversation()
+                    protection_level = _cached_protection_level
+                else:
+                    conversation = conversations_db.get_conversation(uid, conversation_id)
+                    protection_level = None  # let DB function read it
                 if conversation:
                     for i, existing_segment in enumerate(conversation['transcript_segments']):
                         if existing_segment['id'] == segment.id:
                             conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
                             conversations_db.update_conversation_segments(
                                 uid, conversation_id, conversation['transcript_segments'],
-                                data_protection_level=_cached_protection_level,
+                                data_protection_level=protection_level,
                             )
-                            _update_cached_segments(conversation['transcript_segments'])
+                            if conversation_id == current_conversation_id:
+                                _update_cached_segments(conversation['transcript_segments'])
                             break
 
             if websocket_active:
