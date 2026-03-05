@@ -43,3 +43,12 @@ pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_auth_routes.py -v
+pytest tests/unit/test_from_segments.py -v
+pytest tests/unit/test_desktop_chat.py -v
+pytest tests/unit/test_screen_activity_sync.py -v
+pytest tests/unit/test_assistant_settings_ai_profile.py -v
+pytest tests/unit/test_focus_sessions.py -v
+pytest tests/unit/test_advice.py -v
+pytest tests/unit/test_staged_tasks.py -v
+pytest tests/unit/test_chat_generate_title.py -v
+pytest tests/unit/test_conversations_count.py -v
