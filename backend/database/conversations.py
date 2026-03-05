@@ -881,13 +881,21 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
+def update_conversation_segments(
+    uid: str,
+    conversation_id: str,
+    segments: List[dict],
+    finished_at: datetime = None,
+    data_protection_level: str = None,
+):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-    if not doc_snapshot.exists:
-        return
-
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if data_protection_level is not None:
+        doc_level = data_protection_level
+    else:
+        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
+        if not doc_snapshot.exists:
+            return
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
     if finished_at:
         update_payload['finished_at'] = finished_at
