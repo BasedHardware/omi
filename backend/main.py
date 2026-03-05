@@ -46,6 +46,7 @@ from routers import (
     phone_calls,
     agent_tools,
     desktop_chat,
+    screen_activity,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -106,6 +107,7 @@ app.include_router(announcements.router)
 app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
 app.include_router(desktop_chat.router)
+app.include_router(screen_activity.router)
 
 
 methods_timeout = {
