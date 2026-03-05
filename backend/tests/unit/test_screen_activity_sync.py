@@ -77,3 +77,18 @@ class TestScreenActivitySyncValidation:
             resp = client.post("/v1/screen-activity/sync", json={"rows": rows}, headers=AUTH)
         assert resp.status_code == 200
         mock_thread.assert_not_called()
+
+
+class TestUpsertVectorsBackground:
+    def test_vector_upsert_exception_is_logged(self):
+        from routers.screen_activity import _upsert_vectors_background
+        with patch('routers.screen_activity.vector_db.upsert_screen_activity_vectors', side_effect=Exception("Pinecone down")), \
+             patch('routers.screen_activity.logger') as mock_logger:
+            _upsert_vectors_background("uid123", [{"id": 1, "embedding": [0.1]}])
+        mock_logger.exception.assert_called_once()
+
+    def test_vector_upsert_success(self):
+        from routers.screen_activity import _upsert_vectors_background
+        with patch('routers.screen_activity.vector_db.upsert_screen_activity_vectors') as mock_upsert:
+            _upsert_vectors_background("uid123", [{"id": 1, "embedding": [0.1]}])
+        mock_upsert.assert_called_once_with("uid123", [{"id": 1, "embedding": [0.1]}])
