@@ -1285,9 +1285,11 @@ async def _stream_handler(
                     segment.id, detected_lang, translation_language_base or translation_language
                 )
 
+            # Normalize detected_lang for comparison (e.g. "en-US" -> "en")
+            detected_lang_base = detected_lang.split('-')[0] if detected_lang else None
+
             # Use detected_language_code to check if already in target language
-            # Compare against both full locale tag and base language
-            if detected_lang and (detected_lang == translation_language or detected_lang == translation_language_base):
+            if detected_lang_base and detected_lang_base == translation_language_base:
                 # Prune completed entry
                 pending_translations.pop(segment.id, None)
                 return
@@ -1323,6 +1325,10 @@ async def _stream_handler(
 
         except Exception as e:
             logger.error(f"Translation error: {e} {uid} {session_id}")
+            # Prune failed entry so it doesn't block future translations for this segment
+            pending = pending_translations.get(segment.id)
+            if pending and pending.get('version', 0) == version:
+                pending_translations.pop(segment.id, None)
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         if not translation_language:
