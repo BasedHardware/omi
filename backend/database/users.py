@@ -1033,3 +1033,79 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+
+
+# **************************************
+# ****** Assistant Settings ************
+# **************************************
+
+
+def get_assistant_settings(uid: str) -> dict:
+    """Get the user's assistant_settings map from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        settings = user_data.get('assistant_settings', {})
+        # update_channel is a top-level field, not inside assistant_settings
+        update_channel = user_data.get('update_channel')
+        if update_channel is not None:
+            settings['update_channel'] = update_channel
+        return settings
+    return {}
+
+
+def update_assistant_settings(uid: str, data: dict) -> dict:
+    """Merge-update the user's assistant_settings map. Returns merged state.
+
+    Uses per-section set(merge=True) to avoid overwriting sibling sections.
+    Each non-empty section is written individually so that e.g. patching
+    only 'focus' does not wipe 'shared' or 'task'.
+    """
+    user_ref = db.collection('users').document(uid)
+
+    # Separate update_channel (top-level) from assistant_settings sub-map
+    update_channel = data.pop('update_channel', None)
+
+    # Write each section individually with merge to preserve siblings
+    for section_key, section_val in data.items():
+        if isinstance(section_val, dict) and section_val:
+            user_ref.set({'assistant_settings': {section_key: section_val}}, merge=True)
+
+    if update_channel is not None:
+        user_ref.set({'update_channel': update_channel}, merge=True)
+
+    return get_assistant_settings(uid)
+
+
+# **************************************
+# ******** AI User Profile *************
+# **************************************
+
+
+def get_ai_user_profile(uid: str) -> Optional[dict]:
+    """Get the user's ai_user_profile map from their user document."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('ai_user_profile')
+    return None
+
+
+def update_ai_user_profile(uid: str, data: dict) -> dict:
+    """Full-replace the user's ai_user_profile map. Returns new state.
+
+    Uses update() for true field replacement (removes stale nested keys).
+    Falls back to set(merge=True) if document doesn't exist yet.
+    """
+    user_ref = db.collection('users').document(uid)
+    try:
+        user_ref.update({'ai_user_profile': data})
+    except Exception as e:
+        # Only fall back on not-found (code 404); re-raise other errors
+        if hasattr(e, 'code') and e.code == 404:
+            user_ref.set({'ai_user_profile': data}, merge=True)
+        else:
+            raise
+    return get_ai_user_profile(uid)

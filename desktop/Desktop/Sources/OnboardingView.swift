@@ -219,8 +219,6 @@ struct OnboardingView: View {
 
         // Navigate to Tasks page after transition
         UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        appState.hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
         // Start essential services
@@ -252,6 +250,13 @@ struct OnboardingView: View {
 
         if let onComplete = onComplete {
             onComplete()
+        }
+
+        // Defer the view hierarchy change so SwiftUI finishes rendering the
+        // current button before the OnboardingView is removed from the tree.
+        // Setting this synchronously crashes in Button.body.getter.
+        DispatchQueue.main.async {
+            appState.hasCompletedOnboarding = true
         }
     }
 }
