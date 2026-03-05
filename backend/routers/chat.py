@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from multipart.multipart import shutil
 
 import database.chat as chat_db
@@ -496,6 +497,202 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
     response = [fc.dict() for fc in files_chat]
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Desktop: session management, message persistence, and rating
+# The desktop app manages sessions explicitly (vs mobile's implicit sessions)
+# and persists messages without triggering the LLM pipeline — AI responses
+# come from the local ACP Bridge, not the backend.
+# ---------------------------------------------------------------------------
+
+
+class CreateChatSessionRequest(BaseModel):
+    title: Optional[str] = None
+    app_id: Optional[str] = None
+
+
+class UpdateChatSessionRequest(BaseModel):
+    title: Optional[str] = None
+    starred: Optional[bool] = None
+
+
+class ChatSessionResponse(BaseModel):
+    id: str
+    title: str
+    preview: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    app_id: Optional[str] = None
+    message_count: int = 0
+    starred: bool = False
+
+
+class SaveMessageRequest(BaseModel):
+    text: str
+    sender: str
+    app_id: Optional[str] = None
+    session_id: Optional[str] = None
+    metadata: Optional[str] = None
+
+
+class SaveMessageResponse(BaseModel):
+    id: str
+    created_at: datetime
+
+
+class RateMessageRequest(BaseModel):
+    rating: Optional[int] = None
+
+
+class StatusResponse(BaseModel):
+    status: str
+
+
+@router.get('/v2/chat-sessions', response_model=List[ChatSessionResponse], tags=['chat'])
+def list_chat_sessions(
+    app_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    starred: Optional[bool] = Query(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: list chat sessions with optional filtering."""
+    sessions = chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    return sessions
+
+
+@router.post('/v2/chat-sessions', response_model=ChatSessionResponse, tags=['chat'])
+def create_chat_session(
+    request: CreateChatSessionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: explicitly create a named chat session."""
+    now = datetime.now(timezone.utc)
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'title': request.title or 'New Chat',
+        'preview': None,
+        'created_at': now,
+        'updated_at': now,
+        'app_id': request.app_id,
+        'plugin_id': request.app_id,
+        'message_count': 0,
+        'starred': False,
+    }
+    chat_db.add_chat_session(uid, session_data)
+    return session_data
+
+
+@router.get('/v2/chat-sessions/{session_id}', response_model=ChatSessionResponse, tags=['chat'])
+def get_chat_session_by_id(
+    session_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: get a single chat session by ID."""
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    return session
+
+
+@router.patch('/v2/chat-sessions/{session_id}', response_model=ChatSessionResponse, tags=['chat'])
+def update_chat_session(
+    session_id: str,
+    request: UpdateChatSessionRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: update session title or starred status."""
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    update_data = {}
+    if request.title is not None:
+        update_data['title'] = request.title
+    if request.starred is not None:
+        update_data['starred'] = request.starred
+    if update_data:
+        update_data['updated_at'] = datetime.now(timezone.utc)
+        chat_db.update_chat_session(uid, session_id, update_data)
+        session.update(update_data)
+
+    return session
+
+
+@router.delete('/v2/chat-sessions/{session_id}', response_model=StatusResponse, tags=['chat'])
+def delete_chat_session(
+    session_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: delete a chat session and cascade-delete its messages."""
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    chat_db.delete_chat_session_messages(uid, session_id)
+    chat_db.delete_chat_session(uid, session_id)
+    return StatusResponse(status='ok')
+
+
+@router.post('/v2/messages/save', response_model=SaveMessageResponse, tags=['chat'])
+def save_message(
+    request: SaveMessageRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: persist a message without triggering LLM pipeline.
+
+    The desktop app runs AI locally via ACP Bridge and only calls this
+    endpoint to sync human + AI messages to Firestore.
+    """
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=422, detail="Message text cannot be empty")
+    if request.sender not in ('human', 'ai'):
+        raise HTTPException(status_code=422, detail="sender must be 'human' or 'ai'")
+
+    now = datetime.now(timezone.utc)
+    message_id = str(uuid.uuid4())
+    message_data = {
+        'id': message_id,
+        'text': request.text,
+        'created_at': now,
+        'sender': request.sender,
+        'app_id': request.app_id,
+        'plugin_id': request.app_id,
+        'session_id': request.session_id,
+        'chat_session_id': request.session_id,
+        'rating': None,
+        'reported': False,
+        'type': 'text',
+        'memories_id': [],
+        'from_external_integration': False,
+        'metadata': request.metadata,
+    }
+    chat_db.save_message(uid, message_data)
+
+    if request.session_id:
+        try:
+            chat_db.add_message_to_chat_session(uid, request.session_id, message_id, preview=request.text[:200])
+        except Exception as e:
+            logger.warning(f"Failed to link message to session {request.session_id}: {e}")
+
+    return SaveMessageResponse(id=message_id, created_at=now)
+
+
+@router.patch('/v2/messages/{message_id}/rating', response_model=StatusResponse, tags=['chat'])
+def rate_message(
+    message_id: str,
+    request: RateMessageRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: rate a message (1 = thumbs up, -1 = thumbs down, null = clear)."""
+    if request.rating is not None and request.rating not in (1, -1):
+        raise HTTPException(status_code=422, detail="rating must be 1, -1, or null")
+
+    success = chat_db.update_message_rating(uid, message_id, request.rating)
+    if not success:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return StatusResponse(status='ok')
 
 
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
