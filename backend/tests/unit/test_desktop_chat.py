@@ -249,11 +249,78 @@ class TestDesktopMessageEndpoints:
             assert mock_rate.call_args[0][1] == 'msg-1'
             assert mock_rate.call_args[0][2] is None
 
+    def test_rate_message_thumbs_down(self, client):
+        with (
+            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.desktop_chat.chat_db.update_message_rating') as mock_rate,
+        ):
+            response = client.patch(
+                '/v2/messages/msg-1/rating',
+                json={'rating': -1},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+            assert mock_rate.call_args[0][2] == -1
+
     def test_rate_message_invalid_value_422(self, client):
         with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
                 json={'rating': 5},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 422
+
+    def test_update_session_not_found(self, client):
+        with (
+            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=None),
+        ):
+            response = client.patch(
+                '/v2/chat-sessions/missing',
+                json={'title': 'Renamed'},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 404
+
+    def test_delete_session_not_found(self, client):
+        with (
+            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=None),
+        ):
+            response = client.delete(
+                '/v2/chat-sessions/missing',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 404
+
+    def test_save_message_session_link_failure_still_succeeds(self, client):
+        with (
+            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.desktop_chat.chat_db.save_message') as mock_save,
+            patch('routers.desktop_chat.chat_db.add_message_to_chat_session', side_effect=Exception('Firestore error')),
+        ):
+            mock_save.side_effect = lambda uid, data: data
+            response = client.post(
+                '/v2/desktop/messages',
+                json={'text': 'Hello', 'sender': 'human', 'session_id': 's1'},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+            assert 'id' in response.json()
+
+    def test_list_sessions_limit_validation(self, client):
+        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.get(
+                '/v2/chat-sessions?limit=0',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 422
+
+    def test_list_sessions_offset_negative_validation(self, client):
+        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.get(
+                '/v2/chat-sessions?offset=-1',
                 headers={'Authorization': 'Bearer test'},
             )
             assert response.status_code == 422
