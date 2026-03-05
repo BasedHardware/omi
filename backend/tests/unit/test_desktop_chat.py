@@ -16,7 +16,7 @@ for mod_name in [
 ]:
     sys.modules.setdefault(mod_name, MagicMock())
 
-from routers.desktop_chat import (
+from routers.chat import (
     CreateChatSessionRequest,
     UpdateChatSessionRequest,
     ChatSessionResponse,
@@ -71,8 +71,8 @@ class TestChatSessionEndpoints:
 
     def test_create_session(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.add_chat_session') as mock_add,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.add_chat_session') as mock_add,
         ):
             mock_add.side_effect = lambda uid, data: data
             response = client.post(
@@ -89,8 +89,8 @@ class TestChatSessionEndpoints:
 
     def test_create_session_default_title(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.add_chat_session') as mock_add,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.add_chat_session') as mock_add,
         ):
             mock_add.side_effect = lambda uid, data: data
             response = client.post(
@@ -108,8 +108,8 @@ class TestChatSessionEndpoints:
             {'id': 's2', 'title': 'Chat 2', 'created_at': now, 'updated_at': now, 'message_count': 3, 'starred': True},
         ]
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_sessions', return_value=mock_sessions),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_sessions', return_value=mock_sessions),
         ):
             response = client.get('/v2/chat-sessions', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 200
@@ -121,8 +121,8 @@ class TestChatSessionEndpoints:
         now = datetime.now(timezone.utc)
         mock_session = {'id': 's1', 'title': 'Chat', 'created_at': now, 'updated_at': now, 'message_count': 0, 'starred': False}
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=mock_session),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=mock_session),
         ):
             response = client.get('/v2/chat-sessions/s1', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 200
@@ -130,8 +130,8 @@ class TestChatSessionEndpoints:
 
     def test_get_session_not_found(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=None),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=None),
         ):
             response = client.get('/v2/chat-sessions/missing', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 404
@@ -140,9 +140,9 @@ class TestChatSessionEndpoints:
         now = datetime.now(timezone.utc)
         mock_session = {'id': 's1', 'title': 'Old', 'created_at': now, 'updated_at': now, 'message_count': 0, 'starred': False}
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=mock_session),
-            patch('routers.desktop_chat.chat_db.update_chat_session') as mock_update,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=mock_session),
+            patch('routers.chat.chat_db.update_chat_session') as mock_update,
         ):
             response = client.patch(
                 '/v2/chat-sessions/s1',
@@ -159,10 +159,10 @@ class TestChatSessionEndpoints:
         now = datetime.now(timezone.utc)
         mock_session = {'id': 's1', 'title': 'Del', 'created_at': now, 'updated_at': now}
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=mock_session),
-            patch('routers.desktop_chat.chat_db.delete_chat_session_messages') as mock_del_msgs,
-            patch('routers.desktop_chat.chat_db.delete_chat_session') as mock_del,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=mock_session),
+            patch('routers.chat.chat_db.delete_chat_session_messages') as mock_del_msgs,
+            patch('routers.chat.chat_db.delete_chat_session') as mock_del,
         ):
             response = client.delete('/v2/chat-sessions/s1', headers={'Authorization': 'Bearer test'})
             assert response.status_code == 200
@@ -186,13 +186,13 @@ class TestDesktopMessageEndpoints:
 
     def test_save_message(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.save_message') as mock_save,
-            patch('routers.desktop_chat.chat_db.add_message_to_chat_session'),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.save_message') as mock_save,
+            patch('routers.chat.chat_db.add_message_to_chat_session'),
         ):
             mock_save.side_effect = lambda uid, data: data
             response = client.post(
-                '/v2/desktop/messages',
+                '/v2/messages/save',
                 json={'text': 'Hello', 'sender': 'human', 'session_id': 's1'},
                 headers={'Authorization': 'Bearer test'},
             )
@@ -202,18 +202,18 @@ class TestDesktopMessageEndpoints:
             assert 'created_at' in data
 
     def test_save_message_empty_text_422(self, client):
-        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.post(
-                '/v2/desktop/messages',
+                '/v2/messages/save',
                 json={'text': '   ', 'sender': 'human'},
                 headers={'Authorization': 'Bearer test'},
             )
             assert response.status_code == 422
 
     def test_save_message_invalid_sender_422(self, client):
-        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.post(
-                '/v2/desktop/messages',
+                '/v2/messages/save',
                 json={'text': 'Hello', 'sender': 'bot'},
                 headers={'Authorization': 'Bearer test'},
             )
@@ -221,8 +221,8 @@ class TestDesktopMessageEndpoints:
 
     def test_rate_message_thumbs_up(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -236,8 +236,8 @@ class TestDesktopMessageEndpoints:
 
     def test_rate_message_clear(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -251,8 +251,8 @@ class TestDesktopMessageEndpoints:
 
     def test_rate_message_thumbs_down(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -263,7 +263,7 @@ class TestDesktopMessageEndpoints:
             assert mock_rate.call_args[0][2] == -1
 
     def test_rate_message_invalid_value_422(self, client):
-        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
                 json={'rating': 5},
@@ -273,8 +273,8 @@ class TestDesktopMessageEndpoints:
 
     def test_update_session_not_found(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=None),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=None),
         ):
             response = client.patch(
                 '/v2/chat-sessions/missing',
@@ -285,8 +285,8 @@ class TestDesktopMessageEndpoints:
 
     def test_delete_session_not_found(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.get_chat_session_by_id', return_value=None),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_session_by_id', return_value=None),
         ):
             response = client.delete(
                 '/v2/chat-sessions/missing',
@@ -296,13 +296,13 @@ class TestDesktopMessageEndpoints:
 
     def test_save_message_session_link_failure_still_succeeds(self, client):
         with (
-            patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.desktop_chat.chat_db.save_message') as mock_save,
-            patch('routers.desktop_chat.chat_db.add_message_to_chat_session', side_effect=Exception('Firestore error')),
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.save_message') as mock_save,
+            patch('routers.chat.chat_db.add_message_to_chat_session', side_effect=Exception('Firestore error')),
         ):
             mock_save.side_effect = lambda uid, data: data
             response = client.post(
-                '/v2/desktop/messages',
+                '/v2/messages/save',
                 json={'text': 'Hello', 'sender': 'human', 'session_id': 's1'},
                 headers={'Authorization': 'Bearer test'},
             )
@@ -310,7 +310,7 @@ class TestDesktopMessageEndpoints:
             assert 'id' in response.json()
 
     def test_list_sessions_limit_validation(self, client):
-        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.get(
                 '/v2/chat-sessions?limit=0',
                 headers={'Authorization': 'Bearer test'},
@@ -318,7 +318,7 @@ class TestDesktopMessageEndpoints:
             assert response.status_code == 422
 
     def test_list_sessions_offset_negative_validation(self, client):
-        with patch('routers.desktop_chat.auth.get_current_user_uid', return_value='uid-1'):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.get(
                 '/v2/chat-sessions?offset=-1',
                 headers={'Authorization': 'Bearer test'},
