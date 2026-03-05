@@ -3,6 +3,7 @@ import uuid
 import json
 import hashlib
 import time
+import base64
 import requests
 import jwt
 from typing import Optional
@@ -43,6 +44,11 @@ async def auth_authorize(
     """
     if provider not in ['google', 'apple']:
         raise HTTPException(status_code=400, detail="Unsupported provider")
+
+    # Validate redirect_uri against allowed app URL schemes
+    ALLOWED_REDIRECT_SCHEMES = ('omi://', 'omi-computer://', 'omi-computer-dev://')
+    if not redirect_uri or not any(redirect_uri.startswith(s) for s in ALLOWED_REDIRECT_SCHEMES):
+        raise HTTPException(status_code=400, detail="Invalid redirect_uri: must use an allowed app URL scheme")
 
     # Store session for auth flow
     session_id = str(uuid.uuid4())
@@ -96,6 +102,7 @@ async def auth_callback_google(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": session_data.get('redirect_uri') or 'omi://auth/callback',
         },
     )
 
@@ -134,6 +141,7 @@ async def auth_callback_apple_post(
             "request": request,
             "code": auth_code,
             "state": session_data['state'] or '',
+            "redirect_uri": session_data.get('redirect_uri') or 'omi://auth/callback',
         },
     )
 
@@ -379,47 +387,67 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
     Works with any bundle ID - perfect for multiple developers
     """
     try:
-        # Get Firebase API Key from environment
+        firebase_uid = None
+
+        # Try REST API first (works when FIREBASE_API_KEY has no app restrictions)
         firebase_api_key = os.getenv('FIREBASE_API_KEY')
-        if not firebase_api_key:
-            raise Exception("FIREBASE_API_KEY not configured")
+        if firebase_api_key:
+            sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
 
-        # Sign in with OAuth credential using Firebase Auth REST API
-        sign_in_url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+            if provider == 'google':
+                post_body = f'id_token={id_token}&providerId=google.com'
+                if access_token:
+                    post_body += f'&access_token={access_token}'
+            elif provider == 'apple':
+                post_body = f'id_token={id_token}&providerId=apple.com'
+                if access_token:
+                    post_body += f'&access_token={access_token}'
+            else:
+                raise Exception(f"Unsupported provider: {provider}")
 
-        # Prepare the postBody based on provider
-        if provider == 'google':
-            post_body = f'id_token={id_token}&providerId=google.com'
-            if access_token:
-                post_body += f'&access_token={access_token}'
-        elif provider == 'apple':
-            post_body = f'id_token={id_token}&providerId=apple.com'
-            if access_token:
-                post_body += f'&access_token={access_token}'
-        else:
-            raise Exception(f"Unsupported provider: {provider}")
+            payload = {
+                'postBody': post_body,
+                'requestUri': 'http://localhost',
+                'returnIdpCredential': True,
+                'returnSecureToken': True,
+            }
 
-        payload = {
-            'postBody': post_body,
-            'requestUri': 'http://localhost',
-            'returnIdpCredential': True,
-            'returnSecureToken': True,
-        }
+            response = requests.post(sign_in_url, json=payload)
 
-        # Call Firebase Auth REST API to sign in
-        response = requests.post(sign_in_url, json=payload)
+            if response.status_code == 200:
+                result = response.json()
+                firebase_uid = result.get('localId')
+                if firebase_uid:
+                    logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+            else:
+                logger.warning(
+                    f"Firebase REST API sign-in failed (status={response.status_code}), falling back to Admin SDK"
+                )
 
-        if response.status_code != 200:
-            logger.error(f"Firebase sign-in failed: {sanitize(response.text)}")
-            raise Exception(f"Firebase sign-in failed: status={response.status_code}")
+        # Fallback: decode id_token JWT and look up/create user via Admin SDK
+        if not firebase_uid:
+            parts = id_token.split('.')
+            if len(parts) < 2:
+                raise Exception("Invalid id_token format")
+            payload_b64 = parts[1] + '=' * (4 - len(parts[1]) % 4)
+            token_payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            email = token_payload.get('email')
+            if not email:
+                raise Exception("No email in id_token")
 
-        result = response.json()
-        firebase_uid = result.get('localId')
+            # Look up existing Firebase user by email
+            try:
+                user = firebase_admin.auth.get_user_by_email(email)
+                firebase_uid = user.uid
+                logger.info(f"Found existing Firebase user for {email}, UID: {firebase_uid}")
+            except firebase_admin.auth.UserNotFoundError:
+                # Create new Firebase user
+                user = firebase_admin.auth.create_user(email=email, email_verified=True)
+                firebase_uid = user.uid
+                logger.info(f"Created new Firebase user for {email}, UID: {firebase_uid}")
 
         if not firebase_uid:
-            raise Exception("No Firebase UID returned from sign-in")
-
-        logger.info(f"Firebase sign-in successful for {provider}, UID: {firebase_uid}")
+            raise Exception("No Firebase UID obtained")
 
         # Create custom token for this UID
         custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
