@@ -33,6 +33,7 @@ from utils.chat import (
     resolve_voice_message_language,
     transcribe_voice_message_segment,
 )
+from utils.llm.clients import llm_mini
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
@@ -693,6 +694,50 @@ def rate_message(
     if not success:
         raise HTTPException(status_code=404, detail="Message not found")
     return StatusResponse(status='ok')
+
+
+class TitleMessageInput(BaseModel):
+    text: str
+    sender: str
+
+
+class GenerateTitleRequest(BaseModel):
+    session_id: str
+    messages: List[TitleMessageInput]
+
+
+class GenerateTitleResponse(BaseModel):
+    title: str
+
+
+@router.post('/v2/chat/generate-title', response_model=GenerateTitleResponse, tags=['chat'])
+def generate_chat_title(
+    request: GenerateTitleRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Desktop: generate a short title for a chat session from its messages."""
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="messages list cannot be empty")
+
+    transcript = '\n'.join(f'{m.sender}: {m.text[:500]}' for m in request.messages[:10])
+    prompt = (
+        'Generate a short chat session title (max 6 words) summarising this conversation. '
+        'Return ONLY the title text, no quotes or punctuation.\n\n' + transcript
+    )
+    try:
+        result = llm_mini.invoke(prompt)
+        title = result.content.strip().strip('"\'')[:100]
+    except Exception as e:
+        logger.warning(f'generate_chat_title LLM failed: {e}')
+        title = request.messages[0].text[:50]
+
+    # Update session title if session exists
+    try:
+        chat_db.update_chat_session(uid, request.session_id, {'title': title, 'updated_at': datetime.now(timezone.utc)})
+    except Exception as e:
+        logger.warning(f'generate_chat_title update session failed: {e}')
+
+    return GenerateTitleResponse(title=title)
 
 
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
