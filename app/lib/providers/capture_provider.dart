@@ -40,7 +40,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
+import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/main.dart';
@@ -1827,6 +1827,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
 
+    // Write mute state first — before BLE cancel which may fire other events
+    await BatteryWidgetService().updateMuteState(true);
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
     _isPaused = true;
@@ -1837,6 +1839,8 @@ class CaptureProvider extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
+    // Update widget immediately — don't wait for streaming setup
+    BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
 
