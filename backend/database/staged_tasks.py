@@ -64,8 +64,10 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> Tuple[List[
     Returns (items, has_more).
     """
     ref = db.collection('users').document(uid).collection(COLLECTION)
-    query = ref.where(filter=firestore.FieldFilter('completed', '==', False)).order_by(
-        'relevance_score', direction=firestore.Query.ASCENDING
+    query = (
+        ref.where(filter=firestore.FieldFilter('completed', '==', False))
+        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
     # Fetch more than needed to account for deleted items being filtered client-side
