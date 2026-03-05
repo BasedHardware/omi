@@ -228,6 +228,64 @@ class TestFromSegmentsEndpoint:
             create_obj = mock_process.call_args[0][2]
             assert create_obj.source.value == 'desktop'
 
+    def test_empty_segments_list_returns_422(self, client):
+        with patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'):
+            response = client.post(
+                '/v1/conversations/from-segments',
+                json={'transcript_segments': []},
+                headers={'Authorization': 'Bearer test-token'},
+            )
+            assert response.status_code == 422
+
+    def test_over_500_segments_returns_422(self, client):
+        with patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'):
+            segments = [{'text': f'seg {i}', 'start': float(i), 'end': float(i + 1)} for i in range(501)]
+            response = client.post(
+                '/v1/conversations/from-segments',
+                json={'transcript_segments': segments},
+                headers={'Authorization': 'Bearer test-token'},
+            )
+            assert response.status_code == 422
+            assert '500' in response.json()['detail']
+
+    def test_finished_at_before_started_at_returns_422(self, client):
+        with patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'):
+            now = datetime.now(timezone.utc)
+            earlier = now - timedelta(hours=1)
+            response = client.post(
+                '/v1/conversations/from-segments',
+                json={
+                    'transcript_segments': [{'text': 'Hello', 'start': 0.0, 'end': 1.0}],
+                    'started_at': now.isoformat(),
+                    'finished_at': earlier.isoformat(),
+                },
+                headers={'Authorization': 'Bearer test-token'},
+            )
+            assert response.status_code == 422
+            assert 'finished_at' in response.json()['detail']
+
+    def test_geolocation_enrichment_failure_continues(self, client):
+        with (
+            patch('routers.conversations.auth.get_current_user_uid', return_value='test-uid-123'),
+            patch('routers.conversations.process_conversation') as mock_process,
+            patch('routers.conversations.get_google_maps_location', side_effect=Exception('API error')),
+        ):
+            mock_conv = MagicMock()
+            mock_conv.id = 'conv-geo'
+            mock_conv.status.value = 'completed'
+            mock_conv.discarded = False
+            mock_process.return_value = mock_conv
+
+            response = client.post(
+                '/v1/conversations/from-segments',
+                json={
+                    'transcript_segments': [{'text': 'Hello', 'start': 0.0, 'end': 1.0}],
+                    'geolocation': {'latitude': 37.7749, 'longitude': -122.4194},
+                },
+                headers={'Authorization': 'Bearer test-token'},
+            )
+            assert response.status_code == 200
+
 
 # Keep patch import at module scope for the with-statement usage
 from unittest.mock import patch
