@@ -11,6 +11,7 @@ from typing import Union, Tuple, List, Optional
 from fastapi import HTTPException
 
 from database import redis_db
+from database.auth import get_user_name
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -85,6 +86,10 @@ def _get_structured(
     try:
         tz = notification_db.get_user_time_zone(uid)
 
+        # Fetch the user's configured display name so transcripts use real names
+        # instead of the generic "User" placeholder during summary generation.
+        user_name = get_user_name(uid, use_default=False)
+
         # Fetch existing action items from past 2 days for deduplication
         existing_action_items = None
         try:
@@ -139,7 +144,7 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False, people=people)
+        transcript_text = conversation.get_transcript(False, people=people, user_name=user_name)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -290,6 +295,9 @@ def _trigger_apps(
     language_code: str = 'en',
     people: List[Person] = None,
 ):
+    # Fetch user's configured display name for transcript formatting
+    user_name = get_user_name(uid, use_default=False)
+
     # Get default apps for auto-selection
     default_apps = get_default_conversation_summarized_apps()
     default_apps_dict = {app.id: app for app in default_apps}
@@ -345,7 +353,7 @@ def _trigger_apps(
     def execute_app(app):
         with track_usage(uid, Features.CONVERSATION_APPS):
             result = get_app_result(
-                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code
+                conversation.get_transcript(False, people=people, user_name=user_name), conversation.photos, app, language_code=language_code
             ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
