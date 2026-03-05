@@ -44,6 +44,7 @@ from routers import (
     goals,
     announcements,
     agent_tools,
+    desktop_chat,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -102,6 +103,7 @@ app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(announcements.router)
 app.include_router(agent_tools.router)
+app.include_router(desktop_chat.router)
 
 
 methods_timeout = {
