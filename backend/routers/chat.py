@@ -672,7 +672,7 @@ def save_message(
 
     if request.session_id:
         try:
-            chat_db.add_message_to_chat_session(uid, request.session_id, message_id)
+            chat_db.add_message_to_chat_session(uid, request.session_id, message_id, preview=request.text[:200])
         except Exception as e:
             logger.warning(f"Failed to link message to session {request.session_id}: {e}")
 
@@ -689,7 +689,9 @@ def rate_message(
     if request.rating is not None and request.rating not in (1, -1):
         raise HTTPException(status_code=422, detail="rating must be 1, -1, or null")
 
-    chat_db.update_message_rating(uid, message_id, request.rating)
+    success = chat_db.update_message_rating(uid, message_id, request.rating)
+    if not success:
+        raise HTTPException(status_code=404, detail="Message not found")
     return StatusResponse(status='ok')
 
 
