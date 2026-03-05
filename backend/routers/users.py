@@ -1312,9 +1312,12 @@ def update_ai_profile_endpoint(
     data: UpdateAIProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # Validate generated_at is RFC3339 (matching Rust behavior)
+    # Strict RFC3339 validation — require T separator and timezone (Z or +/-offset)
+    ts = data.generated_at
+    if 'T' not in ts or (not ts.endswith('Z') and '+' not in ts.split('T')[1] and '-' not in ts.split('T')[1]):
+        raise HTTPException(status_code=400, detail="generated_at must be a valid RFC3339 timestamp")
     try:
-        datetime.fromisoformat(data.generated_at.replace('Z', '+00:00'))
+        parsed_ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
     except (ValueError, AttributeError):
         raise HTTPException(status_code=400, detail="generated_at must be a valid RFC3339 timestamp")
 
@@ -1324,7 +1327,7 @@ def update_ai_profile_endpoint(
 
     profile_data = {
         'profile_text': profile_text,
-        'generated_at': data.generated_at,
+        'generated_at': parsed_ts,
         'data_sources_used': data.data_sources_used,
     }
     return update_ai_user_profile(uid, profile_data)
