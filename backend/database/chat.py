@@ -476,8 +476,10 @@ def get_chat_sessions(
     sessions_ref = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if starred is not None:
         sessions_ref = sessions_ref.where(filter=FieldFilter('starred', '==', starred))
-    sessions_ref = sessions_ref.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
-    return [doc.to_dict() for doc in sessions_ref.stream()]
+    sessions_ref = sessions_ref.limit(limit).offset(offset)
+    sessions = [doc.to_dict() for doc in sessions_ref.stream()]
+    sessions.sort(key=lambda s: s.get('updated_at', s.get('created_at', datetime.min)), reverse=True)
+    return sessions
 
 
 def update_chat_session(uid: str, chat_session_id: str, update_data: dict):
