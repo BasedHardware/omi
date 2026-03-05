@@ -1193,3 +1193,138 @@ async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
+
+
+# **************************************
+# ****** Assistant Settings ************
+# **************************************
+
+
+class SharedAssistantSettings(BaseModel):
+    cooldown_interval: Optional[int] = None
+    glow_overlay_enabled: Optional[bool] = None
+    analysis_delay: Optional[int] = None
+    screen_analysis_enabled: Optional[bool] = None
+
+
+class FocusSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = None
+    cooldown_interval: Optional[int] = None
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class TaskSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = None
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = None
+    notifications_enabled: Optional[bool] = None
+    allowed_apps: Optional[List[str]] = None
+    browser_keywords: Optional[List[str]] = None
+
+
+class AdviceSettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = None
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = None
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class MemorySettings(BaseModel):
+    enabled: Optional[bool] = None
+    analysis_prompt: Optional[str] = None
+    extraction_interval: Optional[float] = None
+    min_confidence: Optional[float] = None
+    notifications_enabled: Optional[bool] = None
+    excluded_apps: Optional[List[str]] = None
+
+
+class AssistantSettingsData(BaseModel):
+    shared: Optional[SharedAssistantSettings] = None
+    focus: Optional[FocusSettings] = None
+    task: Optional[TaskSettings] = None
+    advice: Optional[AdviceSettings] = None
+    memory: Optional[MemorySettings] = None
+    update_channel: Optional[str] = None
+
+
+def _validate_assistant_settings(data: AssistantSettingsData):
+    """Validate prompt lengths and list sizes matching Rust backend limits."""
+    for section_name in ('focus', 'task', 'advice', 'memory'):
+        section = getattr(data, section_name, None)
+        if section and section.analysis_prompt and len(section.analysis_prompt) > 10000:
+            raise HTTPException(status_code=400, detail=f'{section_name}.analysis_prompt exceeds 10000 chars')
+
+    if data.task:
+        if data.task.allowed_apps and len(data.task.allowed_apps) > 500:
+            raise HTTPException(status_code=400, detail='task.allowed_apps exceeds 500 items')
+        if data.task.browser_keywords and len(data.task.browser_keywords) > 500:
+            raise HTTPException(status_code=400, detail='task.browser_keywords exceeds 500 items')
+        if data.task.min_confidence is not None and not (0.0 <= data.task.min_confidence <= 1.0):
+            raise HTTPException(status_code=400, detail='task.min_confidence must be between 0.0 and 1.0')
+
+    if data.advice and data.advice.min_confidence is not None and not (0.0 <= data.advice.min_confidence <= 1.0):
+        raise HTTPException(status_code=400, detail='advice.min_confidence must be between 0.0 and 1.0')
+
+    if data.memory and data.memory.min_confidence is not None and not (0.0 <= data.memory.min_confidence <= 1.0):
+        raise HTTPException(status_code=400, detail='memory.min_confidence must be between 0.0 and 1.0')
+
+
+@router.get('/v1/users/assistant-settings', tags=['users'])
+def get_assistant_settings_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    return get_assistant_settings(uid)
+
+
+@router.patch('/v1/users/assistant-settings', tags=['users'])
+def update_assistant_settings_endpoint(
+    data: AssistantSettingsData,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _validate_assistant_settings(data)
+    update_data = data.model_dump(exclude_none=True)
+    if not update_data:
+        return get_assistant_settings(uid)
+    return update_assistant_settings(uid, update_data)
+
+
+# **************************************
+# ******** AI User Profile *************
+# **************************************
+
+
+class UpdateAIProfileRequest(BaseModel):
+    profile_text: str
+    generated_at: str
+    data_sources_used: int
+
+
+@router.get('/v1/users/ai-profile', tags=['users'])
+def get_ai_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    return get_ai_user_profile(uid)
+
+
+@router.patch('/v1/users/ai-profile', tags=['users'])
+def update_ai_profile_endpoint(
+    data: UpdateAIProfileRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    # Validate generated_at is RFC3339 (matching Rust behavior)
+    try:
+        datetime.fromisoformat(data.generated_at.replace('Z', '+00:00'))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="generated_at must be a valid RFC3339 timestamp")
+
+    # Truncate profile_text to 10000 bytes (matching Rust behavior — truncate, not reject)
+    profile_bytes = data.profile_text.encode('utf-8')[:10000]
+    profile_text = profile_bytes.decode('utf-8', errors='ignore')
+
+    profile_data = {
+        'profile_text': profile_text,
+        'generated_at': data.generated_at,
+        'data_sources_used': data.data_sources_used,
+    }
+    return update_ai_user_profile(uid, profile_data)
