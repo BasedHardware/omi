@@ -468,6 +468,39 @@ def delete_chat_session(uid, chat_session_id):
     session_ref.delete()
 
 
+def get_chat_sessions(
+    uid: str, app_id: Optional[str] = None, limit: int = 50, offset: int = 0, starred: Optional[bool] = None
+):
+    """List chat sessions with optional filters."""
+    sessions_ref = db.collection('users').document(uid).collection('chat_sessions')
+    sessions_ref = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    if starred is not None:
+        sessions_ref = sessions_ref.where(filter=FieldFilter('starred', '==', starred))
+    sessions_ref = sessions_ref.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+    return [doc.to_dict() for doc in sessions_ref.stream()]
+
+
+def update_chat_session(uid: str, chat_session_id: str, update_data: dict):
+    """Partial update of a chat session."""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update(update_data)
+
+
+def save_message(uid: str, message_data: dict):
+    """Save a message directly by document ID (for desktop CRUD)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('messages').document(message_data['id']).set(message_data)
+    return message_data
+
+
+def update_message_rating(uid: str, message_id: str, rating: Optional[int]):
+    """Update the rating on a message."""
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').document(message_id)
+    message_ref.update({'rating': rating})
+
+
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
