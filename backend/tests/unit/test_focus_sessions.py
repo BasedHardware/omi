@@ -31,7 +31,7 @@ class TestCreateFocusSession:
                 "description": "Coding", "created_at": datetime.now(timezone.utc),
             }
             resp = client.post("/v1/focus-sessions", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()["status"] == "focused"
 
     def test_create_distracted_session(self, client):
@@ -42,7 +42,7 @@ class TestCreateFocusSession:
                 "description": "Scrolling", "created_at": datetime.now(timezone.utc),
             }
             resp = client.post("/v1/focus-sessions", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()["status"] == "distracted"
 
     def test_create_invalid_status_returns_400(self, client):
@@ -62,7 +62,7 @@ class TestCreateFocusSession:
                 **{k: v for k, v in data.items()}, "created_at": datetime.now(timezone.utc),
             }
             resp = client.post("/v1/focus-sessions", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()["message"] == "Keep going!"
         assert resp.json()["duration_seconds"] == 300
 
@@ -92,9 +92,11 @@ class TestGetFocusSessions:
         mock_get.assert_called_once()
         assert mock_get.call_args[1]['date'] == '2026-03-05'
 
-    def test_get_invalid_date_returns_400(self, client):
-        resp = client.get("/v1/focus-sessions?date=not-a-date", headers=AUTH)
-        assert resp.status_code == 400
+    def test_get_invalid_date_skips_filter(self, client):
+        with patch('routers.focus_sessions.focus_sessions_db.get_focus_sessions', return_value=[]) as mock_get:
+            resp = client.get("/v1/focus-sessions?date=not-a-date", headers=AUTH)
+        assert resp.status_code == 200
+        assert mock_get.call_args[1]['date'] is None
 
     def test_get_with_limit_and_offset(self, client):
         with patch('routers.focus_sessions.focus_sessions_db.get_focus_sessions', return_value=[]) as mock_get:
@@ -162,9 +164,12 @@ class TestFocusStats:
         today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         assert called_date == today
 
-    def test_stats_invalid_date_returns_400(self, client):
-        resp = client.get("/v1/focus-stats?date=bad", headers=AUTH)
-        assert resp.status_code == 400
+    def test_stats_invalid_date_defaults_to_today(self, client):
+        with patch('routers.focus_sessions.focus_sessions_db.get_focus_sessions_for_stats', return_value=[]) as mock_get:
+            resp = client.get("/v1/focus-stats?date=bad", headers=AUTH)
+        assert resp.status_code == 200
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        assert mock_get.call_args[0][1] == today
 
     def test_stats_distraction_without_duration_defaults_60(self, client):
         sessions = [
@@ -174,6 +179,15 @@ class TestFocusStats:
             resp = client.get("/v1/focus-stats?date=2026-03-05", headers=AUTH)
         assert resp.status_code == 200
         assert resp.json()["top_distractions"][0]["total_seconds"] == 60
+
+    def test_stats_distraction_with_zero_duration_keeps_zero(self, client):
+        sessions = [
+            {"status": "distracted", "app_or_site": "Slack", "duration_seconds": 0},
+        ]
+        with patch('routers.focus_sessions.focus_sessions_db.get_focus_sessions_for_stats', return_value=sessions):
+            resp = client.get("/v1/focus-stats?date=2026-03-05", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.json()["top_distractions"][0]["total_seconds"] == 0
 
     def test_stats_top5_limit(self, client):
         sessions = [

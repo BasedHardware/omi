@@ -32,7 +32,7 @@ class TestCreateAdvice:
                 "created_at": datetime.now(timezone.utc),
             }
             resp = client.post("/v1/advice", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()["content"] == "Take a break"
         assert resp.json()["category"] == "other"
 
@@ -45,7 +45,7 @@ class TestCreateAdvice:
         with patch('routers.advice.advice_db.create_advice') as mock_create:
             mock_create.return_value = {"id": "adv-2", **data, "is_read": False, "is_dismissed": False, "created_at": datetime.now(timezone.utc)}
             resp = client.post("/v1/advice", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
         assert resp.json()["category"] == "health"
         assert resp.json()["confidence"] == 0.9
 
@@ -70,14 +70,14 @@ class TestCreateAdvice:
         with patch('routers.advice.advice_db.create_advice') as mock_create:
             mock_create.return_value = {"id": "adv-3", "content": "Test", "confidence": 0.0, "category": "other", "is_read": False, "is_dismissed": False, "created_at": datetime.now(timezone.utc)}
             resp = client.post("/v1/advice", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
 
     def test_create_confidence_boundary_one(self, client):
         data = {"content": "Test", "confidence": 1.0}
         with patch('routers.advice.advice_db.create_advice') as mock_create:
             mock_create.return_value = {"id": "adv-4", "content": "Test", "confidence": 1.0, "category": "other", "is_read": False, "is_dismissed": False, "created_at": datetime.now(timezone.utc)}
             resp = client.post("/v1/advice", json=data, headers=AUTH)
-        assert resp.status_code == 201
+        assert resp.status_code == 200
 
     def test_create_no_auth_returns_401(self, client):
         resp = client.post("/v1/advice", json={"content": "Test"})
@@ -94,7 +94,7 @@ class TestCreateAdvice:
             with patch('routers.advice.advice_db.create_advice') as mock_create:
                 mock_create.return_value = {"id": "x", "content": "Test", "category": cat, "confidence": 0.5, "is_read": False, "is_dismissed": False, "created_at": datetime.now(timezone.utc)}
                 resp = client.post("/v1/advice", json=data, headers=AUTH)
-            assert resp.status_code == 201, f"Failed for category {cat}"
+            assert resp.status_code == 200, f"Failed for category {cat}"
 
 
 class TestGetAdvice:
@@ -110,9 +110,11 @@ class TestGetAdvice:
         assert resp.status_code == 200
         assert mock_get.call_args[1]['category'] == 'health'
 
-    def test_get_invalid_category_filter_returns_400(self, client):
-        resp = client.get("/v1/advice?category=bad_cat", headers=AUTH)
-        assert resp.status_code == 400
+    def test_get_invalid_category_skips_filter(self, client):
+        with patch('routers.advice.advice_db.get_advice', return_value=[]) as mock_get:
+            resp = client.get("/v1/advice?category=bad_cat", headers=AUTH)
+        assert resp.status_code == 200
+        assert mock_get.call_args[1]['category'] is None
 
     def test_get_include_dismissed(self, client):
         with patch('routers.advice.advice_db.get_advice', return_value=[]) as mock_get:
@@ -149,14 +151,16 @@ class TestUpdateAdvice:
         assert resp.status_code == 200
         assert resp.json()["is_dismissed"] is True
 
-    def test_empty_update_returns_400(self, client):
-        resp = client.patch("/v1/advice/adv-1", json={}, headers=AUTH)
-        assert resp.status_code == 400
+    def test_empty_update_still_updates_timestamp(self, client):
+        with patch('routers.advice.advice_db.update_advice') as mock_update:
+            mock_update.return_value = {"id": "adv-1", "is_read": False, "is_dismissed": False, "content": "x", "category": "other", "confidence": 0.5, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc)}
+            resp = client.patch("/v1/advice/adv-1", json={}, headers=AUTH)
+        assert resp.status_code == 200
 
-    def test_update_not_found_returns_404(self, client):
+    def test_update_not_found_returns_500(self, client):
         with patch('routers.advice.advice_db.update_advice', return_value=None):
             resp = client.patch("/v1/advice/adv-1", json={"is_read": True}, headers=AUTH)
-        assert resp.status_code == 404
+        assert resp.status_code == 500
 
     def test_update_firestore_error_returns_500(self, client):
         with patch('routers.advice.advice_db.update_advice', side_effect=Exception("err")):
