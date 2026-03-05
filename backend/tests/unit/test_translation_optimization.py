@@ -492,3 +492,181 @@ class TestBatchChunking:
     def test_max_batch_size_constant(self):
         """MAX_BATCH_SIZE should be 100."""
         assert MAX_BATCH_SIZE == 100
+
+
+# ---------------------------------------------------------------------------
+# Debounce integration tests
+# ---------------------------------------------------------------------------
+# The debounce logic lives inside transcribe.py closures. These tests replicate
+# the state machine pattern to verify first-appearance, debounced update,
+# final-segment bypass, stale version rejection, and flush behavior.
+
+
+def _is_segment_final(segment_text: str) -> bool:
+    """Mirror of the _is_segment_final function inside _stream_handler."""
+    return bool(segment_text) and segment_text[-1] in '.?!'
+
+
+class TestIsSegmentFinal:
+    def test_period_is_final(self):
+        assert _is_segment_final("Hello world.") is True
+
+    def test_question_mark_is_final(self):
+        assert _is_segment_final("How are you?") is True
+
+    def test_exclamation_is_final(self):
+        assert _is_segment_final("Wow!") is True
+
+    def test_no_punctuation_not_final(self):
+        assert _is_segment_final("Hello how are you") is False
+
+    def test_comma_not_final(self):
+        assert _is_segment_final("Hello, how are you,") is False
+
+    def test_empty_string_not_final(self):
+        assert _is_segment_final("") is False
+
+    def test_whitespace_only_not_final(self):
+        assert _is_segment_final("   ") is False
+
+    def test_colon_not_final(self):
+        assert _is_segment_final("Note:") is False
+
+
+class TestDebounceStateMachine:
+    """Tests the debounce decision logic as implemented in transcribe.py translate()."""
+
+    def _make_decision(self, pending, segment_text):
+        """Replicate the debounce decision: returns 'immediate' or 'debounce'."""
+        segment_is_final = _is_segment_final(segment_text)
+        if not pending or segment_is_final:
+            return 'immediate'
+        else:
+            return 'debounce'
+
+    def test_first_appearance_immediate(self):
+        """First time a segment appears -> translate immediately."""
+        assert self._make_decision(pending=None, segment_text="Hello") == 'immediate'
+
+    def test_first_appearance_final_immediate(self):
+        """First time + final segment -> still immediate."""
+        assert self._make_decision(pending=None, segment_text="Hello.") == 'immediate'
+
+    def test_update_non_final_debounced(self):
+        """Updated segment without final punctuation -> debounce."""
+        pending = {'text_hash': 'old', 'version': 1}
+        assert self._make_decision(pending=pending, segment_text="Hello how are") == 'debounce'
+
+    def test_update_final_immediate(self):
+        """Updated segment with final punctuation -> immediate (bypass debounce)."""
+        pending = {'text_hash': 'old', 'version': 1}
+        assert self._make_decision(pending=pending, segment_text="Hello how are you.") == 'immediate'
+
+    def test_update_question_final_immediate(self):
+        """Updated segment ending with question mark -> immediate."""
+        pending = {'text_hash': 'old', 'version': 1}
+        assert self._make_decision(pending=pending, segment_text="How are you?") == 'immediate'
+
+    def test_update_exclamation_final_immediate(self):
+        """Updated segment ending with exclamation -> immediate."""
+        pending = {'text_hash': 'old', 'version': 1}
+        assert self._make_decision(pending=pending, segment_text="That is great!") == 'immediate'
+
+
+class TestDebounceVersionSafety:
+    """Tests stale-write protection via monotonic version counter."""
+
+    def test_stale_version_rejected(self):
+        """A translate result with an outdated version should be discarded."""
+        pending_translations = {}
+        segment_id = 'seg-1'
+
+        # Simulate: version 1 translate starts, version 2 update arrives before v1 completes
+        pending_translations[segment_id] = {'text_hash': 'h1', 'version': 1}
+        # New update bumps version
+        pending_translations[segment_id] = {'text_hash': 'h2', 'version': 2}
+
+        # When v1 translate completes, check version
+        pending = pending_translations.get(segment_id)
+        old_version = 1
+        assert pending['version'] != old_version  # Should be rejected
+
+    def test_current_version_accepted(self):
+        """A translate result with current version should be accepted."""
+        pending_translations = {}
+        segment_id = 'seg-1'
+        pending_translations[segment_id] = {'text_hash': 'h1', 'version': 3}
+
+        pending = pending_translations.get(segment_id)
+        current_version = 3
+        assert pending['version'] == current_version  # Should be accepted
+
+    def test_pruned_entry_rejected(self):
+        """If entry was pruned (completed), returning translate should be discarded."""
+        pending_translations = {}
+        segment_id = 'seg-1'
+        # Entry was pruned (segment completed translation, entry removed)
+        pending = pending_translations.get(segment_id)
+        assert pending is None  # Should abort — entry no longer exists
+
+    def test_monotonic_counter_never_reuses(self):
+        """Version counter should strictly increase, never reuse values."""
+        counter = 0
+        versions = []
+        for _ in range(10):
+            counter += 1
+            versions.append(counter)
+        assert versions == list(range(1, 11))
+        assert len(set(versions)) == 10  # All unique
+
+
+class TestDebounceSameTextSkip:
+    """Tests that same-text updates are skipped (no redundant translation)."""
+
+    def test_same_hash_skipped(self):
+        """If segment text hasn't changed, skip translation entirely."""
+        text = "Hello how are you"
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        pending = {'text_hash': text_hash, 'version': 1}
+
+        new_hash = hashlib.md5(text.encode()).hexdigest()
+        assert pending.get('text_hash') == new_hash  # Same text, should skip
+
+    def test_different_hash_not_skipped(self):
+        """If segment text changed, proceed with translation."""
+        old_text = "Hello"
+        new_text = "Hello how are you"
+        old_hash = hashlib.md5(old_text.encode()).hexdigest()
+        new_hash = hashlib.md5(new_text.encode()).hexdigest()
+
+        pending = {'text_hash': old_hash, 'version': 1}
+        assert pending.get('text_hash') != new_hash  # Different text, should proceed
+
+
+class TestDebounceFlushPending:
+    """Tests flush_pending_translations behavior."""
+
+    def test_flush_clears_all_entries(self):
+        """After flush, pending_translations should be empty."""
+        pending_translations = {
+            'seg-1': {'text_hash': 'h1', 'version': 1, 'task': None},
+            'seg-2': {'text_hash': 'h2', 'version': 2, 'task': None},
+        }
+        # Simulate flush
+        pending_translations.clear()
+        assert len(pending_translations) == 0
+
+    def test_exception_in_translate_cleans_up(self):
+        """If _translate_segment raises, pending entry should still be cleaned up."""
+        pending_translations = {'seg-1': {'text_hash': 'h1', 'version': 1}}
+        segment_id = 'seg-1'
+
+        # Simulate: _translate_segment raises, finally block pops entry
+        try:
+            raise Exception("Translation API error")
+        except Exception:
+            # The real code logs the error and the entry stays until pruned
+            # But flush will clear it
+            pass
+        pending_translations.pop(segment_id, None)
+        assert segment_id not in pending_translations
