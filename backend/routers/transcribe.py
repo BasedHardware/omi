@@ -658,9 +658,11 @@ async def _stream_handler(
                 segment_person_assignment_map,
                 speaker_to_person_map,
             )
+            segments_dicts = [segment.dict() for segment in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
-                uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
+                uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
             )
+            _update_cached_segments(segments_dicts)
 
         if photos:
             conversations_db.store_conversation_photos(uid, conversation.id, photos)
@@ -1310,14 +1312,16 @@ async def _stream_handler(
 
             # Persist with lock to prevent concurrent read-modify-write clobbering
             async with translation_persist_lock:
-                conversation = conversations_db.get_conversation(uid, conversation_id)
+                conversation = _get_cached_conversation()
                 if conversation:
                     for i, existing_segment in enumerate(conversation['transcript_segments']):
                         if existing_segment['id'] == segment.id:
                             conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
                             conversations_db.update_conversation_segments(
-                                uid, conversation_id, conversation['transcript_segments']
+                                uid, conversation_id, conversation['transcript_segments'],
+                                data_protection_level=_cached_protection_level,
                             )
+                            _update_cached_segments(conversation['transcript_segments'])
                             break
 
             if websocket_active:
@@ -1645,6 +1649,33 @@ async def _stream_handler(
         except Exception as e:
             logger.error(f"Speaker ID: match error for speaker {speaker_id}: {e} {uid} {session_id}")
 
+    # In-memory conversation cache to avoid Firestore re-reads every 0.6s
+    _cached_conversation_data = None
+    _cached_conversation_id = None
+    _cached_conversation_time = 0.0  # monotonic
+    _cached_protection_level = 'standard'
+    CONVERSATION_CACHE_REFRESH_SECONDS = 30
+
+    def _get_cached_conversation(force_refresh=False):
+        nonlocal _cached_conversation_data, _cached_conversation_id, _cached_conversation_time, _cached_protection_level
+        now = time.monotonic()
+        id_changed = current_conversation_id != _cached_conversation_id
+        stale = (now - _cached_conversation_time) >= CONVERSATION_CACHE_REFRESH_SECONDS
+        if _cached_conversation_data is None or id_changed or stale or force_refresh:
+            data = conversations_db.get_conversation(uid, current_conversation_id)
+            if data:
+                _cached_conversation_data = data
+                _cached_conversation_id = current_conversation_id
+                _cached_conversation_time = now
+                _cached_protection_level = data.get('data_protection_level', 'standard')
+            return data
+        return _cached_conversation_data
+
+    def _update_cached_segments(segments_dicts):
+        """Update the cached conversation's transcript_segments in-place after a write."""
+        if _cached_conversation_data is not None:
+            _cached_conversation_data['transcript_segments'] = segments_dicts
+
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
         nonlocal current_conversation_id, translation_enabled, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
@@ -1666,8 +1697,8 @@ async def _stream_handler(
 
             finished_at = datetime.now(timezone.utc)
 
-            # Get conversation
-            conversation_data = conversations_db.get_conversation(uid, current_conversation_id)
+            # Get conversation (cached — refreshes on ID change or every 30s)
+            conversation_data = _get_cached_conversation()
             if not conversation_data:
                 logger.warning(
                     f"Warning: conversation {current_conversation_id} not found during segment processing {uid} {session_id}"
@@ -2276,7 +2307,7 @@ async def _stream_handler(
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
         bg_tasks.clear()
 
-        # Clean up collections to aid garbage collection
+        # Clean up collections and heavy objects to aid garbage collection
         try:
             locked_conversation_ids.clear()
             speaker_to_person_map.clear()
@@ -2287,9 +2318,22 @@ async def _stream_handler(
             realtime_photo_buffers.clear()
             image_chunks.clear()
             person_embeddings_cache.clear()
+            # Release conversation cache
+            _cached_conversation_data = None
         except NameError as e:
             # Variables might not be defined if an error occurred early
             logger.error(f"Cleanup error (safe to ignore): {e} {uid} {session_id}")
+
+        # Release heavy objects that hold model state / native resources
+        try:
+            if vad_gate is not None:
+                del vad_gate
+            if language_cache is not None:
+                language_cache.clear()
+            if translation_service is not None:
+                translation_service.translation_cache.clear()
+        except NameError:
+            pass
 
     logger.info(f"_stream_handler ended {uid} {session_id}")
 
