@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Pārslēgšanai nepieciešama lietotnes pārstartēšana",
     "shared": "Kopīgots",
     "onlyYouCanSeeConversation": "Tikai jūs varat redzēt šo sarunu",
-    "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt"
+    "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
+    "showDailyScoreOnHomepage": "Rādīt dienas rezultātu sākumlapā",
+    "showTasksOnHomepage": "Rādīt uzdevumus sākumlapā"
 }

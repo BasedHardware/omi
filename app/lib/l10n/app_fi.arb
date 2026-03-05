@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Vaihto vaatii sovelluksen uudelleenkäynnistyksen",
     "shared": "Jaettu",
     "onlyYouCanSeeConversation": "Vain sinä voit nähdä tämän keskustelun",
-    "anyoneWithLinkCanView": "Kuka tahansa linkin haltija voi katsella"
+    "anyoneWithLinkCanView": "Kuka tahansa linkin haltija voi katsella",
+    "showDailyScoreOnHomepage": "Näytä päivittäinen pistemäärä etusivulla",
+    "showTasksOnHomepage": "Näytä tehtävät etusivulla"
 }

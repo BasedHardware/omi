@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
     "shared": "Κοινόχρηστο",
     "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
-    "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει"
+    "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
+    "showDailyScoreOnHomepage": "Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα",
+    "showTasksOnHomepage": "Εμφάνιση εργασιών στην αρχική σελίδα"
 }

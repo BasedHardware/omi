@@ -2662,5 +2662,7 @@
     "switchRequiresRestart": "Prepnutie vyžaduje reštart aplikácie",
     "shared": "Zdieľané",
     "onlyYouCanSeeConversation": "Túto konverzáciu môžete vidieť iba vy",
-    "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť"
+    "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
+    "showDailyScoreOnHomepage": "Zobraziť denné skóre na domovskej stránke",
+    "showTasksOnHomepage": "Zobraziť úlohy na domovskej stránke"
 }

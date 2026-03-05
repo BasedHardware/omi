@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Vahetamine nõuab rakenduse taaskäivitamist",
     "shared": "Jagatud",
     "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
-    "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata"
+    "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
+    "showDailyScoreOnHomepage": "Kuva päevapunktid avalehel",
+    "showTasksOnHomepage": "Kuva ülesanded avalehel"
 }

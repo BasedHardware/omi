@@ -8286,4 +8286,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Każdy, kto ma link, może wyświetlić';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Pokaż dzienny wynik na stronie głównej';
+
+  @override
+  String get showTasksOnHomepage => 'Pokaż zadania na stronie głównej';
 }

@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Bytting krever omstart av appen",
     "shared": "Delt",
     "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
-    "anyoneWithLinkCanView": "Alle med lenken kan se"
+    "anyoneWithLinkCanView": "Alle med lenken kan se",
+    "showDailyScoreOnHomepage": "Vis daglig poengsum på hjemmesiden",
+    "showTasksOnHomepage": "Vis oppgaver på hjemmesiden"
 }

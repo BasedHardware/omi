@@ -2692,5 +2692,7 @@
     "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir",
     "shared": "Paylaşıldı",
     "onlyYouCanSeeConversation": "Bu konuşmayı yalnızca siz görebilirsiniz",
-    "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir"
+    "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
+    "showDailyScoreOnHomepage": "Ana sayfada günlük puanı göster",
+    "showTasksOnHomepage": "Ana sayfada görevleri göster"
 }

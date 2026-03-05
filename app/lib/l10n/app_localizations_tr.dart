@@ -8280,4 +8280,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bağlantıya sahip olan herkes görüntüleyebilir';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Ana sayfada günlük puanı göster';
+
+  @override
+  String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
 }

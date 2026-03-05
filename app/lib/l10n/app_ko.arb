@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "전환하려면 앱을 다시 시작해야 합니다",
     "shared": "공유됨",
     "onlyYouCanSeeConversation": "이 대화는 본인만 볼 수 있습니다",
-    "anyoneWithLinkCanView": "링크가 있는 사람은 누구나 볼 수 있습니다"
+    "anyoneWithLinkCanView": "링크가 있는 사람은 누구나 볼 수 있습니다",
+    "showDailyScoreOnHomepage": "홈페이지에 일일 점수 표시",
+    "showTasksOnHomepage": "홈페이지에 작업 표시"
 }

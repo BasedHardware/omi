@@ -8292,4 +8292,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Sesiapa yang mempunyai pautan boleh melihat';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tunjukkan Skor Harian di laman utama';
+
+  @override
+  String get showTasksOnHomepage => 'Tunjukkan Tugasan di laman utama';
 }

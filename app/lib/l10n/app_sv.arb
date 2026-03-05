@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Byte kräver omstart av appen",
     "shared": "Delad",
     "onlyYouCanSeeConversation": "Bara du kan se den här konversationen",
-    "anyoneWithLinkCanView": "Alla med länken kan visa"
+    "anyoneWithLinkCanView": "Alla med länken kan visa",
+    "showDailyScoreOnHomepage": "Visa dagligt poäng på hemsidan",
+    "showTasksOnHomepage": "Visa uppgifter på hemsidan"
 }

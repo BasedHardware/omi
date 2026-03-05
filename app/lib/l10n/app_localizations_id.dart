@@ -8278,4 +8278,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Siapa pun yang memiliki tautan dapat melihat';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tampilkan Skor Harian di beranda';
+
+  @override
+  String get showTasksOnHomepage => 'Tampilkan Tugas di beranda';
 }
