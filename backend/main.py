@@ -44,7 +44,6 @@ from routers import (
     goals,
     announcements,
     agent_tools,
-    desktop_chat,
     screen_activity,
 )
 
@@ -104,7 +103,6 @@ app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(announcements.router)
 app.include_router(agent_tools.router)
-app.include_router(desktop_chat.router)
 app.include_router(screen_activity.router)
 
 
