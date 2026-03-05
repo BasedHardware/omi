@@ -1,4 +1,5 @@
 import json
+import re
 import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
@@ -1312,9 +1313,9 @@ def update_ai_profile_endpoint(
     data: UpdateAIProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # Strict RFC3339 validation — require T separator and timezone (Z or +/-offset)
+    # Strict RFC3339: YYYY-MM-DDTHH:MM:SS[.frac](Z|+HH:MM|-HH:MM)
     ts = data.generated_at
-    if 'T' not in ts or (not ts.endswith('Z') and '+' not in ts.split('T')[1] and '-' not in ts.split('T')[1]):
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})', ts):
         raise HTTPException(status_code=400, detail="generated_at must be a valid RFC3339 timestamp")
     try:
         parsed_ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
