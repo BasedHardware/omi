@@ -2336,7 +2336,7 @@ async def _stream_handler(
             if vad_gate is not None:
                 del vad_gate
             if language_cache is not None:
-                language_cache.clear()
+                language_cache.cache.clear()
             if translation_service is not None:
                 translation_service.translation_cache.clear()
         except NameError:
