@@ -82,13 +82,10 @@ def _get_structured(
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     force_process: bool = False,
     people: List[Person] = None,
+    user_name: str = None,
 ) -> Tuple[Structured, bool]:
     try:
         tz = notification_db.get_user_time_zone(uid)
-
-        # Fetch the user's configured display name so transcripts use real names
-        # instead of the generic "User" placeholder during summary generation.
-        user_name = get_user_name(uid, use_default=False)
 
         # Fetch existing action items from past 2 days for deduplication
         existing_action_items = None
@@ -294,10 +291,8 @@ def _trigger_apps(
     app_id: Optional[str] = None,
     language_code: str = 'en',
     people: List[Person] = None,
+    user_name: str = None,
 ):
-    # Fetch user's configured display name for transcript formatting
-    user_name = get_user_name(uid, use_default=False)
-
     # Get default apps for auto-selection
     default_apps = get_default_conversation_summarized_apps()
     default_apps_dict = {app.id: app for app in default_apps}
@@ -639,7 +634,11 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
+    # Fetch user's display name once and pass through to avoid duplicate network calls.
+    # Falls back to None (→ 'User') when no name is configured.
+    user_name = get_user_name(uid, use_default=False)
+
+    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people, user_name=user_name)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
     # AI-based folder assignment
@@ -698,7 +697,7 @@ def process_conversation(
             record_usage(uid, insights_gained=insights_gained)
 
         _trigger_apps(
-            uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
+            uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people, user_name=user_name
         )
         (
             threading.Thread(
