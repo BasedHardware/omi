@@ -219,8 +219,10 @@ def get_conversations(
     return conversations
 
 
-def count_conversations(uid: str, statuses: List[str] = []) -> int:
+def count_conversations(uid: str, statuses: Optional[List[str]] = None) -> int:
     """Count conversations matching status filters without fetching full documents."""
+    if statuses is None:
+        statuses = []
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
@@ -230,8 +232,10 @@ def count_conversations(uid: str, statuses: List[str] = []) -> int:
     return results[0][0].value
 
 
-def stream_conversations(uid: str, statuses: List[str] = []):
+def stream_conversations(uid: str, statuses: Optional[List[str]] = None):
     """Yield conversation docs as a stream for counting without loading all into memory."""
+    if statuses is None:
+        statuses = []
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
