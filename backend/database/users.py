@@ -1094,7 +1094,15 @@ def get_ai_user_profile(uid: str) -> Optional[dict]:
 
 
 def update_ai_user_profile(uid: str, data: dict) -> dict:
-    """Replace the user's ai_user_profile map. Returns new state."""
+    """Full-replace the user's ai_user_profile map. Returns new state.
+
+    Uses update() for true field replacement (removes stale nested keys).
+    Falls back to set(merge=True) if document doesn't exist yet.
+    """
     user_ref = db.collection('users').document(uid)
-    user_ref.set({'ai_user_profile': data}, merge=True)
+    try:
+        user_ref.update({'ai_user_profile': data})
+    except Exception:
+        # Document may not exist — create with merge
+        user_ref.set({'ai_user_profile': data}, merge=True)
     return get_ai_user_profile(uid)
