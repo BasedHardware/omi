@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
@@ -1102,7 +1103,7 @@ def update_ai_user_profile(uid: str, data: dict) -> dict:
     user_ref = db.collection('users').document(uid)
     try:
         user_ref.update({'ai_user_profile': data})
-    except Exception:
-        # Document may not exist — create with merge
+    except NotFound:
+        # Document doesn't exist yet — create with merge
         user_ref.set({'ai_user_profile': data}, merge=True)
     return get_ai_user_profile(uid)
