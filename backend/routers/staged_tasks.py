@@ -10,7 +10,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import database.staged_tasks as staged_tasks_db
 from utils.other import endpoints as auth
@@ -224,8 +224,6 @@ def get_daily_score(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Calculate daily score from action items due today (legacy endpoint)."""
-    from datetime import date as date_type
-
     if date:
         try:
             parsed = datetime.strptime(date, '%Y-%m-%d').date()
@@ -250,8 +248,6 @@ def get_scores(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get daily, weekly, and overall scores with default tab selection."""
-    from datetime import timedelta
-
     if date:
         try:
             parsed = datetime.strptime(date, '%Y-%m-%d').date()
