@@ -61,7 +61,7 @@ def _validate_confidence(confidence: Optional[float]):
         raise HTTPException(status_code=400, detail="confidence must be between 0.0 and 1.0")
 
 
-@router.post('/v1/advice', status_code=201, tags=['advice'])
+@router.post('/v1/advice', tags=['advice'])
 def create_advice(
     request: CreateAdviceRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -83,7 +83,8 @@ def get_advice(
     include_dismissed: bool = Query(default=False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _validate_category(category)
+    if category and category not in VALID_CATEGORIES:
+        category = None  # Skip unknown category filter (match Rust behavior)
     try:
         return advice_db.get_advice(
             uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed,
@@ -100,12 +101,10 @@ def update_advice(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     update_data = request.model_dump(exclude_none=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update")
     try:
         result = advice_db.update_advice(uid, advice_id, update_data)
         if result is None:
-            raise HTTPException(status_code=404, detail="Advice not found")
+            raise HTTPException(status_code=500, detail="Failed to update advice")
         return result
     except HTTPException:
         raise
