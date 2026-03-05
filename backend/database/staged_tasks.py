@@ -25,13 +25,29 @@ def _prepare_for_read(data: dict) -> dict:
 
 
 def create_staged_task(uid: str, data: dict) -> dict:
-    """Create a staged task. Returns the created document with id."""
+    """Create a staged task with dedup. Returns existing item if description matches (case-insensitive)."""
+    description = data.get('description', '').strip()
+    if not description:
+        raise ValueError('description must not be empty')
+
+    ref = db.collection('users').document(uid).collection(COLLECTION)
+
+    # Dedup: check for existing task with same description (case-insensitive)
+    normalized = description.lower()
+    for doc in ref.stream():
+        existing = doc.to_dict()
+        if existing.get('deleted'):
+            continue
+        if existing.get('description', '').strip().lower() == normalized:
+            existing['id'] = doc.id
+            return _prepare_for_read(existing)
+
     now = datetime.now(timezone.utc)
+    data['description'] = description
     data.setdefault('created_at', now)
     data.setdefault('updated_at', now)
     data.setdefault('completed', False)
 
-    ref = db.collection('users').document(uid).collection(COLLECTION)
     _, doc_ref = ref.add(data)
     result = data.copy()
     result['id'] = doc_ref.id
@@ -42,12 +58,18 @@ def create_staged_task(uid: str, data: dict) -> dict:
 
 
 def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> Tuple[List[dict], bool]:
-    """List staged tasks ordered by relevance_score ASC. Returns (items, has_more)."""
-    ref = db.collection('users').document(uid).collection(COLLECTION)
-    query = ref.order_by('relevance_score', direction=firestore.Query.ASCENDING)
+    """List staged tasks ordered by relevance_score ASC, filtering out completed/deleted.
 
-    # Fetch limit+1 to detect has_more
-    fetch_limit = limit + 1
+    Matches Rust behavior: completed=false filter, skip deleted, tie-break by created_at DESC.
+    Returns (items, has_more).
+    """
+    ref = db.collection('users').document(uid).collection(COLLECTION)
+    query = ref.where(filter=firestore.FieldFilter('completed', '==', False)).order_by(
+        'relevance_score', direction=firestore.Query.ASCENDING
+    )
+
+    # Fetch more than needed to account for deleted items being filtered client-side
+    fetch_limit = (limit + 1) * 2
     if offset > 0:
         query = query.offset(offset)
     query = query.limit(fetch_limit)
@@ -56,6 +78,9 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> Tuple[List[
     items = []
     for doc in docs:
         data = doc.to_dict()
+        # Skip soft-deleted
+        if data.get('deleted'):
+            continue
         data['id'] = doc.id
         items.append(_prepare_for_read(data))
 
@@ -98,14 +123,10 @@ def batch_update_scores(uid: str, scores: List[dict]) -> None:
 # --- DELETE ---
 
 
-def delete_staged_task(uid: str, task_id: str) -> bool:
-    """Hard-delete a staged task. Returns True if deleted."""
+def delete_staged_task(uid: str, task_id: str) -> None:
+    """Hard-delete a staged task. Idempotent — no error if not found (matches Rust behavior)."""
     doc_ref = db.collection('users').document(uid).collection(COLLECTION).document(task_id)
-    doc = doc_ref.get()
-    if not doc.exists:
-        return False
     doc_ref.delete()
-    return True
 
 
 def delete_staged_tasks_batch(uid: str, task_ids: List[str]) -> int:
@@ -193,12 +214,29 @@ def get_action_items_for_daily_score(uid: str, due_start: str, due_end: str) -> 
 
 
 def get_action_items_for_weekly_score(uid: str, week_start: str, week_end: str) -> Tuple[int, int]:
-    """Count completed vs total action items in a 7-day window.
+    """Count completed vs total action items created in a 7-day window.
 
+    Uses created_at range (not due_at) to match Rust weekly score behavior.
     Returns (completed_count, total_count).
     """
-    # Same logic as daily but wider date range
-    return get_action_items_for_daily_score(uid, week_start, week_end)
+    ref = db.collection('users').document(uid).collection('action_items')
+    start_dt = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
+    end_dt = datetime.fromisoformat(week_end.replace('Z', '+00:00'))
+
+    query = ref.where(filter=firestore.FieldFilter('created_at', '>=', start_dt)).where(
+        filter=firestore.FieldFilter('created_at', '<=', end_dt)
+    )
+
+    completed = 0
+    total = 0
+    for doc in query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        total += 1
+        if data.get('completed'):
+            completed += 1
+    return completed, total
 
 
 def get_action_items_for_overall_score(uid: str) -> Tuple[int, int]:
