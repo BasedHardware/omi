@@ -48,8 +48,7 @@ class TestFromSegmentsModels:
         assert req.language == "en"
         assert req.started_at is None
         assert req.finished_at is None
-        assert req.timezone is None
-        assert req.input_device_name is None
+        assert req.geolocation is None
 
     def test_response_model(self):
         resp = FromSegmentsResponse(id="conv123", status="completed", discarded=False)
@@ -79,15 +78,6 @@ class TestFromSegmentsValidation:
     def test_custom_source(self, valid_segments):
         req = CreateConversationFromSegmentsRequest(transcript_segments=valid_segments, source="phone")
         assert req.source == "phone"
-
-    def test_timezone_and_input_device_accepted(self, valid_segments):
-        req = CreateConversationFromSegmentsRequest(
-            transcript_segments=valid_segments,
-            timezone="America/New_York",
-            input_device_name="MacBook Pro Microphone",
-        )
-        assert req.timezone == "America/New_York"
-        assert req.input_device_name == "MacBook Pro Microphone"
 
     def test_started_finished_at(self, valid_segments):
         now = datetime.now(timezone.utc)

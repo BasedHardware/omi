@@ -222,7 +222,7 @@ class TestDesktopMessageEndpoints:
     def test_rate_message_thumbs_up(self, client):
         with (
             patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.chat_db.update_message_rating', return_value=True) as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -237,7 +237,7 @@ class TestDesktopMessageEndpoints:
     def test_rate_message_clear(self, client):
         with (
             patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.chat_db.update_message_rating', return_value=True) as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -252,7 +252,7 @@ class TestDesktopMessageEndpoints:
     def test_rate_message_thumbs_down(self, client):
         with (
             patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
-            patch('routers.chat.chat_db.update_message_rating') as mock_rate,
+            patch('routers.chat.chat_db.update_message_rating', return_value=True) as mock_rate,
         ):
             response = client.patch(
                 '/v2/messages/msg-1/rating',
@@ -261,6 +261,18 @@ class TestDesktopMessageEndpoints:
             )
             assert response.status_code == 200
             assert mock_rate.call_args[0][2] == -1
+
+    def test_rate_message_not_found_404(self, client):
+        with (
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.update_message_rating', return_value=False),
+        ):
+            response = client.patch(
+                '/v2/messages/msg-missing/rating',
+                json={'rating': 1},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 404
 
     def test_rate_message_invalid_value_422(self, client):
         with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
