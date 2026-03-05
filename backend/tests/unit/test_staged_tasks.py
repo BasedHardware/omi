@@ -461,3 +461,357 @@ class TestDailyScoreEndpoints:
             # Weekly should use a 7-day window ending today
             week_start_arg = mock_weekly.call_args[0][1]
             assert '2026-02-26' in week_start_arg
+
+    # --- Promote with [screen] prefix/suffix normalization ---
+
+    def test_promote_skips_screen_prefix_duplicate(self, client):
+        """Promote dedup strips [screen] prefix when comparing descriptions."""
+        now = datetime.now(timezone.utc)
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.get_active_ai_action_items') as mock_active,
+            patch('routers.staged_tasks.staged_tasks_db.get_staged_tasks') as mock_staged,
+            patch('routers.staged_tasks.staged_tasks_db.promote_staged_task') as mock_promote,
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task'),
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_tasks_batch') as mock_batch_del,
+        ):
+            # Active item without [screen] prefix
+            mock_active.return_value = [{'id': 'ai-1', 'description': 'Buy milk'}]
+            # Staged item with [screen] prefix — should be detected as duplicate
+            mock_staged.return_value = (
+                [
+                    {'id': 'st-1', 'description': '[screen] Buy milk', 'completed': False, 'relevance_score': 1},
+                    {'id': 'st-2', 'description': 'New unique task', 'completed': False, 'relevance_score': 2},
+                ],
+                False,
+            )
+            mock_promote.return_value = {
+                'id': 'ai-2',
+                'description': 'New unique task',
+                'completed': False,
+                'created_at': now,
+                'updated_at': now,
+            }
+            response = client.post('/v1/staged-tasks/promote', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 200
+            assert response.json()['promoted'] is True
+            assert response.json()['promoted_task']['description'] == 'New unique task'
+            # st-1 with [screen] prefix should be deleted as duplicate
+            assert mock_batch_del.called
+            assert 'st-1' in mock_batch_del.call_args[0][1]
+
+    def test_promote_skips_screen_suffix_duplicate(self, client):
+        """Promote dedup strips [screen] suffix when comparing descriptions."""
+        now = datetime.now(timezone.utc)
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.get_active_ai_action_items') as mock_active,
+            patch('routers.staged_tasks.staged_tasks_db.get_staged_tasks') as mock_staged,
+            patch('routers.staged_tasks.staged_tasks_db.promote_staged_task') as mock_promote,
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task'),
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_tasks_batch') as mock_batch_del,
+        ):
+            # Active item with [screen] suffix
+            mock_active.return_value = [{'id': 'ai-1', 'description': 'Buy milk [screen]'}]
+            # Staged item without [screen] — should be detected as duplicate
+            mock_staged.return_value = (
+                [
+                    {'id': 'st-1', 'description': 'buy milk', 'completed': False, 'relevance_score': 1},
+                    {'id': 'st-2', 'description': 'Different task', 'completed': False, 'relevance_score': 2},
+                ],
+                False,
+            )
+            mock_promote.return_value = {
+                'id': 'ai-2',
+                'description': 'Different task',
+                'completed': False,
+                'created_at': now,
+                'updated_at': now,
+            }
+            response = client.post('/v1/staged-tasks/promote', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 200
+            assert response.json()['promoted'] is True
+            # st-1 should be deleted as duplicate
+            assert mock_batch_del.called
+            assert 'st-1' in mock_batch_del.call_args[0][1]
+
+    # --- Promote boundary: 4 active should still promote ---
+
+    def test_promote_with_4_active_succeeds(self, client):
+        """Promote succeeds when exactly 4 active AI tasks (under max 5)."""
+        now = datetime.now(timezone.utc)
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.get_active_ai_action_items') as mock_active,
+            patch('routers.staged_tasks.staged_tasks_db.get_staged_tasks') as mock_staged,
+            patch('routers.staged_tasks.staged_tasks_db.promote_staged_task') as mock_promote,
+            patch('routers.staged_tasks.staged_tasks_db.delete_staged_task'),
+        ):
+            mock_active.return_value = [{'id': f'ai-{i}', 'description': f'Task {i}'} for i in range(4)]
+            mock_staged.return_value = (
+                [{'id': 'st-1', 'description': 'New task', 'completed': False, 'relevance_score': 1}],
+                False,
+            )
+            mock_promote.return_value = {
+                'id': 'ai-5',
+                'description': 'New task',
+                'completed': False,
+                'created_at': now,
+                'updated_at': now,
+            }
+            response = client.post('/v1/staged-tasks/promote', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 200
+            assert response.json()['promoted'] is True
+
+    # --- Cap boundary tests ---
+
+    def test_create_description_max_length_accepted(self, client):
+        """Description at exactly 2000 chars is accepted."""
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.create_staged_task') as mock_create,
+        ):
+            desc = 'A' * 2000
+            mock_create.return_value = {
+                'id': 'st-1',
+                'description': desc,
+                'completed': False,
+            }
+            response = client.post(
+                '/v1/staged-tasks',
+                json={'description': desc},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+
+    def test_create_description_over_max_rejected(self, client):
+        """Description at 2001 chars is rejected."""
+        with patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.post(
+                '/v1/staged-tasks',
+                json={'description': 'A' * 2001},
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 422
+
+    def test_list_limit_1_accepted(self, client):
+        """List with limit=1 is accepted."""
+        with (
+            patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.staged_tasks.staged_tasks_db.get_staged_tasks', return_value=([], False)),
+        ):
+            response = client.get('/v1/staged-tasks?limit=1', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 200
+
+    def test_list_limit_0_rejected(self, client):
+        """List with limit=0 is rejected (min 1)."""
+        with patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.get('/v1/staged-tasks?limit=0', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 422
+
+    def test_list_offset_negative_rejected(self, client):
+        """List with offset=-1 is rejected (min 0)."""
+        with patch('routers.staged_tasks.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.get('/v1/staged-tasks?offset=-1', headers={'Authorization': 'Bearer test'})
+            assert response.status_code == 422
+
+
+# --- DB Unit Tests ---
+
+
+class _MockDoc:
+    """Mock Firestore document snapshot."""
+
+    def __init__(self, doc_id, data, exists=True):
+        self.id = doc_id
+        self._data = data
+        self.exists = exists
+
+    def to_dict(self):
+        return self._data.copy()
+
+
+class TestStagedTasksDB:
+    """Unit tests for database/staged_tasks.py functions with mocked Firestore."""
+
+    def test_create_dedup_case_insensitive(self):
+        """create_staged_task returns existing task if description matches case-insensitively."""
+        import database.staged_tasks as db_mod
+
+        existing_doc = _MockDoc('existing-1', {'description': 'Buy Milk', 'completed': False})
+        mock_ref = MagicMock()
+        mock_ref.stream.return_value = [existing_doc]
+
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_ref
+            result = db_mod.create_staged_task('uid-1', {'description': 'buy milk'})
+            assert result['id'] == 'existing-1'
+            assert result['description'] == 'Buy Milk'
+            # Should NOT have called add (dedup returned existing)
+            mock_ref.add.assert_not_called()
+
+    def test_create_dedup_whitespace_trim(self):
+        """create_staged_task trims whitespace before dedup comparison."""
+        import database.staged_tasks as db_mod
+
+        existing_doc = _MockDoc('existing-1', {'description': 'Buy Milk', 'completed': False})
+        mock_ref = MagicMock()
+        mock_ref.stream.return_value = [existing_doc]
+
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_ref
+            result = db_mod.create_staged_task('uid-1', {'description': '  buy milk  '})
+            assert result['id'] == 'existing-1'
+            mock_ref.add.assert_not_called()
+
+    def test_create_dedup_skips_deleted(self):
+        """create_staged_task ignores soft-deleted tasks during dedup scan."""
+        import database.staged_tasks as db_mod
+
+        deleted_doc = _MockDoc('del-1', {'description': 'Buy Milk', 'completed': False, 'deleted': True})
+        mock_ref = MagicMock()
+        mock_ref.stream.return_value = [deleted_doc]
+        mock_ref.add.return_value = (None, MagicMock(id='new-1'))
+
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_ref
+            result = db_mod.create_staged_task('uid-1', {'description': 'Buy Milk'})
+            # Should create new since deleted match doesn't count
+            assert result['id'] == 'new-1'
+            mock_ref.add.assert_called_once()
+
+    def test_create_empty_description_raises(self):
+        """create_staged_task raises ValueError for empty/whitespace description."""
+        import database.staged_tasks as db_mod
+
+        with pytest.raises(ValueError, match='description must not be empty'):
+            db_mod.create_staged_task('uid-1', {'description': '   '})
+
+    def test_get_staged_tasks_filters_completed_and_deleted(self):
+        """get_staged_tasks uses completed=false filter and skips deleted client-side."""
+        import database.staged_tasks as db_mod
+
+        docs = [
+            _MockDoc('t-1', {'description': 'Active', 'completed': False, 'relevance_score': 1}),
+            _MockDoc('t-2', {'description': 'Deleted', 'completed': False, 'deleted': True, 'relevance_score': 2}),
+            _MockDoc('t-3', {'description': 'Also active', 'completed': False, 'relevance_score': 3}),
+        ]
+
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = docs
+
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            items, has_more = db_mod.get_staged_tasks('uid-1', limit=10)
+            # Should have 2 items (t-2 is deleted, filtered out)
+            assert len(items) == 2
+            assert items[0]['id'] == 't-1'
+            assert items[1]['id'] == 't-3'
+            assert has_more is False
+
+    def test_get_staged_tasks_queries_completed_false(self):
+        """get_staged_tasks passes completed=false FieldFilter to Firestore."""
+        import database.staged_tasks as db_mod
+
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with (
+            patch.object(db_mod, 'db') as mock_db,
+            patch.object(db_mod, 'firestore') as mock_fs,
+        ):
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            mock_fs.FieldFilter.return_value = 'completed_filter'
+            mock_fs.Query.ASCENDING = 'ASC'
+            mock_fs.Query.DESCENDING = 'DESC'
+
+            db_mod.get_staged_tasks('uid-1')
+
+            # Verify FieldFilter was called with completed=false
+            mock_fs.FieldFilter.assert_called_once_with('completed', '==', False)
+            mock_query.where.assert_called_once_with(filter='completed_filter')
+
+    def test_daily_score_uses_due_at(self):
+        """get_action_items_for_daily_score filters by due_at range."""
+        import database.staged_tasks as db_mod
+
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with (
+            patch.object(db_mod, 'db') as mock_db,
+            patch.object(db_mod, 'firestore') as mock_fs,
+        ):
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            mock_fs.FieldFilter.side_effect = lambda field, op, val: f'{field}_{op}_{val}'
+
+            db_mod.get_action_items_for_daily_score('uid-1', '2026-03-05T00:00:00Z', '2026-03-05T23:59:59.999Z')
+
+            # Should have called FieldFilter with 'due_at' (not 'created_at')
+            calls = mock_fs.FieldFilter.call_args_list
+            fields_used = [c[0][0] for c in calls]
+            assert 'due_at' in fields_used
+            assert 'created_at' not in fields_used
+
+    def test_weekly_score_uses_created_at(self):
+        """get_action_items_for_weekly_score filters by created_at range (not due_at)."""
+        import database.staged_tasks as db_mod
+
+        mock_query = MagicMock()
+        mock_query.where.return_value = mock_query
+        mock_query.stream.return_value = []
+
+        with (
+            patch.object(db_mod, 'db') as mock_db,
+            patch.object(db_mod, 'firestore') as mock_fs,
+        ):
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_query
+            mock_fs.FieldFilter.side_effect = lambda field, op, val: f'{field}_{op}_{val}'
+
+            db_mod.get_action_items_for_weekly_score('uid-1', '2026-02-26T00:00:00Z', '2026-03-05T23:59:59.999Z')
+
+            # Should have called FieldFilter with 'created_at' (not 'due_at')
+            calls = mock_fs.FieldFilter.call_args_list
+            fields_used = [c[0][0] for c in calls]
+            assert 'created_at' in fields_used
+            assert 'due_at' not in fields_used
+
+    def test_overall_score_counts_all_non_deleted(self):
+        """get_action_items_for_overall_score scans all docs, skips deleted."""
+        import database.staged_tasks as db_mod
+
+        docs = [
+            _MockDoc('a-1', {'completed': True}),
+            _MockDoc('a-2', {'completed': False}),
+            _MockDoc('a-3', {'completed': True, 'deleted': True}),  # Should be skipped
+            _MockDoc('a-4', {'completed': False}),
+        ]
+
+        mock_ref = MagicMock()
+        mock_ref.stream.return_value = docs
+
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value = mock_ref
+            completed, total = db_mod.get_action_items_for_overall_score('uid-1')
+            assert completed == 1  # Only a-1 (a-3 is deleted)
+            assert total == 3  # a-1, a-2, a-4 (a-3 is deleted)
+
+    def test_delete_is_idempotent(self):
+        """delete_staged_task calls Firestore delete without checking existence."""
+        import database.staged_tasks as db_mod
+
+        mock_doc_ref = MagicMock()
+        with patch.object(db_mod, 'db') as mock_db:
+            mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                mock_doc_ref
+            )
+            # Should not raise even if doc doesn't exist
+            db_mod.delete_staged_task('uid-1', 'nonexistent-id')
+            mock_doc_ref.delete.assert_called_once()
