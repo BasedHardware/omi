@@ -45,6 +45,8 @@ from routers import (
     announcements,
     agent_tools,
     screen_activity,
+    focus_sessions,
+    advice,
     staged_tasks,
 )
 
@@ -105,6 +107,8 @@ app.include_router(goals.router)
 app.include_router(announcements.router)
 app.include_router(agent_tools.router)
 app.include_router(screen_activity.router)
+app.include_router(focus_sessions.router)
+app.include_router(advice.router)
 app.include_router(staged_tasks.router)
 
 
