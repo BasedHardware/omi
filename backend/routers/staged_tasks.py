@@ -118,10 +118,8 @@ def get_staged_tasks(
 
 @router.delete('/v1/staged-tasks/{task_id}', response_model=StatusResponse, tags=['staged-tasks'])
 def delete_staged_task(task_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Hard-delete a staged task."""
-    deleted = staged_tasks_db.delete_staged_task(uid, task_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail='Staged task not found')
+    """Hard-delete a staged task. Idempotent — returns ok even if not found (matches Rust)."""
+    staged_tasks_db.delete_staged_task(uid, task_id)
     return StatusResponse(status='ok')
 
 
