@@ -7,6 +7,8 @@ and cleanup on disconnect.
 import time
 from unittest.mock import MagicMock, patch
 
+from google.api_core.exceptions import NotFound
+
 
 class FakeConversationsDb:
     """Mock conversations_db with call tracking."""
@@ -223,10 +225,10 @@ class TestUpdateConversationSegmentsDataProtection:
             if not doc_snapshot.exists:
                 return
             doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-        # Simulate the update with try/except (mirrors conversations.py)
+        # Simulate the update with try/except NotFound (mirrors conversations.py)
         try:
             doc_ref.update({'transcript_segments': segments, '_level': doc_level})
-        except Exception:
+        except NotFound:
             return None
         return doc_level
 
@@ -264,7 +266,7 @@ class TestUpdateConversationSegmentsDataProtection:
     def test_handles_deleted_doc_gracefully_with_cached_level(self):
         """When cached level is provided but doc was deleted, should not crash."""
         mock_doc_ref = MagicMock()
-        mock_doc_ref.update.side_effect = Exception("NOT_FOUND: Document does not exist")
+        mock_doc_ref.update.side_effect = NotFound("Document does not exist")
 
         result = self._update_segments_logic(
             mock_doc_ref, 'uid', 'conv-1', [{'text': 'hello'}], data_protection_level='standard'
@@ -272,3 +274,15 @@ class TestUpdateConversationSegmentsDataProtection:
 
         # Should return None (graceful failure) instead of raising
         assert result is None
+
+    def test_non_notfound_errors_propagate(self):
+        """Non-NotFound errors (permission, quota) should still propagate."""
+        mock_doc_ref = MagicMock()
+        mock_doc_ref.update.side_effect = PermissionError("Insufficient permissions")
+
+        import pytest
+
+        with pytest.raises(PermissionError):
+            self._update_segments_logic(
+                mock_doc_ref, 'uid', 'conv-1', [{'text': 'hello'}], data_protection_level='standard'
+            )
