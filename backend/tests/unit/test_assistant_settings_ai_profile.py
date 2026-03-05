@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -86,6 +87,50 @@ class TestAssistantSettingsValidation:
             resp = client.patch("/v1/users/assistant-settings", json={}, headers=AUTH)
         assert resp.status_code == 200
 
+    def test_patch_task_prompt_exceeds_10000_chars(self, client):
+        data = {"task": {"analysis_prompt": "x" * 10001}}
+        resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 400
+        assert "task" in resp.json()["detail"]
+
+    def test_patch_advice_prompt_exceeds_10000_chars(self, client):
+        data = {"advice": {"analysis_prompt": "x" * 10001}}
+        resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 400
+        assert "advice" in resp.json()["detail"]
+
+    def test_patch_memory_prompt_exceeds_10000_chars(self, client):
+        data = {"memory": {"analysis_prompt": "x" * 10001}}
+        resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 400
+        assert "memory" in resp.json()["detail"]
+
+    def test_patch_advice_confidence_below_zero(self, client):
+        data = {"advice": {"min_confidence": -0.1}}
+        resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_patch_memory_confidence_above_one(self, client):
+        data = {"memory": {"min_confidence": 1.5}}
+        resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_patch_excludes_none_fields(self, client):
+        data = {"task": {"enabled": True}}
+        with patch('routers.users.update_assistant_settings', return_value=data) as mock_update:
+            resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 200
+        call_data = mock_update.call_args[0][1]
+        assert "min_confidence" not in call_data.get("task", {})
+
+    def test_patch_update_channel(self, client):
+        data = {"update_channel": "beta"}
+        with patch('routers.users.update_assistant_settings', return_value={"update_channel": "beta"}) as mock_update:
+            resp = client.patch("/v1/users/assistant-settings", json=data, headers=AUTH)
+        assert resp.status_code == 200
+        call_data = mock_update.call_args[0][1]
+        assert call_data["update_channel"] == "beta"
+
 
 class TestAIProfileValidation:
     def test_get_empty_returns_null(self, client):
@@ -131,6 +176,22 @@ class TestAIProfileValidation:
         data = {"profile_text": "test", "generated_at": "not-a-date", "data_sources_used": 1}
         resp = client.patch("/v1/users/ai-profile", json=data, headers=AUTH)
         assert resp.status_code == 400
+
+    def test_patch_invalid_calendar_date(self, client):
+        # Feb 30 passes regex but fails fromisoformat
+        data = {"profile_text": "test", "generated_at": "2026-02-30T10:00:00Z", "data_sources_used": 1}
+        resp = client.patch("/v1/users/ai-profile", json=data, headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_patch_generated_at_stored_as_datetime(self, client):
+        data = {"profile_text": "test", "generated_at": "2026-03-05T10:00:00Z", "data_sources_used": 1}
+        with patch('routers.users.update_ai_user_profile') as mock_update:
+            mock_update.return_value = {}
+            resp = client.patch("/v1/users/ai-profile", json=data, headers=AUTH)
+        assert resp.status_code == 200
+        call_data = mock_update.call_args[0][1]
+        assert isinstance(call_data['generated_at'], datetime)
+        assert call_data['generated_at'].tzinfo is not None
 
     def test_profile_text_truncation_at_boundary(self, client):
         # 10001 bytes of ASCII should truncate to 10000
