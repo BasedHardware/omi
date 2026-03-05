@@ -176,3 +176,34 @@ class TestGenerateChatTitle:
         prompt = mock_llm.invoke.call_args[0][0]
         assert 'Message 9' in prompt
         assert 'Message 10' not in prompt
+
+    def test_generate_title_fallback_truncates_to_50_chars(self, client):
+        """When LLM fails, fallback title is truncated to 50 chars."""
+        long_text = 'A' * 100
+        data = {
+            "session_id": "sess-1",
+            "messages": [{"text": long_text, "sender": "human"}],
+        }
+        with patch('routers.chat.llm_mini') as mock_llm:
+            mock_llm.invoke.side_effect = Exception("LLM down")
+            with patch('routers.chat.chat_db.update_chat_session'):
+                resp = client.post("/v2/chat/generate-title", json=data, headers=AUTH)
+        assert resp.status_code == 200
+        assert len(resp.json()["title"]) == 50
+
+    def test_generate_title_truncates_message_text_to_500_chars(self, client):
+        """Each message text is truncated to 500 chars in the transcript sent to LLM."""
+        long_text = 'B' * 1000
+        data = {
+            "session_id": "sess-1",
+            "messages": [{"text": long_text, "sender": "human"}],
+        }
+        with patch('routers.chat.llm_mini') as mock_llm:
+            mock_llm.invoke.return_value = MagicMock(content='Title')
+            with patch('routers.chat.chat_db.update_chat_session'):
+                resp = client.post("/v2/chat/generate-title", json=data, headers=AUTH)
+        assert resp.status_code == 200
+        prompt = mock_llm.invoke.call_args[0][0]
+        # The transcript line should contain exactly 500 B's, not 1000
+        assert 'B' * 500 in prompt
+        assert 'B' * 501 not in prompt
