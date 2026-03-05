@@ -36,3 +36,5 @@ pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_from_segments.py -v
 pytest tests/unit/test_desktop_chat.py -v
+pytest tests/unit/test_screen_activity_sync.py -v
+pytest tests/unit/test_assistant_settings_ai_profile.py -v
