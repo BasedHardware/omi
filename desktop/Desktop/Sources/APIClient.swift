@@ -405,14 +405,10 @@ extension APIClient {
         return response.count
     }
 
-    /// Gets the count of AI chat messages from PostHog
+    /// Gets the count of AI chat messages
     func getChatMessageCount() async throws -> Int {
-        struct CountResponse: Decodable {
-            let count: Int
-        }
-
-        let response: CountResponse = try await get("v1/users/stats/chat-messages")
-        return response.count
+        // No-op: chat-messages stats endpoint not available in Python backend
+        return 0
     }
 
     /// Merges multiple conversations into a new conversation
@@ -581,7 +577,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try container.decode(String.self, forKey: .id)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
         finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
         structured = try container.decode(Structured.self, forKey: .structured)
@@ -1454,13 +1450,25 @@ struct UserProfile: Codable {
 // MARK: - Action Items API
 
 /// Response wrapper for paginated action items list
-struct ActionItemsListResponse: Codable {
+struct ActionItemsListResponse: Decodable {
     let items: [TaskActionItem]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {
+        case actionItems = "action_items"
         case items
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+        // Python action_items endpoint returns "action_items"; staged-tasks returns "items"
+        if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
+            items = actionItems
+        } else {
+            items = try container.decodeIfPresent([TaskActionItem].self, forKey: .items) ?? []
+        }
     }
 }
 
@@ -1917,17 +1925,6 @@ extension APIClient {
         return try await post("v1/staged-tasks/promote")
     }
 
-    /// One-time migration of existing AI tasks to staged_tasks
-    func migrateStagedTasks() async throws {
-        struct StatusResponse: Decodable { let status: String }
-        let _: StatusResponse = try await post("v1/staged-tasks/migrate")
-    }
-
-    /// Migrate conversation-extracted action items (no source field) to staged_tasks
-    func migrateConversationItemsToStaged() async throws {
-        struct MigrateResponse: Decodable { let status: String; let migrated: Int; let deleted: Int }
-        let _: MigrateResponse = try await post("v1/staged-tasks/migrate-conversation-items")
-    }
 }
 
 /// Response for staged task promotion
@@ -3175,13 +3172,12 @@ extension APIClient {
 
     /// Regenerates persona prompt from current public memories
     func regeneratePersonaPrompt() async throws -> GeneratePromptResponse {
-        struct EmptyRequest: Encodable {}
-        return try await post("v1/personas/generate-prompt", body: EmptyRequest())
+        return try await get("v1/app/generate-prompts")
     }
 
     /// Checks if a username is available
     func checkPersonaUsername(_ username: String) async throws -> UsernameAvailableResponse {
-        return try await get("v1/personas/check-username?username=\(username)")
+        return try await get("v1/apps/check-username?username=\(username)")
     }
 }
 
@@ -3279,9 +3275,27 @@ struct GeneratePromptResponse: Codable {
 }
 
 /// Response for username availability check
-struct UsernameAvailableResponse: Codable {
+struct UsernameAvailableResponse: Decodable {
     let available: Bool
-    let username: String
+    let username: String?
+    let isTaken: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case available, username
+        case isTaken = "is_taken"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        username = try container.decodeIfPresent(String.self, forKey: .username)
+        isTaken = try container.decodeIfPresent(Bool.self, forKey: .isTaken)
+        // Python returns is_taken; Rust returned available. Support both.
+        if let isTaken = isTaken {
+            available = !isTaken
+        } else {
+            available = try container.decodeIfPresent(Bool.self, forKey: .available) ?? true
+        }
+    }
 }
 
 // MARK: - User Settings API
@@ -4119,7 +4133,7 @@ extension APIClient {
         }
 
         let body = InitialMessageRequest(sessionId: sessionId, appId: appId)
-        return try await post("v2/chat/initial-message", body: body)
+        return try await post("v2/initial-message", body: body)
     }
 
     /// Generate a title for a chat session based on its messages
@@ -4268,31 +4282,51 @@ extension APIClient {
     // MARK: - Agent VM
 
     struct AgentProvisionResponse: Decodable {
-        let status: String
-        let vmName: String
+        let hasVm: Bool
+        let status: String?
+        let vmName: String?
         let ip: String?
-        let authToken: String
-        let agentStatus: String
+        let authToken: String?
+        let agentStatus: String?
+
+        enum CodingKeys: String, CodingKey {
+            case hasVm = "has_vm"
+            case status
+            case vmName = "vm_name"
+            case ip
+            case authToken = "auth_token"
+            case agentStatus = "agent_status"
+        }
     }
 
     /// Provision a cloud agent VM for the current user (fire-and-forget)
     func provisionAgentVM() async throws -> AgentProvisionResponse {
-        return try await post("v2/agent/provision")
+        return try await post("v1/agent/vm-ensure")
     }
 
     struct AgentStatusResponse: Decodable {
-        let vmName: String
-        let zone: String
+        let hasVm: Bool
+        let vmName: String?
+        let zone: String?
         let ip: String?
-        let status: String
-        let authToken: String
-        let createdAt: String
+        let status: String?
+        let authToken: String?
+        let createdAt: String?
         let lastQueryAt: String?
+
+        enum CodingKeys: String, CodingKey {
+            case hasVm = "has_vm"
+            case vmName = "vm_name"
+            case zone, ip, status
+            case authToken = "auth_token"
+            case createdAt = "created_at"
+            case lastQueryAt = "last_query_at"
+        }
     }
 
     /// Get current agent VM status
     func getAgentStatus() async throws -> AgentStatusResponse? {
-        return try await get("v2/agent/status")
+        return try await get("v1/agent/vm-status")
     }
 }
 
@@ -4397,41 +4431,13 @@ extension APIClient {
         costUsd: Double,
         account: String = "omi"
     ) async {
-        struct Req: Encodable {
-            let input_tokens: Int
-            let output_tokens: Int
-            let cache_read_tokens: Int
-            let cache_write_tokens: Int
-            let total_tokens: Int
-            let cost_usd: Double
-            let account: String
-        }
-        struct Res: Decodable { let status: String }
-        do {
-            let _: Res = try await post("v1/users/me/llm-usage", body: Req(
-                input_tokens: inputTokens,
-                output_tokens: outputTokens,
-                cache_read_tokens: cacheReadTokens,
-                cache_write_tokens: cacheWriteTokens,
-                total_tokens: totalTokens,
-                cost_usd: costUsd,
-                account: account
-            ))
-        } catch {
-            log("APIClient: LLM usage record failed: \(error.localizedDescription)")
-        }
+        // No-op: LLM usage tracking endpoint not available in Python backend
+        log("APIClient: recordLlmUsage no-op (endpoint removed)")
     }
 
     func fetchTotalOmiAICost() async -> Double? {
-        struct Res: Decodable { let total_cost_usd: Double }
-        do {
-            log("APIClient: Fetching total Omi AI cost from backend")
-            let res: Res = try await get("v1/users/me/llm-usage/total")
-            log("APIClient: Total Omi AI cost from backend: $\(String(format: "%.4f", res.total_cost_usd))")
-            return res.total_cost_usd
-        } catch {
-            log("APIClient: LLM total cost fetch failed: \(error.localizedDescription)")
-            return nil
-        }
+        // No-op: LLM usage total endpoint not available in Python backend
+        log("APIClient: fetchTotalOmiAICost no-op (endpoint removed)")
+        return nil
     }
 }
