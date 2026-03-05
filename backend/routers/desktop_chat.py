@@ -119,7 +119,7 @@ def get_chat_session(
     return session
 
 
-@router.patch('/v2/chat-sessions/{session_id}', response_model=StatusResponse, tags=['desktop-chat'])
+@router.patch('/v2/chat-sessions/{session_id}', response_model=ChatSessionResponse, tags=['desktop-chat'])
 def update_chat_session(
     session_id: str,
     request: UpdateChatSessionRequest,
@@ -137,8 +137,9 @@ def update_chat_session(
     if update_data:
         update_data['updated_at'] = datetime.now(timezone.utc)
         chat_db.update_chat_session(uid, session_id, update_data)
+        session.update(update_data)
 
-    return StatusResponse(status='ok')
+    return session
 
 
 @router.delete('/v2/chat-sessions/{session_id}', response_model=StatusResponse, tags=['desktop-chat'])
@@ -150,6 +151,7 @@ def delete_chat_session(
     if not session:
         raise HTTPException(status_code=404, detail="Chat session not found")
 
+    chat_db.delete_chat_session_messages(uid, session_id)
     chat_db.delete_chat_session(uid, session_id)
     return StatusResponse(status='ok')
 
