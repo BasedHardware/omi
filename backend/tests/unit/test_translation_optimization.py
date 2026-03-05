@@ -483,6 +483,51 @@ class TestDominantLanguageDetection:
             assert detected_lang == "en"
 
 
+class TestMixedLanguageBatch:
+    """Tests that mixed-language segments are correctly translated, not dropped."""
+
+    def setup_method(self):
+        self.service = TranslationService()
+        mock_redis.get.return_value = None
+        mock_redis.set.return_value = True
+
+    def test_mixed_language_returns_translated_text(self):
+        """Mixed-language input (e.g. 'Hello. Hola.') with target=en should still return translation.
+
+        Even when dominant detected language matches target, the translated text should be
+        returned because individual sentences may differ from the original.
+        """
+        # "Hello." stays as-is, "Hola." gets translated to "Hello."
+        mock_t1 = MagicMock(translated_text="Hello.", detected_language_code="en")
+        mock_t2 = MagicMock(translated_text="Hello.", detected_language_code="es")
+        mock_response = MagicMock(translations=[mock_t1, mock_t2])
+
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.return_value = mock_response
+
+            result_text, detected_lang = self.service.translate_text_by_sentence("en", "Hello. Hola.")
+
+            # Both sentences should be in result
+            assert "Hello." in result_text
+            # API was called (no skip due to dominant language matching target)
+            mock_client.translate_text.assert_called_once()
+
+    def test_all_target_language_still_returns_translation(self):
+        """Even if all sentences are in target language, translation result is returned.
+
+        The caller decides whether to persist — TranslationService always returns the API result.
+        """
+        mock_t1 = MagicMock(translated_text="Hello.", detected_language_code="en")
+        mock_response = MagicMock(translations=[mock_t1])
+
+        with patch('utils.translation._client') as mock_client:
+            mock_client.translate_text.return_value = mock_response
+
+            result_text, detected_lang = self.service.translate_text_by_sentence("en", "Hello.")
+            assert result_text == "Hello."
+            assert detected_lang == "en"
+
+
 class TestBatchChunking:
     def setup_method(self):
         self.service = TranslationService()
