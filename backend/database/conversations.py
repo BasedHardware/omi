@@ -5,6 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -902,8 +903,8 @@ def update_conversation_segments(
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
     try:
         doc_ref.update(prepared_payload)
-    except Exception:
-        # Document may have been deleted between cache read and write — safe to skip
+    except NotFound:
+        # Document was deleted between cache read and write — safe to skip
         return
 
 
