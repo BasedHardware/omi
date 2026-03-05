@@ -1330,6 +1330,14 @@ async def _stream_handler(
             if pending and pending.get('version', 0) == version:
                 pending_translations.pop(segment.id, None)
 
+    def _is_segment_final(segment_text: str) -> bool:
+        """Check if segment text indicates a finalized utterance from STT.
+
+        Deepgram with punctuate=True and endpointing=300ms adds terminal punctuation
+        when an utterance is complete. Text ending with .?! signals the segment is final.
+        """
+        return bool(segment_text) and segment_text[-1] in '.?!'
+
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         if not translation_language:
             return
@@ -1364,8 +1372,11 @@ async def _stream_handler(
             if pending and pending.get('task') and not pending['task'].done():
                 pending['task'].cancel()
 
-            if not pending:
-                # First appearance — translate immediately (zero UX delay)
+            # Detect if STT has finalized this segment (terminal punctuation)
+            segment_is_final = _is_segment_final(segment_text)
+
+            if not pending or segment_is_final:
+                # First appearance or final segment — translate immediately (zero UX delay)
                 pending_translations[segment.id] = {
                     'text_hash': text_hash,
                     'version': new_version,
