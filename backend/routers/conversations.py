@@ -249,6 +249,23 @@ def get_conversations(
     return conversations
 
 
+@router.get('/v1/conversations/count', tags=['conversations'])
+def get_conversations_count(
+    statuses: Optional[str] = Query("processing,completed"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Count conversations matching optional status filters."""
+    status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    if len(status_list) > 10:
+        raise HTTPException(status_code=400, detail="Too many status values (max 10)")
+    try:
+        count = conversations_db.count_conversations(uid, statuses=status_list)
+    except Exception as e:
+        logger.warning(f'count_conversations aggregation fallback: {e}')
+        count = sum(1 for _ in conversations_db.stream_conversations(uid, statuses=status_list))
+    return {'count': count}
+
+
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')

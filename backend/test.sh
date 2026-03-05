@@ -42,3 +42,5 @@ pytest tests/unit/test_assistant_settings_ai_profile.py -v
 pytest tests/unit/test_focus_sessions.py -v
 pytest tests/unit/test_advice.py -v
 pytest tests/unit/test_staged_tasks.py -v
+pytest tests/unit/test_chat_generate_title.py -v
+pytest tests/unit/test_conversations_count.py -v
