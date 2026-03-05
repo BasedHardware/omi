@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 
 from google.cloud import firestore
@@ -50,9 +50,9 @@ def get_focus_sessions(
 
     if date:
         day_start = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
-        day_end = day_start.replace(hour=23, minute=59, second=59)
+        next_day_start = day_start + timedelta(days=1)
         query = query.where(filter=firestore.FieldFilter('created_at', '>=', day_start))
-        query = query.where(filter=firestore.FieldFilter('created_at', '<=', day_end))
+        query = query.where(filter=firestore.FieldFilter('created_at', '<', next_day_start))
 
     query = query.offset(offset).limit(limit)
 
