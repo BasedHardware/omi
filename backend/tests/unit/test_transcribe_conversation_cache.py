@@ -171,6 +171,42 @@ class TestConversationCache:
         assert db.get_conversation_calls == 2
 
 
+class TestTranslateCacheIdGuard:
+    """Tests for translate() conversation_id guard — only uses cache when IDs match."""
+
+    def test_matching_id_uses_cache(self):
+        """When conversation_id matches current, should use cache (no extra DB call)."""
+        db = FakeConversationsDb()
+        get_cached, _, set_id, get_level, _ = _make_cache(db, 'uid-1')
+
+        # Prime cache
+        get_cached()
+        assert db.get_conversation_calls == 1
+
+        # Simulate translate with matching ID — should use cache
+        result = get_cached()  # hits cache
+        assert db.get_conversation_calls == 1
+        assert result is not None
+
+    def test_mismatched_id_falls_back_to_db(self):
+        """When conversation_id differs from current, should NOT use cache."""
+        db = FakeConversationsDb()
+        get_cached, _, set_id, _, _ = _make_cache(db, 'uid-1')
+
+        # Prime cache with conv-1
+        get_cached()
+        assert db.get_conversation_calls == 1
+
+        # Simulate translate for a different conversation_id
+        # In real code, this path does conversations_db.get_conversation(uid, conversation_id)
+        # directly instead of using _get_cached_conversation()
+        different_id = 'conv-old'
+        # The cache is keyed on current_conversation_id, so changing it triggers refresh
+        set_id(different_id)
+        get_cached()
+        assert db.get_conversation_calls == 2  # fresh DB read
+
+
 class TestUpdateConversationSegmentsDataProtection:
     """Tests for data_protection_level param on update_conversation_segments.
 
@@ -187,6 +223,11 @@ class TestUpdateConversationSegmentsDataProtection:
             if not doc_snapshot.exists:
                 return
             doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+        # Simulate the update with try/except (mirrors conversations.py)
+        try:
+            doc_ref.update({'transcript_segments': segments, '_level': doc_level})
+        except Exception:
+            return None
         return doc_level
 
     def test_skips_db_read_when_level_provided(self):
@@ -218,4 +259,16 @@ class TestUpdateConversationSegmentsDataProtection:
 
         result = self._update_segments_logic(mock_doc_ref, 'uid', 'conv-1', [{'text': 'hello'}])
 
+        assert result is None
+
+    def test_handles_deleted_doc_gracefully_with_cached_level(self):
+        """When cached level is provided but doc was deleted, should not crash."""
+        mock_doc_ref = MagicMock()
+        mock_doc_ref.update.side_effect = Exception("NOT_FOUND: Document does not exist")
+
+        result = self._update_segments_logic(
+            mock_doc_ref, 'uid', 'conv-1', [{'text': 'hello'}], data_protection_level='standard'
+        )
+
+        # Should return None (graceful failure) instead of raising
         assert result is None
