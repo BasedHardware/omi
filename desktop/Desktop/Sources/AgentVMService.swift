@@ -23,26 +23,28 @@ actor AgentVMService {
             do {
                 let status = try await APIClient.shared.getAgentStatus()
                 if let status = status, status.status == "ready", let ip = status.ip {
-                    log("AgentVMService: VM already ready — vmName=\(status.vmName) ip=\(ip)")
+                    let token = status.authToken ?? ""
+                    log("AgentVMService: VM already ready — vmName=\(status.vmName ?? "unknown") ip=\(ip)")
                     // Only upload if the VM doesn't have a database yet
-                    if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-                        await uploadDatabase(vmIP: ip, authToken: status.authToken)
+                    if await checkVMNeedsDatabase(vmIP: ip, authToken: token) {
+                        await uploadDatabase(vmIP: ip, authToken: token)
                     } else {
                         log("AgentVMService: VM already has database, skipping upload")
                     }
-                    await startIncrementalSync(vmIP: ip, authToken: status.authToken)
+                    await startIncrementalSync(vmIP: ip, authToken: token)
                     return
                 }
                 if let status = status,
                    status.status == "provisioning" || status.status == "stopped" {
-                    log("AgentVMService: VM is \(status.status), polling until ready...")
+                    log("AgentVMService: VM is \(status.status ?? "unknown"), polling until ready...")
                     if let result = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5),
                        let ip = result.ip {
+                        let token = result.authToken ?? ""
                         log("AgentVMService: VM became ready — ip=\(ip)")
-                        if await checkVMNeedsDatabase(vmIP: ip, authToken: result.authToken) {
-                            await uploadDatabase(vmIP: ip, authToken: result.authToken)
+                        if await checkVMNeedsDatabase(vmIP: ip, authToken: token) {
+                            await uploadDatabase(vmIP: ip, authToken: token)
                         }
-                        await startIncrementalSync(vmIP: ip, authToken: result.authToken)
+                        await startIncrementalSync(vmIP: ip, authToken: token)
                     }
                     return
                 }
@@ -76,7 +78,7 @@ actor AgentVMService {
         let provisionResult: APIClient.AgentProvisionResponse
         do {
             provisionResult = try await APIClient.shared.provisionAgentVM()
-            log("AgentVMService: Provision response — vmName=\(provisionResult.vmName) status=\(provisionResult.status) ip=\(provisionResult.ip ?? "none")")
+            log("AgentVMService: Provision response — vmName=\(provisionResult.vmName ?? "unknown") status=\(provisionResult.status ?? "unknown") ip=\(provisionResult.ip ?? "none")")
         } catch {
             log("AgentVMService: Provision failed — \(error.localizedDescription)")
             return
@@ -84,14 +86,14 @@ actor AgentVMService {
 
         // Step 2: Poll until VM is ready with an IP
         var vmIP = provisionResult.ip
-        var authToken = provisionResult.authToken
+        var authToken = provisionResult.authToken ?? ""
 
-        if vmIP == nil || provisionResult.agentStatus == "provisioning" {
+        if vmIP == nil || provisionResult.status == "provisioning" {
             log("AgentVMService: Waiting for VM to be ready...")
             let pollResult = await pollUntilReady(maxAttempts: 30, intervalSeconds: 5)
             if let result = pollResult {
                 vmIP = result.ip
-                authToken = result.authToken
+                authToken = result.authToken ?? ""
                 log("AgentVMService: VM ready — ip=\(vmIP ?? "none")")
             } else {
                 log("AgentVMService: VM did not become ready in time")
@@ -111,7 +113,7 @@ actor AgentVMService {
         await startIncrementalSync(vmIP: ip, authToken: authToken)
     }
 
-    /// Poll GET /v2/agent/status until status is "ready" and IP is available.
+    /// Poll GET /v1/agent/vm-status until status is "ready" and IP is available.
     private func pollUntilReady(maxAttempts: Int, intervalSeconds: UInt64) async -> APIClient.AgentStatusResponse? {
         for attempt in 1...maxAttempts {
             do {
