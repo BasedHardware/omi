@@ -321,6 +321,58 @@ class TestDesktopMessageEndpoints:
             assert response.status_code == 200
             assert 'id' in response.json()
 
+    def test_create_session_malformed_body_422(self, client):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.post(
+                '/v2/chat-sessions',
+                content=b'not json',
+                headers={'Authorization': 'Bearer test', 'Content-Type': 'application/json'},
+            )
+            assert response.status_code == 422
+
+    def test_list_sessions_limit_max_valid(self, client):
+        with (
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_sessions', return_value=[]),
+        ):
+            response = client.get(
+                '/v2/chat-sessions?limit=200',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+
+    def test_list_sessions_limit_over_max_422(self, client):
+        with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
+            response = client.get(
+                '/v2/chat-sessions?limit=201',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 422
+
+    def test_list_sessions_app_id_filter(self, client):
+        with (
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_sessions', return_value=[]) as mock_get,
+        ):
+            response = client.get(
+                '/v2/chat-sessions?app_id=my-app',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+            assert mock_get.call_args[1]['app_id'] == 'my-app'
+
+    def test_list_sessions_starred_filter(self, client):
+        with (
+            patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'),
+            patch('routers.chat.chat_db.get_chat_sessions', return_value=[]) as mock_get,
+        ):
+            response = client.get(
+                '/v2/chat-sessions?starred=true',
+                headers={'Authorization': 'Bearer test'},
+            )
+            assert response.status_code == 200
+            assert mock_get.call_args[1]['starred'] is True
+
     def test_list_sessions_limit_validation(self, client):
         with patch('routers.chat.auth.get_current_user_uid', return_value='uid-1'):
             response = client.get(
