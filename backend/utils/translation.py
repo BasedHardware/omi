@@ -2,7 +2,7 @@ import os
 import hashlib
 import json
 import re
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple
 
 from google.cloud import translate_v3
@@ -379,8 +379,6 @@ class TranslationService:
         # Determine dominant detected language
         dominant_lang = ""
         if detected_langs:
-            from collections import Counter
-
             lang_counts = Counter(lang for lang in detected_langs if lang)
             if lang_counts:
                 dominant_lang = lang_counts.most_common(1)[0][0]
