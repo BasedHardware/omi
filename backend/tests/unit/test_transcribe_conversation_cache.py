@@ -138,6 +138,38 @@ class TestConversationCache:
         finally:
             time.monotonic = original_monotonic
 
+    def test_exact_30s_triggers_refresh(self):
+        """At exactly 30s, cache should be considered stale (>= comparison)."""
+        db = FakeConversationsDb()
+        get_cached, _, _, _, _ = _make_cache(db, 'uid-1')
+
+        get_cached()
+        assert db.get_conversation_calls == 1
+
+        original_monotonic = time.monotonic
+        try:
+            time.monotonic = lambda: original_monotonic() + 30  # exactly 30s
+            get_cached()
+            assert db.get_conversation_calls == 2  # stale at >= 30
+        finally:
+            time.monotonic = original_monotonic
+
+    def test_just_below_30s_uses_cache(self):
+        """At 29.999s, cache should still be fresh."""
+        db = FakeConversationsDb()
+        get_cached, _, _, _, _ = _make_cache(db, 'uid-1')
+
+        get_cached()
+        assert db.get_conversation_calls == 1
+
+        original_monotonic = time.monotonic
+        try:
+            time.monotonic = lambda: original_monotonic() + 29.999
+            get_cached()
+            assert db.get_conversation_calls == 1  # still fresh
+        finally:
+            time.monotonic = original_monotonic
+
     def test_update_cached_segments_reflects_in_cache(self):
         """Updating cached segments should be visible on next cache hit."""
         db = FakeConversationsDb()
