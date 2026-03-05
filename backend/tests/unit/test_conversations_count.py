@@ -126,3 +126,24 @@ class TestConversationsCount:
                 resp = client.get("/v1/conversations/count", headers=AUTH)
         assert resp.status_code == 200
         assert resp.json()["count"] == 5
+
+    def test_count_statuses_whitespace_normalization(self, client):
+        """Parser strips whitespace and drops empty segments from statuses."""
+        with patch('routers.conversations.conversations_db.count_conversations', return_value=7) as mock_count:
+            resp = client.get("/v1/conversations/count?statuses= processing , , completed ", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 7
+        assert mock_count.call_args[1]['statuses'] == ['processing', 'completed']
+
+    def test_count_fallback_receives_parsed_statuses(self, client):
+        """Fallback stream_conversations receives the same parsed status list."""
+        with patch(
+            'routers.conversations.conversations_db.count_conversations', side_effect=Exception("err")
+        ):
+            with patch(
+                'routers.conversations.conversations_db.stream_conversations', return_value=iter([1, 2])
+            ) as mock_stream:
+                resp = client.get("/v1/conversations/count?statuses=completed,processing", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 2
+        assert mock_stream.call_args[1]['statuses'] == ['completed', 'processing']
