@@ -108,8 +108,6 @@ class CreateConversationFromSegmentsRequest(BaseModel):
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     language: Optional[str] = 'en'
-    timezone: Optional[str] = None
-    input_device_name: Optional[str] = None
     geolocation: Optional[Geolocation] = None
 
 
