@@ -57,7 +57,7 @@ def _validate_focus_status(status: str):
         raise HTTPException(status_code=400, detail="status must be 'focused' or 'distracted'")
 
 
-@router.post('/v1/focus-sessions', response_model=FocusSessionResponse, status_code=201, tags=['focus-sessions'])
+@router.post('/v1/focus-sessions', response_model=FocusSessionResponse, tags=['focus-sessions'])
 def create_focus_session(
     request: CreateFocusSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -82,7 +82,7 @@ def get_focus_sessions(
         try:
             datetime.strptime(date, '%Y-%m-%d')
         except ValueError:
-            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD format")
+            date = None  # Skip invalid date filter (match Rust behavior)
     try:
         return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
     except Exception:
@@ -112,8 +112,8 @@ def get_focus_stats(
         try:
             datetime.strptime(date, '%Y-%m-%d')
         except ValueError:
-            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD format")
-    else:
+            date = None  # Skip invalid date filter (match Rust behavior)
+    if not date:
         date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
     try:
@@ -133,7 +133,8 @@ def get_focus_stats(
         elif status == 'distracted':
             distracted_count += 1
             app = s.get('app_or_site', 'Unknown')
-            duration = s.get('duration_seconds') or 60
+            raw_duration = s.get('duration_seconds')
+            duration = raw_duration if raw_duration is not None else 60
             distraction_map[app]['total_seconds'] += duration
             distraction_map[app]['count'] += 1
 

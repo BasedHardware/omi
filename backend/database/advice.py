@@ -107,6 +107,9 @@ def mark_all_advice_read(uid: str) -> int:
     count = 0
     now = datetime.now(timezone.utc)
     for doc in query.stream():
-        doc.reference.update({'is_read': True, 'updated_at': now})
-        count += 1
+        try:
+            doc.reference.update({'is_read': True, 'updated_at': now})
+            count += 1
+        except Exception:
+            logger.warning('Failed to mark advice %s as read for uid=%s', doc.id, uid)
     return count
