@@ -85,11 +85,11 @@ class TestConversationsCount:
         assert resp.json()["count"] == 0
 
     def test_count_fallback_on_aggregation_error(self, client):
-        """If Firestore count() aggregation fails, falls back to len(get_conversations)."""
+        """If Firestore count() aggregation fails, falls back to stream_conversations."""
         with patch(
             'routers.conversations.conversations_db.count_conversations', side_effect=Exception("aggregation err")
         ):
-            with patch('routers.conversations.conversations_db.get_conversations', return_value=[{}, {}, {}]):
+            with patch('routers.conversations.conversations_db.stream_conversations', return_value=iter([1, 2, 3])):
                 resp = client.get("/v1/conversations/count", headers=AUTH)
         assert resp.status_code == 200
         assert resp.json()["count"] == 3
@@ -108,3 +108,21 @@ class TestConversationsCount:
         assert resp.status_code == 200
         assert resp.json()["count"] == 25
         assert mock_count.call_args[1]['statuses'] == ['processing', 'completed', 'in_progress']
+
+    def test_count_too_many_statuses_returns_400(self, client):
+        statuses = ','.join(f'status{i}' for i in range(11))
+        resp = client.get(f"/v1/conversations/count?statuses={statuses}", headers=AUTH)
+        assert resp.status_code == 400
+        assert 'max 10' in resp.json()['detail']
+
+    def test_count_stream_fallback(self, client):
+        """Fallback uses stream_conversations for unbounded counting."""
+        with patch(
+            'routers.conversations.conversations_db.count_conversations', side_effect=Exception("no aggregation")
+        ):
+            with patch(
+                'routers.conversations.conversations_db.stream_conversations', return_value=iter([1, 2, 3, 4, 5])
+            ):
+                resp = client.get("/v1/conversations/count", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 5
