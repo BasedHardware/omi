@@ -1252,6 +1252,18 @@ async def _stream_handler(
     translation_flushing = False
     translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
 
+    # Translation metrics counters
+    translate_metrics = {
+        'api_calls': 0,
+        'cache_hits_memory': 0,
+        'cache_hits_redis': 0,
+        'debounce_skips': 0,
+        'lang_cache_skips': 0,
+        'same_text_skips': 0,
+        'segments_translated': 0,
+        'total_translate_calls': 0,
+    }
+
     async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
         """Translate a single segment and persist/notify. Used by debounce."""
         if not translation_language:
@@ -1345,6 +1357,7 @@ async def _stream_handler(
             if language_cache.is_in_target_language(
                 segment.id, segment_text, translation_language_base or translation_language
             ):
+                translate_metrics['lang_cache_skips'] += 1
                 continue
 
             text_hash = hashlib.md5(segment_text.encode()).hexdigest()
@@ -1352,6 +1365,7 @@ async def _stream_handler(
 
             if pending and pending.get('text_hash') == text_hash:
                 # Same text, skip (already translating or translated)
+                translate_metrics['same_text_skips'] += 1
                 continue
 
             # Monotonic version for stale-write protection (never reuses values after prune)
@@ -1368,6 +1382,9 @@ async def _stream_handler(
 
             if not pending or segment_is_final:
                 # First appearance or final segment — translate immediately (zero UX delay)
+                translate_metrics['segments_translated'] += 1
+                action = 'immediate_first' if not pending else 'immediate_final'
+                logger.info(f"translate [{action}] seg={segment.id[:8]} v={new_version} {uid}")
                 pending_translations[segment.id] = {
                     'text_hash': text_hash,
                     'version': new_version,
@@ -1375,6 +1392,9 @@ async def _stream_handler(
                 }
             else:
                 # Update — debounce with trailing window
+                translate_metrics['debounce_skips'] += 1
+                logger.info(f"translate [debounce] seg={segment.id[:8]} v={new_version} {uid}")
+
                 async def _debounced_translate(seg=segment, conv_id=conversation_id, ver=new_version):
                     await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
                     await _translate_segment(seg, conv_id, ver)
@@ -1398,6 +1418,15 @@ async def _stream_handler(
                     pass
         pending_translations.clear()
         translation_flushing = False
+        # Log session translation metrics summary
+        m = translate_metrics
+        total_handled = m['segments_translated'] + m['debounce_skips'] + m['lang_cache_skips'] + m['same_text_skips']
+        logger.info(
+            f"translate_summary {uid} session={session_id} "
+            f"translated={m['segments_translated']} debounced={m['debounce_skips']} "
+            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']} "
+            f"total_events={total_handled}"
+        )
 
     async def conversation_lifecycle_manager():
         """Background task that checks conversation timeout and triggers processing every 5 seconds."""
