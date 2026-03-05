@@ -256,12 +256,13 @@ def get_conversations_count(
 ):
     """Count conversations matching optional status filters."""
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    if len(status_list) > 10:
+        raise HTTPException(status_code=400, detail="Too many status values (max 10)")
     try:
         count = conversations_db.count_conversations(uid, statuses=status_list)
     except Exception as e:
-        logger.warning(f'count_conversations fallback: {e}')
-        conversations = conversations_db.get_conversations(uid, limit=10000, statuses=status_list)
-        count = len(conversations)
+        logger.warning(f'count_conversations aggregation fallback: {e}')
+        count = sum(1 for _ in conversations_db.stream_conversations(uid, statuses=status_list))
     return {'count': count}
 
 

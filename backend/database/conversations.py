@@ -230,6 +230,15 @@ def count_conversations(uid: str, statuses: List[str] = []) -> int:
     return results[0][0].value
 
 
+def stream_conversations(uid: str, statuses: List[str] = []):
+    """Yield conversation docs as a stream for counting without loading all into memory."""
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if statuses:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    yield from conversations_ref.stream()
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,
