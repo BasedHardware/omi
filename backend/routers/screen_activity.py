@@ -47,7 +47,11 @@ def sync_screen_activity(
     rows_data = [row.model_dump() for row in request.rows]
 
     # Firestore upsert (synchronous — blocks response until written)
-    synced = screen_activity_db.upsert_screen_activity(uid, rows_data)
+    try:
+        synced = screen_activity_db.upsert_screen_activity(uid, rows_data)
+    except Exception:
+        logger.exception('Firestore upsert failed for uid=%s', uid)
+        raise HTTPException(status_code=500, detail="Failed to sync screen activity")
 
     # Pinecone vector upsert (fire-and-forget background thread)
     rows_with_embeddings = [r for r in rows_data if r.get('embedding')]
