@@ -848,17 +848,24 @@ class FloatingControlBarManager {
     }
 
     /// Toggle visibility.
-    /// When visible with an AI conversation open, collapse to the pill instead of hiding.
     func toggle() {
         guard let window = window else { return }
         if window.isVisible {
-            if window.state.showingAIConversation {
-                window.closeAIConversation()
-            }
-            // Already collapsed pill — do nothing (don't hide)
+            AnalyticsManager.shared.floatingBarToggled(visible: false, source: "shortcut")
+            hide()
         } else {
             AnalyticsManager.shared.floatingBarToggled(visible: true, source: "shortcut")
             show()
+        }
+    }
+
+    /// Toggle AI input: if conversation is open, collapse it; otherwise open it.
+    func toggleAIInput() {
+        guard let window = window else { return }
+        if window.isVisible && window.state.showingAIConversation {
+            window.closeAIConversation()
+        } else {
+            openAIInput()
         }
     }
 
