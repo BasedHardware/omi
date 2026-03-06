@@ -1,5 +1,6 @@
 import WatchKit
 import WatchConnectivity
+import WidgetKit
 
 class BatteryManager: NSObject {
     static let shared = BatteryManager()
