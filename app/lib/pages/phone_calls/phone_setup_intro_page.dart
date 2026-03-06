@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_number_page.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PhoneSetupIntroPage extends StatelessWidget {
   const PhoneSetupIntroPage({super.key});
@@ -35,35 +36,35 @@ class PhoneSetupIntroPage extends StatelessWidget {
                 child: const Icon(Icons.phone, color: Colors.white, size: 36),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Phone Calls with Omi',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+              Text(
+                context.l10n.phoneCallsWithOmi,
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                'Make calls with real-time transcription',
+                context.l10n.phoneCallsSubtitle,
                 style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
               // Step rows
-              const _StepRow(
+              _StepRow(
                 icon: Icons.phone_outlined,
-                title: 'Verify your phone number',
-                subtitle: "We'll call you to confirm it's yours",
+                title: context.l10n.phoneSetupStep1Title,
+                subtitle: context.l10n.phoneSetupStep1Subtitle,
               ),
               const SizedBox(height: 16),
-              const _StepRow(
+              _StepRow(
                 icon: Icons.dialpad,
-                title: 'Enter a verification code',
-                subtitle: "A short code you'll type on the call",
+                title: context.l10n.phoneSetupStep2Title,
+                subtitle: context.l10n.phoneSetupStep2Subtitle,
               ),
               const SizedBox(height: 16),
-              const _StepRow(
+              _StepRow(
                 icon: Icons.people_outline,
-                title: 'Start calling your contacts',
-                subtitle: 'With live transcription built in',
+                title: context.l10n.phoneSetupStep3Title,
+                subtitle: context.l10n.phoneSetupStep3Subtitle,
               ),
               const Spacer(),
               // Get Started button
@@ -82,15 +83,15 @@ class PhoneSetupIntroPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(28),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                  child: Text(
+                    context.l10n.phoneGetStarted,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                   ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Call recording may require consent in your jurisdiction',
+                context.l10n.callRecordingConsentDisclaimer,
                 style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                 textAlign: TextAlign.center,
               ),
