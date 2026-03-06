@@ -139,7 +139,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var localHotkeyMonitor: Any?
     private var windowObservers: [NSObjectProtocol] = []
     private var statusBarItem: NSStatusItem?
-    private var toggleBarObserver: NSObjectProtocol?
     private var screenCaptureSwitch: NSSwitch?
     private var audioRecordingSwitch: NSSwitch?
 
@@ -334,17 +333,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Register global hotkey for Rewind (Cmd+Shift+Space)
         setupGlobalHotkeys()
 
-        // Register Carbon-based global shortcuts for floating control bar (Cmd+\)
+        // Register Carbon-based global shortcuts for floating control bar (Ask Omi)
         GlobalShortcutManager.shared.registerShortcuts()
-        toggleBarObserver = NotificationCenter.default.addObserver(
-            forName: GlobalShortcutManager.toggleFloatingBarNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            Task { @MainActor in
-                FloatingControlBarManager.shared.toggle()
-            }
-        }
 
         // Ensure app always shows in dock as a regular app
         NSApp.setActivationPolicy(.regular)
@@ -549,7 +539,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         log("AppDelegate: Hotkey monitors registered - global=\(globalHotkeyMonitor != nil), local=\(localHotkeyMonitor != nil)")
-        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi + Cmd+\\ via Carbon hotkeys")
+        log("AppDelegate: Hotkey is Ctrl+Option+R (⌃⌥R), Ask Omi via Carbon hotkeys")
     }
 
     // Dock icon is always visible — LSUIElement=false and activation policy stays .regular
@@ -921,11 +911,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSEvent.removeMonitor(monitor)
             localHotkeyMonitor = nil
         }
-        // Remove floating bar observers and shortcuts
-        if let observer = toggleBarObserver {
-            NotificationCenter.default.removeObserver(observer)
-            toggleBarObserver = nil
-        }
+        // Remove floating bar shortcuts
         GlobalShortcutManager.shared.unregisterShortcuts()
 
         // Stop push-to-talk
