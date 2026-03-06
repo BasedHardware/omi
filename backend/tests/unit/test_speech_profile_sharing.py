@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from database import users as users_db
-
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -16,6 +14,8 @@ os.environ.setdefault(
 sys.modules["database._client"] = MagicMock()
 sys.modules["database.auth"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
+
+from database import users as users_db
 
 
 class NotFound(Exception):
@@ -91,7 +91,7 @@ def test_set_user_speaker_embedding():
     user_ref = MagicMock()
     mock_db.collection.return_value.document.return_value = user_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         embedding = [0.1, 0.2, 0.3]
         users_db.set_user_speaker_embedding("test_uid", embedding)
 
@@ -109,7 +109,7 @@ def test_share_speech_profile():
     shared_ref = MagicMock()
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.share_speech_profile("owner_uid", "target_uid")
 
         assert result is True
@@ -127,7 +127,7 @@ def test_revoke_speech_profile_share_exists():
     shared_ref.get.return_value = _FakeSnapshot({'shared_with_uid': 'target_uid', 'revoked_at': None}, exists=True)
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.revoke_speech_profile_share("owner_uid", "target_uid")
 
         assert result is True
@@ -143,7 +143,7 @@ def test_revoke_speech_profile_share_not_exists():
     shared_ref.get.return_value.exists = False
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.revoke_speech_profile_share("owner_uid", "target_uid")
 
         assert result is False
@@ -164,7 +164,7 @@ def test_get_profiles_shared_with_user():
     mock_query.stream.return_value = [doc1, doc2]
     mock_db.collection_group.return_value.where.return_value.where.return_value = mock_query
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.get_profiles_shared_with_user("target_uid")
 
         assert len(result) == 2
@@ -185,7 +185,7 @@ def test_get_users_shared_with():
     mock_collection.where.return_value = mock_query
     mock_db.collection.return_value.document.return_value.collection.return_value = mock_collection
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.get_users_shared_with("owner_uid")
 
         assert len(result) == 2
@@ -203,7 +203,7 @@ def test_get_users_shared_with_empty():
     mock_collection.where.return_value = mock_query
     mock_db.collection.return_value.document.return_value.collection.return_value = mock_collection
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.get_users_shared_with("owner_uid")
 
         assert len(result) == 0
@@ -215,7 +215,7 @@ def test_share_profile_idempotent():
     shared_ref = MagicMock()
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result1 = users_db.share_speech_profile("owner_uid", "target_uid")
         result2 = users_db.share_speech_profile("owner_uid", "target_uid")
 
@@ -472,7 +472,7 @@ def test_remove_shared_profile_from_me():
     shared_ref.get.return_value = _FakeSnapshot({'shared_with_uid': 'target', 'revoked_at': None}, exists=True)
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.remove_shared_profile_from_me('owner_uid', 'target_uid')
 
         assert result is True
@@ -490,7 +490,7 @@ def test_remove_shared_profile_from_me_already_revoked():
     )
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.remove_shared_profile_from_me('owner_uid', 'target_uid')
 
         assert result is False
@@ -503,7 +503,7 @@ def test_remove_shared_profile_from_me_not_exists():
     shared_ref.get.return_value = _FakeSnapshot({}, exists=False)
     mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         result = users_db.remove_shared_profile_from_me('owner_uid', 'target_uid')
 
         assert result is False
@@ -566,7 +566,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     user_ref = MagicMock()
     mock_db.collection.return_value.document.return_value = user_ref
 
-    with patch('database.users.db', mock_db):
+    with patch.object(users_db, 'db', mock_db):
         users_db.set_user_speaker_embedding("alice_uid", alice_embedding_raw)
         user_ref.update.assert_called_once()
         stored = user_ref.update.call_args[0][0]
@@ -577,7 +577,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     shared_ref = MagicMock()
     mock_db2.collection.return_value.document.return_value.collection.return_value.document.return_value = shared_ref
 
-    with patch('database.users.db', mock_db2):
+    with patch.object(users_db, 'db', mock_db2):
         result = users_db.share_speech_profile("alice_uid", "bob_uid")
         assert result is True
         call_args = shared_ref.set.call_args[0][0]
@@ -658,7 +658,7 @@ def test_full_pipeline_shared_profile_speaker_identification(monkeypatch):
     revoke_ref.get.return_value = _FakeSnapshot({'shared_with_uid': 'bob_uid', 'revoked_at': None}, exists=True)
     mock_db3.collection.return_value.document.return_value.collection.return_value.document.return_value = revoke_ref
 
-    with patch('database.users.db', mock_db3):
+    with patch.object(users_db, 'db', mock_db3):
         revoked = users_db.revoke_speech_profile_share("alice_uid", "bob_uid")
         assert revoked is True
 

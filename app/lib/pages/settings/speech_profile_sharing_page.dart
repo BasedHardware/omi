@@ -136,7 +136,12 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     final truncatedUid = info.uid.length > 12
         ? '${info.uid.substring(0, 6)}...${info.uid.substring(info.uid.length - 4)}'
         : info.uid;
-    return ListTile(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+      ),
+      child: ListTile(
       title: Text(
         hasName ? info.name : truncatedUid,
         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
@@ -155,7 +160,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
       },
       trailing: trailing,
-    );
+    ));
   }
 
   Widget _buildActionPill(String label, Color color, VoidCallback onTap) {

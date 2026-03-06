@@ -22,6 +22,7 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from models.conversation import Conversation
 from models.other import Person
+from utils.shared_profiles import resolve_shared_people
 from utils.llm.chat import (
     answer_omi_question,
     answer_omi_question_stream,
@@ -378,8 +379,10 @@ def qa_handler(state: GraphState):
 
     people = []
     if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        unique_person_ids = list(set(all_person_ids))
+        people_data = users_db.get_people_by_ids(uid, unique_person_ids)
         people = [Person(**p) for p in people_data]
+        people.extend(resolve_shared_people(unique_person_ids, uid))
 
     # streaming
     streaming = state.get("streaming")

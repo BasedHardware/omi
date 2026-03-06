@@ -136,8 +136,21 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
     if data.target_uid == uid:
         raise HTTPException(status_code=400, detail="Cannot share with yourself.")
     profile = get_user_profile(uid)
-    if not profile or not profile.get('speaker_embedding'):
+    if not profile:
         raise HTTPException(status_code=400, detail="No speech profile recorded.")
+    if not profile.get('speaker_embedding'):
+        file_path = get_profile_audio_if_exists(uid, download=True)
+        if not file_path:
+            raise HTTPException(status_code=400, detail="No speech profile recorded.")
+        try:
+            embedding = extract_embedding(file_path)
+            set_user_speaker_embedding(uid, embedding.flatten().tolist())
+        except Exception as e:
+            logger.error(f"Failed to extract speaker embedding for sharing: {e} {uid}")
+            raise HTTPException(status_code=503, detail="Embedding extraction temporarily unavailable.")
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
     if not is_exists_user(data.target_uid):
         raise HTTPException(status_code=404, detail="Target user not found.")
     existing = get_users_shared_with(uid)

@@ -15,6 +15,7 @@ import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
+from utils.shared_profiles import resolve_shared_people
 from utils.llm.clients import embeddings
 import logging
 
@@ -209,6 +210,7 @@ def get_conversations_tool(
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
                 people = [Person(**p) for p in people_data]
+                people.extend(resolve_shared_people(list(all_person_ids), uid))
                 logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
@@ -424,6 +426,7 @@ def search_conversations_tool(
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
                 people = [Person(**p) for p in people_data]
+                people.extend(resolve_shared_people(list(all_person_ids), uid))
                 logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
             logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")

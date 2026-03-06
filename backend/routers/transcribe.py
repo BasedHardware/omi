@@ -2136,7 +2136,7 @@ async def _stream_handler(
                                     can_assign
                                     and person_id
                                     and person_id != 'user'
-                                    and not person_id.startswith("shared:")
+                                    and not (isinstance(person_id, str) and person_id.startswith("shared:"))
                                     and private_cloud_sync_enabled
                                     and send_speaker_sample_request is not None
                                     and current_conversation_id
