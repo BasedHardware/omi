@@ -277,3 +277,25 @@ class TestWebListenBoundaryInputs:
                 await web_listen_handler(websocket=mock_ws, speaker_auto_assign='')
                 kwargs = mock_stream.call_args
                 assert kwargs[1]['speaker_auto_assign_enabled'] is False
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_whitespace_treated_as_disabled(self):
+        """Whitespace-only speaker_auto_assign should produce False."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, speaker_auto_assign='  ')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['speaker_auto_assign_enabled'] is False
+
+    @pytest.mark.asyncio
+    async def test_vad_gate_explicit_empty_becomes_none(self):
+        """Explicit vad_gate='' (query param ?vad_gate=) should produce None."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, vad_gate='')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['vad_gate_override'] is None
