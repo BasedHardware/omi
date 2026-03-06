@@ -301,7 +301,6 @@ final class AudioSourceManager: ObservableObject {
         // Start BLE audio processing with direct audio callback and WAL recording
         await bleAudioService.startProcessing(
             from: connection,
-            transcriptionService: nil,  // We'll handle routing ourselves
             audioDataHandler: { [weak self] pcmData in
                 // Convert decoded PCM mono to stereo and forward
                 self?.handleBleAudio(pcmData)
