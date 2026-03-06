@@ -404,10 +404,10 @@ class Conversation(BaseModel):
 
         return "\n\n---------------------\n\n".join(result).strip()
 
-    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(
-            self.transcript_segments, include_timestamps=include_timestamps, people=people
+            self.transcript_segments, include_timestamps=include_timestamps, people=people, user_name=user_name
         )
 
     def get_photos_descriptions(self, include_timestamps: bool = False) -> str:
@@ -450,9 +450,9 @@ class CreateConversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
-    def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
-            self.transcript_segments, include_timestamps=include_timestamps, people=people
+            self.transcript_segments, include_timestamps=include_timestamps, people=people, user_name=user_name
         )
 
     def get_person_ids(self) -> List[str]:
