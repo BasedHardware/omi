@@ -634,6 +634,7 @@ async def _stream_handler(
             status=ConversationStatus.in_progress,
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
+            call_id=call_id if is_multi_channel else None,
         )
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
