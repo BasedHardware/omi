@@ -122,59 +122,23 @@ class TestWebListenParamParity:
         assert missing == set(), f"_stream_handler is missing params: {missing}"
 
 
-class TestWebListenParamConversion:
-    """Test that string params are correctly converted to typed values."""
-
-    def test_speaker_auto_assign_enabled_conversion(self):
-        """'enabled' string should convert to True boolean."""
-        speaker_auto_assign = 'enabled'
-        result = speaker_auto_assign == 'enabled'
-        assert result is True
-
-    def test_speaker_auto_assign_disabled_conversion(self):
-        """'disabled' string should convert to False boolean."""
-        speaker_auto_assign = 'disabled'
-        result = speaker_auto_assign == 'enabled'
-        assert result is False
-
-    def test_vad_gate_enabled_conversion(self):
-        """'enabled' should pass through as override."""
-        vad_gate = 'enabled'
-        result = vad_gate if vad_gate in ('enabled', 'disabled') else None
-        assert result == 'enabled'
-
-    def test_vad_gate_disabled_conversion(self):
-        """'disabled' should pass through as override."""
-        vad_gate = 'disabled'
-        result = vad_gate if vad_gate in ('enabled', 'disabled') else None
-        assert result == 'disabled'
-
-    def test_vad_gate_empty_conversion(self):
-        """Empty string should convert to None (no override)."""
-        vad_gate = ''
-        result = vad_gate if vad_gate in ('enabled', 'disabled') else None
-        assert result is None
-
-    def test_vad_gate_invalid_conversion(self):
-        """Invalid value should convert to None (no override)."""
-        vad_gate = 'foobar'
-        result = vad_gate if vad_gate in ('enabled', 'disabled') else None
-        assert result is None
-
-
 class TestWebListenStreamHandlerIntegration:
     """Integration tests: verify web_listen_handler passes correct kwargs to _stream_handler."""
 
-    @pytest.mark.asyncio
-    async def test_speaker_auto_assign_enabled_passed_to_stream_handler(self):
-        """When speaker_auto_assign=enabled, _stream_handler gets speaker_auto_assign_enabled=True."""
+    def _make_mock_ws(self):
+        """Create a mock WebSocket with auth message pre-configured."""
         mock_ws = AsyncMock()
         mock_ws.accept = AsyncMock()
-        # First message: auth token
         mock_ws.receive = AsyncMock(
             return_value={'type': 'websocket.receive', 'text': json.dumps({"type": "auth", "token": "test-token"})}
         )
         mock_ws.send_json = AsyncMock()
+        return mock_ws
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_enabled_passed_to_stream_handler(self):
+        """When speaker_auto_assign=enabled, _stream_handler gets speaker_auto_assign_enabled=True."""
+        mock_ws = self._make_mock_ws()
 
         with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
             with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
@@ -191,12 +155,7 @@ class TestWebListenStreamHandlerIntegration:
     @pytest.mark.asyncio
     async def test_defaults_passed_to_stream_handler(self):
         """Default params (disabled/empty) produce False/None in _stream_handler call."""
-        mock_ws = AsyncMock()
-        mock_ws.accept = AsyncMock()
-        mock_ws.receive = AsyncMock(
-            return_value={'type': 'websocket.receive', 'text': json.dumps({"type": "auth", "token": "test-token"})}
-        )
-        mock_ws.send_json = AsyncMock()
+        mock_ws = self._make_mock_ws()
 
         with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
             with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
@@ -209,15 +168,112 @@ class TestWebListenStreamHandlerIntegration:
     @pytest.mark.asyncio
     async def test_source_desktop_passed_through(self):
         """source=desktop is forwarded to _stream_handler."""
-        mock_ws = AsyncMock()
-        mock_ws.accept = AsyncMock()
-        mock_ws.receive = AsyncMock(
-            return_value={'type': 'websocket.receive', 'text': json.dumps({"type": "auth", "token": "test-token"})}
-        )
-        mock_ws.send_json = AsyncMock()
+        mock_ws = self._make_mock_ws()
 
         with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
             with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
                 await web_listen_handler(websocket=mock_ws, source='desktop')
                 kwargs = mock_stream.call_args
                 assert kwargs[1]['source'] == 'desktop'
+
+    @pytest.mark.asyncio
+    async def test_vad_gate_disabled_passed_to_stream_handler(self):
+        """When vad_gate=disabled, _stream_handler gets vad_gate_override='disabled'."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, vad_gate='disabled')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['vad_gate_override'] == 'disabled'
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_disabled_explicit(self):
+        """Explicit speaker_auto_assign=disabled produces False."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, speaker_auto_assign='disabled')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['speaker_auto_assign_enabled'] is False
+
+
+class TestWebListenBoundaryInputs:
+    """Boundary tests: non-canonical inputs are handled safely by the handler."""
+
+    def _make_mock_ws(self):
+        """Create a mock WebSocket with auth message pre-configured."""
+        mock_ws = AsyncMock()
+        mock_ws.accept = AsyncMock()
+        mock_ws.receive = AsyncMock(
+            return_value={'type': 'websocket.receive', 'text': json.dumps({"type": "auth", "token": "test-token"})}
+        )
+        mock_ws.send_json = AsyncMock()
+        return mock_ws
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_invalid_string_treated_as_disabled(self):
+        """Non-canonical value 'foobar' for speaker_auto_assign should produce False."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, speaker_auto_assign='foobar')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['speaker_auto_assign_enabled'] is False
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_uppercase_treated_as_disabled(self):
+        """Uppercase 'ENABLED' should not match — only lowercase 'enabled' is valid."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, speaker_auto_assign='ENABLED')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['speaker_auto_assign_enabled'] is False
+
+    @pytest.mark.asyncio
+    async def test_vad_gate_invalid_string_becomes_none(self):
+        """Non-canonical value 'foobar' for vad_gate should produce None."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, vad_gate='foobar')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['vad_gate_override'] is None
+
+    @pytest.mark.asyncio
+    async def test_vad_gate_uppercase_becomes_none(self):
+        """Uppercase 'ENABLED' should not match — only lowercase is valid."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, vad_gate='ENABLED')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['vad_gate_override'] is None
+
+    @pytest.mark.asyncio
+    async def test_vad_gate_whitespace_becomes_none(self):
+        """Whitespace-only vad_gate should produce None (not a valid override)."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, vad_gate='  ')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['vad_gate_override'] is None
+
+    @pytest.mark.asyncio
+    async def test_speaker_auto_assign_empty_treated_as_disabled(self):
+        """Empty string for speaker_auto_assign should produce False."""
+        mock_ws = self._make_mock_ws()
+
+        with patch('routers.transcribe.auth.get_current_user_uid_from_ws_message', return_value='uid-test'):
+            with patch('routers.transcribe._stream_handler', new_callable=AsyncMock) as mock_stream:
+                await web_listen_handler(websocket=mock_ws, speaker_auto_assign='')
+                kwargs = mock_stream.call_args
+                assert kwargs[1]['speaker_auto_assign_enabled'] is False
