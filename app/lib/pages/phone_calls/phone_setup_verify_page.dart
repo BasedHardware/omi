@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 enum _VerifyStatus { calling, inProgress, missedCall, verified, timedOut }
 
@@ -58,7 +59,6 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       _pollCount++;
 
-      // After first poll, update to "in progress"
       if (_pollCount == 2 && mounted && _status == _VerifyStatus.calling) {
         setState(() => _status = _VerifyStatus.inProgress);
       }
@@ -128,31 +128,28 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
           child: Column(
             children: [
               const SizedBox(height: 32),
-              const Text(
-                'Verify your number',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+              Text(
+                context.l10n.verifyYourNumber,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               _buildStatusChip(),
               const SizedBox(height: 32),
-              // Step cards
               _buildStepCard(
                 icon: Icons.phone_callback_outlined,
-                label: 'Answer the call from',
+                label: context.l10n.answerTheCallFrom,
                 value: '+1 (415) 723-4000',
               ),
               const SizedBox(height: 16),
               _buildCodeCard(),
               const SizedBox(height: 32),
-              // User's phone number
               Text(
                 widget.phoneNumber,
                 style: TextStyle(fontSize: 16, color: Colors.grey[500]),
                 textAlign: TextAlign.center,
               ),
               const Spacer(),
-              // Retry button (only when timed out)
               if (_status == _VerifyStatus.missedCall || _status == _VerifyStatus.timedOut) ...[
                 GestureDetector(
                   onTap: () {
@@ -167,9 +164,9 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
                       borderRadius: BorderRadius.circular(28),
                     ),
                     alignment: Alignment.center,
-                    child: const Text(
-                      'Try Again',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                    child: Text(
+                      context.l10n.phoneTryAgain,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                     ),
                   ),
                 ),
@@ -204,7 +201,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
               ),
             ),
             const SizedBox(width: 8),
-            const Text('Calling...', style: TextStyle(fontSize: 13, color: Colors.white)),
+            Text(context.l10n.statusCalling, style: const TextStyle(fontSize: 13, color: Colors.white)),
           ],
         );
       case _VerifyStatus.inProgress:
@@ -224,32 +221,33 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
               ),
             ),
             const SizedBox(width: 8),
-            const Text('Call in progress', style: TextStyle(fontSize: 13, color: Colors.white)),
+            Text(context.l10n.statusCallInProgress, style: const TextStyle(fontSize: 13, color: Colors.white)),
           ],
         );
       case _VerifyStatus.verified:
         bgColor = Colors.green[700]!;
-        content = const Row(
+        content = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check, color: Colors.white, size: 16),
-            SizedBox(width: 6),
-            Text('Verified', style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500)),
+            const Icon(Icons.check, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(context.l10n.statusVerifiedLabel,
+                style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500)),
           ],
         );
       case _VerifyStatus.missedCall:
         bgColor = const Color(0xFF3A2A00);
-        content = const Row(
+        content = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.phone_missed, color: Colors.orange, size: 16),
-            SizedBox(width: 6),
-            Text('Call missed', style: TextStyle(fontSize: 13, color: Colors.orange)),
+            const Icon(Icons.phone_missed, color: Colors.orange, size: 16),
+            const SizedBox(width: 6),
+            Text(context.l10n.statusCallMissed, style: const TextStyle(fontSize: 13, color: Colors.orange)),
           ],
         );
       case _VerifyStatus.timedOut:
         bgColor = Colors.red.shade900;
-        content = const Text('Timed out', style: TextStyle(fontSize: 13, color: Colors.white));
+        content = Text(context.l10n.statusTimedOut, style: const TextStyle(fontSize: 13, color: Colors.white));
     }
 
     return AnimatedContainer(
@@ -311,7 +309,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('On the call, enter this code', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+                Text(context.l10n.onTheCallEnterThisCode, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
                 const SizedBox(height: 8),
                 if (code != null && code.isNotEmpty)
                   Text(
@@ -324,9 +322,9 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
                     ),
                   )
                 else
-                  const Text(
-                    'Follow the voice instructions',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
+                  Text(
+                    context.l10n.followTheVoiceInstructions,
+                    style: const TextStyle(fontSize: 16, color: Colors.white),
                   ),
               ],
             ),
