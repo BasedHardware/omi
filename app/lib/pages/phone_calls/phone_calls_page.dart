@@ -9,6 +9,7 @@ import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PhoneCallsPage extends StatefulWidget {
   const PhoneCallsPage({super.key});
@@ -116,7 +117,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       );
     } else {
       messenger.showSnackBar(
-        SnackBar(content: Text(provider.error ?? 'Failed to start call')),
+        SnackBar(content: Text(provider.error ?? context.l10n.failedToStartCall)),
       );
     }
   }
@@ -128,7 +129,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        title: const Text('Phone', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title:
+            Text(context.l10n.phonePageTitle, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
@@ -140,9 +142,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
           labelColor: Colors.white,
           labelStyle: const TextStyle(fontWeight: FontWeight.w600),
           unselectedLabelColor: Colors.grey[600],
-          tabs: const [
-            Tab(text: 'Contacts'),
-            Tab(text: 'Keypad'),
+          tabs: [
+            Tab(text: context.l10n.phoneContactsTab),
+            Tab(text: context.l10n.phoneKeypadTab),
           ],
         ),
       ),
@@ -167,7 +169,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
               Icon(Icons.contacts_outlined, size: 48, color: Colors.grey[700]),
               const SizedBox(height: 16),
               Text(
-                'Grant access to your contacts',
+                context.l10n.grantContactsAccess,
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey[400]),
               ),
@@ -188,9 +190,9 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                     color: Colors.deepPurple,
                     borderRadius: BorderRadius.circular(28),
                   ),
-                  child: const Text(
-                    'Allow',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                  child: Text(
+                    context.l10n.phoneAllow,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                   ),
                 ),
               ),
@@ -213,7 +215,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
             onChanged: _filterContacts,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Search',
+              hintText: context.l10n.phoneSearchHint,
               hintStyle: TextStyle(color: Colors.grey[600]),
               prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
               filled: true,
@@ -229,7 +231,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         Expanded(
           child: _filteredContacts.isEmpty
               ? Center(
-                  child: Text('No contacts found', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                  child:
+                      Text(context.l10n.phoneNoContactsFound, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
                 )
               : ListView.separated(
                   itemCount: _filteredContacts.length,
@@ -266,7 +269,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 const SizedBox(width: 48),
                 Expanded(
                   child: Text(
-                    hasDigits ? _dialpadController.text : 'Enter number',
+                    hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
