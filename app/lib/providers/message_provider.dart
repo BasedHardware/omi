@@ -468,6 +468,13 @@ class MessageProvider extends ChangeNotifier {
     if (appId == 'no_selected') {
       appId = null;
     }
+    // Use local file paths as thumbnails so images display immediately
+    List<MessageFile> localFiles = List.from(uploadedFiles);
+    for (int i = 0; i < localFiles.length && i < selectedFiles.length; i++) {
+      if (localFiles[i].mimeTypeToFileType() == 'image') {
+        localFiles[i].thumbnail = selectedFiles[i].path;
+      }
+    }
     var message = ServerMessage(
       const Uuid().v4(),
       DateTime.now(),
@@ -476,7 +483,7 @@ class MessageProvider extends ChangeNotifier {
       MessageType.text,
       appId,
       false,
-      List.from(uploadedFiles),
+      localFiles,
       fileIds,
       [],
     );

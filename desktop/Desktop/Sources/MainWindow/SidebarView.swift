@@ -20,7 +20,7 @@ enum SidebarNavItem: Int, CaseIterable {
         switch self {
         case .dashboard: return "Dashboard"
         case .conversations: return "Conversations"
-        case .chat: return "AI chat"
+        case .chat: return "Chat"
         case .memories: return "Memories"
         case .tasks: return "Tasks"
         case .focus: return "Focus"
@@ -199,7 +199,7 @@ struct SidebarView: View {
                                     isSelected: selectedIndex == item.rawValue,
                                     isCollapsed: isCollapsed,
                                     iconWidth: iconWidth,
-                                    isOn: isMonitoring && appState.isTranscribing,
+                                    isOn: isMonitoring || appState.isTranscribing,
                                     isToggling: isTogglingMonitoring,
                                     isPageLoading: isRewindPageLoading,
                                     onTap: {
@@ -219,9 +219,9 @@ struct SidebarView: View {
                                         AnalyticsManager.shared.tabChanged(tabName: item.title)
                                     },
                                     onToggle: {
-                                        // Use combined state so toggle matches what's displayed
-                                        let isFullyOn = isMonitoring && appState.isTranscribing
-                                        toggleMonitoring(enabled: !isFullyOn)
+                                        // Toggle both — on if either is off, off if both are on
+                                        let isAnyOn = isMonitoring || appState.isTranscribing
+                                        toggleMonitoring(enabled: !isAnyOn)
                                     },
                                     showRewindIcon: true
                                 )
@@ -320,21 +320,6 @@ struct SidebarView: View {
                             }
                         )
                     }
-
-                    // Help from Founder - navigates to Crisp chat page
-                    NavItemView(
-                        icon: SidebarNavItem.help.icon,
-                        label: SidebarNavItem.help.title,
-                        isSelected: selectedIndex == SidebarNavItem.help.rawValue,
-                        isCollapsed: isCollapsed,
-                        iconWidth: iconWidth,
-                        badge: crispManager.unreadCount,
-                        onTap: {
-                            selectedIndex = SidebarNavItem.help.rawValue
-                            crispManager.markAsRead()
-                            AnalyticsManager.shared.tabChanged(tabName: SidebarNavItem.help.title)
-                        }
-                    )
 
                     // Settings at the very bottom
                     NavItemView(
@@ -484,7 +469,7 @@ struct SidebarView: View {
 
             if !isCollapsed {
                 // Brand name
-                Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi")
+                Text(UpdateChannel.appDisplayName)
                     .scaledFont(size: 22, weight: .bold)
                     .foregroundColor(OmiColors.textPrimary)
                     .tracking(-0.5)
@@ -885,10 +870,12 @@ struct SidebarView: View {
                         // Reset and restart to fix broken ScreenCaptureKit state
                         ScreenCaptureService.resetScreenCapturePermissionAndRestart()
                     } else {
-                        // Request both traditional TCC and ScreenCaptureKit permissions
-                        ScreenCaptureService.requestAllScreenCapturePermissions()
-                        // Also open settings for manual grant if needed
+                        // Open Settings FIRST so it's visible before system dialog steals focus
                         ScreenCaptureService.openScreenRecordingPreferences()
+                        // Then request permissions (may show system dialog)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            ScreenCaptureService.requestAllScreenCapturePermissions()
+                        }
                         // Track attempt — if still not granted on next check, show recovery instructions
                         appState.screenRecordingGrantAttempts += 1
                     }
@@ -1127,9 +1114,11 @@ struct SidebarView: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            // Request both traditional TCC and ScreenCaptureKit permissions
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 
@@ -1143,13 +1132,6 @@ struct SidebarView: View {
         // Persist the setting
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
-
-        // Also toggle audio transcription to match (Rewind bundles both)
-        if enabled && !appState.isTranscribing {
-            appState.startTranscription()
-        } else if !enabled && appState.isTranscribing {
-            appState.stopTranscription()
-        }
 
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in

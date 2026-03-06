@@ -311,6 +311,7 @@ impl FirestoreService {
         cache_write: i64,
         total: i64,
         cost: f64,
+        account: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let date_key = Utc::now().format("%Y-%m-%d").to_string();
         let doc_path = format!(
@@ -321,6 +322,9 @@ impl FirestoreService {
             "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
             self.project_id
         );
+        // Write to account-specific prefix (e.g. "desktop_chat_omi" or "desktop_chat_personal")
+        // Also continue writing to "desktop_chat" for backward compat with existing queries
+        let acct_prefix = format!("desktop_chat_{}", account);
         let body = json!({
             "writes": [{
                 "transform": {
@@ -333,6 +337,13 @@ impl FirestoreService {
                         { "fieldPath": "desktop_chat.total_tokens",       "increment": { "integerValue": total.to_string() } },
                         { "fieldPath": "desktop_chat.cost_usd",           "increment": { "doubleValue": cost } },
                         { "fieldPath": "desktop_chat.call_count",         "increment": { "integerValue": "1" } },
+                        { "fieldPath": format!("{}.input_tokens", acct_prefix),       "increment": { "integerValue": input.to_string() } },
+                        { "fieldPath": format!("{}.output_tokens", acct_prefix),      "increment": { "integerValue": output.to_string() } },
+                        { "fieldPath": format!("{}.cache_read_tokens", acct_prefix),  "increment": { "integerValue": cache_read.to_string() } },
+                        { "fieldPath": format!("{}.cache_write_tokens", acct_prefix), "increment": { "integerValue": cache_write.to_string() } },
+                        { "fieldPath": format!("{}.total_tokens", acct_prefix),       "increment": { "integerValue": total.to_string() } },
+                        { "fieldPath": format!("{}.cost_usd", acct_prefix),           "increment": { "doubleValue": cost } },
+                        { "fieldPath": format!("{}.call_count", acct_prefix),         "increment": { "integerValue": "1" } },
                     ]
                 }
             }]
@@ -2492,20 +2503,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["relevance_score", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2513,7 +2528,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
@@ -2552,20 +2567,24 @@ impl FirestoreService {
                         },
                         "updateMask": {
                             "fieldPaths": ["sort_order", "indent_level", "updated_at"]
+                        },
+                        "currentDocument": {
+                            "exists": true
                         }
                     })
                 })
                 .collect();
 
-            let commit_url = format!(
-                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            // Use batchWrite (not commit) so deleted-doc failures don't block other updates
+            let batch_url = format!(
+                "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:batchWrite",
                 self.project_id
             );
 
             let body = json!({ "writes": writes });
 
             let response = self
-                .build_request(reqwest::Method::POST, &commit_url)
+                .build_request(reqwest::Method::POST, &batch_url)
                 .await?
                 .json(&body)
                 .send()
@@ -2573,7 +2592,7 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit error: {}", error_text).into());
+                return Err(format!("Firestore batchWrite error: {}", error_text).into());
             }
         }
 
@@ -5208,7 +5227,6 @@ impl FirestoreService {
             use_case: self.parse_string(fields, "use_case"),
             job: self.parse_string(fields, "job"),
             company: self.parse_string(fields, "company"),
-            desktop_update_channel: self.parse_string(fields, "desktop_update_channel"),
         })
     }
 

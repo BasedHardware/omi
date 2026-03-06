@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
@@ -56,6 +58,8 @@ class VoiceRecorderProvider extends ChangeNotifier {
     _onClose = null;
   }
 
+  static const _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
+
   Future<void> startRecording() async {
     if (_state == VoiceRecorderState.recording) return;
 
@@ -70,6 +74,18 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     await Permission.microphone.request();
+
+    // Configure audio session for Bluetooth before starting recorder.
+    // This must happen before flutter_sound's startRecorder() which sets
+    // AVAudioSessionCategoryPlayAndRecord without Bluetooth options —
+    // but skips if the category is already PlayAndRecord.
+    if (Platform.isIOS) {
+      try {
+        await _audioSessionChannel.invokeMethod('configureForBluetooth');
+      } catch (e) {
+        Logger.debug('VoiceRecorderProvider: Failed to configure audio session for Bluetooth: $e');
+      }
+    }
 
     // Setup timer to update the wave visualization every second
     _waveformTimer = Timer.periodic(const Duration(seconds: 1), (_) {

@@ -6,7 +6,7 @@ import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
   private let maxSize: CGFloat = 3000
-  private let jpegQuality: CGFloat = 1.0
+  private let jpegQuality: CGFloat = 0.8
 
   /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
   /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
@@ -79,7 +79,22 @@ final class ScreenCaptureService: Sendable {
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     {
-      NSWorkspace.shared.open(url)
+      let opened = NSWorkspace.shared.open(url)
+      if opened {
+        log("Opened Screen Recording preferences via URL scheme")
+        // Bring System Settings to front after a brief moment to ensure it's visible
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          if let settingsApp = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first
+            ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Preferences").first
+          {
+            settingsApp.activate()
+          }
+        }
+      } else {
+        log("Failed to open Screen Recording preferences via URL scheme — trying fallback")
+        // Fallback: open System Settings directly
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:")!)
+      }
     }
   }
 
@@ -178,10 +193,8 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
-    // 3. Open System Settings so the user can grant/toggle permission
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-      openScreenRecordingPreferences()
-    }
+    // Note: callers are responsible for opening System Settings
+    // (removed duplicate open that conflicted with caller's own open call)
   }
 
   /// Test if ScreenCaptureKit specifically works (macOS 14+)

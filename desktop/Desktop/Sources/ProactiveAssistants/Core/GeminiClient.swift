@@ -257,6 +257,7 @@ actor GeminiClient {
         return lower.contains("service unavailable")
           || lower.contains("overloaded")
           || lower.contains("resource exhausted")
+          || lower.contains("high demand")
           || lower.contains("503")
           || lower.contains("429")
           || lower.contains("internal error")
@@ -268,6 +269,13 @@ actor GeminiClient {
     }
     // URLSession network errors are transient
     return (error as NSError).domain == NSURLErrorDomain
+  }
+
+  /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
+  private func retryBackoff(attempt: Int, error: Error) async {
+    let delaySec = [2, 8][min(attempt, 1)]
+    log("GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)")
+    try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
   /// Send a request to the Gemini API with an image
@@ -349,8 +357,7 @@ actor GeminiClient {
         }
 
         // Backoff: 1s after first failure, 2s after second
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -415,8 +422,7 @@ actor GeminiClient {
         guard attempt < maxRetries && isTransientError(error) else {
           throw error
         }
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -486,8 +492,7 @@ actor GeminiClient {
         guard attempt < maxRetries && isTransientError(error) else {
           throw error
         }
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -1269,8 +1274,7 @@ extension GeminiClient {
         guard attempt < maxRetries && isTransientError(error) else {
           throw error
         }
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -1363,8 +1367,7 @@ extension GeminiClient {
         guard attempt < maxRetries && isTransientError(error) else {
           throw error
         }
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -1465,8 +1468,7 @@ extension GeminiClient {
         guard attempt < maxRetries && isTransientError(error) else {
           throw error
         }
-        let backoffSeconds = UInt64(attempt + 1)
-        try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+        await retryBackoff(attempt: attempt, error: error)
       }
     }
 

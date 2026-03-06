@@ -102,6 +102,7 @@ struct OnboardingChatView: View {
     @State private var explorationCompleted = false
     @State private var explorationText = ""
     @State private var explorationTask: Task<Void, Never>?
+    @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -116,12 +117,18 @@ struct OnboardingChatView: View {
 
                 Spacer()
 
-                Button(action: onSkip) {
+                Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
                         .font(.system(size: 13))
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .alert("Are you sure?", isPresented: $showSkipConfirmation) {
+                    Button("Skip anyway", role: .destructive) { onSkip() }
+                    Button("Continue setup", role: .cancel) { }
+                } message: {
+                    Text("Omi won't be useful for you if it doesn't know enough about you.")
+                }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -134,8 +141,8 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                            OnboardingChatBubble(message: message)
-                                .id(message.id)
+                                OnboardingChatBubble(message: message)
+                                    .id(message.id)
                         }
 
                         // Parallel exploration card (appears after scan_files)
@@ -160,6 +167,14 @@ struct OnboardingChatView: View {
 
                         // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            // Show permission GIF when quick replies include a "Grant" button
+                            if let grantOption = quickReplyOptions.first(where: { isGrantButton($0) }),
+                               let permType = permissionType(from: grantOption) {
+                                OnboardingPermissionImage(permissionType: permType)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+                            }
+
                             HStack(spacing: 8) {
                                 ForEach(quickReplyOptions, id: \.self) { option in
                                     Button(action: {
@@ -190,12 +205,52 @@ struct OnboardingChatView: View {
                             .id("quick-replies")
                         }
 
-                        // "Continue to App" button — shown after AI calls complete_onboarding
-                        if onboardingCompleted && !chatProvider.isSending && !explorationRunning {
+                        // Retry "Open System Settings" button — shown when a permission grant
+                        // is pending but System Settings didn't open (or user closed it)
+                        if let pending = pendingPermissionType, quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            let isStillPending: Bool = {
+                                switch pending {
+                                case "screen_recording": return !appState.hasScreenRecordingPermission
+                                case "microphone": return !appState.hasMicrophonePermission
+                                case "notifications": return !appState.hasNotificationPermission
+                                case "accessibility": return !appState.hasAccessibilityPermission
+                                case "automation": return !appState.hasAutomationPermission
+                                default: return false
+                                }
+                            }()
+                            if isStillPending {
+                                OnboardingPermissionImage(permissionType: pending)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+
+                                Button(action: {
+                                    openSettingsForPermission(pending)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "gear")
+                                            .font(.system(size: 12))
+                                        Text("Open System Settings")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(20)
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 44)
+                            }
+                        }
+
+                        // "Continue" button — shown only after AI calls complete_onboarding
+                        // and no pending questions or permissions remain.
+                        if onboardingCompleted && !chatProvider.isSending && quickReplyOptions.isEmpty && pendingPermissionType == nil {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
-                                Text("Continue to App")
+                                Text("Continue")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
@@ -328,6 +383,29 @@ struct OnboardingChatView: View {
         }
     }
 
+    /// Open System Settings to the correct pane for a permission type
+    private func openSettingsForPermission(_ type: String) {
+        let urlString: String? = {
+            switch type {
+            case "screen_recording":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            case "microphone":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            case "accessibility":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            case "automation":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            case "notifications":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"
+            default:
+                return nil
+            }
+        }()
+        if let urlString, let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Called when a permission is detected as granted (by the 1s timer)
     private func handlePermissionGranted(_ type: String, label: String) {
         bringToFront()
@@ -439,9 +517,8 @@ struct OnboardingChatView: View {
                     resume: savedSessionId
                 )
             }
-        } else {
+        } else if chatProvider.messages.isEmpty {
             // Fresh start — clear stale messages, mark mid-onboarding, begin
-            chatProvider.messages.removeAll()
             OnboardingChatPersistence.saveMidOnboarding()
 
             Task {
@@ -463,8 +540,9 @@ struct OnboardingChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
 
-        // Clear quick replies when user types their own message
+        // Clear quick replies and unblock any pending ask_followup
         quickReplyOptions = []
+        ChatToolExecutor.resumeFollowup(with: text)
 
         Task {
             await chatProvider.sendMessage(text)
@@ -512,7 +590,8 @@ struct OnboardingChatView: View {
                 }
             }
         } else {
-            // Regular quick reply — just send as message
+            // Regular quick reply — resume the blocked ask_followup tool, then send as message
+            ChatToolExecutor.resumeFollowup(with: option)
             Task {
                 await chatProvider.sendMessage(option)
             }
@@ -520,51 +599,7 @@ struct OnboardingChatView: View {
     }
 
     private func handleOnboardingComplete() {
-        log("OnboardingChatView: Completing onboarding")
-
-        // Set flag so DesktopHomeView navigates to Chat page after transition
-        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        // Mark onboarding as done
-        appState.hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-
-        // Start cloud agent VM pipeline
-        Task {
-            await AgentVMService.shared.startPipeline()
-        }
-
-        // Enable launch at login
-        if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-        }
-
-        // Start proactive monitoring
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-
-        // Start transcription if microphone is available
-        appState.startTranscription()
-
-        // Create welcome task (skip if it already exists from a previous onboarding)
-        Task {
-            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
-            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
-            if !alreadyExists {
-                await TasksStore.shared.createTask(
-                    description: welcomeDescription,
-                    dueAt: Date(),
-                    priority: "low"
-                )
-            }
-        }
-
-        // Send welcome notification
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            NotificationService.shared.sendNotification(
-                title: "You're all set!",
-                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
-            )
-        }
+        log("OnboardingChatView: Chat step complete, advancing to next onboarding step")
 
         // Clean up parallel exploration
         explorationTask?.cancel()
@@ -574,14 +609,7 @@ struct OnboardingChatView: View {
         }
         explorationBridge = nil
 
-        // Clean up onboarding state and persisted chat data
-        chatProvider.isOnboarding = false
-        OnboardingChatPersistence.clear()
-
-        // Log analytics
-        AnalyticsManager.shared.onboardingCompleted()
-
-        // Notify parent
+        // Notify parent to advance to next step
         onComplete()
     }
 
@@ -885,7 +913,20 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Render content blocks in order — interleaving tool indicators with text
+                            // Use the full message text (which streams continuously) for a single bubble.
+                            // contentBlocks splits text around tool calls, but message.text is uninterrupted.
+                            let allText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                            if !allText.isEmpty {
+                                Markdown(allText)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+
                             ForEach(message.contentBlocks) { block in
                                 switch block {
                                 case .toolCall(_, let name, let status, _, let input, _):
@@ -893,20 +934,10 @@ struct OnboardingChatBubble: View {
                                     if !indicator.isHidden {
                                         indicator
                                     }
-                                case .text(_, let text):
-                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Markdown(text)
-                                            .markdownTheme(.aiMessage())
-                                            .textSelection(.enabled)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 10)
-                                            .background(OmiColors.backgroundSecondary)
-                                            .cornerRadius(18)
-                                    }
-                                case .thinking:
-                                    EmptyView()
                                 case .discoveryCard(_, let title, let summary, let fullText):
                                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                                default:
+                                    EmptyView()
                                 }
                             }
                         }
@@ -936,6 +967,7 @@ struct OnboardingChatBubble: View {
             .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         }
     }
+
 }
 
 // MARK: - Tool Activity Indicator
