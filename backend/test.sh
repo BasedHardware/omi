@@ -36,3 +36,14 @@ pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
+pytest tests/unit/test_auth_routes.py -v
+pytest tests/unit/test_from_segments.py -v
+pytest tests/unit/test_desktop_chat.py -v
+pytest tests/unit/test_screen_activity_sync.py -v
+pytest tests/unit/test_assistant_settings_ai_profile.py -v
+pytest tests/unit/test_focus_sessions.py -v
+pytest tests/unit/test_advice.py -v
+pytest tests/unit/test_staged_tasks.py -v
+pytest tests/unit/test_chat_generate_title.py -v
+pytest tests/unit/test_conversations_count.py -v
+pytest tests/unit/test_web_listen_params.py -v

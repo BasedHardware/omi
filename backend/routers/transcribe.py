@@ -2390,9 +2390,11 @@ async def web_listen_handler(
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
+    speaker_auto_assign: str = 'disabled',
+    vad_gate: str = '',
 ):
     """
-    WebSocket endpoint for web browser clients using first-message authentication.
+    WebSocket endpoint for web browser and desktop clients using first-message authentication.
 
     First message must be: {"type": "auth", "token": "<firebase_token>"}
     Response: {"type": "auth_response", "success": true/false}
@@ -2436,6 +2438,8 @@ async def web_listen_handler(
     # Proceed with streaming (websocket already accepted, uid already validated)
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
+    speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'
+    vad_gate_override = vad_gate if vad_gate in ('enabled', 'disabled') else None
 
     await _stream_handler(
         websocket,
@@ -2450,5 +2454,7 @@ async def web_listen_handler(
         source=source,
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
+        speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        vad_gate_override=vad_gate_override,
     )
     logger.info(f"web_listen_handler ended {uid}")
