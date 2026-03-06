@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_verify_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PhoneSetupNumberPage extends StatefulWidget {
   const PhoneSetupNumberPage({super.key});
@@ -98,7 +99,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
     } else {
       setState(() {
         _isLoading = false;
-        _errorMessage = provider.error ?? 'Failed to start verification';
+        _errorMessage = provider.error ?? context.l10n.failedToStartVerification;
       });
     }
   }
@@ -122,14 +123,14 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 60),
-              const Text(
-                'Enter your number',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+              Text(
+                context.l10n.enterYourNumber,
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                'Once verified, this becomes your caller ID',
+                context.l10n.phoneNumberCallerIdHint,
                 style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                 textAlign: TextAlign.center,
               ),
@@ -170,7 +171,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                         decoration: InputDecoration(
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                          hintText: 'Phone number',
+                          hintText: context.l10n.phoneNumberHint,
                           hintStyle: TextStyle(color: Colors.grey[600]),
                         ),
                         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\s\-\(\)]'))],
@@ -214,9 +215,9 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                             valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text(
-                          'Continue',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                      : Text(
+                          context.l10n.phoneContinue,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                         ),
                 ),
               ),
@@ -285,7 +286,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                 fillColor: const Color(0xFF1F1F25),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
-                hintText: 'Search countries',
+                hintText: context.l10n.searchCountries,
                 hintStyle: TextStyle(color: Colors.grey[600], fontSize: 15),
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
               ),
