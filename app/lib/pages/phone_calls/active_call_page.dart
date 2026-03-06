@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ActiveCallPage extends StatefulWidget {
   const ActiveCallPage({super.key});
@@ -105,18 +106,18 @@ class _CallInfoHeader extends StatelessWidget {
     return '${twoDigits(d.inMinutes)}:${twoDigits(d.inSeconds.remainder(60))}';
   }
 
-  String _stateLabel() {
+  String _stateLabel(BuildContext context) {
     switch (state) {
       case PhoneCallState.connecting:
-        return 'Connecting...';
+        return context.l10n.callStateConnecting;
       case PhoneCallState.ringing:
-        return 'Ringing...';
+        return context.l10n.callStateRinging;
       case PhoneCallState.active:
         return _formatDuration(duration);
       case PhoneCallState.ended:
-        return 'Call Ended';
+        return context.l10n.callStateEnded;
       case PhoneCallState.failed:
-        return 'Call Failed';
+        return context.l10n.callStateFailed;
       default:
         return '';
     }
@@ -149,7 +150,7 @@ class _CallInfoHeader extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text(
-          _stateLabel(),
+          _stateLabel(context),
           style: TextStyle(
             fontSize: 16,
             color: state == PhoneCallState.failed ? Colors.red[300] : Colors.grey[400],
@@ -174,7 +175,7 @@ class _LiveTranscriptView extends StatelessWidget {
     if (segments.isEmpty) {
       return Center(
         child: Text(
-          'Transcript will appear here...',
+          context.l10n.transcriptPlaceholder,
           style: TextStyle(color: Colors.grey[600], fontSize: 14),
         ),
       );
@@ -291,7 +292,7 @@ class _CallControls extends StatelessWidget {
         children: [
           _ControlButton(
             icon: isMuted ? Icons.mic_off : Icons.mic,
-            label: isMuted ? 'Unmute' : 'Mute',
+            label: isMuted ? context.l10n.phoneUnmute : context.l10n.phoneMute,
             isActive: isMuted,
             onTap: isActive ? onMuteToggle : null,
           ),
@@ -300,7 +301,7 @@ class _CallControls extends StatelessWidget {
           ),
           _ControlButton(
             icon: isSpeakerOn ? Icons.volume_up : Icons.volume_down,
-            label: 'Speaker',
+            label: context.l10n.phoneSpeaker,
             isActive: isSpeakerOn,
             onTap: isActive ? onSpeakerToggle : null,
           ),
@@ -381,7 +382,7 @@ class _EndCallButton extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'End',
+            context.l10n.phoneEndCall,
             style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600]),
           ),
         ],
