@@ -27,7 +27,7 @@ final class BleAudioService: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     // Audio delivery
-    private var transcriptionService: TranscriptionService?
+    private var audioSink: ((Data) -> Void)?
     private var audioDataHandler: ((Data) -> Void)?
     private var rawFrameHandler: ((Data) -> Void)?
 
@@ -44,12 +44,12 @@ final class BleAudioService: ObservableObject {
     /// Start processing audio from a device connection
     /// - Parameters:
     ///   - connection: The device connection to get audio from
-    ///   - transcriptionService: Optional transcription service to send audio to
+    ///   - audioSink: Optional closure to receive decoded mono PCM audio (e.g., send to transcription service)
     ///   - audioDataHandler: Optional handler for decoded PCM data (alternative to transcription)
     ///   - rawFrameHandler: Optional handler for raw encoded frames (for WAL recording)
     func startProcessing(
         from connection: DeviceConnection,
-        transcriptionService: TranscriptionService? = nil,
+        audioSink: ((Data) -> Void)? = nil,
         audioDataHandler: ((Data) -> Void)? = nil,
         rawFrameHandler: ((Data) -> Void)? = nil
     ) async {
@@ -58,7 +58,7 @@ final class BleAudioService: ObservableObject {
             return
         }
 
-        self.transcriptionService = transcriptionService
+        self.audioSink = audioSink
         self.audioDataHandler = audioDataHandler
         self.rawFrameHandler = rawFrameHandler
 
@@ -126,7 +126,7 @@ final class BleAudioService: ObservableObject {
         cancellables.removeAll()
 
         isProcessing = false
-        transcriptionService = nil
+        audioSink = nil
         audioDataHandler = nil
         rawFrameHandler = nil
 
@@ -194,35 +194,11 @@ final class BleAudioService: ObservableObject {
         // Calculate audio level
         updateAudioLevel(from: pcmData)
 
-        // Send to transcription service (mono channel)
-        if let transcription = transcriptionService {
-            // TranscriptionService expects stereo (2 channels) for multichannel transcription
-            // For BLE device audio, we duplicate to both channels (device is the "user")
-            let stereoData = convertToStereo(pcmData)
-            transcription.sendAudio(stereoData)
-        }
+        // Send decoded mono PCM to audio sink (e.g., transcription service)
+        audioSink?(pcmData)
 
         // Send to custom handler
         audioDataHandler?(pcmData)
-    }
-
-    /// Convert mono PCM to stereo (duplicate to both channels)
-    private func convertToStereo(_ monoData: Data) -> Data {
-        // Mono: [S0, S1, S2, ...]
-        // Stereo: [S0, S0, S1, S1, S2, S2, ...] (interleaved)
-        var stereoData = Data(capacity: monoData.count * 2)
-
-        monoData.withUnsafeBytes { bytes in
-            let samples = bytes.bindMemory(to: Int16.self)
-            for i in 0..<samples.count {
-                var sample = samples[i]
-                // Write same sample to both channels
-                stereoData.append(Data(bytes: &sample, count: 2))
-                stereoData.append(Data(bytes: &sample, count: 2))
-            }
-        }
-
-        return stereoData
     }
 
     /// Calculate RMS audio level from PCM data
