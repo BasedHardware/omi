@@ -8127,4 +8127,194 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
+
+  @override
+  String get phoneCallsWithOmi => 'Omiで通話';
+
+  @override
+  String get phoneCallsSubtitle => 'リアルタイム文字起こし付きで通話';
+
+  @override
+  String get phoneSetupStep1Title => '電話番号を認証';
+
+  @override
+  String get phoneSetupStep1Subtitle => '確認のためお電話します';
+
+  @override
+  String get phoneSetupStep2Title => '認証コードを入力';
+
+  @override
+  String get phoneSetupStep2Subtitle => '通話中に入力する短いコード';
+
+  @override
+  String get phoneSetupStep3Title => '連絡先に電話を開始';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'ライブ文字起こし内蔵';
+
+  @override
+  String get phoneGetStarted => '始める';
+
+  @override
+  String get callRecordingConsentDisclaimer => '通話録音にはお住まいの地域で同意が必要な場合があります';
+
+  @override
+  String get enterYourNumber => '番号を入力';
+
+  @override
+  String get phoneNumberCallerIdHint => '認証後、これが発信者IDになります';
+
+  @override
+  String get phoneNumberHint => '電話番号';
+
+  @override
+  String get failedToStartVerification => '認証の開始に失敗しました';
+
+  @override
+  String get phoneContinue => '続ける';
+
+  @override
+  String get verifyYourNumber => '番号を認証';
+
+  @override
+  String get answerTheCallFrom => 'この番号からの着信に応答';
+
+  @override
+  String get onTheCallEnterThisCode => '通話中にこのコードを入力';
+
+  @override
+  String get followTheVoiceInstructions => '音声案内に従ってください';
+
+  @override
+  String get statusCalling => '発信中...';
+
+  @override
+  String get statusCallInProgress => '通話中';
+
+  @override
+  String get statusVerifiedLabel => '認証済み';
+
+  @override
+  String get statusCallMissed => '不在着信';
+
+  @override
+  String get statusTimedOut => 'タイムアウト';
+
+  @override
+  String get phoneTryAgain => '再試行';
+
+  @override
+  String get phonePageTitle => '電話';
+
+  @override
+  String get phoneContactsTab => '連絡先';
+
+  @override
+  String get phoneKeypadTab => 'キーパッド';
+
+  @override
+  String get grantContactsAccess => '連絡先へのアクセスを許可';
+
+  @override
+  String get phoneAllow => '許可';
+
+  @override
+  String get phoneSearchHint => '検索';
+
+  @override
+  String get phoneNoContactsFound => '連絡先が見つかりません';
+
+  @override
+  String get phoneEnterNumber => '番号を入力';
+
+  @override
+  String get failedToStartCall => '通話の開始に失敗しました';
+
+  @override
+  String get callStateConnecting => '接続中...';
+
+  @override
+  String get callStateRinging => '呼び出し中...';
+
+  @override
+  String get callStateEnded => '通話終了';
+
+  @override
+  String get callStateFailed => '通話失敗';
+
+  @override
+  String get transcriptPlaceholder => '文字起こしがここに表示されます...';
+
+  @override
+  String get phoneUnmute => 'ミュート解除';
+
+  @override
+  String get phoneMute => 'ミュート';
+
+  @override
+  String get phoneSpeaker => 'スピーカー';
+
+  @override
+  String get phoneEndCall => '終了';
+
+  @override
+  String get phoneCallSettingsTitle => '通話設定';
+
+  @override
+  String get yourVerifiedNumbers => '認証済みの番号';
+
+  @override
+  String get verifiedNumbersDescription => '電話をかけると、相手にこの番号が表示されます';
+
+  @override
+  String get noVerifiedNumbers => '認証済みの番号はありません';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumberを削除しますか？';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '通話するには再度認証が必要です';
+
+  @override
+  String get phoneDeleteButton => '削除';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes分前に認証';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours時間前に認証';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days日前に認証';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$dateに認証';
+  }
+
+  @override
+  String get verifiedFallback => '認証済み';
+
+  @override
+  String get callAlreadyInProgress => '通話中です';
+
+  @override
+  String get failedToGetCallToken => 'トークンの取得に失敗しました。先に番号を認証してください。';
+
+  @override
+  String get failedToInitializeCallService => '通話サービスの初期化に失敗しました';
+
+  @override
+  String get speakerLabelYou => 'あなた';
+
+  @override
+  String get speakerLabelUnknown => '不明';
 }

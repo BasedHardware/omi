@@ -3150,7 +3150,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get report => 'Докладване';
 
   @override
-  String get microphonePermissionRequired => 'Разрешение за микрофон е необходимо за гласов запис.';
+  String get microphonePermissionRequired => 'Разрешение за микрофон е необходимо за обаждания';
 
   @override
   String get microphonePermissionDenied =>
@@ -5178,7 +5178,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get analyzing => 'Анализиране...';
 
   @override
-  String get searchCountries => 'Търсене на държави...';
+  String get searchCountries => 'Търсене на държави';
 
   @override
   String get checkingAppleWatch => 'Проверка на Apple Watch...';
@@ -8302,4 +8302,195 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
+
+  @override
+  String get phoneCallsWithOmi => 'Телефонни обаждания с Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Обаждайте се с транскрипция в реално време';
+
+  @override
+  String get phoneSetupStep1Title => 'Потвърдете телефонния си номер';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Ще ви се обадим, за да потвърдим, че е ваш';
+
+  @override
+  String get phoneSetupStep2Title => 'Въведете код за потвърждение';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Кратък код, който ще въведете по време на обаждането';
+
+  @override
+  String get phoneSetupStep3Title => 'Започнете да се обаждате на контактите си';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'С вградена транскрипция на живо';
+
+  @override
+  String get phoneGetStarted => 'Започнете';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Записването на обаждания може да изисква съгласие във вашата юрисдикция';
+
+  @override
+  String get enterYourNumber => 'Въведете номера си';
+
+  @override
+  String get phoneNumberCallerIdHint => 'След потвърждение това ще стане вашият идентификатор на обаждащия се';
+
+  @override
+  String get phoneNumberHint => 'Телефонен номер';
+
+  @override
+  String get failedToStartVerification => 'Неуспешно стартиране на потвърждението';
+
+  @override
+  String get phoneContinue => 'Продължи';
+
+  @override
+  String get verifyYourNumber => 'Потвърдете номера си';
+
+  @override
+  String get answerTheCallFrom => 'Отговорете на обаждането от';
+
+  @override
+  String get onTheCallEnterThisCode => 'По време на обаждането въведете този код';
+
+  @override
+  String get followTheVoiceInstructions => 'Следвайте гласовите инструкции';
+
+  @override
+  String get statusCalling => 'Обаждане...';
+
+  @override
+  String get statusCallInProgress => 'Обаждане в ход';
+
+  @override
+  String get statusVerifiedLabel => 'Потвърдено';
+
+  @override
+  String get statusCallMissed => 'Пропуснато обаждане';
+
+  @override
+  String get statusTimedOut => 'Времето изтече';
+
+  @override
+  String get phoneTryAgain => 'Опитайте отново';
+
+  @override
+  String get phonePageTitle => 'Телефон';
+
+  @override
+  String get phoneContactsTab => 'Контакти';
+
+  @override
+  String get phoneKeypadTab => 'Клавиатура';
+
+  @override
+  String get grantContactsAccess => 'Предоставете достъп до контактите си';
+
+  @override
+  String get phoneAllow => 'Разреши';
+
+  @override
+  String get phoneSearchHint => 'Търсене';
+
+  @override
+  String get phoneNoContactsFound => 'Няма намерени контакти';
+
+  @override
+  String get phoneEnterNumber => 'Въведете номер';
+
+  @override
+  String get failedToStartCall => 'Неуспешно стартиране на обаждането';
+
+  @override
+  String get callStateConnecting => 'Свързване...';
+
+  @override
+  String get callStateRinging => 'Звъни...';
+
+  @override
+  String get callStateEnded => 'Обаждането приключи';
+
+  @override
+  String get callStateFailed => 'Обаждането не успя';
+
+  @override
+  String get transcriptPlaceholder => 'Транскрипцията ще се появи тук...';
+
+  @override
+  String get phoneUnmute => 'Включи звука';
+
+  @override
+  String get phoneMute => 'Заглуши';
+
+  @override
+  String get phoneSpeaker => 'Високоговорител';
+
+  @override
+  String get phoneEndCall => 'Край';
+
+  @override
+  String get phoneCallSettingsTitle => 'Настройки на телефонните обаждания';
+
+  @override
+  String get yourVerifiedNumbers => 'Вашите потвърдени номера';
+
+  @override
+  String get verifiedNumbersDescription => 'Когато се обадите на някого, той ще види този номер на телефона си';
+
+  @override
+  String get noVerifiedNumbers => 'Няма потвърдени номера';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Изтриване на $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Ще трябва да потвърдите отново, за да извършвате обаждания';
+
+  @override
+  String get phoneDeleteButton => 'Изтрий';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Потвърдено преди $minutes мин';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Потвърдено преди $hours ч';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Потвърдено преди $days дни';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Потвърдено на $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Потвърдено';
+
+  @override
+  String get callAlreadyInProgress => 'Вече има обаждане в ход';
+
+  @override
+  String get failedToGetCallToken => 'Неуспешно получаване на токен за обаждане. Първо потвърдете телефонния си номер.';
+
+  @override
+  String get failedToInitializeCallService => 'Неуспешна инициализация на услугата за обаждания';
+
+  @override
+  String get speakerLabelYou => 'Вие';
+
+  @override
+  String get speakerLabelUnknown => 'Неизвестен';
 }

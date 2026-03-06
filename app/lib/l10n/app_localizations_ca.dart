@@ -8318,4 +8318,195 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Qualsevol persona amb l\'enllaç pot veure';
+
+  @override
+  String get phoneCallsWithOmi => 'Trucades amb Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Fes trucades amb transcripcio en temps real';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifica el teu numero de telefon';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Et trucarem per confirmar que es teu';
+
+  @override
+  String get phoneSetupStep2Title => 'Introdueix un codi de verificacio';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un codi curt que escriuras a la trucada';
+
+  @override
+  String get phoneSetupStep3Title => 'Comenca a trucar als teus contactes';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Amb transcripcio en directe integrada';
+
+  @override
+  String get phoneGetStarted => 'Comenca';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'La gravacio de trucades pot requerir consentiment a la teva jurisdiccio';
+
+  @override
+  String get enterYourNumber => 'Introdueix el teu numero';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Un cop verificat, aquest sera el teu identificador de trucada';
+
+  @override
+  String get phoneNumberHint => 'Numero de telefon';
+
+  @override
+  String get failedToStartVerification => 'No s\'ha pogut iniciar la verificacio';
+
+  @override
+  String get phoneContinue => 'Continuar';
+
+  @override
+  String get verifyYourNumber => 'Verifica el teu numero';
+
+  @override
+  String get answerTheCallFrom => 'Respon la trucada de';
+
+  @override
+  String get onTheCallEnterThisCode => 'A la trucada, introdueix aquest codi';
+
+  @override
+  String get followTheVoiceInstructions => 'Segueix les instruccions de veu';
+
+  @override
+  String get statusCalling => 'Trucant...';
+
+  @override
+  String get statusCallInProgress => 'Trucada en curs';
+
+  @override
+  String get statusVerifiedLabel => 'Verificat';
+
+  @override
+  String get statusCallMissed => 'Trucada perduda';
+
+  @override
+  String get statusTimedOut => 'Temps esgotat';
+
+  @override
+  String get phoneTryAgain => 'Torna-ho a provar';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Contactes';
+
+  @override
+  String get phoneKeypadTab => 'Teclat';
+
+  @override
+  String get grantContactsAccess => 'Dona acces als teus contactes';
+
+  @override
+  String get phoneAllow => 'Permetre';
+
+  @override
+  String get phoneSearchHint => 'Cercar';
+
+  @override
+  String get phoneNoContactsFound => 'Cap contacte trobat';
+
+  @override
+  String get phoneEnterNumber => 'Introdueix numero';
+
+  @override
+  String get failedToStartCall => 'No s\'ha pogut iniciar la trucada';
+
+  @override
+  String get callStateConnecting => 'Connectant...';
+
+  @override
+  String get callStateRinging => 'Sonant...';
+
+  @override
+  String get callStateEnded => 'Trucada finalitzada';
+
+  @override
+  String get callStateFailed => 'Trucada fallida';
+
+  @override
+  String get transcriptPlaceholder => 'La transcripcio apareixera aqui...';
+
+  @override
+  String get phoneUnmute => 'Activar so';
+
+  @override
+  String get phoneMute => 'Silenciar';
+
+  @override
+  String get phoneSpeaker => 'Altaveu';
+
+  @override
+  String get phoneEndCall => 'Finalitzar';
+
+  @override
+  String get phoneCallSettingsTitle => 'Configuracio de trucades';
+
+  @override
+  String get yourVerifiedNumbers => 'Els teus numeros verificats';
+
+  @override
+  String get verifiedNumbersDescription => 'Quan truquis a algu, veuran aquest numero al seu telefon';
+
+  @override
+  String get noVerifiedNumbers => 'Cap numero verificat';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Eliminar $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Hauras de verificar de nou per fer trucades';
+
+  @override
+  String get phoneDeleteButton => 'Eliminar';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificat fa ${minutes}m';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificat fa ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificat fa ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificat el $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificat';
+
+  @override
+  String get callAlreadyInProgress => 'Ja hi ha una trucada en curs';
+
+  @override
+  String get failedToGetCallToken => 'No s\'ha pogut obtenir el token. Verifica el teu numero primer.';
+
+  @override
+  String get failedToInitializeCallService => 'No s\'ha pogut inicialitzar el servei de trucades';
+
+  @override
+  String get speakerLabelYou => 'Tu';
+
+  @override
+  String get speakerLabelUnknown => 'Desconegut';
 }

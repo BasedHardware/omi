@@ -8257,4 +8257,194 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Ktokoľvek s odkazom môže zobraziť';
+
+  @override
+  String get phoneCallsWithOmi => 'Hovory s Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Volajte s prepisom v realnom case';
+
+  @override
+  String get phoneSetupStep1Title => 'Overte svoje telefonne cislo';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Zavolame vam na potvrdenie';
+
+  @override
+  String get phoneSetupStep2Title => 'Zadajte overovaci kod';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kratky kod, ktory zadate pocas hovoru';
+
+  @override
+  String get phoneSetupStep3Title => 'Zacnite volat svojim kontaktom';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'So zabudovanym zivym prepisom';
+
+  @override
+  String get phoneGetStarted => 'Zacat';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Nahravanie hovorov moze vyzadovat suhlas vo vasej jurisdikcii';
+
+  @override
+  String get enterYourNumber => 'Zadajte svoje cislo';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Po overeni sa toto stane vasim ID volajuceho';
+
+  @override
+  String get phoneNumberHint => 'Telefonne cislo';
+
+  @override
+  String get failedToStartVerification => 'Nepodarilo sa zacat overovanie';
+
+  @override
+  String get phoneContinue => 'Pokracovat';
+
+  @override
+  String get verifyYourNumber => 'Overte svoje cislo';
+
+  @override
+  String get answerTheCallFrom => 'Odpovedzte na hovor od';
+
+  @override
+  String get onTheCallEnterThisCode => 'Pocas hovoru zadajte tento kod';
+
+  @override
+  String get followTheVoiceInstructions => 'Postupujte podla hlasovych pokynov';
+
+  @override
+  String get statusCalling => 'Volanie...';
+
+  @override
+  String get statusCallInProgress => 'Hovor prebieha';
+
+  @override
+  String get statusVerifiedLabel => 'Overene';
+
+  @override
+  String get statusCallMissed => 'Zmeskany hovor';
+
+  @override
+  String get statusTimedOut => 'Cas vyprsal';
+
+  @override
+  String get phoneTryAgain => 'Skusit znova';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakty';
+
+  @override
+  String get phoneKeypadTab => 'Klavesnica';
+
+  @override
+  String get grantContactsAccess => 'Udelite pristup ku kontaktom';
+
+  @override
+  String get phoneAllow => 'Povolit';
+
+  @override
+  String get phoneSearchHint => 'Hladat';
+
+  @override
+  String get phoneNoContactsFound => 'Ziadne kontakty';
+
+  @override
+  String get phoneEnterNumber => 'Zadajte cislo';
+
+  @override
+  String get failedToStartCall => 'Nepodarilo sa zacat hovor';
+
+  @override
+  String get callStateConnecting => 'Pripajanie...';
+
+  @override
+  String get callStateRinging => 'Zvoni...';
+
+  @override
+  String get callStateEnded => 'Hovor ukonceny';
+
+  @override
+  String get callStateFailed => 'Hovor zlyhal';
+
+  @override
+  String get transcriptPlaceholder => 'Prepis sa zobrazi tu...';
+
+  @override
+  String get phoneUnmute => 'Zrusit stlmenie';
+
+  @override
+  String get phoneMute => 'Stlmit';
+
+  @override
+  String get phoneSpeaker => 'Reproduktor';
+
+  @override
+  String get phoneEndCall => 'Ukoncit';
+
+  @override
+  String get phoneCallSettingsTitle => 'Nastavenia hovorov';
+
+  @override
+  String get yourVerifiedNumbers => 'Vase overene cisla';
+
+  @override
+  String get verifiedNumbersDescription => 'Ked niekomu zavolate, uvidi toto cislo';
+
+  @override
+  String get noVerifiedNumbers => 'Ziadne overene cisla';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Vymazat $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Na volanie budete musiet znovu overit';
+
+  @override
+  String get phoneDeleteButton => 'Vymazat';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Overene pred ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Overene pred ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Overene pred ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Overene $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Overene';
+
+  @override
+  String get callAlreadyInProgress => 'Hovor uz prebieha';
+
+  @override
+  String get failedToGetCallToken => 'Nepodarilo sa ziskat token. Najprv overte svoje cislo.';
+
+  @override
+  String get failedToInitializeCallService => 'Nepodarilo sa inicializovat sluzbu hovorov';
+
+  @override
+  String get speakerLabelYou => 'Vy';
+
+  @override
+  String get speakerLabelUnknown => 'Neznamy';
 }
