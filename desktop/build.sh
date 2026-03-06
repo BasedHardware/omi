@@ -89,6 +89,7 @@ cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 omi-computer" "$APP_BUNDLE/Contents/Info.plist"
 
 # Copy Sparkle framework
 SWIFT_BUILD_DIR=$(swift build -c release --package-path Desktop --show-bin-path)
