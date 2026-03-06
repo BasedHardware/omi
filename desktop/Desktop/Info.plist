@@ -50,7 +50,7 @@
             <string>Omi Auth Callback</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>omi-computer</string>
+                <string>omi-computer-dev</string>
             </array>
         </dict>
     </array>
