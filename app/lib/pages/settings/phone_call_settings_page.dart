@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class PhoneCallSettingsPage extends StatelessWidget {
@@ -12,7 +13,7 @@ class PhoneCallSettingsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('Phone Call Settings'),
+        title: Text(context.l10n.phoneCallSettingsTitle),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
       ),
@@ -23,26 +24,23 @@ class PhoneCallSettingsPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Your Verified Numbers',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                Text(
+                  context.l10n.yourVerifiedNumbers,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  "When you call someone, they'll see this number on their phone",
+                  context.l10n.verifiedNumbersDescription,
                   style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                 ),
                 const SizedBox(height: 24),
                 if (provider.verifiedNumbers.isEmpty)
-                  _buildEmptyState()
+                  _buildEmptyState(context)
                 else
                   ...provider.verifiedNumbers.map(
                     (number) => _buildNumberRow(context, provider, number.id, number.phoneNumber, number.verifiedAt),
                   ),
                 const Spacer(),
-                if (provider.verifiedNumbers.isNotEmpty)
-                  _buildDeleteButton(
-                      context, provider, provider.verifiedNumbers.first.id, provider.verifiedNumbers.first.phoneNumber),
                 SizedBox(height: MediaQuery.of(context).viewPadding.bottom),
               ],
             ),
@@ -52,12 +50,12 @@ class PhoneCallSettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Center(
         child: Text(
-          'No verified numbers',
+          context.l10n.noVerifiedNumbers,
           style: TextStyle(fontSize: 15, color: Colors.grey[600]),
         ),
       ),
@@ -66,7 +64,7 @@ class PhoneCallSettingsPage extends StatelessWidget {
 
   Widget _buildNumberRow(
       BuildContext context, PhoneCallProvider provider, String id, String phoneNumber, String verifiedAt) {
-    var timeAgo = _formatVerifiedAt(verifiedAt);
+    var timeAgo = _formatVerifiedAt(context, verifiedAt);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -96,33 +94,11 @@ class PhoneCallSettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.check_circle, color: Colors.green[600], size: 24),
+          GestureDetector(
+            onTap: () => _confirmDelete(context, provider, id, phoneNumber),
+            child: Icon(Icons.delete_outline, color: Colors.red[400], size: 22),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDeleteButton(BuildContext context, PhoneCallProvider provider, String id, String phoneNumber) {
-    return GestureDetector(
-      onTap: () => _confirmDelete(context, provider, id, phoneNumber),
-      child: Container(
-        width: double.infinity,
-        height: 56,
-        decoration: BoxDecoration(
-          color: Colors.red[900]!.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.delete_outline, color: Colors.red[400], size: 20),
-            const SizedBox(width: 8),
-            Text(
-              'Delete Phone Number',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.red[400]),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -137,23 +113,23 @@ class PhoneCallSettingsPage extends StatelessWidget {
           Navigator.pop(ctx);
           await provider.deleteNumber(id);
         },
-        'Delete $phoneNumber?',
-        "You'll need to verify again to make calls",
-        okButtonText: 'Delete',
+        context.l10n.deletePhoneNumberConfirm(phoneNumber),
+        context.l10n.deletePhoneNumberWarning,
+        okButtonText: context.l10n.phoneDeleteButton,
       ),
     );
   }
 
-  String _formatVerifiedAt(String verifiedAt) {
+  String _formatVerifiedAt(BuildContext context, String verifiedAt) {
     try {
       var dt = DateTime.parse(verifiedAt);
       var diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 60) return 'Verified ${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return 'Verified ${diff.inHours}h ago';
-      if (diff.inDays < 7) return 'Verified ${diff.inDays}d ago';
-      return 'Verified on ${dt.month}/${dt.day}/${dt.year}';
+      if (diff.inMinutes < 60) return context.l10n.verifiedMinutesAgo(diff.inMinutes);
+      if (diff.inHours < 24) return context.l10n.verifiedHoursAgo(diff.inHours);
+      if (diff.inDays < 7) return context.l10n.verifiedDaysAgo(diff.inDays);
+      return context.l10n.verifiedOnDate('${dt.month}/${dt.day}/${dt.year}');
     } catch (_) {
-      return 'Verified';
+      return context.l10n.verifiedFallback;
     }
   }
 }
