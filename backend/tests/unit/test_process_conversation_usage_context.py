@@ -46,6 +46,7 @@ for submodule in [
     "apps",
     "llm_usage",
     "_client",
+    "auth",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -69,6 +70,9 @@ llm_usage_mod.record_llm_usage = MagicMock()
 
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="Test User")
 
 from utils.llm import usage_tracker
 
@@ -191,6 +195,8 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
+    conversation.started_at = None
+    conversation.finished_at = None
 
     # Mock notification_db
     notifications_mod = sys.modules["database.notifications"]
@@ -256,6 +262,8 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -299,6 +307,8 @@ def test_action_items_tracked_separately_from_structure():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")
@@ -341,6 +351,8 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
     conversation.structured = MagicMock()
     conversation.structured.title = "Test"
     conversation.structured.overview = "Test overview"
@@ -393,6 +405,8 @@ def test_action_items_skipped_on_discard():
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
+    conversation.started_at = None
+    conversation.finished_at = None
 
     notifications_mod = sys.modules["database.notifications"]
     notifications_mod.get_user_time_zone = MagicMock(return_value="UTC")

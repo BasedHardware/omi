@@ -7,6 +7,7 @@ from database.conversations import get_conversations_by_id
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.other import Person
+from utils.shared_profiles import resolve_shared_people
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
@@ -90,8 +91,10 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
 
     people = []
     if all_person_ids:
-        people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
+        unique_person_ids = list(set(all_person_ids))
+        people_data = users_db.get_people_by_ids(uid, unique_person_ids)
         people = [Person(**p) for p in people_data]
+        people.extend(resolve_shared_people(unique_person_ids, uid))
 
     if memories_id_to_topics:
         # TODO: restore sorthing here
