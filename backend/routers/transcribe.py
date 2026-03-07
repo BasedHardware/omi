@@ -51,6 +51,7 @@ from models.conversation import (
 )
 from models.message_event import (
     ConversationEvent,
+    FocusResultEvent,
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     LastConversationEvent,
@@ -100,6 +101,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.desktop.focus import analyze_focus
 from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
@@ -2127,6 +2129,38 @@ async def _stream_handler(
                                 logger.info(
                                     f"Speaker assignment ignored: missing speaker_id/person_id/person_name. {uid} {session_id}"
                                 )
+                        # Desktop proactive AI — screen_frame analysis (#5396)
+                        elif json_data.get('type') == 'screen_frame':
+                            frame_id = json_data.get('frame_id', '')
+                            image_b64 = json_data.get('image_b64', '')
+                            analyze_types = json_data.get('analyze', [])
+                            if image_b64 and 'focus' in analyze_types:
+                                async def _handle_focus(fid, img, app, wtitle):
+                                    try:
+                                        result = await analyze_focus(
+                                            uid=uid,
+                                            image_b64=img,
+                                            app_name=app,
+                                            window_title=wtitle,
+                                        )
+                                        _send_message_event(FocusResultEvent(
+                                            frame_id=fid,
+                                            status=result['status'],
+                                            app_or_site=result['app_or_site'],
+                                            description=result['description'],
+                                            message=result.get('message'),
+                                        ))
+                                    except Exception as focus_err:
+                                        logger.error(f"Focus analysis failed: {focus_err} {uid} {session_id}")
+
+                                spawn(_handle_focus(
+                                    frame_id,
+                                    image_b64,
+                                    json_data.get('app_name', ''),
+                                    json_data.get('window_title', ''),
+                                ))
+                            elif not image_b64:
+                                logger.warning(f"screen_frame missing image_b64 {uid} {session_id}")
                     except json.JSONDecodeError:
                         logger.info(
                             f"Received non-json text message: {sanitize(message.get('text'))} {uid} {session_id}"

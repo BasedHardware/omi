@@ -181,3 +181,21 @@ class SegmentsDeletedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+# Desktop proactive AI events (Phase 2 — #5396)
+
+
+class FocusResultEvent(MessageEvent):
+    event_type: str = "focus_result"
+    frame_id: str
+    status: str
+    app_or_site: str
+    description: str
+    message: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
