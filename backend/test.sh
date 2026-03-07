@@ -35,3 +35,4 @@ pytest tests/unit/test_log_sanitizer.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
+pytest tests/unit/test_conversation_source_unknown.py -v
