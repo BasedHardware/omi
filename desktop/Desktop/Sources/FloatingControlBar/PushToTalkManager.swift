@@ -34,7 +34,7 @@ class PushToTalkManager: ObservableObject {
   private let doubleTapThreshold: TimeInterval = 0.4
 
   // Transcription
-  private var transcriptionService: TranscriptionService?
+  private var transcriptionService: BackendTranscriptionService?
   private var audioCaptureService: AudioCaptureService?
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
@@ -299,58 +299,20 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
+    // Flush remaining audio and wait for final transcript from backend
+    transcriptionService?.finishStream()
+    log("PushToTalkManager: finalizing — mic stopped, waiting for final transcript")
 
-    if isBatchMode {
-      // Batch mode: send accumulated audio to pre-recorded API
-      log("PushToTalkManager: finalizing (batch) — mic stopped, transcribing recorded audio")
-      batchAudioLock.lock()
-      let audioData = batchAudioBuffer
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
-
-      // Stop streaming service (was not used in batch mode, but clean up)
-      stopAudioTranscription()
-
-      guard !audioData.isEmpty else {
-        log("PushToTalkManager: batch mode — no audio recorded")
-        sendTranscript()
-        return
-      }
-
-      barState?.voiceTranscript = "Transcribing..."
-
-      Task {
-        do {
-          let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-          let transcript = try await TranscriptionService.batchTranscribe(
-            audioData: audioData,
-            language: language
-          )
-          if let transcript, !transcript.isEmpty {
-            self.transcriptSegments = [transcript]
-          }
-        } catch {
-          logError("PushToTalkManager: batch transcription failed", error: error)
-        }
+    // Safety timeout: if backend doesn't send a final segment within 3s, send what we have
+    let timeout = DispatchWorkItem { [weak self] in
+      Task { @MainActor in
+        guard let self, self.state == .finalizing else { return }
+        log("PushToTalkManager: finalization timeout — sending transcript")
         self.sendTranscript()
       }
-    } else {
-      // Live mode: flush remaining audio and wait for final transcript from Deepgram
-      transcriptionService?.finishStream()
-      log("PushToTalkManager: finalizing (live) — mic stopped, waiting for final transcript")
-
-      // Safety timeout: if Deepgram doesn't send a final segment within 3s, send what we have
-      let timeout = DispatchWorkItem { [weak self] in
-        Task { @MainActor in
-          guard let self, self.state == .finalizing else { return }
-          log("PushToTalkManager: live finalization timeout — sending transcript")
-          self.sendTranscript()
-        }
-      }
-      liveFinalizationTimeout = timeout
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
     }
+    liveFinalizationTimeout = timeout
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
   }
 
   private func sendTranscript() {
@@ -418,50 +380,34 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
+    // Always use live streaming through the backend (no client-side batch mode)
+    startMicCapture()
 
-    if isBatchMode {
-      // Batch mode: just capture audio into buffer, no streaming connection
-      batchAudioLock.lock()
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
-      startMicCapture(batchMode: true)
-      log("PushToTalkManager: started audio capture (batch mode)")
-    } else {
-      // Live mode: start mic capture and stream to Deepgram
-      startMicCapture()
+    let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+    let service = BackendTranscriptionService(language: language)
+    transcriptionService = service
 
-      do {
-        let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let service = try TranscriptionService(language: language, channels: 1)
-        transcriptionService = service
-
-        service.start(
-          onTranscript: { [weak self] segment in
-            Task { @MainActor in
-              self?.handleTranscript(segment)
-            }
-          },
-          onError: { [weak self] error in
-            Task { @MainActor in
-              logError("PushToTalkManager: transcription error", error: error)
-              self?.stopListening()
-            }
-          },
-          onConnected: {
-            Task { @MainActor in
-              log("PushToTalkManager: DeepGram connected")
-            }
-          }
-        )
-      } catch {
-        logError("PushToTalkManager: failed to create TranscriptionService", error: error)
-        stopListening()
+    service.start(
+      onTranscript: { [weak self] segment in
+        Task { @MainActor in
+          self?.handleTranscript(segment)
+        }
+      },
+      onError: { [weak self] error in
+        Task { @MainActor in
+          logError("PushToTalkManager: transcription error", error: error)
+          self?.stopListening()
+        }
+      },
+      onConnected: {
+        Task { @MainActor in
+          log("PushToTalkManager: backend connected")
+        }
       }
-    }
+    )
   }
 
-  private func startMicCapture(batchMode: Bool = false) {
+  private func startMicCapture() {
     if audioCaptureService == nil {
       audioCaptureService = AudioCaptureService()
     }
@@ -472,20 +418,12 @@ class PushToTalkManager: ObservableObject {
       do {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
-            guard let self else { return }
-            if batchMode {
-              // Batch mode: accumulate audio in buffer
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
-            } else {
-              // Live mode: stream to Deepgram
-              self.transcriptionService?.sendAudio(audioData)
-            }
+            // Stream mono audio to backend
+            self?.transcriptionService?.sendAudio(audioData)
           },
           onAudioLevel: { _ in }
         )
-        log("PushToTalkManager: mic capture started (batch=\(batchMode))")
+        log("PushToTalkManager: mic capture started")
       } catch {
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
