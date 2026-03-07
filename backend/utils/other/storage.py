@@ -646,6 +646,29 @@ def delete_cached_merged_audio(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
+def delete_all_user_private_audio(uid: str) -> int:
+    """Delete all private cloud sync audio for a user across all conversations.
+
+    Removes chunks, merged cache, and raw audio blobs.
+
+    Args:
+        uid: User ID
+
+    Returns:
+        Number of blobs deleted
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    deleted = 0
+    for prefix in [f'chunks/{uid}/', f'audio/{uid}/', f'merged/{uid}/']:
+        for blob in bucket.list_blobs(prefix=prefix):
+            try:
+                blob.delete()
+                deleted += 1
+            except Exception as e:
+                logger.error(f"Failed to delete blob {blob.name}: {e}")
+    return deleted
+
+
 def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
     """Convert PCM16 data to WAV format."""
     wav_buffer = io.BytesIO()
