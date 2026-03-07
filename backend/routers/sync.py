@@ -27,6 +27,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    delete_all_user_private_audio,
 )
 
 # Audio constants
@@ -384,6 +385,69 @@ def download_audio_file_endpoint(
 
 
 # **********************************************
+
+# **********************************************
+# ******** AUDIO LISTING & DELETE **************
+# **********************************************
+
+
+@router.get("/v1/sync/audio", tags=['v1'])
+def list_user_audio_files(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    List all conversations with audio files for the current user.
+    Returns conversation metadata and audio file summaries.
+    """
+    conversations = conversations_db.get_conversations(uid, limit=200, include_discarded=False)
+    result = []
+    for conv in conversations:
+        audio_files = conv.get('audio_files', [])
+        if not audio_files:
+            continue
+        structured = conv.get('structured', {})
+        title = structured.get('title', '') if isinstance(structured, dict) else ''
+        result.append({
+            'conversation_id': conv.get('id', ''),
+            'title': title or 'Untitled',
+            'created_at': conv.get('created_at'),
+            'audio_files': [
+                {'id': af.get('id', ''), 'duration': af.get('duration', 0)}
+                for af in audio_files
+                if af.get('id')
+            ],
+            'total_duration': sum(af.get('duration', 0) for af in audio_files),
+        })
+    return {'conversations': result}
+
+
+@router.delete("/v1/sync/audio", tags=['v1'], status_code=200)
+def delete_all_user_audio(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Delete all private cloud audio files for the current user.
+    Removes both GCS blobs and Firestore audio_files records.
+    """
+    # Delete from GCS
+    deleted_count = delete_all_user_private_audio(uid)
+    logger.info(f"Deleted {deleted_count} audio blobs for user {uid}")
+
+    # Clear audio_files from Firestore conversations
+    conversations = conversations_db.get_conversations(uid, limit=500, include_discarded=True)
+    cleared = 0
+    for conv in conversations:
+        if conv.get('audio_files'):
+            conversations_db.update_conversation(uid, conv['id'], {'audio_files': []})
+            cleared += 1
+
+    return {
+        'status': 'ok',
+        'blobs_deleted': deleted_count,
+        'conversations_cleared': cleared,
+    }
+
+
 # ************ SYNC LOCAL FILES ****************
 # **********************************************
 
