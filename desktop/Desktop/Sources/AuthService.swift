@@ -49,6 +49,10 @@ class AuthService {
         return "\(urlScheme)://auth/callback"
     }
 
+    private var currentBundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "unknown.bundle"
+    }
+
     private var urlScheme: String {
         if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
            let firstType = urlTypes.first,
@@ -502,6 +506,16 @@ class AuthService {
         let code = queryItems.first(where: { $0.name == "code" })?.value
         let state = queryItems.first(where: { $0.name == "state" })?.value
         let error = queryItems.first(where: { $0.name == "error" })?.value
+
+        if let state, let targetBundleId = targetBundleIdentifier(from: state), targetBundleId != currentBundleIdentifier {
+            NSLog(
+                "OMI AUTH: Callback is for bundle %@, current bundle is %@. Forwarding...",
+                targetBundleId,
+                currentBundleIdentifier
+            )
+            forwardOAuthCallback(url: url, toBundleId: targetBundleId)
+            return
+        }
 
         if let error = error {
             NSLog("OMI AUTH: OAuth error: %@", error)
@@ -1052,10 +1066,38 @@ class AuthService {
     private func generateState() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return Data(bytes).base64EncodedString()
+        let nonce = Data(bytes).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+        // Encode source bundle in state so callbacks can be routed back to the
+        // originating app, even when multiple dev builds share URL schemes.
+        return "\(nonce)|\(currentBundleIdentifier)"
+    }
+
+    private func targetBundleIdentifier(from state: String) -> String? {
+        let parts = state.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        let bundleId = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return bundleId.isEmpty ? nil : bundleId
+    }
+
+    private func forwardOAuthCallback(url: URL, toBundleId bundleId: String) {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+            NSLog("OMI AUTH: Unable to forward callback. Bundle %@ not found.", bundleId)
+            return
+        }
+
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+
+        NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: config) { _, error in
+            if let error {
+                NSLog("OMI AUTH: Failed to forward callback to %@: %@", bundleId, error.localizedDescription)
+            } else {
+                NSLog("OMI AUTH: Forwarded callback to %@", bundleId)
+            }
+        }
     }
 
     // MARK: - Native Apple Sign In Helpers
