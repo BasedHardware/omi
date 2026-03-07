@@ -3,7 +3,6 @@ from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
 import database.users as users_db
-from database.users import get_user_language_preference
 from models.conversation import Structured, Conversation
 from models.other import Person
 from utils.llm.clients import parser, llm_mini, llm_medium_experiment
@@ -83,7 +82,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     user_name, memories_str = get_prompt_memories(uid)
-    user_language = get_user_language_preference(uid)
+    user_language = users_db.get_user_language_preference(uid)
 
     all_person_ids = []
     for m in memories:
@@ -144,7 +143,7 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    user_language = get_user_language_preference(uid)
+    user_language = users_db.get_user_language_preference(uid)
 
     all_person_ids = []
     for m in conversations:
