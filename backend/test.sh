@@ -37,3 +37,9 @@ pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_desktop_focus.py -v
+pytest tests/unit/test_desktop_tasks.py -v
+pytest tests/unit/test_desktop_memories.py -v
+pytest tests/unit/test_desktop_advice.py -v
+pytest tests/unit/test_desktop_live_notes.py -v
+pytest tests/unit/test_desktop_profile.py -v
+pytest tests/unit/test_desktop_task_ops.py -v
