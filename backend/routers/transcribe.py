@@ -911,8 +911,10 @@ async def _stream_handler(
 
         last_synced_conversation_id = None
 
-        # Conversation processing
-        pending_conversation_requests: Set[str] = set()
+        # Conversation processing — maps conversation_id to {sent_at, retries}
+        PENDING_REQUEST_TIMEOUT = 120  # seconds before retrying a pending request
+        MAX_RETRIES_PER_REQUEST = 3
+        pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
@@ -923,16 +925,26 @@ async def _stream_handler(
             """Request pusher to process a conversation."""
             nonlocal pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             if not pusher_connected or not pusher_ws:
-                logger.info(
-                    f"Pusher not connected, falling back to local processing for {conversation_id} {uid} {session_id}"
-                )
+                logger.info(f"Pusher not connected for {conversation_id}, will retry on reconnect {uid} {session_id}")
+                # Track as pending so it gets retried on reconnect
+                if conversation_id not in pending_conversation_requests:
+                    pending_conversation_requests[conversation_id] = {'sent_at': time.time(), 'retries': 0}
+                    pending_request_event.set()
                 return False
             # Prevent unbounded growth of pending requests
             if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
-                logger.info(f"Too many pending requests, dropping one to add {conversation_id} {uid} {session_id}")
-                pending_conversation_requests.pop()  # Remove arbitrary element (set has no order)
+                oldest_id = min(
+                    pending_conversation_requests, key=lambda k: pending_conversation_requests[k]['sent_at']
+                )
+                logger.info(
+                    f"Too many pending requests, dropping {oldest_id} to add {conversation_id} {uid} {session_id}"
+                )
+                del pending_conversation_requests[oldest_id]
             try:
-                pending_conversation_requests.add(conversation_id)
+                pending_conversation_requests[conversation_id] = {
+                    'sent_at': time.time(),
+                    'retries': pending_conversation_requests.get(conversation_id, {}).get('retries', 0),
+                }
                 pending_request_event.set()  # Signal the receiver
                 data = bytearray()
                 data.extend(struct.pack("I", 104))
@@ -942,7 +954,6 @@ async def _stream_handler(
                 return True
             except Exception as e:
                 logger.error(f"Failed to send process_conversation request: {e} {uid} {session_id}")
-                pending_conversation_requests.discard(conversation_id)
                 return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
@@ -1066,7 +1077,7 @@ async def _stream_handler(
                     await _audio_bytes_flush(auto_reconnect=True)
 
         async def pusher_receive():
-            """Receive and handle messages from pusher."""
+            """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
             nonlocal websocket_active, pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             while websocket_active:
                 # Wait efficiently until there's work to do
@@ -1091,7 +1102,7 @@ async def _stream_handler(
                     if header_type == 201:
                         result = json.loads(msg[4:].decode("utf-8"))
                         conversation_id = result.get("conversation_id")
-                        pending_conversation_requests.discard(conversation_id)
+                        pending_conversation_requests.pop(conversation_id, None)
 
                         if "error" in result:
                             logger.error(f"Conversation processing failed: {result['error']} {uid} {session_id}")
@@ -1102,7 +1113,7 @@ async def _stream_handler(
                             on_conversation_processed(conversation_id)
 
                 except asyncio.TimeoutError:
-                    continue  # Check loop conditions again
+                    pass  # Fall through to retry check below
                 except asyncio.CancelledError:
                     break
                 except ConnectionClosed as e:
@@ -1111,6 +1122,29 @@ async def _stream_handler(
                 except Exception as e:
                     logger.error(f"Pusher receive error: {e} {uid} {session_id}")
                     await asyncio.sleep(0.5)
+
+                # Retry timed-out pending requests (handles silent WS death)
+                now = time.time()
+                timed_out = [
+                    cid
+                    for cid, info in list(pending_conversation_requests.items())
+                    if now - info['sent_at'] > PENDING_REQUEST_TIMEOUT
+                ]
+                for cid in timed_out:
+                    info = pending_conversation_requests.get(cid)
+                    if not info:
+                        continue
+                    if info['retries'] >= MAX_RETRIES_PER_REQUEST:
+                        logger.error(
+                            f"Conversation {cid} failed after {MAX_RETRIES_PER_REQUEST} retries, giving up {uid} {session_id}"
+                        )
+                        pending_conversation_requests.pop(cid, None)
+                        continue
+                    info['retries'] += 1
+                    logger.warning(
+                        f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {uid} {session_id}"
+                    )
+                    await request_conversation_processing(cid)
 
                 # Reconnect outside try/except (same pattern as flush functions)
                 if pusher_connected is False and websocket_active:
@@ -1150,6 +1184,14 @@ async def _stream_handler(
                     # Session ended during connection attempt
                     return
                 pusher_connected = True
+                # Re-send any pending conversation requests after reconnect
+                if pending_conversation_requests:
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(pending_conversation_requests)} pending requests {uid} {session_id}"
+                    )
+                    for cid in list(pending_conversation_requests.keys()):
+                        pending_conversation_requests[cid]['sent_at'] = time.time()
+                        await request_conversation_processing(cid)
             except Exception as e:
                 logger.error(f"Exception in connect: {e}")
 
