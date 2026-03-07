@@ -2659,6 +2659,8 @@
     "shared": "साझा",
     "onlyYouCanSeeConversation": "केवल आप ही इस बातचीत को देख सकते हैं",
     "anyoneWithLinkCanView": "लिंक वाला कोई भी व्यक्ति देख सकता है",
+    "tasksCleanTodayTitle": "आज के कार्य साफ़ करें?",
+    "tasksCleanTodayMessage": "यह केवल समय-सीमाएँ हटाएगा",
     "answerTheCallFrom": "इस नंबर से आने वाली कॉल का जवाब दें",
     "callAlreadyInProgress": "एक कॉल पहले से चल रही है",
     "callRecordingConsentDisclaimer": "कॉल रिकॉर्डिंग के लिए आपके क्षेत्र में सहमति आवश्यक हो सकती है",

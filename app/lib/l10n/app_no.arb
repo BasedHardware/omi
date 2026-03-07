@@ -2658,6 +2658,8 @@
     "shared": "Delt",
     "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
     "anyoneWithLinkCanView": "Alle med lenken kan se",
+    "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
+    "tasksCleanTodayMessage": "Dette vil kun fjerne frister",
     "answerTheCallFrom": "Svar pa anropet fra",
     "callAlreadyInProgress": "En samtale pagar allerede",
     "callRecordingConsentDisclaimer": "Samtaleopptak kan kreve samtykke i din jurisdiksjon",

@@ -132,6 +132,7 @@ async def _websocket_util_trigger(
     audio_bytes_trigger_delay_seconds = 4
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
     private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
+    cached_protection_level = users_db.get_data_protection_level(uid) if private_cloud_sync_enabled else None
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task] = set()
@@ -185,7 +186,9 @@ async def _websocket_util_trigger(
                 retries = chunk_info.get('retries', 0)
 
                 try:
-                    await asyncio.to_thread(upload_audio_chunk, chunk_data, uid, conv_id, timestamp)
+                    await asyncio.to_thread(
+                        upload_audio_chunk, chunk_data, uid, conv_id, timestamp, cached_protection_level
+                    )
                     successful_conversation_ids.add(conv_id)
                 except Exception as e:
                     if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:

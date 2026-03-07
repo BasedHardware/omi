@@ -33,3 +33,10 @@ pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
 pytest tests/unit/test_log_sanitizer.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
+pytest tests/unit/test_pusher_conversation_retry.py -v
+pytest tests/unit/test_desktop_updates.py -v
+pytest tests/unit/test_translation_optimization.py -v
+pytest tests/unit/test_conversation_source_unknown.py -v
+pytest tests/unit/test_transcribe_conversation_cache.py -v
+pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
+pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v

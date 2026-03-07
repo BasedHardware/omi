@@ -8307,6 +8307,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Bárki megtekintheti, akinek megvan a link';
 
   @override
+  String get tasksCleanTodayTitle => 'Törlöd a mai feladatokat?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
+
+  @override
   String get phoneCallsWithOmi => 'Hivasok az Omival';
 
   @override

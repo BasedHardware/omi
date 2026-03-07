@@ -2663,6 +2663,8 @@
     "shared": "Đã chia sẻ",
     "onlyYouCanSeeConversation": "Chỉ bạn mới có thể xem cuộc trò chuyện này",
     "anyoneWithLinkCanView": "Bất kỳ ai có liên kết đều có thể xem",
+    "tasksCleanTodayTitle": "Dọn các nhiệm vụ hôm nay?",
+    "tasksCleanTodayMessage": "Thao tác này chỉ xóa thời hạn",
     "answerTheCallFrom": "Trả lời cuộc gọi từ",
     "callAlreadyInProgress": "Một cuộc gọi đang diễn ra",
     "callRecordingConsentDisclaimer": "Ghi âm cuộc gọi có thể yêu cầu sự đồng ý trong khu vực pháp lý của bạn",

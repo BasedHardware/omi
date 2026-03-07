@@ -2693,6 +2693,8 @@
     "shared": "Общий",
     "onlyYouCanSeeConversation": "Только вы можете видеть этот разговор",
     "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать",
+    "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
+    "tasksCleanTodayMessage": "Это удалит только сроки",
     "answerTheCallFrom": "Ответьте на звонок от",
     "callAlreadyInProgress": "Звонок уже идет",
     "callRecordingConsentDisclaimer": "Запись звонков может требовать согласия в вашей юрисдикции",

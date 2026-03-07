@@ -254,6 +254,13 @@ class ConversationSource(str, Enum):
     external_integration = 'external_integration'
     limitless = 'limitless'
     onboarding = 'onboarding'
+    unknown = 'unknown'
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            return cls.unknown
+        return None
 
 
 class ConversationVisibility(str, Enum):

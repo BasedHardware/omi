@@ -8250,6 +8250,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get anyoneWithLinkCanView => 'लिंक वाला कोई भी व्यक्ति देख सकता है';
 
   @override
+  String get tasksCleanTodayTitle => 'आज के कार्य साफ़ करें?';
+
+  @override
+  String get tasksCleanTodayMessage => 'यह केवल समय-सीमाएँ हटाएगा';
+
+  @override
   String get phoneCallsWithOmi => 'Omi के साथ कॉल';
 
   @override

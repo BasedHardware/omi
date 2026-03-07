@@ -2658,6 +2658,8 @@
     "shared": "Jaettu",
     "onlyYouCanSeeConversation": "Vain sinä voit nähdä tämän keskustelun",
     "anyoneWithLinkCanView": "Kuka tahansa linkin haltija voi katsella",
+    "tasksCleanTodayTitle": "Siivota tämän päivän tehtävät?",
+    "tasksCleanTodayMessage": "Tämä poistaa vain määräajat",
     "answerTheCallFrom": "Vastaa puheluun numerosta",
     "callAlreadyInProgress": "Puhelu on jo kaynnissa",
     "callRecordingConsentDisclaimer": "Puheluiden nauhoittaminen voi vaatia suostumuksen lainkaytoalueellasi",

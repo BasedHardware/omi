@@ -2658,6 +2658,8 @@
     "shared": "공유됨",
     "onlyYouCanSeeConversation": "이 대화는 본인만 볼 수 있습니다",
     "anyoneWithLinkCanView": "링크가 있는 사람은 누구나 볼 수 있습니다",
+    "tasksCleanTodayTitle": "오늘 할 일을 정리할까요?",
+    "tasksCleanTodayMessage": "마감일만 제거됩니다",
     "answerTheCallFrom": "이 번호의 전화를 받으세요",
     "callAlreadyInProgress": "통화가 이미 진행 중입니다",
     "callRecordingConsentDisclaimer": "통화 녹음은 관할 지역에서 동의가 필요할 수 있습니다",

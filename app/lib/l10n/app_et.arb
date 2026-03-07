@@ -2658,6 +2658,8 @@
     "shared": "Jagatud",
     "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
     "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
+    "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
+    "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
     "answerTheCallFrom": "Vasta konesle numbrilt",
     "callAlreadyInProgress": "Kone on juba pooleli",
     "callRecordingConsentDisclaimer": "Kone salvestamine voib teie jurisdiktsioonis nousoleku nousolekut",

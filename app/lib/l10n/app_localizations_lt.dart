@@ -8277,6 +8277,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Bet kas, turintis nuorodą, gali peržiūrėti';
 
   @override
+  String get tasksCleanTodayTitle => 'Išvalyti šiandienos užduotis?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bus pašalinti tik terminai';
+
+  @override
   String get phoneCallsWithOmi => 'Skambuciai su Omi';
 
   @override

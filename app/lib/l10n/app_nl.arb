@@ -2658,6 +2658,8 @@
     "shared": "Gedeeld",
     "onlyYouCanSeeConversation": "Alleen jij kunt dit gesprek zien",
     "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
+    "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
+    "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
     "answerTheCallFrom": "Beantwoord het gesprek van",
     "callAlreadyInProgress": "Er is al een gesprek gaande",
     "callRecordingConsentDisclaimer": "Gespreksopname kan toestemming vereisen in uw rechtsgebied",

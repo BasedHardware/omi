@@ -170,6 +170,56 @@ class FloatingControlBarWindow: NSWindow, NSWindowDelegate {
                 self?.validatePositionOnScreenChange()
             }
         }
+
+        // Follow cursor across monitors — poll mouse position to move bar instantly
+        startCursorScreenTracking()
+    }
+
+    private var cursorTrackingTimer: DispatchSourceTimer?
+
+    /// Poll mouse position at ~250ms to move the bar when the cursor enters a different screen.
+    private func startCursorScreenTracking() {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(250))
+        timer.setEventHandler { [weak self] in
+            self?.checkCursorScreen()
+        }
+        timer.resume()
+        cursorTrackingTimer = timer
+    }
+
+    private func checkCursorScreen() {
+        // Only follow when there are multiple screens
+        guard NSScreen.screens.count > 1 else { return }
+
+        // Find which screen the cursor is on
+        let mouseLocation = NSEvent.mouseLocation
+        guard let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) else { return }
+
+        // Already on the same screen — nothing to do
+        let currentScreen = self.screen ?? NSScreen.main
+        if targetScreen == currentScreen { return }
+
+        // Move to the equivalent position on the target screen
+        let currentVisible = currentScreen?.visibleFrame ?? .zero
+        let targetVisible = targetScreen.visibleFrame
+
+        if ShortcutSettings.shared.draggableBarEnabled {
+            // Translate position proportionally
+            let relX = currentVisible.width > 0 ? (frame.origin.x - currentVisible.origin.x) / currentVisible.width : 0.5
+            let relY = currentVisible.height > 0 ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
+            let newX = targetVisible.origin.x + relX * targetVisible.width
+            let newY = targetVisible.origin.y + relY * targetVisible.height
+            setFrameOrigin(NSPoint(x: newX, y: newY))
+            UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
+        } else {
+            // Non-draggable: center on new screen
+            let x = targetVisible.midX - frame.width / 2
+            let y = targetVisible.maxY - frame.height - 20
+            setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        log("FloatingControlBarWindow: followed cursor to screen \(targetScreen.localizedName)")
     }
 
     // MARK: - AI Actions
@@ -809,6 +859,16 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Toggle AI input: if conversation is open, collapse it; otherwise open it.
+    func toggleAIInput() {
+        guard let window = window else { return }
+        if window.isVisible && window.state.showingAIConversation {
+            window.closeAIConversation()
+        } else {
+            openAIInput()
+        }
+    }
+
     /// Open the AI input panel.
     func openAIInput() {
         guard let window = window else { return }
@@ -930,14 +990,20 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        // Hide the bar, capture a clean screenshot, then restore — same path for both typed and PTT
-        barWindow.orderOut(nil)
+        // Hide the bar visually (without ordering it out) so we keep key-window ownership
+        // and avoid promoting the main Omi window while capturing a clean screenshot.
+        let previousAlpha = barWindow.alphaValue
+        let previousIgnoresMouseEvents = barWindow.ignoresMouseEvents
+        barWindow.alphaValue = 0
+        barWindow.ignoresMouseEvents = true
         try? await Task.sleep(nanoseconds: 150_000_000) // 150ms for window to disappear
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
             return try? Data(contentsOf: url)
         }.value
-        barWindow.makeKeyAndOrderFront(nil)
+        barWindow.alphaValue = previousAlpha
+        barWindow.ignoresMouseEvents = previousIgnoresMouseEvents
+        barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 

@@ -2658,6 +2658,8 @@
     "shared": "Partajat",
     "onlyYouCanSeeConversation": "Doar tu poți vedea această conversație",
     "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza",
+    "tasksCleanTodayTitle": "Curăți sarcinile de azi?",
+    "tasksCleanTodayMessage": "Aceasta va elimina doar termenele limită",
     "answerTheCallFrom": "Raspundeti la apelul de la",
     "callAlreadyInProgress": "Un apel este deja in curs",
     "callRecordingConsentDisclaimer": "Inregistrarea apelurilor poate necesita consimtamant in jurisdictia dvs.",

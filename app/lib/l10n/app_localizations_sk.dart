@@ -8259,6 +8259,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Ktokoľvek s odkazom môže zobraziť';
 
   @override
+  String get tasksCleanTodayTitle => 'Vyčistiť dnešné úlohy?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Týmto sa odstránia iba termíny';
+
+  @override
   String get phoneCallsWithOmi => 'Hovory s Omi';
 
   @override

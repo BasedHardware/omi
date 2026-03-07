@@ -8267,6 +8267,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Igaüks, kellel on link, saab vaadata';
 
   @override
+  String get tasksCleanTodayTitle => 'Puhastada tänased ülesanded?';
+
+  @override
+  String get tasksCleanTodayMessage => 'See eemaldab ainult tähtajad';
+
+  @override
   String get phoneCallsWithOmi => 'Koned Omiga';
 
   @override

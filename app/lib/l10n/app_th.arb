@@ -2658,6 +2658,8 @@
     "shared": "แชร์แล้ว",
     "onlyYouCanSeeConversation": "เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้",
     "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
+    "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
+    "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
     "answerTheCallFrom": "รับสายจาก",
     "callAlreadyInProgress": "มีสายโทรศัพท์อยู่แล้ว",
     "callRecordingConsentDisclaimer": "การบันทึกสายอาจต้องได้รับความยินยอมในเขตอำนาจศาลของคุณ",

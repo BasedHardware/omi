@@ -1962,11 +1962,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
                                 self?.needsBrowserExtensionSetup = true
                                 self?.stopAgent()
-                                // Bring the app to the foreground so the setup sheet is visible
-                                // (the failed browser attempt may have opened Chrome, stealing focus)
-                                NSApp.activate(ignoringOtherApps: true)
-                                for window in NSApp.windows where window.title.hasPrefix("Omi") {
-                                    window.makeKeyAndOrderFront(nil)
+                                // Keep floating-bar sessions non-intrusive: do not foreground
+                                // the main window when the query originated from the floating bar.
+                                if sessionKey != "floating" {
+                                    // Bring the app to the foreground so the setup sheet is visible
+                                    // (the failed browser attempt may have opened Chrome, stealing focus)
+                                    NSApp.activate(ignoringOtherApps: true)
+                                    for window in NSApp.windows where window.title.hasPrefix("Omi") {
+                                        window.makeKeyAndOrderFront(nil)
+                                    }
                                 }
                             }
                             // Show the floating bar so the user has an always-on-top UI

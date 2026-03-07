@@ -2658,6 +2658,8 @@
     "shared": "Bendrinamas",
     "onlyYouCanSeeConversation": "Tik jūs galite matyti šį pokalbį",
     "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
+    "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
+    "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
     "answerTheCallFrom": "Atsiliepkite i skambutai is",
     "callAlreadyInProgress": "Skambutis jau vyksta",
     "callRecordingConsentDisclaimer": "Skambuciu irasymas gali reikalauti sutikimo jusu jurisdikcijoje",

@@ -8333,6 +8333,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει';
 
   @override
+  String get tasksCleanTodayTitle => 'Να καθαριστούν οι σημερινές εργασίες;';
+
+  @override
+  String get tasksCleanTodayMessage => 'Αυτό θα αφαιρέσει μόνο τις προθεσμίες';
+
+  @override
   String get phoneCallsWithOmi => 'Κλήσεις με Omi';
 
   @override

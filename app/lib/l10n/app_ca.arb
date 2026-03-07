@@ -2627,6 +2627,8 @@
     "shared": "Compartit",
     "onlyYouCanSeeConversation": "Només tu pots veure aquesta conversa",
     "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure",
+    "tasksCleanTodayTitle": "Netejar les tasques d'avui?",
+    "tasksCleanTodayMessage": "Això només eliminarà els terminis",
     "answerTheCallFrom": "Respon la trucada de",
     "callAlreadyInProgress": "Ja hi ha una trucada en curs",
     "callRecordingConsentDisclaimer": "La gravacio de trucades pot requerir consentiment a la teva jurisdiccio",

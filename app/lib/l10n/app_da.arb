@@ -2667,6 +2667,8 @@
     "shared": "Delt",
     "onlyYouCanSeeConversation": "Kun du kan se denne samtale",
     "anyoneWithLinkCanView": "Alle med linket kan se",
+    "tasksCleanTodayTitle": "Ryd dagens opgaver?",
+    "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
     "answerTheCallFrom": "Besvar opkaldet fra",
     "callAlreadyInProgress": "Et opkald er allerede i gang",
     "callRecordingConsentDisclaimer": "Optagelse af opkald kan kraeve samtykke i din jurisdiktion",

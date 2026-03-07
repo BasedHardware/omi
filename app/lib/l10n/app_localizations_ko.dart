@@ -8131,6 +8131,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get anyoneWithLinkCanView => '링크가 있는 사람은 누구나 볼 수 있습니다';
 
   @override
+  String get tasksCleanTodayTitle => '오늘 할 일을 정리할까요?';
+
+  @override
+  String get tasksCleanTodayMessage => '마감일만 제거됩니다';
+
+  @override
   String get phoneCallsWithOmi => 'Omi로 통화';
 
   @override

@@ -8282,6 +8282,12 @@ class AppLocalizationsUk extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Будь-хто з посиланням може переглядати';
 
   @override
+  String get tasksCleanTodayTitle => 'Очистити завдання на сьогодні?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Це видалить лише дедлайни';
+
+  @override
   String get phoneCallsWithOmi => 'Дзвінки з Omi';
 
   @override

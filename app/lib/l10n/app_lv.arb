@@ -2658,6 +2658,8 @@
     "shared": "Kopīgots",
     "onlyYouCanSeeConversation": "Tikai jūs varat redzēt šo sarunu",
     "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
+    "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
+    "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
     "answerTheCallFrom": "Atbildiet uz zvanu no",
     "callAlreadyInProgress": "Zvans jau notiek",
     "callRecordingConsentDisclaimer": "Zvanu ierakstisanai var but nepieciesama piekrišana jusu jurisdikcija",

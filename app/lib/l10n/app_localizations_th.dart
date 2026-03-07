@@ -8226,6 +8226,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get anyoneWithLinkCanView => 'ใครก็ตามที่มีลิงก์สามารถดูได้';
 
   @override
+  String get tasksCleanTodayTitle => 'ล้างงานของวันนี้ไหม?';
+
+  @override
+  String get tasksCleanTodayMessage => 'การดำเนินการนี้จะลบเฉพาะกำหนดส่ง';
+
+  @override
   String get phoneCallsWithOmi => 'โทรกับ Omi';
 
   @override

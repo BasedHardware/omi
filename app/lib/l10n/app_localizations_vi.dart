@@ -8273,6 +8273,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
 
   @override
+  String get tasksCleanTodayTitle => 'Dọn các nhiệm vụ hôm nay?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
+
+  @override
   String get phoneCallsWithOmi => 'Cuộc gọi với Omi';
 
   @override

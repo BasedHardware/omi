@@ -8297,6 +8297,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Любой, у кого есть ссылка, может просматривать';
 
   @override
+  String get tasksCleanTodayTitle => 'Очистить задачи на сегодня?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Это удалит только сроки';
+
+  @override
   String get phoneCallsWithOmi => 'Звонки с Omi';
 
   @override

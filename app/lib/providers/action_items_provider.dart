@@ -285,6 +285,65 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  Future<int> clearTodayDeadlinesForIncompleteTasks() async {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final startOfTomorrow = startOfToday.add(const Duration(days: 1));
+
+    final itemsToClear = _actionItems.where((item) {
+      final dueAt = item.dueAt;
+      if (item.completed || dueAt == null) return false;
+      return !dueAt.isBefore(startOfToday) && dueAt.isBefore(startOfTomorrow);
+    }).toList();
+
+    if (itemsToClear.isEmpty) return 0;
+
+    final originalItemsById = <String, ActionItemWithMetadata>{};
+    for (final item in itemsToClear) {
+      final index = _actionItems.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        originalItemsById[item.id] = _actionItems[index];
+        _actionItems[index] = _actionItems[index].copyWith(dueAt: null);
+      }
+    }
+    notifyListeners();
+
+    int successCount = 0;
+    for (final item in itemsToClear) {
+      try {
+        final updatedItem = await api.updateActionItem(
+          item.id,
+          clearDueAt: true,
+        );
+
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (updatedItem != null) {
+          if (index != -1) {
+            _actionItems[index] = updatedItem;
+          }
+          successCount++;
+        } else if (index != -1) {
+          final originalItem = originalItemsById[item.id];
+          if (originalItem != null) {
+            _actionItems[index] = originalItem;
+          }
+        }
+      } catch (e) {
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (index != -1) {
+          final originalItem = originalItemsById[item.id];
+          if (originalItem != null) {
+            _actionItems[index] = originalItem;
+          }
+        }
+        Logger.debug('Error clearing today deadline for item ${item.id}: $e');
+      }
+    }
+
+    notifyListeners();
+    return successCount;
+  }
+
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);

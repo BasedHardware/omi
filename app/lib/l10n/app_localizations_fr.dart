@@ -8347,6 +8347,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Toute personne disposant du lien peut voir';
 
   @override
+  String get tasksCleanTodayTitle => 'Nettoyer les tâches d’aujourd’hui ?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Cela supprimera uniquement les échéances';
+
+  @override
   String get phoneCallsWithOmi => 'Appels avec Omi';
 
   @override

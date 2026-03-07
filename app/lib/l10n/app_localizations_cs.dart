@@ -8265,6 +8265,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Kdokoli s odkazem může zobrazit';
 
   @override
+  String get tasksCleanTodayTitle => 'Vyčistit dnešní úkoly?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tímto se odstraní pouze termíny';
+
+  @override
   String get phoneCallsWithOmi => 'Hovory s Omi';
 
   @override

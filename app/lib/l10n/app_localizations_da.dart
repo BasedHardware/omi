@@ -8253,6 +8253,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Alle med linket kan se';
 
   @override
+  String get tasksCleanTodayTitle => 'Ryd dagens opgaver?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Dette fjerner kun deadlines';
+
+  @override
   String get phoneCallsWithOmi => 'Opkald med Omi';
 
   @override

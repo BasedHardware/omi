@@ -2700,6 +2700,8 @@
     "shared": "Dibagikan",
     "onlyYouCanSeeConversation": "Hanya Anda yang dapat melihat percakapan ini",
     "anyoneWithLinkCanView": "Siapa pun yang memiliki tautan dapat melihat",
+    "tasksCleanTodayTitle": "Bersihkan tugas hari ini?",
+    "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu",
     "answerTheCallFrom": "Jawab panggilan dari",
     "callAlreadyInProgress": "Panggilan sedang berlangsung",
     "callRecordingConsentDisclaimer": "Rekaman panggilan mungkin memerlukan persetujuan di yurisdiksi Anda",

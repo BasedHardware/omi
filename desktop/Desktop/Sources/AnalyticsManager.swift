@@ -28,6 +28,7 @@ class AnalyticsManager {
         }
         MixpanelManager.shared.initialize()
         PostHogManager.shared.initialize()
+        HeapManager.shared.initialize()
     }
 
     // MARK: - User Identification
@@ -35,11 +36,13 @@ class AnalyticsManager {
     func identify() {
         MixpanelManager.shared.identify()
         PostHogManager.shared.identify()
+        HeapManager.shared.identify()
     }
 
     func reset() {
         MixpanelManager.shared.reset()
         PostHogManager.shared.reset()
+        HeapManager.shared.reset()
     }
 
     // MARK: - Opt In/Out
@@ -59,11 +62,13 @@ class AnalyticsManager {
     func onboardingStepCompleted(step: Int, stepName: String) {
         MixpanelManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
         PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
+        HeapManager.shared.track("Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
     }
 
     func onboardingCompleted() {
         MixpanelManager.shared.onboardingCompleted()
         PostHogManager.shared.onboardingCompleted()
+        HeapManager.shared.track("Onboarding Completed")
     }
 
     func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
@@ -86,21 +91,25 @@ class AnalyticsManager {
     func signInStarted(provider: String) {
         MixpanelManager.shared.signInStarted(provider: provider)
         PostHogManager.shared.signInStarted(provider: provider)
+        HeapManager.shared.track("Sign In Started", properties: ["provider": provider])
     }
 
     func signInCompleted(provider: String) {
         MixpanelManager.shared.signInCompleted(provider: provider)
         PostHogManager.shared.signInCompleted(provider: provider)
+        HeapManager.shared.track("Sign In Completed", properties: ["provider": provider])
     }
 
     func signInFailed(provider: String, error: String) {
         MixpanelManager.shared.signInFailed(provider: provider, error: error)
         PostHogManager.shared.signInFailed(provider: provider, error: error)
+        HeapManager.shared.track("Sign In Failed", properties: ["provider": provider, "error": error])
     }
 
     func signedOut() {
         MixpanelManager.shared.signedOut()
         PostHogManager.shared.signedOut()
+        HeapManager.shared.track("Signed Out")
     }
 
     // MARK: - Monitoring Events
@@ -240,6 +249,7 @@ class AnalyticsManager {
     func appLaunched() {
         MixpanelManager.shared.appLaunched()
         PostHogManager.shared.appLaunched()
+        HeapManager.shared.track("App Launched")
     }
 
     func trackStartupTiming(dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool, databaseInitFailed: Bool) {
@@ -274,9 +284,10 @@ class AnalyticsManager {
         // Collect system diagnostics
         let diagnostics = collectSystemDiagnostics()
 
-        // Track in both analytics systems
+        // Track in all analytics systems
         MixpanelManager.shared.firstLaunch(diagnostics: diagnostics)
         PostHogManager.shared.firstLaunch(diagnostics: diagnostics)
+        HeapManager.shared.track("First Launch")
 
         log("Analytics: First launch diagnostics tracked")
     }
@@ -420,6 +431,7 @@ class AnalyticsManager {
     func deleteAccountConfirmed() {
         MixpanelManager.shared.deleteAccountConfirmed()
         PostHogManager.shared.deleteAccountConfirmed()
+        HeapManager.shared.track("Delete Account Confirmed")
     }
 
     func deleteAccountCancelled() {

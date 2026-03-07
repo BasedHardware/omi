@@ -73,6 +73,7 @@ echo "Binary built at: $BINARY_PATH"
 # Create app bundle structure
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
+mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 # Copy binary
 cp "$BINARY_PATH" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
@@ -83,11 +84,38 @@ cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 # Copy app icon
 cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 
+# Copy Firebase config for desktop auth
+cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+
 # Update Info.plist with actual values
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 omi-computer" "$APP_BUNDLE/Contents/Info.plist"
+
+# Copy Sparkle framework
+SWIFT_BUILD_DIR=$(swift build -c release --package-path Desktop --show-bin-path)
+SPARKLE_FRAMEWORK="$SWIFT_BUILD_DIR/../Sparkle.framework"
+if [ -d "$SPARKLE_FRAMEWORK" ]; then
+    cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+    echo "Copied Sparkle framework"
+fi
+
+# Copy HeapSwiftCore framework and its dependency CSSwiftProtobuf
+HEAP_FRAMEWORK="Desktop/.build/artifacts/heap-swift-core-sdk/HeapSwiftCore/HeapSwiftCore.xcframework/macos-arm64_x86_64/HeapSwiftCore.framework"
+if [ -d "$HEAP_FRAMEWORK" ]; then
+    cp -R "$HEAP_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+    echo "Copied HeapSwiftCore framework"
+fi
+CSPROTOBUF_FRAMEWORK="Desktop/.build/artifacts/csswiftprotobuf/CSSwiftProtobuf/CSSwiftProtobuf.xcframework/macos-arm64_x86_64/CSSwiftProtobuf.framework"
+if [ -d "$CSPROTOBUF_FRAMEWORK" ]; then
+    cp -R "$CSPROTOBUF_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+    echo "Copied CSSwiftProtobuf framework"
+fi
+
+# Add rpath for Frameworks directory
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" 2>/dev/null || true
 
 # Copy resource bundle (contains app assets like herologo.png, omi-with-rope-no-padding.webp, etc.)
 SWIFT_BUILD_DIR=$(swift build -c release --package-path Desktop --show-bin-path)
@@ -103,7 +131,8 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
     cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    # Preserve symlinks inside node_modules (some optional Playwright links are intentionally dangling on macOS)
+    cp -RPf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     echo "Copied acp-bridge to bundle"
 fi
 

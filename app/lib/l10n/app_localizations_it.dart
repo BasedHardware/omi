@@ -8320,6 +8320,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get anyoneWithLinkCanView => 'Chiunque abbia il link può visualizzare';
 
   @override
+  String get tasksCleanTodayTitle => 'Pulire le attività di oggi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Questo rimuoverà solo le scadenze';
+
+  @override
   String get phoneCallsWithOmi => 'Chiamate con Omi';
 
   @override

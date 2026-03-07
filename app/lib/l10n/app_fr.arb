@@ -2693,6 +2693,8 @@
     "shared": "Partagé",
     "onlyYouCanSeeConversation": "Vous seul pouvez voir cette conversation",
     "anyoneWithLinkCanView": "Toute personne disposant du lien peut voir",
+    "tasksCleanTodayTitle": "Nettoyer les tâches d’aujourd’hui ?",
+    "tasksCleanTodayMessage": "Cela supprimera uniquement les échéances",
     "answerTheCallFrom": "Repondez a l'appel de",
     "callAlreadyInProgress": "Un appel est deja en cours",
     "callRecordingConsentDisclaimer": "L'enregistrement d'appels peut necessiter un consentement dans votre juridiction",

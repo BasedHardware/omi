@@ -2693,6 +2693,8 @@
     "shared": "Paylaşıldı",
     "onlyYouCanSeeConversation": "Bu konuşmayı yalnızca siz görebilirsiniz",
     "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
+    "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
+    "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
     "answerTheCallFrom": "Su numaradan gelen aramayi cevaplayin",
     "callAlreadyInProgress": "Bir arama zaten devam ediyor",
     "callRecordingConsentDisclaimer": "Arama kaydi, yargi bolgenizde onay gerektirebilir",

@@ -8129,6 +8129,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
 
   @override
+  String get tasksCleanTodayTitle => '今日のタスクを整理しますか？';
+
+  @override
+  String get tasksCleanTodayMessage => '期限のみ削除されます';
+
+  @override
   String get phoneCallsWithOmi => 'Omiで通話';
 
   @override
