@@ -64,6 +64,27 @@ class TestConversationSourceMissing:
         for member in ConversationSource:
             assert ConversationSource(member.value) == member
 
+    def test_non_string_int_rejected(self):
+        """Non-string values (int) are not coerced to unknown."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ConversationSource(123)
+
+    def test_non_string_none_rejected(self):
+        """None is not coerced to unknown."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ConversationSource(None)
+
+    def test_non_string_dict_rejected(self):
+        """Dict is not coerced to unknown."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            ConversationSource({})
+
 
 class TestConversationModelWithUnknownSource:
     """Test that Conversation Pydantic model handles unknown sources."""
