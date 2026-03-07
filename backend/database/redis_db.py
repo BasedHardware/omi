@@ -236,6 +236,10 @@ def disable_app(uid: str, app_id: str):
     r.srem(f'users:{uid}:enabled_plugins', app_id)
 
 
+def is_app_enabled(uid: str, app_id: str) -> bool:
+    return r.sismember(f'users:{uid}:enabled_plugins', app_id)
+
+
 def get_enabled_apps(uid: str):
     val = r.smembers(f'users:{uid}:enabled_plugins')
     if not val:
