@@ -69,6 +69,9 @@ class PushToTalkManager: ObservableObject {
   // MARK: - Event Monitors
 
   private func installEventMonitors() {
+    // Remove any existing monitors to make setup() safely re-entrant
+    removeEventMonitors()
+
     // Global monitor — fires when OTHER apps are focused
     globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) {
       [weak self] event in

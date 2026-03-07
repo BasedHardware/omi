@@ -1,24 +1,24 @@
 import SwiftUI
 import AppKit
 
-/// Onboarding step: prompts user to press ⌘+Enter, then activates the real
-/// floating bar at the top of the screen. Shows Continue after the AI responds.
-struct OnboardingFloatingBarDemoView: View {
+/// Onboarding step: prompts user to hold the PTT key (Option by default)
+/// to ask a question using voice via the real floating bar.
+struct OnboardingVoiceInputDemoView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
 
-    @State private var barActivated = false
+    @ObservedObject private var pttManager = PushToTalkManager.shared
+    @State private var hasTried = false
     @State private var showContinue = false
     @State private var pulseAnimation = false
-    @State private var keyMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Ask omi anything")
+                Text("Voice input")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -50,7 +50,7 @@ struct OnboardingFloatingBarDemoView: View {
                         .scaleEffect(pulseAnimation ? 1.15 : 1.0)
                         .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
 
-                    Image(systemName: "rectangle.and.text.magnifyingglass")
+                    Image(systemName: "mic.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(
                             LinearGradient(
@@ -63,48 +63,41 @@ struct OnboardingFloatingBarDemoView: View {
                 .onAppear { pulseAnimation = true }
 
                 VStack(spacing: 10) {
-                    Text("The Floating Bar")
+                    Text("Ask with Your Voice")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
 
-                    Text("Ask anything and it responds using\neverything it knows about you.")
+                    Text("Hold the Option key and speak your question.\nRelease to send it.")
                         .font(.system(size: 14))
                         .foregroundColor(OmiColors.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
 
-                if !barActivated {
-                    // Keyboard shortcut hint
-                    VStack(spacing: 12) {
-                        Text("Try it now")
+                if !showContinue {
+                    VStack(spacing: 16) {
+                        VStack(spacing: 12) {
+                            Text("Try it now — hold")
+                                .font(.system(size: 13))
+                                .foregroundColor(OmiColors.textTertiary)
+
+                            keyCap("⌥")
+                        }
+
+                        Text("Try asking: \"What's the weather in my city?\"")
                             .font(.system(size: 13))
                             .foregroundColor(OmiColors.textTertiary)
-
-                        HStack(spacing: 6) {
-                            keyCap("⌘")
-                            Text("+")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(OmiColors.textTertiary)
-                            keyCap("Enter")
-                        }
+                            .italic()
                     }
                     .padding(.top, 4)
                     .transition(.opacity)
-                } else if !showContinue {
-                    // Waiting for user to type and get a response
-                    Text("Type a question in the floating bar above")
-                        .font(.system(size: 13))
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.top, 4)
-                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, 40)
 
             Spacer()
 
-            // Bottom button — only after AI response completes
+            // Bottom button
             if showContinue {
                 Button(action: onComplete) {
                     Text("Continue")
@@ -123,75 +116,26 @@ struct OnboardingFloatingBarDemoView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
-            // Set up the real floating bar (creates the window if needed)
+            // Ensure floating bar is set up and visible for PTT
             FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
-            // Unregister global shortcuts so we handle Cmd+Enter ourselves
-            GlobalShortcutManager.shared.unregisterShortcuts()
-            installKeyMonitor()
-        }
-        .onDisappear {
-            removeKeyMonitor()
-            // Close the AI conversation panel on the floating bar so the next step starts clean
-            if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
-                FloatingControlBarManager.shared.toggleAIInput()
+            if !FloatingControlBarManager.shared.isVisible {
+                FloatingControlBarManager.shared.show()
             }
-            // Re-register global shortcuts for subsequent steps and normal use
-            GlobalShortcutManager.shared.registerShortcuts()
-        }
-        .onChange(of: barActivated) { _, activated in
-            if activated {
-                Task { await waitForResponse() }
+
+            // Set up push-to-talk
+            if let barState = FloatingControlBarManager.shared.barState {
+                PushToTalkManager.shared.setup(barState: barState)
             }
         }
-    }
-
-    // MARK: - Response Observer
-
-    /// Poll the floating bar state until the AI finishes responding.
-    @MainActor
-    private func waitForResponse() async {
-        guard let barState = FloatingControlBarManager.shared.barState else { return }
-        // Poll every 0.5s for up to 60s
-        for _ in 0..<120 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            if barState.showingAIResponse,
-               let msg = barState.currentAIMessage,
-               !msg.isStreaming {
+        .onChange(of: pttManager.state) { _, newState in
+            if newState != .idle {
+                hasTried = true
+            }
+            if hasTried && newState == .idle {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showContinue = true
                 }
-                return
             }
-        }
-        // Timeout — show Continue anyway
-        withAnimation(.easeInOut(duration: 0.3)) {
-            showContinue = true
-        }
-    }
-
-    // MARK: - Key Monitor
-
-    private func installKeyMonitor() {
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if mods == .command && event.keyCode == 36 { // 36 = Return
-                if !barActivated {
-                    // Activate the real floating bar's AI input
-                    FloatingControlBarManager.shared.openAIInput()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        barActivated = true
-                    }
-                    return nil
-                }
-            }
-            return event
-        }
-    }
-
-    private func removeKeyMonitor() {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
         }
     }
 
