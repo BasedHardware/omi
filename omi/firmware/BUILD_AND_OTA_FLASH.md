@@ -80,23 +80,17 @@ sudo apt install ninja-build ccache
 # Install via chocolatey or download binaries
 ```
 
-#### Python Dependencies
-The build process requires several Python packages. Install them in the West environment:
-
-```bash
-# Get the West Python path
-WEST_PYTHON="/opt/homebrew/Cellar/west/1.4.0/libexec/bin/python"
-
-# Install required packages
-$WEST_PYTHON -m pip install cryptography intelhex ecdsa click cbor2
-```
-
 ### 3. Initialize the nRF Connect SDK Workspace
 
-If the `v2.9.0` directory doesn't exist or is empty, you need to initialize the nRF Connect SDK workspace:
+If the `v2.9.0` directory doesn't exist or is empty, you need to initialize the nRF Connect SDK workspace.
+
+Since `west` and required Python dependencies are included in the nRF Connect SDK toolchain, launch the toolchain shell first:
 
 ```bash
-# Navigate to the firmware directory
+# Launch the nRF Connect SDK environment
+nrfutil toolchain-manager launch --ncs-version v2.9.0 --shell
+
+# Navigate to the firmware directory within the shell
 cd /path/to/omi/firmware
 
 # Create and navigate to the v2.9.0 directory
@@ -220,7 +214,9 @@ During OTA update:
 #### Missing Dependencies
 ```bash
 # Error: ModuleNotFoundError: No module named 'cryptography'
-/opt/homebrew/Cellar/west/1.4.0/libexec/bin/python -m pip install cryptography
+# This typically occurs if you are building outside of the nrfutil shell.
+# Ensure you launch the nRF Connect SDK environment first:
+# nrfutil toolchain-manager launch --ncs-version v2.9.0 --shell
 
 # Error: ccache: command not found
 brew install ccache
