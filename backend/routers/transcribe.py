@@ -51,17 +51,24 @@ from models.conversation import (
     TranscriptSegment,
 )
 from models.message_event import (
+    AdviceExtractedEvent,
     ConversationEvent,
+    DedupCompleteEvent,
     FocusResultEvent,
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     LastConversationEvent,
+    LiveNoteEvent,
+    MemoriesExtractedEvent,
     MessageEvent,
     MessageServiceStatusEvent,
     PhotoDescribedEvent,
     PhotoProcessingEvent,
+    ProfileUpdatedEvent,
+    RerankCompleteEvent,
     SegmentsDeletedEvent,
     SpeakerLabelSuggestionEvent,
+    TasksExtractedEvent,
     TranslationEvent,
 )
 from models.transcript_segment import Translation
@@ -102,7 +109,13 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.desktop.advice import generate_advice
 from utils.desktop.focus import analyze_focus
+from utils.desktop.live_notes import generate_live_note
+from utils.desktop.memories import extract_memories
+from utils.desktop.profile import generate_profile
+from utils.desktop.task_ops import dedup_tasks, rerank_tasks
+from utils.desktop.tasks import extract_tasks
 from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
@@ -2242,33 +2255,93 @@ async def _stream_handler(
                             frame_id = json_data.get('frame_id', '')
                             image_b64 = json_data.get('image_b64', '')
                             analyze_types = json_data.get('analyze', [])
-                            if image_b64 and 'focus' in analyze_types:
-                                async def _handle_focus(fid, img, app, wtitle):
-                                    try:
-                                        result = await analyze_focus(
-                                            uid=uid,
-                                            image_b64=img,
-                                            app_name=app,
-                                            window_title=wtitle,
-                                        )
-                                        _send_message_event(FocusResultEvent(
-                                            frame_id=fid,
-                                            status=result['status'],
-                                            app_or_site=result['app_or_site'],
-                                            description=result['description'],
-                                            message=result.get('message'),
-                                        ))
-                                    except Exception as focus_err:
-                                        logger.error(f"Focus analysis failed: {focus_err} {uid} {session_id}")
-
-                                spawn(_handle_focus(
-                                    frame_id,
-                                    image_b64,
-                                    json_data.get('app_name', ''),
-                                    json_data.get('window_title', ''),
-                                ))
-                            elif not image_b64:
+                            sf_app = json_data.get('app_name', '')
+                            sf_wtitle = json_data.get('window_title', '')
+                            if not image_b64:
                                 logger.warning(f"screen_frame missing image_b64 {uid} {session_id}")
+                            else:
+                                # Fan out to parallel handlers per analyze type
+                                if 'focus' in analyze_types:
+                                    async def _handle_focus(fid, img, app, wtitle):
+                                        try:
+                                            result = await analyze_focus(uid=uid, image_b64=img, app_name=app, window_title=wtitle)
+                                            _send_message_event(FocusResultEvent(
+                                                frame_id=fid, status=result['status'], app_or_site=result['app_or_site'],
+                                                description=result['description'], message=result.get('message'),
+                                            ))
+                                        except Exception as e:
+                                            logger.error(f"Focus analysis failed: {e} {uid} {session_id}")
+                                    spawn(_handle_focus(frame_id, image_b64, sf_app, sf_wtitle))
+
+                                if 'tasks' in analyze_types:
+                                    async def _handle_tasks(fid, img, app, wtitle):
+                                        try:
+                                            result = await extract_tasks(uid=uid, image_b64=img, app_name=app, window_title=wtitle)
+                                            _send_message_event(TasksExtractedEvent(frame_id=fid, tasks=result.get('tasks', [])))
+                                        except Exception as e:
+                                            logger.error(f"Task extraction failed: {e} {uid} {session_id}")
+                                    spawn(_handle_tasks(frame_id, image_b64, sf_app, sf_wtitle))
+
+                                if 'memories' in analyze_types:
+                                    async def _handle_memories(fid, img, app, wtitle):
+                                        try:
+                                            result = await extract_memories(uid=uid, image_b64=img, app_name=app, window_title=wtitle)
+                                            _send_message_event(MemoriesExtractedEvent(frame_id=fid, memories=result.get('memories', [])))
+                                        except Exception as e:
+                                            logger.error(f"Memory extraction failed: {e} {uid} {session_id}")
+                                    spawn(_handle_memories(frame_id, image_b64, sf_app, sf_wtitle))
+
+                                if 'advice' in analyze_types:
+                                    async def _handle_advice(fid, img, app, wtitle):
+                                        try:
+                                            result = await generate_advice(uid=uid, image_b64=img, app_name=app, window_title=wtitle)
+                                            _send_message_event(AdviceExtractedEvent(
+                                                frame_id=fid, advice=result.get('advice'),
+                                            ))
+                                        except Exception as e:
+                                            logger.error(f"Advice generation failed: {e} {uid} {session_id}")
+                                    spawn(_handle_advice(frame_id, image_b64, sf_app, sf_wtitle))
+
+                        # Desktop proactive AI — text-only message types (#5396)
+                        elif json_data.get('type') == 'live_notes_text':
+                            async def _handle_live_notes(text, ctx):
+                                try:
+                                    result = await generate_live_note(text=text, session_context=ctx)
+                                    if result.get('text'):
+                                        _send_message_event(LiveNoteEvent(text=result['text']))
+                                except Exception as e:
+                                    logger.error(f"Live note generation failed: {e} {uid} {session_id}")
+                            spawn(_handle_live_notes(json_data.get('text', ''), json_data.get('session_context', '')))
+
+                        elif json_data.get('type') == 'profile_request':
+                            async def _handle_profile():
+                                try:
+                                    result = await generate_profile(uid=uid)
+                                    _send_message_event(ProfileUpdatedEvent(profile_text=result['profile_text']))
+                                except Exception as e:
+                                    logger.error(f"Profile generation failed: {e} {uid} {session_id}")
+                            spawn(_handle_profile())
+
+                        elif json_data.get('type') == 'task_rerank':
+                            async def _handle_rerank():
+                                try:
+                                    result = await rerank_tasks(uid=uid)
+                                    _send_message_event(RerankCompleteEvent(updated_tasks=result['updated_tasks']))
+                                except Exception as e:
+                                    logger.error(f"Task reranking failed: {e} {uid} {session_id}")
+                            spawn(_handle_rerank())
+
+                        elif json_data.get('type') == 'task_dedup':
+                            async def _handle_dedup():
+                                try:
+                                    result = await dedup_tasks(uid=uid)
+                                    _send_message_event(DedupCompleteEvent(
+                                        deleted_ids=result['deleted_ids'], reason=result['reason'],
+                                    ))
+                                except Exception as e:
+                                    logger.error(f"Task dedup failed: {e} {uid} {session_id}")
+                            spawn(_handle_dedup())
+
                     except json.JSONDecodeError:
                         logger.info(
                             f"Received non-json text message: {sanitize(message.get('text'))} {uid} {session_id}"
