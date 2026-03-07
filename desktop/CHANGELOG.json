@@ -1,14 +1,19 @@
 {
-  "unreleased": [
-    "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
-    "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
-    "Floating bar now follows your active app across monitors",
-    "Screenshots now capture the screen where your cursor is, not just the primary display",
-    "Fixed focus notifications not detecting distractions like YouTube and TikTok",
-    "Improved advice/tips quality with better prompts",
-    "Removed notification sound from focus alerts"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.0.1",
+      "date": "2026-03-07",
+      "changes": [
+        "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
+        "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
+        "Floating bar now follows your active app across monitors",
+        "Screenshots now capture the screen where your cursor is, not just the primary display",
+        "Fixed focus notifications not detecting distractions like YouTube and TikTok",
+        "Improved advice/tips quality with better prompts",
+        "Removed notification sound from focus alerts"
+      ]
+    },
     {
       "version": "0.11.48",
       "date": "2026-03-03",
