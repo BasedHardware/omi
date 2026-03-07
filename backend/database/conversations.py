@@ -5,6 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -881,18 +882,30 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
+def update_conversation_segments(
+    uid: str,
+    conversation_id: str,
+    segments: List[dict],
+    finished_at: datetime = None,
+    data_protection_level: str = None,
+):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-    if not doc_snapshot.exists:
-        return
-
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    if data_protection_level is not None:
+        doc_level = data_protection_level
+    else:
+        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
+        if not doc_snapshot.exists:
+            return
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
     if finished_at:
         update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    doc_ref.update(prepared_payload)
+    try:
+        doc_ref.update(prepared_payload)
+    except NotFound:
+        # Document was deleted between cache read and write — safe to skip
+        return
 
 
 # ***********************************
