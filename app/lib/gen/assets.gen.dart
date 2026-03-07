@@ -294,6 +294,10 @@ class $AssetsImagesGen {
   AssetGenImage get plaudNotePin =>
       const AssetGenImage('assets/images/plaud_note_pin.webp');
 
+  /// File path: assets/images/pocket_device.png
+  AssetGenImage get pocketDevice =>
+      const AssetGenImage('assets/images/pocket_device.png');
+
   /// File path: assets/images/recording_green_circle_icon.png
   AssetGenImage get recordingGreenCircleIcon =>
       const AssetGenImage('assets/images/recording_green_circle_icon.png');
@@ -403,6 +407,7 @@ class $AssetsImagesGen {
     onboardingBg6,
     onboarding,
     plaudNotePin,
+    pocketDevice,
     recordingGreenCircleIcon,
     slackLogo,
     speaker0Icon,
