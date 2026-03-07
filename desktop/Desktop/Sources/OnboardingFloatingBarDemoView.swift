@@ -1,25 +1,18 @@
 import SwiftUI
 import AppKit
-import MarkdownUI
 
-/// Onboarding step: prompts user to press ⌘ Enter, then reveals an embedded
-/// floating bar inside the onboarding where they can ask a question.
+/// Onboarding step: prompts user to press ⌘+Enter, then activates the real
+/// floating bar at the top of the screen. Shows Continue after the AI responds.
 struct OnboardingFloatingBarDemoView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var chatProvider: ChatProvider
     var onComplete: () -> Void
     var onSkip: () -> Void
 
-    @State private var showBar = false
-    @State private var inputText = ""
-    @State private var responseText = ""
-    @State private var isLoading = false
-    @State private var showResponse = false
-    @State private var querySubmitted = false
-    @State private var doneResponding = false
+    @State private var barActivated = false
+    @State private var showContinue = false
     @State private var pulseAnimation = false
     @State private var keyMonitor: Any?
-    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,33 +74,38 @@ struct OnboardingFloatingBarDemoView: View {
                         .lineSpacing(4)
                 }
 
-                if showBar {
-                    // Embedded floating bar
-                    embeddedBarView
-                        .frame(maxWidth: 480)
-                        .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.95)))
-                } else {
+                if !barActivated {
                     // Keyboard shortcut hint
                     VStack(spacing: 12) {
                         Text("Try it now")
                             .font(.system(size: 13))
                             .foregroundColor(OmiColors.textTertiary)
 
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             keyCap("⌘")
+                            Text("+")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(OmiColors.textTertiary)
                             keyCap("Enter")
                         }
                     }
                     .padding(.top, 4)
                     .transition(.opacity)
+                } else if !showContinue {
+                    // Waiting for user to type and get a response
+                    Text("Type a question in the floating bar above")
+                        .font(.system(size: 13))
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.top, 4)
+                        .transition(.opacity)
                 }
             }
             .padding(.horizontal, 40)
 
             Spacer()
 
-            // Bottom button
-            if doneResponding {
+            // Bottom button — only after AI response completes
+            if showContinue {
                 Button(action: onComplete) {
                     Text("Continue")
                         .font(.system(size: 15, weight: .semibold))
@@ -125,15 +123,49 @@ struct OnboardingFloatingBarDemoView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
-            // Temporarily unregister the global Ask Omi shortcut so it doesn't
-            // open the real floating bar on another monitor during onboarding
+            // Set up the real floating bar (creates the window if needed)
+            FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+            // Unregister global shortcuts so we handle Cmd+Enter ourselves
             GlobalShortcutManager.shared.unregisterShortcuts()
             installKeyMonitor()
         }
         .onDisappear {
             removeKeyMonitor()
-            // Re-register global shortcuts
+            // Close the AI conversation panel on the floating bar so the next step starts clean
+            if FloatingControlBarManager.shared.barState?.showingAIConversation == true {
+                FloatingControlBarManager.shared.toggleAIInput()
+            }
+            // Re-register global shortcuts for subsequent steps and normal use
             GlobalShortcutManager.shared.registerShortcuts()
+        }
+        .onChange(of: barActivated) { _, activated in
+            if activated {
+                Task { await waitForResponse() }
+            }
+        }
+    }
+
+    // MARK: - Response Observer
+
+    /// Poll the floating bar state until the AI finishes responding.
+    @MainActor
+    private func waitForResponse() async {
+        guard let barState = FloatingControlBarManager.shared.barState else { return }
+        // Poll every 0.5s for up to 60s
+        for _ in 0..<120 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if barState.showingAIResponse,
+               let msg = barState.currentAIMessage,
+               !msg.isStreaming {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showContinue = true
+                }
+                return
+            }
+        }
+        // Timeout — show Continue anyway
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showContinue = true
         }
     }
 
@@ -141,14 +173,13 @@ struct OnboardingFloatingBarDemoView: View {
 
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let mods = event.modifierFlags.intersection(NSEvent.ModifierFlags.deviceIndependentFlagsMask)
+            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if mods == .command && event.keyCode == 36 { // 36 = Return
-                if !showBar {
+                if !barActivated {
+                    // Activate the real floating bar's AI input
+                    FloatingControlBarManager.shared.openAIInput()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        showBar = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        isInputFocused = true
+                        barActivated = true
                     }
                     return nil
                 }
@@ -161,169 +192,6 @@ struct OnboardingFloatingBarDemoView: View {
         if let monitor = keyMonitor {
             NSEvent.removeMonitor(monitor)
             keyMonitor = nil
-        }
-    }
-
-    // MARK: - Embedded Bar
-
-    private var embeddedBarView: some View {
-        VStack(spacing: 0) {
-            if !querySubmitted {
-                // Input view
-                HStack(spacing: 6) {
-                    ZStack(alignment: .topLeading) {
-                        if inputText.isEmpty {
-                            Text("Try asking: \"Who am I?\"")
-                                .scaledFont(size: 13)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 8)
-                        }
-
-                        TextField("", text: $inputText)
-                            .textFieldStyle(.plain)
-                            .scaledFont(size: 13)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
-                            .focused($isInputFocused)
-                            .onSubmit {
-                                submitQuery()
-                            }
-                    }
-                    .padding(.horizontal, 4)
-                    .frame(height: 40)
-
-                    Button(action: submitQuery) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .scaledFont(size: 24)
-                            .foregroundColor(
-                                inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? .secondary : .white
-                            )
-                    }
-                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-            } else {
-                // Response view
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.6)
-                                .frame(width: 16, height: 16)
-                            Text("thinking")
-                                .scaledFont(size: 14)
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text("omi says")
-                                .scaledFont(size: 14)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                    }
-
-                    // Question
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(inputText.isEmpty ? "Who am I?" : inputText)
-                            .scaledFont(size: 13)
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(8)
-
-                    // Response
-                    if showResponse && !responseText.isEmpty {
-                        ScrollView {
-                            SelectableMarkdown(text: responseText, sender: .ai)
-                                .textSelection(.enabled)
-                                .environment(\.colorScheme, .dark)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 200)
-                        .padding(.horizontal, 4)
-                    } else if isLoading {
-                        TypingIndicator()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
-                    }
-                }
-                .padding(16)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.ultraThinMaterial)
-                .environment(\.colorScheme, .dark)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-        )
-    }
-
-    // MARK: - Query
-
-    private func submitQuery() {
-        let query = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return }
-        querySubmitted = true
-        isLoading = true
-
-        Task {
-            let systemPrompt = """
-            You are omi, a personal AI that knows the user well from analyzing their screen activity. \
-            The user is trying the floating bar for the first time during onboarding. \
-            Give a warm, personalized response. If they ask "Who am I?", respond with what you know \
-            about them from the onboarding conversation — their name, interests, what they've been working on. \
-            Keep it brief (2-4 sentences) and friendly. If you don't know much yet, be honest but encouraging.
-            """
-
-            await chatProvider.sendMessage(query, systemPromptPrefix: systemPrompt)
-            await observeResponse()
-        }
-    }
-
-    @MainActor
-    private func observeResponse() async {
-        var attempts = 0
-        while attempts < 60 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            attempts += 1
-
-            if let lastMessage = chatProvider.messages.last,
-               lastMessage.sender == .ai {
-                let text = lastMessage.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty {
-                    responseText = text
-                    if !showResponse {
-                        withAnimation(.easeIn(duration: 0.2)) {
-                            showResponse = true
-                        }
-                    }
-                }
-
-                if !lastMessage.isStreaming && !chatProvider.isSending {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isLoading = false
-                        doneResponding = true
-                    }
-                    return
-                }
-            }
-        }
-
-        withAnimation(.easeInOut(duration: 0.3)) {
-            isLoading = false
-            doneResponding = true
         }
     }
 
