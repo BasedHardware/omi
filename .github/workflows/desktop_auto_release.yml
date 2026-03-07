@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   tag-release:
@@ -87,27 +86,11 @@ jobs:
           git add desktop/CHANGELOG.json
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # Tag the commit that includes the consolidated changelog
-          # NOTE: commit message must NOT contain [skip ci] — Codemagic uses this tag to trigger builds
+          # Push changelog commit directly to main.
+          # This commit only touches desktop/CHANGELOG.json and won't retrigger this workflow due path filters.
+          git push origin HEAD:main
+
+          # Tag the commit that includes the consolidated changelog.
+          # NOTE: commit message must NOT contain [skip ci] — Codemagic uses this tag to trigger builds.
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
-
-      - name: Create PR to sync changelog back to main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="changelog/v${VERSION}"
-
-          git checkout -b "$BRANCH"
-          git push origin "$BRANCH"
-
-          gh pr create \
-            --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
-            --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
-            --base main \
-            --head "$BRANCH"
-
-          gh pr merge "$BRANCH" --merge --admin || \
-          gh pr merge "$BRANCH" --merge --auto || \
-          echo "PR merge requires manual approval"
