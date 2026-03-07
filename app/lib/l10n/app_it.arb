@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Il cambio di ambiente richiede il riavvio dell'app",
     "shared": "Condiviso",
     "onlyYouCanSeeConversation": "Solo tu puoi vedere questa conversazione",
-    "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare"
+    "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
+    "tasksCleanTodayTitle": "Pulire le attività di oggi?",
+    "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze"
 }

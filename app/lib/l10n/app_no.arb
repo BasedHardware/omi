@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Bytting krever omstart av appen",
     "shared": "Delt",
     "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
-    "anyoneWithLinkCanView": "Alle med lenken kan se"
+    "anyoneWithLinkCanView": "Alle med lenken kan se",
+    "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
+    "tasksCleanTodayMessage": "Dette vil kun fjerne frister"
 }

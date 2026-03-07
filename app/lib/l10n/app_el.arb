@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Η εναλλαγή απαιτεί επανεκκίνηση της εφαρμογής",
     "shared": "Κοινόχρηστο",
     "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
-    "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει"
+    "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
+    "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
+    "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες"
 }

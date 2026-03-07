@@ -8117,4 +8117,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => '任何拥有链接的人都可以查看';
+
+  @override
+  String get tasksCleanTodayTitle => '清理今天的任务？';
+
+  @override
+  String get tasksCleanTodayMessage => '这只会移除截止日期';
 }

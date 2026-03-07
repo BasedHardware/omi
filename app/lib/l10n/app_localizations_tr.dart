@@ -8280,4 +8280,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bağlantıya sahip olan herkes görüntüleyebilir';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bugünün görevleri temizlensin mi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bu işlem yalnızca son tarihleri kaldırır';
 }

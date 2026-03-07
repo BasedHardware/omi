@@ -1352,7 +1352,14 @@ class TasksStore: ObservableObject {
         }
     }
 
-    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
+    func updateTask(
+        _ task: TaskActionItem,
+        description: String? = nil,
+        dueAt: Date? = nil,
+        clearDueAt: Bool = false,
+        priority: String? = nil,
+        recurrenceRule: String? = nil
+    ) async {
         // Track manual edits: if description is changed, mark as manually edited
         var metadata: [String: Any]? = nil
         if description != nil {
@@ -1364,11 +1371,13 @@ class TasksStore: ObservableObject {
         }
 
         // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
+        var localUpdateSucceeded = true
         do {
             try await ActionItemStorage.shared.updateActionItemFields(
                 backendId: task.id,
                 description: description,
                 dueAt: dueAt,
+                clearDueAt: clearDueAt,
                 priority: priority,
                 metadata: metadata,
                 recurrenceRule: recurrenceRule
@@ -1376,11 +1385,11 @@ class TasksStore: ObservableObject {
         } catch {
             logError("TasksStore: Failed to update task locally", error: error)
             self.error = error.localizedDescription
-            return
+            localUpdateSucceeded = false
         }
 
         // 2. Read back from SQLite and update in-memory arrays immediately
-        if let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
+        if localUpdateSucceeded, let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
             if task.completed {
                 if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
                     completedTasks[index] = updatedTask
@@ -1398,12 +1407,21 @@ class TasksStore: ObservableObject {
                 id: task.id,
                 description: description,
                 dueAt: dueAt,
+                clearDueAt: clearDueAt,
                 priority: priority,
                 metadata: metadata,
                 recurrenceRule: recurrenceRule
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+            // Keep in-memory arrays aligned with server echo immediately.
+            if task.completed {
+                if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
+                    completedTasks[index] = apiResult
+                }
+            } else if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
+                incompleteTasks[index] = apiResult
+            }
         } catch {
             // Local change persists; next successful sync will reconcile
             self.error = error.localizedDescription

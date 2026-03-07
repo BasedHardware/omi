@@ -2692,5 +2692,7 @@
     "switchRequiresRestart": "Переключение требует перезапуска приложения",
     "shared": "Общий",
     "onlyYouCanSeeConversation": "Только вы можете видеть этот разговор",
-    "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать"
+    "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать",
+    "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
+    "tasksCleanTodayMessage": "Это удалит только сроки"
 }

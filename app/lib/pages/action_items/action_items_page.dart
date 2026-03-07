@@ -273,6 +273,44 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     provider.updateActionItemDueDate(item, newDueDate);
   }
 
+  Future<void> _confirmCleanTodayTasks(ActionItemsProvider provider) async {
+    HapticFeedback.lightImpact();
+    final shouldClean = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F22),
+        title: Text(
+          context.l10n.tasksCleanTodayTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          context.l10n.tasksCleanTodayMessage,
+          style: TextStyle(color: Colors.grey[300], fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              context.l10n.cancel,
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              context.l10n.confirm,
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldClean != true) return;
+
+    await provider.clearTodayDeadlinesForIncompleteTasks();
+  }
+
   int _getIndentLevel(ActionItemWithMetadata item) {
     return item.indentLevel;
   }
@@ -649,7 +687,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         ),
                       ),
                       const Spacer(),
-                      if (orderedItems.isNotEmpty)
+                      if (category == TaskCategory.today && !provider.showCompletedView)
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            splashRadius: 10,
+                            onPressed: () => _confirmCleanTodayTasks(provider),
+                            icon: Icon(
+                              Icons.close,
+                              size: 12,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        )
+                      else if (orderedItems.isNotEmpty)
                         Text(
                           '${orderedItems.length}',
                           style: TextStyle(

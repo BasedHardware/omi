@@ -2658,5 +2658,7 @@
     "switchRequiresRestart": "El cambio requiere reiniciar la aplicación",
     "shared": "Compartido",
     "onlyYouCanSeeConversation": "Solo tú puedes ver esta conversación",
-    "anyoneWithLinkCanView": "Cualquier persona con el enlace puede ver"
+    "anyoneWithLinkCanView": "Cualquier persona con el enlace puede ver",
+    "tasksCleanTodayTitle": "¿Limpiar las tareas de hoy?",
+    "tasksCleanTodayMessage": "Esto solo eliminará los plazos"
 }

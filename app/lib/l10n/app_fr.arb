@@ -2692,5 +2692,7 @@
     "switchRequiresRestart": "Le changement d'environnement nécessite un redémarrage de l'application",
     "shared": "Partagé",
     "onlyYouCanSeeConversation": "Vous seul pouvez voir cette conversation",
-    "anyoneWithLinkCanView": "Toute personne disposant du lien peut voir"
+    "anyoneWithLinkCanView": "Toute personne disposant du lien peut voir",
+    "tasksCleanTodayTitle": "Nettoyer les tâches d’aujourd’hui ?",
+    "tasksCleanTodayMessage": "Cela supprimera uniquement les échéances"
 }

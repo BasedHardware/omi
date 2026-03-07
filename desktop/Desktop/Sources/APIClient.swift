@@ -1539,6 +1539,7 @@ extension APIClient {
         completed: Bool? = nil,
         description: String? = nil,
         dueAt: Date? = nil,
+        clearDueAt: Bool = false,
         priority: String? = nil,
         metadata: [String: Any]? = nil,
         goalId: String? = nil,
@@ -1549,6 +1550,7 @@ extension APIClient {
             let completed: Bool?
             let description: String?
             let dueAt: String?
+            let includeDueAt: Bool
             let priority: String?
             let metadata: String?
             let goalId: String?
@@ -1561,6 +1563,24 @@ extension APIClient {
                 case goalId = "goal_id"
                 case relevanceScore = "relevance_score"
                 case recurrenceRule = "recurrence_rule"
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(completed, forKey: .completed)
+                try container.encodeIfPresent(description, forKey: .description)
+                if includeDueAt {
+                    if let dueAt {
+                        try container.encode(dueAt, forKey: .dueAt)
+                    } else {
+                        try container.encodeNil(forKey: .dueAt)
+                    }
+                }
+                try container.encodeIfPresent(priority, forKey: .priority)
+                try container.encodeIfPresent(metadata, forKey: .metadata)
+                try container.encodeIfPresent(goalId, forKey: .goalId)
+                try container.encodeIfPresent(relevanceScore, forKey: .relevanceScore)
+                try container.encodeIfPresent(recurrenceRule, forKey: .recurrenceRule)
             }
         }
 
@@ -1579,6 +1599,7 @@ extension APIClient {
             completed: completed,
             description: description,
             dueAt: dueAt.map { formatter.string(from: $0) },
+            includeDueAt: clearDueAt || dueAt != nil,
             priority: priority,
             metadata: metadataString,
             goalId: goalId,

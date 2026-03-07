@@ -8331,4 +8331,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει';
+
+  @override
+  String get tasksCleanTodayTitle => 'Να καθαριστούν οι σημερινές εργασίες;';
+
+  @override
+  String get tasksCleanTodayMessage => 'Αυτό θα αφαιρέσει μόνο τις προθεσμίες';
 }

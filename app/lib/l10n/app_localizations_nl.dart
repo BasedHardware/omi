@@ -8295,4 +8295,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Iedereen met de link kan bekijken';
+
+  @override
+  String get tasksCleanTodayTitle => 'Taken van vandaag opschonen?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
 }

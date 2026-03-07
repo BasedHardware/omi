@@ -84,6 +84,9 @@ cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 # Copy app icon
 cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 
+# Copy Firebase config for desktop auth
+cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+
 # Update Info.plist with actual values
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
@@ -128,7 +131,8 @@ if [ -d "$ACP_BRIDGE_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/acp-bridge"
     cp -Rf "$ACP_BRIDGE_DIR/dist" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     cp -f "$ACP_BRIDGE_DIR/package.json" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
-    cp -Rf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
+    # Preserve symlinks inside node_modules (some optional Playwright links are intentionally dangling on macOS)
+    cp -RPf "$ACP_BRIDGE_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/acp-bridge/"
     echo "Copied acp-bridge to bundle"
 fi
 

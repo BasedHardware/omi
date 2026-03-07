@@ -2626,5 +2626,7 @@
     "switchRequiresRestart": "Canviar d'entorn requereix reiniciar l'aplicació",
     "shared": "Compartit",
     "onlyYouCanSeeConversation": "Només tu pots veure aquesta conversa",
-    "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure"
+    "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure",
+    "tasksCleanTodayTitle": "Netejar les tasques d'avui?",
+    "tasksCleanTodayMessage": "Això només eliminarà els terminis"
 }

@@ -8262,4 +8262,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Alle med lenken kan se';
+
+  @override
+  String get tasksCleanTodayTitle => 'Rydde dagens oppgaver?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Dette vil kun fjerne frister';
 }

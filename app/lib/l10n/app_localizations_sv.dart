@@ -8271,4 +8271,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Alla med länken kan visa';
+
+  @override
+  String get tasksCleanTodayTitle => 'Rensa dagens uppgifter?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
 }

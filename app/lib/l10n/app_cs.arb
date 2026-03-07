@@ -2626,5 +2626,7 @@
     "switchRequiresRestart": "Přepnutí vyžaduje restart aplikace",
     "shared": "Sdíleno",
     "onlyYouCanSeeConversation": "Tuto konverzaci můžete vidět pouze vy",
-    "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit"
+    "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
+    "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
+    "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny"
 }

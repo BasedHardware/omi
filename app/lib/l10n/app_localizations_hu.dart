@@ -8305,4 +8305,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bárki megtekintheti, akinek megvan a link';
+
+  @override
+  String get tasksCleanTodayTitle => 'Törlöd a mai feladatokat?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
 }

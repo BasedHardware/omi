@@ -2666,5 +2666,7 @@
     "switchRequiresRestart": "Skift kræver genstart af appen",
     "shared": "Delt",
     "onlyYouCanSeeConversation": "Kun du kan se denne samtale",
-    "anyoneWithLinkCanView": "Alle med linket kan se"
+    "anyoneWithLinkCanView": "Alle med linket kan se",
+    "tasksCleanTodayTitle": "Ryd dagens opgaver?",
+    "tasksCleanTodayMessage": "Dette fjerner kun deadlines"
 }

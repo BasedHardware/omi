@@ -8278,4 +8278,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Siapa pun yang memiliki tautan dapat melihat';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bersihkan tugas hari ini?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ini hanya akan menghapus tenggat waktu';
 }

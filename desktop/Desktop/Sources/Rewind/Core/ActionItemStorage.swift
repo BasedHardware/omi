@@ -825,6 +825,7 @@ actor ActionItemStorage {
         backendId: String,
         description: String? = nil,
         dueAt: Date? = nil,
+        clearDueAt: Bool = false,
         priority: String? = nil,
         metadata: [String: Any]? = nil,
         recurrenceRule: String? = nil
@@ -840,7 +841,9 @@ actor ActionItemStorage {
             if let description = description {
                 record.description = description
             }
-            if let dueAt = dueAt {
+            if clearDueAt {
+                record.dueAt = nil
+            } else if let dueAt = dueAt {
                 record.dueAt = dueAt
             }
             if let priority = priority {

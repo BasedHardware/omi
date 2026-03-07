@@ -2626,5 +2626,7 @@
     "switchRequiresRestart": "Превключването изисква рестартиране на приложението",
     "shared": "Споделено",
     "onlyYouCanSeeConversation": "Само вие можете да видите този разговор",
-    "anyoneWithLinkCanView": "Всеки с връзката може да преглежда"
+    "anyoneWithLinkCanView": "Всеки с връзката може да преглежда",
+    "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
+    "tasksCleanTodayMessage": "Това само ще премахне крайните срокове"
 }

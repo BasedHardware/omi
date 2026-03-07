@@ -2625,5 +2625,7 @@
     "switchRequiresRestart": "Wechsel erfordert Neustart der App",
     "shared": "Geteilt",
     "onlyYouCanSeeConversation": "Nur Sie können diese Unterhaltung sehen",
-    "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen"
+    "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen",
+    "tasksCleanTodayTitle": "Heutige Aufgaben bereinigen?",
+    "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt"
 }

@@ -8266,4 +8266,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Kuka tahansa linkin haltija voi katsella';
+
+  @override
+  String get tasksCleanTodayTitle => 'Siivota tämän päivän tehtävät?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tämä poistaa vain määräajat';
 }

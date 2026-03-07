@@ -8309,4 +8309,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Oricine are linkul poate vizualiza';
+
+  @override
+  String get tasksCleanTodayTitle => 'Curăți sarcinile de azi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Aceasta va elimina doar termenele limită';
 }

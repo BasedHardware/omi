@@ -8302,4 +8302,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
+
+  @override
+  String get tasksCleanTodayTitle => 'Да изчистим днешните задачи?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Това само ще премахне крайните срокове';
 }

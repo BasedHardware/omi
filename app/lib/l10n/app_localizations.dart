@@ -15440,6 +15440,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Anyone with the link can view'**
   String get anyoneWithLinkCanView;
+
+  /// Confirmation dialog title for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'Clean today\'s tasks?'**
+  String get tasksCleanTodayTitle;
+
+  /// Confirmation dialog message for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'This will only remove deadlines'**
+  String get tasksCleanTodayMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

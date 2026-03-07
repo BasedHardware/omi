@@ -2658,5 +2658,7 @@
     "switchRequiresRestart": "切替にはアプリの再起動が必要です",
     "shared": "共有済み",
     "onlyYouCanSeeConversation": "この会話を見ることができるのはあなただけです",
-    "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます"
+    "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます",
+    "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
+    "tasksCleanTodayMessage": "期限のみ削除されます"
 }

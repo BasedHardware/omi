@@ -2657,5 +2657,7 @@
     "switchRequiresRestart": "Wisselen vereist herstart van de app",
     "shared": "Gedeeld",
     "onlyYouCanSeeConversation": "Alleen jij kunt dit gesprek zien",
-    "anyoneWithLinkCanView": "Iedereen met de link kan bekijken"
+    "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
+    "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
+    "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd"
 }

@@ -8318,4 +8318,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Chiunque abbia il link può visualizzare';
+
+  @override
+  String get tasksCleanTodayTitle => 'Pulire le attività di oggi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Questo rimuoverà solo le scadenze';
 }

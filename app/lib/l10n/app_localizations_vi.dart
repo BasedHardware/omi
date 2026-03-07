@@ -8271,4 +8271,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
+
+  @override
+  String get tasksCleanTodayTitle => 'Dọn các nhiệm vụ hôm nay?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
 }
