@@ -13,7 +13,7 @@ struct OnboardingView: View {
     @State private var showGraphHints = false
     @State private var hintsHovered = false
 
-    let steps = ["Video", "Chat", "Notifications", "FloatingBar", "Tasks"]
+    let steps = ["Video", "Chat", "Notifications", "FloatingBar", "VoiceInput", "Tasks"]
 
     var body: some View {
         ZStack {
@@ -43,9 +43,9 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            // If currentStep is beyond the 4-step flow, clamp to last step
-            if currentStep > 4 {
-                currentStep = 4
+            // If currentStep is beyond the 6-step flow (0-5), clamp to last step
+            if currentStep > 5 {
+                currentStep = 5
             }
         }
         .task {
@@ -180,11 +180,25 @@ struct OnboardingView: View {
                         currentStep = 4
                     }
                 )
+            } else if currentStep == 4 {
+                // Step 4: Voice Input Demo
+                OnboardingVoiceInputDemoView(
+                    appState: appState,
+                    chatProvider: chatProvider,
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "VoiceInput")
+                        currentStep = 5
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "VoiceInput_Skipped")
+                        currentStep = 5
+                    }
+                )
             } else {
-                // Step 4: Tasks
+                // Step 5: Tasks
                 OnboardingTasksStepView(
                     onComplete: {
-                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "Tasks")
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Tasks")
                         handleOnboardingComplete()
                     }
                 )
