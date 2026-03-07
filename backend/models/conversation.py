@@ -257,7 +257,9 @@ class ConversationSource(str, Enum):
 
     @classmethod
     def _missing_(cls, value):
-        return cls.unknown
+        if isinstance(value, str):
+            return cls.unknown
+        return None
 
 
 class ConversationVisibility(str, Enum):
