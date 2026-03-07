@@ -92,6 +92,8 @@ struct OnboardingChatView: View {
     @State private var hasStarted: Bool = false
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
+    @State private var awaitingGoalInput: Bool = false
+    @State private var createdGoalTitles: Set<String> = []
     @State private var isGrantingPermission: Bool = false
     @State private var pendingPermissionType: String? = nil  // e.g. "microphone" — waiting for user to grant
     @FocusState private var isInputFocused: Bool
@@ -111,9 +113,19 @@ struct OnboardingChatView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Setting up omi")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(OmiColors.textPrimary)
+                if let logoImage = whiteTemplateLogoImage() {
+                    Image(nsImage: logoImage)
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundColor(.white)
+                        .scaledToFit()
+                        .frame(width: 52, height: 18)
+                        .accessibilityLabel("omi")
+                } else {
+                    Text("omi")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
 
                 Spacer()
 
@@ -141,12 +153,15 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                                OnboardingChatBubble(message: message)
+                                OnboardingChatBubble(
+                                    message: message,
+                                    hidePermissionImages: !quickReplyOptions.isEmpty || pendingPermissionType != nil || awaitingGoalInput
+                                )
                                     .id(message.id)
                         }
 
                         // Parallel exploration card (appears after scan_files)
-                        if explorationRunning || (explorationCompleted && !explorationText.isEmpty) {
+                        if !shouldHideExplorationCard && (explorationRunning || (explorationCompleted && !explorationText.isEmpty)) {
                             ExplorationProfileCard(
                                 text: explorationText,
                                 isRunning: explorationRunning,
@@ -448,6 +463,12 @@ struct OnboardingChatView: View {
         }
         ChatToolExecutor.onQuickReplyOptions = { options in
             quickReplyOptions = options
+            if options.contains(where: { isTypeYourOwnOption($0) }) {
+                awaitingGoalInput = true
+            }
+        }
+        ChatToolExecutor.onQuickReplyQuestion = { question in
+            awaitingGoalInput = isGoalPriorityQuestion(question)
         }
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
             guard let vm = graphViewModel else { return }
@@ -545,6 +566,9 @@ struct OnboardingChatView: View {
         ChatToolExecutor.resumeFollowup(with: text)
 
         Task {
+            if awaitingGoalInput {
+                await maybeCreateGoal(from: text, source: "typed")
+            }
             await chatProvider.sendMessage(text)
         }
     }
@@ -583,6 +607,8 @@ struct OnboardingChatView: View {
                 if result.contains("granted") {
                     // Granted immediately — tell the AI
                     await chatProvider.sendMessage("\(option) — done!")
+                } else if result.contains("move omi to /Applications first") {
+                    await chatProvider.sendMessage("Move omi to Applications, reopen it, then tap Grant Notifications again.")
                 } else {
                     // Pending — wait silently for the permission check timer to detect it
                     // The onChange handlers for appState.has*Permission will send the message
@@ -591,10 +617,90 @@ struct OnboardingChatView: View {
             }
         } else {
             // Regular quick reply — resume the blocked ask_followup tool, then send as message
+            let shouldCreateFromSelection = awaitingGoalInput && !isTypeYourOwnOption(option)
+            if shouldCreateFromSelection {
+                awaitingGoalInput = false
+            } else if isTypeYourOwnOption(option) {
+                awaitingGoalInput = true
+            }
             ChatToolExecutor.resumeFollowup(with: option)
             Task {
+                if shouldCreateFromSelection {
+                    await maybeCreateGoal(from: option, source: "selected")
+                }
                 await chatProvider.sendMessage(option)
             }
+        }
+    }
+
+    private var shouldHideExplorationCard: Bool {
+        !quickReplyOptions.isEmpty || pendingPermissionType != nil || awaitingGoalInput
+    }
+
+    private func whiteTemplateLogoImage() -> NSImage? {
+        guard
+            let logoURL = Bundle.resourceBundle.url(forResource: "omi_text_logo", withExtension: "png"),
+            let loadedLogoImage = NSImage(contentsOf: logoURL)
+        else {
+            return nil
+        }
+        let logoImage = loadedLogoImage.copy() as? NSImage ?? loadedLogoImage
+        logoImage.isTemplate = true
+        return logoImage
+    }
+
+    private func isGoalPriorityQuestion(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("top one goal")
+            || lower.contains("top goal")
+            || lower.contains("top priority")
+            || lower.contains("priority right now")
+    }
+
+    private func isTypeYourOwnOption(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("type my own") || lower.contains("i'll type my own") || lower.contains("i’ll type my own")
+    }
+
+    private func normalizedGoalTitle(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    private func shouldSkipGoalCreation(_ title: String) -> Bool {
+        if title.isEmpty {
+            return true
+        }
+        let lower = title.lowercased()
+        if lower == "skip" || lower == "done" || lower.contains("type my own") {
+            return true
+        }
+        return false
+    }
+
+    private func maybeCreateGoal(from rawText: String, source: String) async {
+        let title = normalizedGoalTitle(rawText)
+        guard !shouldSkipGoalCreation(title) else { return }
+
+            let dedupeKey = title.lowercased()
+            guard !createdGoalTitles.contains(dedupeKey) else { return }
+
+        do {
+            let goal = try await APIClient.shared.createGoal(
+                title: title,
+                description: "Added from onboarding",
+                goalType: .boolean,
+                targetValue: 1,
+                currentValue: 0,
+                source: "onboarding_\(source)"
+            )
+            _ = try? await GoalStorage.shared.syncServerGoal(goal)
+            createdGoalTitles.insert(dedupeKey)
+            awaitingGoalInput = false
+            log("OnboardingChat: Created goal from onboarding input: \(title)")
+        } catch {
+            logError("OnboardingChat: Failed to create goal from onboarding input", error: error)
         }
     }
 
@@ -860,6 +966,7 @@ struct OnboardingChatView: View {
 
 struct OnboardingChatBubble: View {
     let message: ChatMessage
+    var hidePermissionImages: Bool = false
 
     /// Whether this AI message has any visible content (non-empty text or visible tool calls)
     private var hasVisibleContent: Bool {
@@ -930,7 +1037,12 @@ struct OnboardingChatBubble: View {
                             ForEach(message.contentBlocks) { block in
                                 switch block {
                                 case .toolCall(_, let name, let status, _, let input, _):
-                                    let indicator = OnboardingToolIndicator(toolName: name, status: status, input: input)
+                                    let indicator = OnboardingToolIndicator(
+                                        toolName: name,
+                                        status: status,
+                                        input: input,
+                                        hidePermissionImage: hidePermissionImages
+                                    )
                                     if !indicator.isHidden {
                                         indicator
                                     }
@@ -976,6 +1088,7 @@ struct OnboardingToolIndicator: View {
     let toolName: String
     let status: ToolCallStatus
     var input: ToolCallInput? = nil
+    var hidePermissionImage: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -995,7 +1108,7 @@ struct OnboardingToolIndicator: View {
             }
 
             // Show permission guide image automatically for scan_files and request_permission
-            if let permImage = permissionImageType {
+            if !hidePermissionImage, let permImage = permissionImageType {
                 OnboardingPermissionImage(permissionType: permImage)
             }
         }
@@ -1005,6 +1118,7 @@ struct OnboardingToolIndicator: View {
     /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
     var isHidden: Bool {
         cleanToolName == "ask_followup"
+            || cleanToolName == "save_knowledge_graph"
     }
 
     /// Strip MCP prefix from tool name (e.g. "mcp__omi-tools__scan_files" → "scan_files")
@@ -1040,17 +1154,13 @@ struct OnboardingToolIndicator: View {
         case "complete_onboarding":
             return status == .running ? "Finishing setup..." : "Setup complete"
         case "save_knowledge_graph":
-            return status == .running ? "Building knowledge graph..." : "Knowledge graph saved"
+            return status == .running ? "Updating your profile..." : "Profile updated"
         default:
-            if toolName.hasPrefix("WebSearch:") {
-                let query = String(toolName.dropFirst("WebSearch: ".count)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-                return status == .running ? "Searching: \(query)" : "Searched: \(query)"
-            }
             if toolName == "WebSearch" || toolName.contains("search") || toolName.contains("web") {
-                return status == .running ? "Searching the web..." : "Web search complete"
+                return status == .running ? "Learning more about you..." : "Learned more about you"
             }
             if toolName.hasPrefix("WebFetch:") || toolName == "WebFetch" {
-                return status == .running ? "Reading webpage..." : "Webpage read"
+                return status == .running ? "Reading context..." : "Context updated"
             }
             return status == .running ? "Working..." : "Done"
         }
