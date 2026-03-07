@@ -748,25 +748,33 @@ def get_conversations(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    conversations = conversations_db.get_conversations(
-        uid,
-        limit,
-        offset,
-        include_discarded=False,
-        statuses=["completed"],
-        start_date=start_date,
-        end_date=end_date,
-        categories=[c.value for c in category_list],
-    )
+    if include_transcript:
+        conversations = conversations_db.get_conversations(
+            uid,
+            limit,
+            offset,
+            include_discarded=False,
+            statuses=["completed"],
+            start_date=start_date,
+            end_date=end_date,
+            categories=[c.value for c in category_list],
+        )
+    else:
+        conversations = conversations_db.get_conversations_lite(
+            uid,
+            limit,
+            offset,
+            include_discarded=False,
+            statuses=["completed"],
+            start_date=start_date,
+            end_date=end_date,
+            categories=[c.value for c in category_list],
+        )
 
     # Filter out locked conversations completely
     unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
-    # Remove transcript_segments if not requested
-    if not include_transcript:
-        for conv in unlocked_conversations:
-            conv.pop('transcript_segments', None)
-    else:
+    if include_transcript:
         _add_speaker_names_to_segments(uid, unlocked_conversations)
 
     return unlocked_conversations

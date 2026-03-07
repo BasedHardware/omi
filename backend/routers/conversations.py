@@ -133,17 +133,32 @@ def get_conversations(
     if len(statuses) == 0:
         statuses = "processing,completed"
 
-    conversations = conversations_db.get_conversations(
-        uid,
-        limit,
-        offset,
-        include_discarded=include_discarded,
-        statuses=statuses.split(",") if len(statuses) > 0 else [],
-        start_date=start_date,
-        end_date=end_date,
-        folder_id=folder_id,
-        starred=starred,
-    )
+    # limit=1 calls (e.g. in-progress recovery) need full hydration (transcript, photos).
+    # Only skip the expensive N+1 photo/transcript work for multi-item list fetches.
+    if limit > 1:
+        conversations = conversations_db.get_conversations_lite(
+            uid,
+            limit,
+            offset,
+            include_discarded=include_discarded,
+            statuses=statuses.split(",") if len(statuses) > 0 else [],
+            start_date=start_date,
+            end_date=end_date,
+            folder_id=folder_id,
+            starred=starred,
+        )
+    else:
+        conversations = conversations_db.get_conversations(
+            uid,
+            limit,
+            offset,
+            include_discarded=include_discarded,
+            statuses=statuses.split(",") if len(statuses) > 0 else [],
+            start_date=start_date,
+            end_date=end_date,
+            folder_id=folder_id,
+            starred=starred,
+        )
 
     for conv in conversations:
         if conv.get('is_locked', False):

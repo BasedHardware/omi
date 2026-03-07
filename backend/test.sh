@@ -36,3 +36,6 @@ pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
+pytest tests/unit/test_conversations_lite_db.py -v
+pytest tests/unit/test_conversations_router_branching.py -v
+pytest tests/unit/test_mcp_and_developer_conversations_lite.py -v
