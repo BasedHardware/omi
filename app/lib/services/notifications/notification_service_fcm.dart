@@ -206,7 +206,6 @@ class _FCMNotificationService implements NotificationInterface {
   @override
   void clearNotification(int id) => _awesomeNotifications.cancel(id);
 
-  // FIXME: Causes the different behavior on android and iOS
   bool _shouldShowForegroundNotificationOnFCMMessageReceived() {
     return Platform.isAndroid;
   }

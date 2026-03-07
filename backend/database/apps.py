@@ -10,6 +10,9 @@ from ulid import ULID
 from models.app import UsageHistoryType
 from ._client import db
 from .redis_db import get_app_reviews
+import logging
+
+logger = logging.getLogger(__name__)
 
 # *****************************
 # ********** CRUD *************
@@ -23,7 +26,7 @@ testers_collection = 'testers'
 def migrate_reviews_from_redis_to_firestore():
     apps_ref = db.collection(apps_collection).stream()
     for app in apps_ref:
-        print('migrating reviews for app:', app.id)
+        logger.info(f'migrating reviews for app: {app.id}')
         app_id = app.id
         reviews = get_app_reviews(app_id)
         for uid, review in reviews.items():

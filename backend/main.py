@@ -1,5 +1,8 @@
 import json
+import logging
 import os
+
+logging.basicConfig(level=logging.INFO)
 
 import firebase_admin
 from fastapi import FastAPI

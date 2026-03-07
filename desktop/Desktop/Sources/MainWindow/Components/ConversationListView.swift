@@ -27,8 +27,23 @@ struct ConversationListView: View {
         return f
     }()
 
-    /// Group conversations by date
-    private var groupedConversations: [(String, [ServerConversation])] {
+    /// Flat list item — either a section header or a conversation row.
+    /// Using a single flat ForEach avoids nested ForEach attribute graph depth which can cause
+    /// SwiftUI layout comparison hangs (AG::LayoutDescriptor::compare) on refresh.
+    private enum ListItem: Identifiable {
+        case header(key: String, isFirst: Bool)
+        case conversation(ServerConversation)
+
+        var id: String {
+            switch self {
+            case .header(let key, _): return "header_\(key)"
+            case .conversation(let c): return c.id
+            }
+        }
+    }
+
+    /// Flat ordered list of headers + conversations, grouped by date.
+    private var flatListItems: [ListItem] {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
@@ -54,7 +69,7 @@ struct ConversationListView: View {
         }
 
         // Sort groups: Today first, then Yesterday, then by date descending
-        return groups.keys.sorted { key1, key2 in
+        let sortedKeys = groups.keys.sorted { key1, key2 in
             if key1 == "Today" { return true }
             if key2 == "Today" { return false }
             if key1 == "Yesterday" { return true }
@@ -62,9 +77,17 @@ struct ConversationListView: View {
             let date1 = groupDates[key1] ?? .distantPast
             let date2 = groupDates[key2] ?? .distantPast
             return date1 > date2
-        }.compactMap { key in
-            groups[key].map { (key, $0) }
         }
+
+        var items: [ListItem] = []
+        for (index, key) in sortedKeys.enumerated() {
+            guard let convos = groups[key] else { continue }
+            items.append(.header(key: key, isFirst: index == 0))
+            for conv in convos {
+                items.append(.conversation(conv))
+            }
+        }
+        return items
     }
 
     var body: some View {
@@ -146,19 +169,17 @@ struct ConversationListView: View {
     }
 
     private var conversationListContent: some View {
-        let groups = groupedConversations
-        let firstGroup = groups.first?.0
+        let items = flatListItems
         return LazyVStack(alignment: .leading, spacing: 8) {
-            ForEach(groups, id: \.0) { group, convos in
-                // Date header
-                Text(group)
-                    .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .padding(.top, group == firstGroup ? 0 : 16)
-                    .padding(.bottom, 8)
-
-                // Conversations in this group
-                ForEach(convos) { conversation in
+            ForEach(items) { item in
+                switch item {
+                case .header(let key, let isFirst):
+                    Text(key)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.top, isFirst ? 0 : 16)
+                        .padding(.bottom, 8)
+                case .conversation(let conversation):
                     ConversationRowView(
                         conversation: conversation,
                         onTap: { onSelect(conversation) },

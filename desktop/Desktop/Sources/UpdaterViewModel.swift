@@ -20,6 +20,12 @@ enum UpdateChannel: String, CaseIterable {
         case .beta: return "Early access to new features"
         }
     }
+
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
+    static var appDisplayName: String {
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
+        return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    }
 }
 
 private let kUpdateChannelKey = "update_channel"
@@ -45,6 +51,23 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Called when Sparkle finishes loading the appcast
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         logSync("Sparkle: Appcast loaded (\(appcast.items.count) items)")
+
+        // Capture latest stable build metadata for downgrade detection
+        var bestStableBuild: Int?
+        var bestStableVersion: String?
+        for item in appcast.items {
+            let isStable = item.channel == nil || item.channel?.isEmpty == true
+            guard isStable, let build = Int(item.versionString) else { continue }
+            if bestStableBuild == nil || build > bestStableBuild! {
+                bestStableBuild = build
+                bestStableVersion = item.displayVersionString
+            }
+        }
+        // Always update (including nil) so stale data doesn't produce false downgrade alerts
+        Task { @MainActor in
+            self.viewModel?.latestStableBuildNumber = bestStableBuild
+            self.viewModel?.latestStableVersionString = bestStableVersion
+        }
     }
 
     /// Called when Sparkle finds a valid update
@@ -78,9 +101,47 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         if isUpToDate {
             logSync("Sparkle: Already up to date")
         } else {
-            logSync("Sparkle: Update check failed - \(message)")
+            logSync("Sparkle: Update check failed - \(message) [domain=\(nsError.domain) code=\(nsError.code)]")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                logSync("Sparkle: Underlying error - \(underlying.localizedDescription) [domain=\(underlying.domain) code=\(underlying.code)]")
+            }
+            for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
+                logSync("Sparkle: Error info [\(key)] = \(value)")
+            }
+            // Build diagnostic properties for analytics
+            let errorDomain = nsError.domain
+            let errorCode = nsError.code
+            var underlyingMessage: String? = nil
+            var underlyingDomain: String? = nil
+            var underlyingCode: Int? = nil
+
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                underlyingMessage = underlying.localizedDescription
+                underlyingDomain = underlying.domain
+                underlyingCode = underlying.code
+            }
+
             Task { @MainActor in
-                AnalyticsManager.shared.updateCheckFailed(error: message)
+                AnalyticsManager.shared.updateCheckFailed(
+                    error: message,
+                    errorDomain: errorDomain,
+                    errorCode: errorCode,
+                    underlyingError: underlyingMessage,
+                    underlyingDomain: underlyingDomain,
+                    underlyingCode: underlyingCode
+                )
+            }
+
+            // SUInstallationError (4005): Sparkle's installer failed to launch.
+            // On macOS 26, AuthorizationCreate/SMJobSubmit can fail due to stricter
+            // code signature validation or on-demand-only launchd mode.
+            // Fallback: open the download page so the user can install manually.
+            let isInstallationError = nsError.domain == SUSparkleErrorDomain && nsError.code == 4005
+            if isInstallationError {
+                logSync("Sparkle: Installation failed, opening download page as fallback")
+                if let url = URL(string: "https://macos.omi.me") {
+                    NSWorkspace.shared.open(url)
+                }
             }
         }
     }
@@ -89,13 +150,52 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Channels are additive: the default (stable) channel is always included.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        switch raw {
-        case "staging":
-            return Set(["staging", "beta"])
-        case "beta":
+        if raw == "beta" || raw == "staging" {
             return Set(["beta"])
-        default:
-            return Set() // empty = default (stable) channel only
+        }
+        return Set() // empty = default (stable) channel only
+    }
+
+    /// Called after Sparkle has launched the installer and submitted launchd jobs.
+    /// On macOS 26+, launchd may be in "on-demand-only mode" which prevents RunAtLoad
+    /// services from starting. We force-start them via launchctl kickstart as a backup
+    /// to Sparkle 2.9.0's built-in probe (PR #2852).
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        logSync("Sparkle: Installer launched for v\(item.displayVersionString), kickstarting services")
+        kickstartSparkleServices()
+    }
+
+    /// Force-start Sparkle's launchd services to work around macOS 26 on-demand-only mode.
+    /// Services submitted via SMJobSubmit with RunAtLoad=YES may not start immediately.
+    /// Using `launchctl kickstart` forces launchd to spawn them right away.
+    private func kickstartSparkleServices() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+
+        let updaterLabel = "\(bundleID)-sparkle-updater"
+        let progressLabel = "\(bundleID)-sparkle-progress"
+        let uid = getuid()
+
+        // Try multiple times to handle timing variance
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) {
+                for label in [progressLabel, updaterLabel] {
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+                    process.arguments = ["kickstart", "-p", "gui/\(uid)/\(label)"]
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
+
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
+                        if process.terminationStatus == 0 {
+                            logSync("Sparkle kickstart: started \(label) (delay=\(delay)s)")
+                        }
+                    } catch {
+                        // Best effort — service may not exist yet or already running
+                    }
+                }
+            }
         }
     }
 
@@ -154,9 +254,15 @@ final class UpdaterViewModel: ObservableObject {
     /// Selected update channel (persisted to UserDefaults)
     @Published var updateChannel: UpdateChannel {
         didSet {
+            guard oldValue != updateChannel else { return }
+
+            // Must happen before check; Sparkle delegate reads from UserDefaults
             UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
+            activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
+
             if isInitialized {
                 AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
+                checkForUpdatesInBackground()
             }
         }
     }
@@ -166,6 +272,12 @@ final class UpdaterViewModel: ObservableObject {
 
     /// Version string of the available update
     @Published var availableVersion: String = ""
+
+    /// Latest stable build number from the appcast (for downgrade detection)
+    @Published var latestStableBuildNumber: Int?
+
+    /// Latest stable version string from the appcast (e.g. "0.11.48+11048")
+    @Published var latestStableVersionString: String?
 
     /// The date of the last update check
     var lastUpdateCheckDate: Date? {
@@ -185,7 +297,9 @@ final class UpdaterViewModel: ObservableObject {
         automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
         // Initialize update channel from UserDefaults
-        let storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        // Normalize legacy "staging" → "beta" for users upgrading from older builds
+        var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        if storedChannel == "staging" { storedChannel = "beta" }
         updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
         // Wire up delegate back-reference
@@ -216,6 +330,11 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
+    /// Background update check (no UI). Used after channel changes.
+    func checkForUpdatesInBackground() {
+        updaterController.updater.checkForUpdatesInBackground()
+    }
+
     /// Get the current app version string
     var currentVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
@@ -224,5 +343,20 @@ final class UpdaterViewModel: ObservableObject {
     /// Get the current build number
     var buildNumber: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
+    }
+
+    /// The active channel label
+    @Published var activeChannelLabel: String = {
+        let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        return (raw == "beta" || raw == "staging") ? "Beta" : ""
+    }()
+
+    /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
+    var isDowngradeToStable: Bool {
+        guard let currentBuild = Int(buildNumber),
+              let stableBuild = latestStableBuildNumber else {
+            return false
+        }
+        return currentBuild > stableBuild
     }
 }

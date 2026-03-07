@@ -422,7 +422,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get planAndUsage => 'Előfizetés és használat';
 
   @override
-  String get offlineSync => 'Offline Sync';
+  String get offlineSync => 'Offline szinkronizálás';
 
   @override
   String get deviceSettings => 'Eszköz beállításai';
@@ -1019,7 +1019,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Csatlakozás';
 
   @override
   String get comingSoon => 'Hamarosan';
@@ -1156,7 +1156,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get yes => 'Igen';
 
   @override
-  String get editName => 'Edit Name';
+  String get editName => 'Név szerkesztése';
 
   @override
   String get howShouldOmiCallYou => 'Hogyan szólítson az Omi?';
@@ -2157,7 +2157,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get saveMemory => 'Emlék mentése';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Újrapróbálkozás';
 
   @override
   String get createActionItem => 'Feladat létrehozása';
@@ -2281,7 +2281,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get folderName => 'Mappa neve';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Leírás (opcionális)';
 
   @override
   String get failedToDeleteFolder => 'A mappa törlése sikertelen';
@@ -2408,7 +2408,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get unpairAndForgetDevice => 'Párosítás megszüntetése és eszköz elfelejtése';
 
   @override
-  String get unknownDevice => 'Unknown';
+  String get unknownDevice => 'Ismeretlen';
 
   @override
   String get unknown => 'Ismeretlen';
@@ -5868,7 +5868,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get sdCard => 'SD Card';
 
   @override
-  String get fromSd => 'From SD';
+  String get fromSd => 'SD-ről';
 
   @override
   String get limitless => 'Limitless';
@@ -5891,13 +5891,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transferMethod => 'Átviteli módszer';
 
   @override
-  String get fast => 'Fast';
+  String get fast => 'Gyors';
 
   @override
   String get ble => 'BLE';
 
   @override
-  String get phone => 'Phone';
+  String get phone => 'Telefon';
 
   @override
   String get cancelSync => 'Szinkronizálás megszakítása';
@@ -5912,7 +5912,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteProcessedFiles => 'Feldolgozott fájlok törlése';
 
   @override
-  String get processedFilesDeleted => 'Processed files deleted';
+  String get processedFilesDeleted => 'Feldolgozott fájlok törölve';
 
   @override
   String get wifiEnableFailed => 'A WiFi engedélyezése sikertelen az eszközön. Kérlek, próbáld újra.';
@@ -5944,7 +5944,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get process => 'Process';
+  String get process => 'Feldolgozás';
 
   @override
   String get wifiSyncFailed => 'WiFi szinkronizálás sikertelen';
@@ -5962,17 +5962,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String conversationsCreated(int count) {
-    return '$count conversations created';
+    return '$count beszélgetés létrehozva';
   }
 
   @override
   String get internetRequired => 'Internet required';
 
   @override
-  String get processAudio => 'Process Audio';
+  String get processAudio => 'Hang feldolgozása';
 
   @override
-  String get start => 'Start';
+  String get start => 'Indítás';
 
   @override
   String get noRecordings => 'Nincsenek felvételek';
@@ -5984,7 +5984,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteProcessed => 'Feldolgozottak törlése';
 
   @override
-  String get tryDifferentFilter => 'Try a different filter';
+  String get tryDifferentFilter => 'Próbáljon más szűrőt';
 
   @override
   String get recordings => 'Felvételek';
@@ -6347,19 +6347,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get setupQuestionsIntro => 'Segíts nekünk fejleszteni az Omit néhány kérdés megválaszolásával.  🫶 💜';
 
   @override
-  String get setupQuestionProfession => '1. What do you do?';
+  String get setupQuestionProfession => '1. Mi a foglalkozásod?';
 
   @override
-  String get setupQuestionUsage => '2. Where do you plan to use your Omi?';
+  String get setupQuestionUsage => '2. Hol tervezed használni az Omi-t?';
 
   @override
-  String get setupQuestionAge => '3. What\'s your age range?';
+  String get setupQuestionAge => '3. Hány éves vagy?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'Még nem válaszoltál minden kérdésre! 🥺';
 
   @override
-  String get setupSkipHelp => 'Skip, I don\'t want to help :C';
+  String get setupSkipHelp => 'Kihagyás, nem akarok segíteni :C';
 
   @override
   String get professionEntrepreneur => 'Vállalkozó';
@@ -6383,16 +6383,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get usageAtWork => 'Munkahelyen';
 
   @override
-  String get usageIrlEvents => 'IRL Events';
+  String get usageIrlEvents => 'Személyes események';
 
   @override
   String get usageOnline => 'Online';
 
   @override
-  String get usageSocialSettings => 'In Social Settings';
+  String get usageSocialSettings => 'Társas helyzetekben';
 
   @override
-  String get usageEverywhere => 'Everywhere';
+  String get usageEverywhere => 'Mindenhol';
 
   @override
   String get customBackendUrlTitle => 'Egyéni háttérszerver URL';
@@ -6557,10 +6557,10 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get sharePublicLink => 'Share Public Link';
+  String get sharePublicLink => 'Nyilvános link megosztása';
 
   @override
-  String get makePersonaPublic => 'Make Persona Public';
+  String get makePersonaPublic => 'Persona nyilvánossá tétele';
 
   @override
   String get connectedKnowledgeData => 'Csatlakoztatott tudásadatok';
@@ -6582,7 +6582,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get getOmi => 'Omi beszerzése';
 
   @override
-  String get iHaveOmiDevice => 'I have Omi device';
+  String get iHaveOmiDevice => 'Van Omi eszközöm';
 
   @override
   String get goal => 'CÉL';
@@ -6661,16 +6661,16 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get personNameAlreadyExists => 'A person with this name already exists.';
+  String get personNameAlreadyExists => 'Ez a név már létezik';
 
   @override
-  String get selectYouFromList => 'To tag yourself, please select \"You\" from the list.';
+  String get selectYouFromList => 'Válaszd ki magad a listáról';
 
   @override
   String get enterPersonsName => 'Személy nevének megadása';
 
   @override
-  String get addPerson => 'Add Person';
+  String get addPerson => 'Személy hozzáadása';
 
   @override
   String tagOtherSegmentsFromSpeaker(int selected, int total) {
@@ -6773,16 +6773,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get recordingDetails => 'Felvétel részletei';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'SD kártya';
 
   @override
   String get storageLocationLimitlessPendant => 'Limitless Pendant';
 
   @override
-  String get storageLocationPhone => 'Phone';
+  String get storageLocationPhone => 'Telefon';
 
   @override
-  String get storageLocationPhoneMemory => 'Phone (Memory)';
+  String get storageLocationPhoneMemory => 'Telefon (memória)';
 
   @override
   String storedOnDevice(String deviceName) {
@@ -6818,7 +6818,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transferInProgress => 'Átvitel folyamatban...';
 
   @override
-  String get shareRecording => 'Share Recording';
+  String get shareRecording => 'Felvétel megosztása';
 
   @override
   String get deleteRecordingConfirmation =>
@@ -6828,10 +6828,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get recordingIdLabel => 'Felvétel azonosító';
 
   @override
-  String get dateTimeLabel => 'Date & Time';
+  String get dateTimeLabel => 'Dátum és idő';
 
   @override
-  String get durationLabel => 'Duration';
+  String get durationLabel => 'Időtartam';
 
   @override
   String get audioFormatLabel => 'Hangformátum';
@@ -6840,7 +6840,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get storageLocationLabel => 'Tárolási hely';
 
   @override
-  String get estimatedSizeLabel => 'Estimated Size';
+  String get estimatedSizeLabel => 'Becsült méret';
 
   @override
   String get deviceModelLabel => 'Eszköz modell';
@@ -6852,10 +6852,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get statusLabel => 'Állapot';
 
   @override
-  String get statusProcessed => 'Processed';
+  String get statusProcessed => 'Feldolgozva';
 
   @override
-  String get statusUnprocessed => 'Unprocessed';
+  String get statusUnprocessed => 'Feldolgozatlan';
 
   @override
   String get switchedToFastTransfer => 'Átváltás gyors átvitelre';
@@ -6958,18 +6958,18 @@ class AppLocalizationsHu extends AppLocalizations {
   String get errorUpdatingAppStatus => 'Hiba történt az alkalmazás állapotának frissítése közben.';
 
   @override
-  String get calculatingETA => 'Calculating...';
+  String get calculatingETA => 'Számítás...';
 
   @override
   String aboutMinutesRemaining(int minutes) {
-    return 'About $minutes minutes remaining';
+    return 'Hozzávetőleg $minutes perc van hátra';
   }
 
   @override
-  String get aboutAMinuteRemaining => 'About a minute remaining';
+  String get aboutAMinuteRemaining => 'Hozzávetőleg egy perc van hátra';
 
   @override
-  String get almostDone => 'Almost done...';
+  String get almostDone => 'Majdnem kész...';
 
   @override
   String get omiSays => 'omi says';
@@ -6979,7 +6979,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String migratingToProtection(String level) {
-    return 'Migrating to $level protection...';
+    return 'Migráció $level védelemre...';
   }
 
   @override
@@ -6991,7 +6991,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get allObjectsMigratedFinalizing => 'All objects migrated. Finalizing...';
+  String get allObjectsMigratedFinalizing => 'Minden elem migrálva. Befejezés...';
 
   @override
   String get migrationErrorOccurred => 'Hiba történt az áttelepítés során. Kérlek, próbáld újra.';
@@ -7005,16 +7005,16 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get chatsLowercase => 'chats';
+  String get chatsLowercase => 'csevegések';
 
   @override
-  String get dataLowercase => 'data';
+  String get dataLowercase => 'adatok';
 
   @override
-  String get fallNotificationTitle => 'Ouch';
+  String get fallNotificationTitle => 'Jaj';
 
   @override
-  String get fallNotificationBody => 'Did you fall?';
+  String get fallNotificationBody => 'Elesett?';
 
   @override
   String get importantConversationTitle => 'Fontos beszélgetés';
@@ -7268,7 +7268,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get xHandlePleaseEnterValid => 'Kérlek, adj meg érvényes X felhasználónevet';
 
   @override
-  String get nextButton => 'Next';
+  String get nextButton => 'Következő';
 
   @override
   String get connectOmiDevice => 'Omi eszköz csatlakoztatása';
@@ -7925,7 +7925,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get categoryOther => 'Egyéb';
 
   @override
-  String get capabilityChat => 'Chat';
+  String get capabilityChat => 'Csevegés';
 
   @override
   String get capabilityConversations => 'Beszélgetések';
@@ -8036,27 +8036,27 @@ class AppLocalizationsHu extends AppLocalizations {
   String get addTask => 'Feladat hozzáadása';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP szerver hozzáadása';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Külső AI eszközök csatlakoztatása';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count eszköz sikeresen csatlakoztatva';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nem sikerült csatlakozni az MCP szerverhez';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Engedélyezés...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hogyan találtál ránk?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8074,19 +8074,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Barát';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Egyéb';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Kérjük, pontosítsd';
 
   @override
-  String get event => 'Event';
+  String get event => 'Esemény';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Munkatárs';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8257,4 +8257,58 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Ezt tudom rólad';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Ez a térkép frissül, ahogy az Omi tanul a beszélgetéseidből.';
+
+  @override
+  String get apiEnvironment => 'API környezet';
+
+  @override
+  String get apiEnvironmentDescription => 'Válassza ki a csatlakozási szervert';
+
+  @override
+  String get production => 'Éles';
+
+  @override
+  String get staging => 'Tesztkörnyezet';
+
+  @override
+  String get switchRequiresRestart => 'A váltás az alkalmazás újraindítását igényli';
+
+  @override
+  String get switchApiConfirmTitle => 'API környezet váltása';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Váltás erre: $environment? A módosítások érvényesítéséhez be kell zárnod és újra kell nyitnod az alkalmazást.';
+  }
+
+  @override
+  String get switchAndRestart => 'Váltás';
+
+  @override
+  String get stagingDisclaimer =>
+      'A tesztkörnyezet instabil lehet, teljesítménye változó, és az adatok elveszhetnek. Csak tesztelésre.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Mentve. Zárd be és nyisd újra az alkalmazást a módosítások alkalmazásához.';
+
+  @override
+  String get shared => 'Megosztott';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Csak Ön láthatja ezt a beszélgetést';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bárki megtekintheti, akinek megvan a link';
+
+  @override
+  String get tasksCleanTodayTitle => 'Törlöd a mai feladatokat?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
 }

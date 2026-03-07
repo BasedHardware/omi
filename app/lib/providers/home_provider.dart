@@ -5,8 +5,33 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/logger.dart';
+
+/// Languages supported by Deepgram Nova-3 multi-language auto-detection.
+/// When a user picks one of these, multi-language mode is enabled (single_language_mode = false).
+const multiLanguageSupported = {
+  'en',
+  'en-US',
+  'en-AU',
+  'en-GB',
+  'en-IN',
+  'en-NZ',
+  'es',
+  'es-419',
+  'fr',
+  'fr-CA',
+  'de',
+  'hi',
+  'ru',
+  'pt',
+  'pt-BR',
+  'pt-PT',
+  'ja',
+  'it',
+  'nl',
+};
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
@@ -197,7 +222,7 @@ class HomeProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateUserPrimaryLanguage(String languageCode) async {
+  Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
       final success = await setUserPrimaryLanguage(languageCode);
       if (success) {
@@ -206,6 +231,11 @@ class HomeProvider extends ChangeNotifier {
         SharedPreferencesUtil().userPrimaryLanguage = languageCode;
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         AnalyticsManager().setUserAttribute('Primary Language', languageCode);
+
+        // Backend auto-sets single_language_mode — sync local state to match
+        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
+        userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
+
         notifyListeners();
         return true;
       }

@@ -19,6 +19,9 @@ from models.conversation import CategoryEnum, Conversation, ActionItem, Event, C
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ****************************************
 # ************* CHAT BASICS **************
@@ -421,14 +424,16 @@ def _get_agentic_qa_prompt(
         current_datetime_user = datetime.now(user_tz)
         current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
         current_datetime_iso = current_datetime_user.isoformat()
-        print(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
+        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
     except Exception:
         # Fallback to UTC if timezone is invalid
         current_datetime_user = datetime.now(timezone.utc)
         current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
         current_datetime_iso = current_datetime_user.isoformat()
         tz = "UTC"
-        print(f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}")
+        logger.warning(
+            f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}"
+        )
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
@@ -517,14 +522,14 @@ Keep this context in mind when answering their question.
         cached_prompt = get_agentic_system_prompt_template()
         base_prompt = render_prompt(cached_prompt.template_text, template_variables)
 
-        print(
+        logger.info(
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
         return base_prompt.strip()
 
     except Exception as e:
-        print(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
+        logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
 
     # Inline fallback prompt - used when LangSmith is unavailable
     #
@@ -878,7 +883,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
-        print(f'Error determining memory discard: {e}')
+        logger.error(f'Error determining memory discard: {e}')
         return []
 
 
@@ -961,7 +966,7 @@ class OutputQuestion(BaseModel):
 
 def extract_question_from_conversation(messages: List[Message]) -> str:
     # user last messages
-    print("extract_question_from_conversation")
+    logger.info("extract_question_from_conversation")
     user_message_idx = len(messages)
     for i in range(len(messages) - 1, -1, -1):
         if messages[i].sender == MessageSender.ai:
@@ -1085,7 +1090,7 @@ def retrieve_metadata_fields_from_transcript(
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
-        print('e', e)
+        logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
@@ -1121,7 +1126,7 @@ def retrieve_metadata_fields_from_transcript(
             #    continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
-            print(f'Error parsing date: {e}')
+            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1212,7 +1217,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     try:
         result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
     except Exception as e:
-        print(f'Error extracting metadata: {e}')
+        logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     def normalize_filter(value: str) -> str:
@@ -1248,7 +1253,7 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
                 continue
             metadata['dates'].append(date.strftime('%Y-%m-%d'))
         except Exception as e:
-            print(f'Error parsing date: {e}')
+            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)

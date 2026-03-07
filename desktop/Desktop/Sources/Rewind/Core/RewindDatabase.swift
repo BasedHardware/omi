@@ -54,6 +54,7 @@ actor RewindDatabase {
     /// Tracks consecutive SQLITE_IOERR/CORRUPT errors. When the threshold is reached,
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
+        guard dbQueue != nil else { return }  // DB already closed, nothing to do
         guard let dbError = error as? DatabaseError else { return }
         let code = dbError.resultCode
         let extendedCode = dbError.extendedResultCode.rawValue
@@ -393,6 +394,26 @@ actor RewindDatabase {
         let itemsToMove = [
             "omi.db", "Screenshots", "Videos", "backups",
         ]
+
+        // Checkpoint WAL at destination before deleting — preserves recent writes
+        // (e.g. knowledge graph saved during onboarding, before app restart for permissions)
+        let destDB = userDir.appendingPathComponent("omi.db")
+        if fileManager.fileExists(atPath: destDB.path) {
+            let destWAL = userDir.appendingPathComponent("omi.db-wal")
+            if fileManager.fileExists(atPath: destWAL.path) {
+                do {
+                    let config = Configuration()
+                    let pool = try DatabasePool(path: destDB.path, configuration: config)
+                    try pool.write { db in
+                        try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                    }
+                    try pool.close()
+                    log("RewindDatabase: Checkpointed WAL at dest before migration")
+                } catch {
+                    log("RewindDatabase: WAL checkpoint failed: \(error.localizedDescription)")
+                }
+            }
+        }
 
         // Delete WAL/SHM and running flag at source AND destination — do NOT migrate them.
         // Stale WAL/SHM at the destination (from a prior partial migration or crash) would
@@ -2081,6 +2102,53 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE action_items ADD COLUMN recurrenceParentId TEXT")
         }
 
+        // Clean up orphan screenshot records that have no valid storage path.
+        // These were created when VideoChunkEncoder dropped frames (e.g. aspect ratio debounce)
+        // but processFrame still inserted a DB record with imagePath="" and no videoChunkPath.
+        migrator.registerMigration("deleteOrphanScreenshots") { db in
+            let count = try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM screenshots
+                WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                AND (imagePath IS NULL OR imagePath = '')
+            """) ?? 0
+            if count > 0 {
+                try db.execute(sql: """
+                    DELETE FROM screenshots
+                    WHERE (videoChunkPath IS NULL OR videoChunkPath = '')
+                    AND (imagePath IS NULL OR imagePath = '')
+                """)
+                log("RewindDatabase: Cleaned up \(count) orphan screenshot records with no storage path")
+            }
+        }
+
+        migrator.registerMigration("addMemoryHeadline") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "headline", .text)
+            }
+        }
+
+        migrator.registerMigration("createLocalKnowledgeGraph") { db in
+            try db.create(table: "local_kg_nodes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("nodeId", .text).notNull().unique()
+                t.column("label", .text).notNull()
+                t.column("nodeType", .text).notNull()
+                t.column("aliasesJson", .text)
+                t.column("sourceFileIds", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "local_kg_edges") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("edgeId", .text).notNull().unique()
+                t.column("sourceNodeId", .text).notNull()
+                t.column("targetNodeId", .text).notNull()
+                t.column("label", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
@@ -2443,6 +2511,58 @@ actor RewindDatabase {
                 .order(Column("timestamp").desc)
                 .limit(limit)
                 .fetchAll(db)
+        }
+    }
+
+    /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
+    /// If the total count for the range is <= targetCount, returns all rows ASC.
+    /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
+    func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+
+        return try dbQueue.read { db in
+            // Get total count for the range
+            let totalCount = try Screenshot
+                .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+                .fetchCount(db)
+
+            if totalCount <= targetCount {
+                // Return all, ordered ASC (oldest first)
+                return try Screenshot
+                    .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+                    .order(Column("timestamp").asc)
+                    .fetchAll(db)
+            }
+
+            // Fetch all IDs + timestamps ordered ASC, then pick every Nth
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id FROM screenshots
+                WHERE timestamp >= ? AND timestamp <= ?
+                ORDER BY timestamp ASC
+            """, arguments: [startDate, endDate])
+
+            let step = Double(totalCount) / Double(targetCount)
+            var sampledIds: [Int64] = []
+            var i: Double = 0
+            while Int(i) < totalCount && sampledIds.count < targetCount {
+                let index = Int(i)
+                if index < rows.count {
+                    sampledIds.append(rows[index]["id"])
+                }
+                i += step
+            }
+
+            // Batch-fetch the sampled rows and return in ASC order
+            guard !sampledIds.isEmpty else { return [] }
+            let placeholders = sampledIds.map { _ in "?" }.joined(separator: ",")
+            let sql = """
+                SELECT * FROM screenshots
+                WHERE id IN (\(placeholders))
+                ORDER BY timestamp ASC
+            """
+            return try Screenshot.fetchAll(db, sql: sql, arguments: StatementArguments(sampledIds))
         }
     }
 

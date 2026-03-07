@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agent-proxy
+description: WebSocket proxy that bridges the mobile app to a user's agent VM
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

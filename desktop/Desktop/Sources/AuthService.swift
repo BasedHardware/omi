@@ -189,6 +189,12 @@ class AuthService {
                     AuthState.shared.userEmail = user?.email
                     AuthState.shared.isRestoringAuth = false
                     self?.saveAuthState(isSignedIn: true, email: user?.email, userId: user?.uid)
+                    // Configure database for the signed-in user immediately so any code
+                    // that touches the DB during onboarding (e.g. save_knowledge_graph)
+                    // writes to the correct per-user path instead of "anonymous".
+                    if let uid = user?.uid {
+                        Task { await RewindDatabase.shared.configure(userId: uid) }
+                    }
                     // Load name from backend profile (Firestore), then Firebase Auth as fallback
                     self?.loadNameFromBackendIfNeeded()
                     // Sync assistant settings from backend (fire-and-forget)
@@ -303,6 +309,7 @@ class AuthService {
         }
 
         saveAuthState(isSignedIn: true, email: AuthState.shared.userEmail, userId: userId)
+        Task { await RewindDatabase.shared.configure(userId: userId) }
 
         if givenName.isEmpty {
             loadNameFromBackendIfNeeded()
@@ -414,6 +421,7 @@ class AuthService {
             // Save auth state immediately
             let userId = firebaseTokens.localId
             saveAuthState(isSignedIn: true, email: tokenResult.email, userId: userId)
+            await RewindDatabase.shared.configure(userId: userId)
 
             // Try to load name from backend profile (Firestore), then Firebase Auth as fallback
             if givenName.isEmpty {
@@ -1026,6 +1034,9 @@ class AuthService {
         UserDefaults.standard.removeObject(forKey: "hasTriggeredScreenRecording")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredMicrophone")
         UserDefaults.standard.removeObject(forKey: "hasTriggeredSystemAudio")
+        UserDefaults.standard.removeObject(forKey: "onboardingChatMessages")
+        UserDefaults.standard.removeObject(forKey: "onboardingACPSessionId")
+        UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
 
         // screenAnalysisEnabled: Don't removeObject here — SettingsSyncManager overwrites
         // it from the server within ~200ms of sign-in. Instead, onboarding force-starts

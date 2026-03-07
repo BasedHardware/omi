@@ -51,6 +51,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
@@ -1914,6 +1915,7 @@ function DeveloperSection({
   onDeleteMcpKey,
   onWebhookChange,
   onExportData,
+  isExporting,
   onDeleteKnowledgeGraph,
 }: {
   apiKeys: DeveloperApiKey[];
@@ -1925,6 +1927,7 @@ function DeveloperSection({
   onDeleteMcpKey: (keyId: string) => void;
   onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
   onExportData: () => void;
+  isExporting?: boolean;
   onDeleteKnowledgeGraph: () => void;
 }) {
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
@@ -2285,16 +2288,26 @@ function DeveloperSection({
         <Card>
           <button
             onClick={onExportData}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
+            disabled={isExporting}
+            className={cn(
+              "w-full flex items-center gap-4 py-3 transition-colors",
+              isExporting ? "text-text-tertiary cursor-not-allowed" : "text-text-primary hover:text-purple-400"
+            )}
           >
             <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Download className="w-5 h-5 text-text-tertiary" />
+              {isExporting ? (
+                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+              ) : (
+                <Download className="w-5 h-5 text-text-tertiary" />
+              )}
             </div>
             <div className="flex-1 text-left">
-              <p className="font-medium">Export All Data</p>
-              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
+              <p className="font-medium">{isExporting ? 'Exporting...' : 'Export All Data'}</p>
+              <p className="text-xs text-text-tertiary">
+                {isExporting ? 'This may take a moment' : 'Export conversations to a JSON file'}
+              </p>
             </div>
-            <ExternalLink className="w-4 h-4 text-text-quaternary" />
+            {!isExporting && <ExternalLink className="w-4 h-4 text-text-quaternary" />}
           </button>
         </Card>
         <Card className="border-red-500/20">
@@ -2578,6 +2591,8 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
+  const { showToast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'profile'
   const sectionParam = searchParams.get('section');
@@ -2830,10 +2845,10 @@ export function SettingsPage() {
   };
 
   const handleExportData = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
     try {
-      const data = await exportAllData();
-      const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
+      const blob = await exportAllData();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -2842,8 +2857,12 @@ export function SettingsPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showToast('Data exported successfully', 'success');
     } catch (error) {
       console.error('Failed to export data:', error);
+      showToast('Failed to export data. Please try again.', 'error');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -2953,6 +2972,7 @@ export function SettingsPage() {
             onDeleteMcpKey={handleDeleteMcpKey}
             onWebhookChange={handleWebhookChange}
             onExportData={handleExportData}
+            isExporting={isExporting}
             onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
           />
         );
@@ -3007,6 +3027,30 @@ export function SettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Export in-progress dialog */}
+      {isExporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="p-3 rounded-full bg-purple-500/10">
+                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Exporting Your Data</h3>
+                <p className="text-text-secondary mt-2 text-sm">
+                  This may take a moment depending on the amount of data in your account.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-yellow-500/10 rounded-xl px-4 py-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                <span className="text-xs text-yellow-400">Please don&apos;t close this tab</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 

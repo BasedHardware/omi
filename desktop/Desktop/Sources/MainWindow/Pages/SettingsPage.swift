@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
     var chatProvider: ChatProvider? = nil
 
@@ -16,9 +15,7 @@ struct SettingsPage: View {
                 VStack(spacing: 0) {
                     // Section header
                     HStack {
-                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                             ? selectedAdvancedSubsection!.rawValue
-                             : selectedSection.rawValue)
+                        Text(selectedSection.rawValue)
                             .scaledFont(size: 28, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
                             .id(selectedSection)
@@ -35,7 +32,6 @@ struct SettingsPage: View {
                     SettingsContentView(
                         appState: appState,
                         selectedSection: $selectedSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         chatProvider: chatProvider
                     )
@@ -56,11 +52,6 @@ struct SettingsPage: View {
         .background(OmiColors.backgroundSecondary.opacity(0.3))
         .onAppear {
             AnalyticsManager.shared.settingsPageOpened()
-        }
-        .onChange(of: selectedSection) { _, newValue in
-            if newValue == .advanced && selectedAdvancedSubsection == nil {
-                selectedAdvancedSubsection = .aiUserProfile
-            }
         }
     }
 }
@@ -101,6 +92,8 @@ struct SettingsContentView: View {
 
     // Task Assistant states
     @State private var taskEnabled: Bool
+    @State private var taskChatAgentEnabled: Bool
+    @State private var taskAgentWorkingDirectory: String
     @State private var taskExtractionInterval: Double
     @State private var taskMinConfidence: Double
     @State private var taskNotificationsEnabled: Bool
@@ -128,6 +121,9 @@ struct SettingsContentView: View {
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
 
+    // Downgrade confirmation alert
+    @State private var showDowngradeAlert = false
+
     // Tier gating (0 = show all, 1-6 = sequential tiers)
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
 
@@ -148,7 +144,6 @@ struct SettingsContentView: View {
 
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
-    @Binding var selectedAdvancedSubsection: AdvancedSubsection?
     @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
@@ -193,6 +188,8 @@ struct SettingsContentView: View {
     // Language auto-detect state (from local settings)
     @State private var transcriptionAutoDetect: Bool = true
     @State private var transcriptionLanguage: String = "en"
+    @State private var vadGateEnabled: Bool = false
+    @State private var batchTranscriptionEnabled: Bool = true
 
     // Multi-chat mode setting
     @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -229,8 +226,6 @@ struct SettingsContentView: View {
 
     enum SettingsSection: String, CaseIterable {
         case general = "General"
-        case device = "Device"
-        case focus = "Focus"
         case rewind = "Rewind"
         case transcription = "Transcription"
         case notifications = "Notifications"
@@ -251,7 +246,7 @@ struct SettingsContentView: View {
         case memoryAssistant = "Memory Assistant"
         case analysisThrottle = "Analysis Throttle"
         case goals = "Goals"
-        case askOmiFloatingBar = "Ask Omi Floating Bar"
+        case askOmiFloatingBar = "Ask omi Floating Bar"
         case preferences = "Preferences"
         case troubleshooting = "Troubleshooting"
 
@@ -279,13 +274,11 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
         highlightedSettingId: Binding<String?> = .constant(nil),
         chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
-        self._selectedAdvancedSubsection = selectedAdvancedSubsection
         self._highlightedSettingId = highlightedSettingId
         self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
@@ -298,6 +291,8 @@ struct SettingsContentView: View {
         _focusNotificationsEnabled = State(initialValue: FocusAssistantSettings.shared.notificationsEnabled)
         _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
         _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
+        _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
+        _taskAgentWorkingDirectory = State(initialValue: TaskAgentSettings.shared.workingDirectory)
         _taskExtractionInterval = State(initialValue: TaskAssistantSettings.shared.extractionInterval)
         _taskMinConfidence = State(initialValue: TaskAssistantSettings.shared.minConfidence)
         _taskNotificationsEnabled = State(initialValue: TaskAssistantSettings.shared.notificationsEnabled)
@@ -313,6 +308,10 @@ struct SettingsContentView: View {
         _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
         _memoryNotificationsEnabled = State(initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
         _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
+        _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
+        _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
+        _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
+        _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
     }
 
     /// Computed status text for notifications
@@ -333,10 +332,6 @@ struct SettingsContentView: View {
                 switch selectedSection {
                 case .general:
                     generalSection
-                case .device:
-                    DeviceSettingsPage()
-                case .focus:
-                    FocusPage()
                 case .rewind:
                     rewindSection
                 case .transcription:
@@ -378,11 +373,15 @@ struct SettingsContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.taskassistant"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .askOmiFloatingBar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.askomifloatingbar"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -394,36 +393,79 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Rewind toggle (controls both screen + audio)
-            settingsCard(settingId: "general.rewind") {
+            // Screen Capture toggle
+            settingsCard(settingId: "general.screencapture") {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "rectangle.dashed.badge.record")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Rewind")
+                        Text("Screen Capture")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? transcriptionError ?? ((isMonitoring || isTranscribing) ? "Screen capture and audio are active" : "Screen capture and audio are paused"))
+                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
                             .scaledFont(size: 13)
-                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
+                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isToggling || isTogglingTranscription {
+                    if isToggling {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
                         Toggle("", isOn: Binding(
-                            get: { isMonitoring || isTranscribing },
+                            get: { isMonitoring },
                             set: { newValue in
                                 isMonitoring = newValue
-                                isTranscribing = newValue
                                 toggleMonitoring(enabled: newValue)
+                            }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                }
+            }
+
+            // Audio Recording toggle
+            settingsCard(settingId: "general.audiorecording") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "mic.fill")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Audio Recording")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
+                            .scaledFont(size: 13)
+                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isTogglingTranscription {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { isTranscribing },
+                            set: { newValue in
+                                isTranscribing = newValue
                                 toggleTranscription(enabled: newValue)
                             }
                         ))
@@ -529,7 +571,7 @@ struct SettingsContentView: View {
                         .shadow(color: showAskOmiBar ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Ask Omi")
+                        Text("Ask omi")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
@@ -909,6 +951,10 @@ struct SettingsContentView: View {
                                         .frame(width: 180)
                                         .onChange(of: transcriptionLanguage) { _, newValue in
                                             AssistantSettings.shared.transcriptionLanguage = newValue
+                                            let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+                                            transcriptionAutoDetect = supportsMulti
+                                            AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
+                                            updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
                                             updateLanguage(newValue)
                                             restartTranscriptionIfNeeded()
                                         }
@@ -1024,6 +1070,68 @@ struct SettingsContentView: View {
                     Text("Press Enter or click + to add • Click × to remove")
                         .scaledFont(size: 11)
                         .foregroundColor(OmiColors.textTertiary)
+                }
+            }
+
+            // Local VAD Gate
+            settingsCard(settingId: "transcription.vadgate") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "waveform.badge.minus")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Local VAD Gate")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $vadGateEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: vadGateEnabled) { _, newValue in
+                                AssistantSettings.shared.vadGateEnabled = newValue
+                                restartTranscriptionIfNeeded()
+                            }
+                    }
+                }
+            }
+
+            // Batch Transcription
+            settingsCard(settingId: "transcription.batch") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "square.stack.3d.up")
+                            .scaledFont(size: 16)
+                            .foregroundColor(OmiColors.purplePrimary)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Batch Transcription")
+                                .scaledFont(size: 15, weight: .medium)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            Text("Transcribes audio in chunks at silence boundaries. Better accuracy, but transcript appears with a few seconds delay.")
+                                .scaledFont(size: 13)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $batchTranscriptionEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: batchTranscriptionEnabled) { _, newValue in
+                                AssistantSettings.shared.batchTranscriptionEnabled = newValue
+                                restartTranscriptionIfNeeded()
+                            }
+                    }
                 }
             }
         }
@@ -1241,7 +1349,7 @@ struct SettingsContentView: View {
                     }
                     .padding(.bottom, 4)
 
-                    Text("Allow Omi to store audio recordings of your conversations")
+                    Text("Allow omi to store audio recordings of your conversations")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
                         .padding(.leading, 34)
@@ -1308,26 +1416,6 @@ struct SettingsContentView: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(Color.green.opacity(0.15))
-                            .cornerRadius(3)
-                    }
-                    .padding(.leading, 14)
-
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock.fill")
-                            .scaledFont(size: 12)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .frame(width: 20)
-
-                        Text("End-to-end encryption")
-                            .scaledFont(size: 13)
-                            .foregroundColor(OmiColors.textTertiary)
-
-                        Text("Coming Soon")
-                            .scaledFont(size: 10, weight: .semibold)
-                            .foregroundColor(OmiColors.textTertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(OmiColors.backgroundQuaternary.opacity(0.5))
                             .cornerRadius(3)
                     }
                     .padding(.leading, 14)
@@ -1496,7 +1584,7 @@ struct SettingsContentView: View {
                         Spacer()
 
                         Picker("", selection: $chatBridgeMode) {
-                            Text("Omi AI (Free)").tag("agentSDK")
+                            Text("omi account").tag("agentSDK")
                             Text("Your Claude Account").tag("claudeCode")
                         }
                         .pickerStyle(.menu)
@@ -1512,7 +1600,7 @@ struct SettingsContentView: View {
 
                     Text(chatBridgeMode == "claudeCode"
                          ? "Using your Claude Pro/Max subscription. You'll be prompted to sign in with your Claude account."
-                         : "Using Omi's AI — free for all users.")
+                         : "Using your omi account.")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.textTertiary)
 
@@ -2007,6 +2095,9 @@ struct SettingsContentView: View {
                             .toggleStyle(.switch)
                             .controlSize(.small)
                             .labelsHidden()
+                            .onChange(of: devModeEnabled) { _, newValue in
+                                AnalyticsManager.shared.settingToggled(setting: "dev_mode", enabled: newValue)
+                            }
                     }
 
                     Text("Let the AI modify the app's source code, rebuild it, and add custom features.")
@@ -2095,10 +2186,23 @@ struct SettingsContentView: View {
     }
 
     private func refreshAIChatConfig() {
+        // Pull skill and CLAUDE.md data directly from ChatProvider (already discovered at startup).
+        // Fall back to reading from disk only when ChatProvider is unavailable.
+        if let provider = chatProvider {
+            aiChatClaudeMdContent = provider.claudeMdContent
+            aiChatClaudeMdPath = provider.claudeMdPath
+            aiChatDiscoveredSkills = provider.discoveredSkills
+            aiChatProjectClaudeMdContent = provider.projectClaudeMdContent
+            aiChatProjectClaudeMdPath = provider.projectClaudeMdPath
+            aiChatProjectDiscoveredSkills = provider.projectDiscoveredSkills
+            loadDisabledSkills()
+            return
+        }
+
+        // Fallback: read from disk (used when Settings is shown before ChatProvider initializes)
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let claudeDir = "\(home)/.claude"
 
-        // Discover global CLAUDE.md
         let mdPath = "\(claudeDir)/CLAUDE.md"
         if FileManager.default.fileExists(atPath: mdPath),
            let content = try? String(contentsOfFile: mdPath, encoding: .utf8) {
@@ -2109,7 +2213,6 @@ struct SettingsContentView: View {
             aiChatClaudeMdPath = nil
         }
 
-        // Discover global skills
         var skills: [(name: String, description: String, path: String)] = []
         let skillsDir = "\(claudeDir)/skills"
         if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: skillsDir) {
@@ -2117,17 +2220,15 @@ struct SettingsContentView: View {
                 let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
                 if FileManager.default.fileExists(atPath: skillPath),
                    let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                    let desc = extractSkillDescription(from: content)
+                    let desc = ChatProvider.extractSkillDescription(from: content)
                     skills.append((name: dir, description: desc, path: skillPath))
                 }
             }
         }
         aiChatDiscoveredSkills = skills
 
-        // Discover project-level config from workspace directory
         let workspace = aiChatWorkingDirectory
         if !workspace.isEmpty, FileManager.default.fileExists(atPath: workspace) {
-            // Project CLAUDE.md
             let projectMdPath = "\(workspace)/CLAUDE.md"
             if FileManager.default.fileExists(atPath: projectMdPath),
                let content = try? String(contentsOfFile: projectMdPath, encoding: .utf8) {
@@ -2138,7 +2239,6 @@ struct SettingsContentView: View {
                 aiChatProjectClaudeMdPath = nil
             }
 
-            // Project skills
             var projectSkills: [(name: String, description: String, path: String)] = []
             let projectSkillsDir = "\(workspace)/.claude/skills"
             if let skillDirs = try? FileManager.default.contentsOfDirectory(atPath: projectSkillsDir) {
@@ -2146,7 +2246,7 @@ struct SettingsContentView: View {
                     let skillPath = "\(projectSkillsDir)/\(dir)/SKILL.md"
                     if FileManager.default.fileExists(atPath: skillPath),
                        let content = try? String(contentsOfFile: skillPath, encoding: .utf8) {
-                        let desc = extractSkillDescription(from: content)
+                        let desc = ChatProvider.extractSkillDescription(from: content)
                         projectSkills.append((name: dir, description: desc, path: skillPath))
                     }
                 }
@@ -2158,29 +2258,7 @@ struct SettingsContentView: View {
             aiChatProjectDiscoveredSkills = []
         }
 
-        // Load enabled skills from UserDefaults
         loadDisabledSkills()
-    }
-
-    private func extractSkillDescription(from content: String) -> String {
-        guard content.hasPrefix("---") else {
-            let lines = content.components(separatedBy: "\n")
-            return lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?.trimmingCharacters(in: .whitespaces) ?? ""
-        }
-        let lines = content.components(separatedBy: "\n")
-        for line in lines.dropFirst() {
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("---") { break }
-            if line.trimmingCharacters(in: .whitespaces).hasPrefix("description:") {
-                var value = String(line.trimmingCharacters(in: .whitespaces).dropFirst("description:".count))
-                value = value.trimmingCharacters(in: .whitespaces)
-                if (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-                   (value.hasPrefix("'") && value.hasSuffix("'")) {
-                    value = String(value.dropFirst().dropLast())
-                }
-                return value
-            }
-        }
-        return ""
     }
 
     private func loadDisabledSkills() {
@@ -2216,34 +2294,45 @@ struct SettingsContentView: View {
         let memoriesTotal: Int
     }
 
+    private func advancedCategoryHeader(title: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .scaledFont(size: 16)
+                .foregroundColor(OmiColors.purplePrimary)
+            Text(title)
+                .scaledFont(size: 18, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+        }
+        .padding(.top, 16)
+    }
+
     private var advancedSection: some View {
-        Group {
-            switch selectedAdvancedSubsection {
-            case .aiUserProfile, .none:
-                aiUserProfileSubsection
-            case .stats:
-                statsSubsection
-            case .featureTiers:
-                featureTiersSubsection
-            case .focusAssistant:
-                focusAssistantSubsection
-            case .taskAssistant:
-                taskAssistantSubsection
-            case .adviceAssistant:
-                adviceAssistantSubsection
-            case .memoryAssistant:
-                memoryAssistantSubsection
-            case .analysisThrottle:
-                analysisThrottleSubsection
-            case .goals:
-                goalsSubsection
-            case .askOmiFloatingBar:
-                askOmiFloatingBarSubsection
-            case .preferences:
-                preferencesSubsection
-            case .troubleshooting:
-                troubleshootingSubsection
-            }
+        VStack(spacing: 24) {
+            advancedCategoryHeader(title: "AI User Profile", icon: "brain")
+            aiUserProfileSubsection
+            advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
+            statsSubsection
+            advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
+            featureTiersSubsection
+            advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
+            focusAssistantSubsection
+            advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+            taskAssistantSubsection
+            advancedCategoryHeader(title: "Advice Assistant", icon: "lightbulb.fill")
+            adviceAssistantSubsection
+            advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+            memoryAssistantSubsection
+            advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+            analysisThrottleSubsection
+            advancedCategoryHeader(title: "Goals", icon: "target")
+            goalsSubsection
+            advancedCategoryHeader(title: "Ask omi Floating Bar", icon: "sparkles")
+            askOmiFloatingBarSubsection
+            advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+            preferencesSubsection
+            advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+            troubleshootingSubsection
         }
     }
 
@@ -2624,18 +2713,33 @@ struct SettingsContentView: View {
                     }
 
                     settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
-                        Button(action: {
-                            PromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                FocusTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                PromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -2733,6 +2837,71 @@ struct SettingsContentView: View {
                         .foregroundColor(OmiColors.textTertiary)
 
                     if taskEnabled {
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    // Task Agent (chat / investigate) toggle
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Task Agent")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text("Investigate button and sidebar chat for tasks")
+                                .scaledFont(size: 12)
+                                .foregroundColor(OmiColors.textTertiary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $taskChatAgentEnabled)
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .onChange(of: taskChatAgentEnabled) { _, newValue in
+                                TaskAgentSettings.shared.isChatEnabled = newValue
+                            }
+                    }
+
+                    // Working Directory (shared by chat agent and terminal agent)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Working Directory")
+                                .scaledFont(size: 14)
+                                .foregroundColor(OmiColors.textSecondary)
+                            Text(taskAgentWorkingDirectory.isEmpty ? "Not set — chat agent defaults to ~" : taskAgentWorkingDirectory)
+                                .scaledFont(size: 11)
+                                .foregroundColor(OmiColors.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        Spacer()
+
+                        Button("Browse...") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.canCreateDirectories = true
+                            if !taskAgentWorkingDirectory.isEmpty {
+                                panel.directoryURL = URL(fileURLWithPath: taskAgentWorkingDirectory)
+                            }
+                            if panel.runModal() == .OK, let url = panel.url {
+                                taskAgentWorkingDirectory = url.path
+                                TaskAgentSettings.shared.workingDirectory = url.path
+                            }
+                        }
+                        .scaledFont(size: 13)
+
+                        if !taskAgentWorkingDirectory.isEmpty {
+                            Button("Clear") {
+                                taskAgentWorkingDirectory = ""
+                                TaskAgentSettings.shared.workingDirectory = ""
+                            }
+                            .scaledFont(size: 13)
+                            .foregroundColor(OmiColors.textTertiary)
+                        }
+                    }
+
                     Divider()
                         .background(OmiColors.backgroundQuaternary)
 
@@ -3044,18 +3213,33 @@ struct SettingsContentView: View {
                     }
 
                     settingRow(title: "Advice Prompt", subtitle: "Customize AI instructions for advice", settingId: "advanced.adviceassistant.prompt") {
-                        Button(action: {
-                            AdvicePromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                AdviceTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                AdvicePromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -3543,7 +3727,6 @@ struct SettingsContentView: View {
             .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Rescan") {
-                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
                     NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
                 }
             } message: {
@@ -3774,21 +3957,22 @@ struct SettingsContentView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Omi")
-                                .scaledFont(size: 18, weight: .bold)
-                                .foregroundColor(OmiColors.textPrimary)
+                            HStack(spacing: 6) {
+                                Text("omi")
+                                    .scaledFont(size: 18, weight: .bold)
+                                    .foregroundColor(OmiColors.textPrimary)
+
+                                if !updaterViewModel.activeChannelLabel.isEmpty {
+                                    Text("(\(updaterViewModel.activeChannelLabel))")
+                                        .scaledFont(size: 13, weight: .medium)
+                                        .foregroundColor(OmiColors.purplePrimary)
+                                }
+                            }
 
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
-                                .onTapGesture {
-                                    // Hidden: Option+click to enable staging channel
-                                    if NSEvent.modifierFlags.contains(.option) {
-                                        UserDefaults.standard.set("staging", forKey: "update_channel")
-                                        updaterViewModel.updateChannel = .beta // closest visible option
-                                        logSync("Settings: Staging channel enabled via hidden gesture")
-                                    }
-                                }
+                                .textSelection(.enabled)
                         }
 
                         Spacer()
@@ -3868,7 +4052,17 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
-                        Picker("", selection: $updaterViewModel.updateChannel) {
+                        Picker("", selection: Binding(
+                            get: { updaterViewModel.updateChannel },
+                            set: { newChannel in
+                                // Switching beta → stable with a newer build: confirm first
+                                if updaterViewModel.updateChannel == .beta && newChannel == .stable && updaterViewModel.isDowngradeToStable {
+                                    showDowngradeAlert = true
+                                } else {
+                                    updaterViewModel.updateChannel = newChannel
+                                }
+                            }
+                        )) {
                             ForEach(UpdateChannel.allCases, id: \.self) { channel in
                                 Text(channel.displayName).tag(channel)
                             }
@@ -3878,6 +4072,18 @@ struct SettingsContentView: View {
                         .frame(width: 100)
                     }
                 }
+            }
+            .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
+                Button("Stay on Beta", role: .cancel) { }
+                Button("Switch to Stable") {
+                    updaterViewModel.updateChannel = .stable
+                    if let url = URL(string: "https://macos.omi.me") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } message: {
+                let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
+                Text("You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now.")
             }
 
             settingsCard(settingId: "about.reportissue") {
@@ -3891,7 +4097,7 @@ struct SettingsContentView: View {
                             .scaledFont(size: 15, weight: .medium)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text("Help us improve Omi")
+                        Text("Help us improve omi")
                             .scaledFont(size: 13)
                             .foregroundColor(OmiColors.textTertiary)
                     }
@@ -4239,6 +4445,8 @@ struct SettingsContentView: View {
         transcriptionLanguage = AssistantSettings.shared.transcriptionLanguage
         transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
         vocabularyList = AssistantSettings.shared.transcriptionVocabulary
+        vadGateEnabled = AssistantSettings.shared.vadGateEnabled
+        batchTranscriptionEnabled = AssistantSettings.shared.batchTranscriptionEnabled
 
         Task {
             do {
@@ -4292,6 +4500,7 @@ struct SettingsContentView: View {
 
                     isLoadingSettings = false
                 }
+
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {
@@ -4716,7 +4925,6 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile),
         highlightedSettingId: .constant(nil)
     )
 }

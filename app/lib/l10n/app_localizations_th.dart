@@ -888,7 +888,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get useMcpApiKey => 'ใช้คีย์ API MCP ของคุณ';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'เว็บฮุก';
 
   @override
   String get conversationEvents => 'เหตุการณ์การสนทนา';
@@ -1009,7 +1009,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'เชื่อมต่อ';
 
   @override
   String get comingSoon => 'เร็วๆ นี้';
@@ -2253,7 +2253,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get folderName => 'ชื่อโฟลเดอร์';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'คำอธิบาย (ไม่จำเป็น)';
 
   @override
   String get failedToDeleteFolder => 'ลบโฟลเดอร์ไม่สำเร็จ';
@@ -6279,7 +6279,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get writeReviewOptional => 'เขียนรีวิว (ไม่บังคับ)';
 
   @override
-  String get setupQuestionsIntro => 'Help us improve Omi by answering a few questions.  🫶 💜';
+  String get setupQuestionsIntro => 'ตอบคำถามสักสองสามข้อเพื่อปรับแต่งประสบการณ์ของคุณ';
 
   @override
   String get setupQuestionProfession => '1. คุณทำอาชีพอะไร?';
@@ -6291,7 +6291,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get setupQuestionAge => '3. ช่วงอายุของคุณคือเท่าไหร่?';
 
   @override
-  String get setupAnswerAllQuestions => 'You haven\'t answered all the questions yet! 🥺';
+  String get setupAnswerAllQuestions => 'คุณยังไม่ได้ตอบคำถามทั้งหมด! 🥺';
 
   @override
   String get setupSkipHelp => 'ข้าม ฉันไม่อยากช่วย :C';
@@ -6707,7 +6707,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get recordingDetails => 'รายละเอียดการบันทึก';
 
   @override
-  String get storageLocationSdCard => 'SD Card';
+  String get storageLocationSdCard => 'การ์ด SD';
 
   @override
   String get storageLocationLimitlessPendant => 'จี้ Limitless';
@@ -7961,27 +7961,27 @@ class AppLocalizationsTh extends AppLocalizations {
   String get addTask => 'เพิ่มงาน';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'เพิ่มเซิร์ฟเวอร์ MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'เชื่อมต่อเครื่องมือ AI ภายนอก';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'เชื่อมต่อ $count เครื่องมือสำเร็จ';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ MCP ได้';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'กำลังอนุญาต...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'คุณพบเราได้อย่างไร?';
 
   @override
   String get tiktok => 'TikTok';
@@ -7999,19 +7999,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'เพื่อน';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'อื่นๆ';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'กรุณาระบุ';
 
   @override
-  String get event => 'Event';
+  String get event => 'กิจกรรม';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'เพื่อนร่วมงาน';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8176,4 +8176,58 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'นี่คือสิ่งที่ฉันรู้เกี่ยวกับคุณ';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'แผนที่นี้จะอัปเดตเมื่อ Omi เรียนรู้จากการสนทนาของคุณ';
+
+  @override
+  String get apiEnvironment => 'สภาพแวดล้อม API';
+
+  @override
+  String get apiEnvironmentDescription => 'เลือกเซิร์ฟเวอร์ที่จะเชื่อมต่อ';
+
+  @override
+  String get production => 'โปรดักชัน';
+
+  @override
+  String get staging => 'สเตจจิ้ง';
+
+  @override
+  String get switchRequiresRestart => 'การสลับต้องรีสตาร์ทแอป';
+
+  @override
+  String get switchApiConfirmTitle => 'สลับสภาพแวดล้อม API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'สลับไปที่ $environment? คุณจะต้องปิดและเปิดแอปใหม่เพื่อให้การเปลี่ยนแปลงมีผล';
+  }
+
+  @override
+  String get switchAndRestart => 'สลับ';
+
+  @override
+  String get stagingDisclaimer =>
+      'สภาพแวดล้อมทดสอบอาจไม่เสถียร มีประสิทธิภาพไม่สม่ำเสมอ และข้อมูลอาจสูญหาย สำหรับการทดสอบเท่านั้น';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'บันทึกแล้ว ปิดและเปิดแอปใหม่เพื่อใช้งานการเปลี่ยนแปลง';
+
+  @override
+  String get shared => 'แชร์แล้ว';
+
+  @override
+  String get onlyYouCanSeeConversation => 'เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้';
+
+  @override
+  String get anyoneWithLinkCanView => 'ใครก็ตามที่มีลิงก์สามารถดูได้';
+
+  @override
+  String get tasksCleanTodayTitle => 'ล้างงานของวันนี้ไหม?';
+
+  @override
+  String get tasksCleanTodayMessage => 'การดำเนินการนี้จะลบเฉพาะกำหนดส่ง';
 }

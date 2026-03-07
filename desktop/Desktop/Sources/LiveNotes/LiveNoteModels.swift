@@ -90,6 +90,13 @@ struct LiveNoteRecord: Codable, FetchableRecord, PersistableRecord, Identifiable
     }
 }
 
+// MARK: - TableDocumented
+
+extension LiveNoteRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["live_notes"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["live_notes"] ?? [:] }
+}
+
 // MARK: - Live Note Error
 
 /// Errors for LiveNote operations

@@ -14,6 +14,8 @@ class AnalyticsManager {
         Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
     }
 
+    private var lastTranscriptionStartedAt: Date?
+
     private init() {}
 
     // MARK: - Initialization
@@ -26,6 +28,7 @@ class AnalyticsManager {
         }
         MixpanelManager.shared.initialize()
         PostHogManager.shared.initialize()
+        HeapManager.shared.initialize()
     }
 
     // MARK: - User Identification
@@ -33,11 +36,13 @@ class AnalyticsManager {
     func identify() {
         MixpanelManager.shared.identify()
         PostHogManager.shared.identify()
+        HeapManager.shared.identify()
     }
 
     func reset() {
         MixpanelManager.shared.reset()
         PostHogManager.shared.reset()
+        HeapManager.shared.reset()
     }
 
     // MARK: - Opt In/Out
@@ -57,11 +62,28 @@ class AnalyticsManager {
     func onboardingStepCompleted(step: Int, stepName: String) {
         MixpanelManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
         PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
+        HeapManager.shared.track("Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
     }
 
     func onboardingCompleted() {
         MixpanelManager.shared.onboardingCompleted()
         PostHogManager.shared.onboardingCompleted()
+        HeapManager.shared.track("Onboarding Completed")
+    }
+
+    func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
+        var props = properties
+        props["tool"] = tool
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Tool Used", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Tool Used", properties: props)
+    }
+
+    func onboardingChatMessage(role: String, step: String) {
+        let props: [String: Any] = ["role": role, "step": step]
+        let mixpanelProps = props.compactMapValues { $0 as? MixpanelType }
+        MixpanelManager.shared.track("Onboarding Chat Message", properties: mixpanelProps)
+        PostHogManager.shared.track("Onboarding Chat Message", properties: props)
     }
 
     // MARK: - Authentication Events
@@ -69,21 +91,25 @@ class AnalyticsManager {
     func signInStarted(provider: String) {
         MixpanelManager.shared.signInStarted(provider: provider)
         PostHogManager.shared.signInStarted(provider: provider)
+        HeapManager.shared.track("Sign In Started", properties: ["provider": provider])
     }
 
     func signInCompleted(provider: String) {
         MixpanelManager.shared.signInCompleted(provider: provider)
         PostHogManager.shared.signInCompleted(provider: provider)
+        HeapManager.shared.track("Sign In Completed", properties: ["provider": provider])
     }
 
     func signInFailed(provider: String, error: String) {
         MixpanelManager.shared.signInFailed(provider: provider, error: error)
         PostHogManager.shared.signInFailed(provider: provider, error: error)
+        HeapManager.shared.track("Sign In Failed", properties: ["provider": provider, "error": error])
     }
 
     func signedOut() {
         MixpanelManager.shared.signedOut()
         PostHogManager.shared.signedOut()
+        HeapManager.shared.track("Signed Out")
     }
 
     // MARK: - Monitoring Events
@@ -111,6 +137,11 @@ class AnalyticsManager {
     // MARK: - Recording Events
 
     func transcriptionStarted() {
+        // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
+        if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
+            return
+        }
+        lastTranscriptionStartedAt = Date()
         MixpanelManager.shared.transcriptionStarted()
         PostHogManager.shared.transcriptionStarted()
     }
@@ -218,6 +249,7 @@ class AnalyticsManager {
     func appLaunched() {
         MixpanelManager.shared.appLaunched()
         PostHogManager.shared.appLaunched()
+        HeapManager.shared.track("App Launched")
     }
 
     func trackStartupTiming(dbInitMs: Double, timeToInteractiveMs: Double, hadUncleanShutdown: Bool, databaseInitFailed: Bool) {
@@ -252,9 +284,10 @@ class AnalyticsManager {
         // Collect system diagnostics
         let diagnostics = collectSystemDiagnostics()
 
-        // Track in both analytics systems
+        // Track in all analytics systems
         MixpanelManager.shared.firstLaunch(diagnostics: diagnostics)
         PostHogManager.shared.firstLaunch(diagnostics: diagnostics)
+        HeapManager.shared.track("First Launch")
 
         log("Analytics: First launch diagnostics tracked")
     }
@@ -398,6 +431,7 @@ class AnalyticsManager {
     func deleteAccountConfirmed() {
         MixpanelManager.shared.deleteAccountConfirmed()
         PostHogManager.shared.deleteAccountConfirmed()
+        HeapManager.shared.track("Delete Account Confirmed")
     }
 
     func deleteAccountCancelled() {
@@ -596,6 +630,21 @@ class AnalyticsManager {
         PostHogManager.shared.taskPromoted(taskCount: taskCount)
     }
 
+    func taskCompleted(source: String?) {
+        MixpanelManager.shared.taskCompleted(source: source)
+        PostHogManager.shared.taskCompleted(source: source)
+    }
+
+    func taskDeleted(source: String?) {
+        MixpanelManager.shared.taskDeleted(source: source)
+        PostHogManager.shared.taskDeleted(source: source)
+    }
+
+    func taskAdded() {
+        MixpanelManager.shared.taskAdded()
+        PostHogManager.shared.taskAdded()
+    }
+
     func memoryExtracted(memoryCount: Int) {
         MixpanelManager.shared.memoryExtracted(memoryCount: memoryCount)
         PostHogManager.shared.memoryExtracted(memoryCount: memoryCount)
@@ -645,9 +694,9 @@ class AnalyticsManager {
         PostHogManager.shared.updateNotFound()
     }
 
-    func updateCheckFailed(error: String) {
-        MixpanelManager.shared.updateCheckFailed(error: error)
-        PostHogManager.shared.updateCheckFailed(error: error)
+    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
+        MixpanelManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
+        PostHogManager.shared.updateCheckFailed(error: error, errorDomain: errorDomain, errorCode: errorCode, underlyingError: underlyingError, underlyingDomain: underlyingDomain, underlyingCode: underlyingCode)
     }
 
     // MARK: - Notification Events
@@ -696,6 +745,11 @@ class AnalyticsManager {
     func tierChanged(tier: Int, reason: String) {
         MixpanelManager.shared.tierChanged(tier: tier, reason: reason)
         PostHogManager.shared.tierChanged(tier: tier, reason: reason)
+    }
+
+    func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
+        MixpanelManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
+        PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
     }
 
     // MARK: - Settings State
@@ -802,6 +856,9 @@ class AnalyticsManager {
         props["rewind_retention_days"] = ud.object(forKey: "rewindRetentionDays") as? Double ?? 7.0
         props["rewind_capture_interval"] = ud.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
 
+        // -- AI Chat Mode --
+        props["chat_bridge_mode"] = ud.string(forKey: "chatBridgeMode") ?? "agentSDK"
+
         // -- UI Preferences --
         props["multi_chat_enabled"] = ud.bool(forKey: "multiChatEnabled")
         props["conversations_compact_view"] = ud.object(forKey: "conversationsCompactView") as? Bool ?? true
@@ -818,6 +875,9 @@ class AnalyticsManager {
         // -- Floating Bar (AskOmi) --
         props["floating_bar_enabled"] = FloatingControlBarManager.shared.isEnabled
         props["floating_bar_visible"] = FloatingControlBarManager.shared.isVisible
+
+        // -- Dev Mode --
+        props["dev_mode_enabled"] = ud.bool(forKey: "devModeEnabled")
 
         return props
     }
@@ -873,6 +933,41 @@ class AnalyticsManager {
         ]
         MixpanelManager.shared.track("Floating Bar PTT Ended", properties: props.compactMapValues { $0 as? MixpanelType })
         PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
+    }
+
+    // MARK: - Knowledge Graph Events
+
+    /// Track when knowledge graph generation starts during onboarding
+    func knowledgeGraphBuildStarted(filesIndexed: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "files_indexed": filesIndexed,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Started", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_started", properties: props)
+    }
+
+    /// Track when knowledge graph generation completes (successfully loaded with data)
+    func knowledgeGraphBuildCompleted(nodeCount: Int, edgeCount: Int, pollAttempts: Int, hadExistingGraph: Bool) {
+        let props: [String: Any] = [
+            "node_count": nodeCount,
+            "edge_count": edgeCount,
+            "poll_attempts": pollAttempts,
+            "had_existing_graph": hadExistingGraph
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Completed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_completed", properties: props)
+    }
+
+    /// Track when knowledge graph generation fails or times out empty
+    func knowledgeGraphBuildFailed(reason: String, pollAttempts: Int, filesIndexed: Int) {
+        let props: [String: Any] = [
+            "reason": reason,
+            "poll_attempts": pollAttempts,
+            "files_indexed": filesIndexed
+        ]
+        MixpanelManager.shared.track("Knowledge Graph Build Failed", properties: props.compactMapValues { $0 as? MixpanelType })
+        PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
     }
 
     // MARK: - Display Info

@@ -123,201 +123,219 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        // Load more button at top
-                        if hasMoreMessages {
-                            Button {
-                                Task {
-                                    await onLoadMore()
-                                }
-                            } label: {
-                                if isLoadingMoreMessages {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Text("Load earlier messages")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                        }
+                scrollContent(proxy: proxy)
+                scrollToBottomButton(proxy: proxy)
+            }
+        }
+    }
 
-                        if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
-                            VStack(spacing: 12) {
-                                Spacer()
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Loading...")
-                                    .scaledFont(size: 13)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else if let error = sessionsLoadError, messages.isEmpty {
-                            VStack(spacing: 16) {
-                                Spacer()
-                                Image(systemName: "exclamationmark.triangle")
-                                    .scaledFont(size: 40)
-                                    .foregroundColor(OmiColors.warning)
+    @ViewBuilder
+    private func scrollContent(proxy: ScrollViewProxy) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                loadMoreButton
+                messageContent
+            }
+            .padding()
+            .textSelection(.enabled)
+            .background(scrollDetectors)
 
-                                Text("Failed to load chats")
-                                    .scaledFont(size: 16, weight: .medium)
-                                    .foregroundColor(OmiColors.textPrimary)
-
-                                Text(error)
-                                    .scaledFont(size: 14)
-                                    .foregroundColor(OmiColors.textTertiary)
-                                    .multilineTextAlignment(.center)
-
-                                if let onRetry {
-                                    Button(action: onRetry) {
-                                        Text("Try Again")
-                                            .scaledFont(size: 14, weight: .medium)
-                                            .foregroundColor(OmiColors.textPrimary)
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .fill(OmiColors.purplePrimary)
-                                            )
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(32)
-                        } else if messages.isEmpty {
-                            welcomeContent()
-                        } else {
-                            let dupeIds = duplicateMessageIds
-                            ForEach(messages) { message in
-                                ChatBubble(
-                                    message: message,
-                                    app: app,
-                                    onRate: { rating in
-                                        onRate(message.id, rating)
-                                    },
-                                    onCitationTap: { citation in
-                                        onCitationTap?(citation)
-                                    },
-                                    isDuplicate: dupeIds.contains(message.id)
-                                )
-                                .id(message.id)
-                            }
-
-                            // Invisible anchor for reliable scroll-to-bottom
-                            Color.clear
-                                .frame(height: 1)
-                                .id("bottom-anchor")
-                        }
-                    }
-                    .padding()
-                    .textSelection(.enabled)
-                    .background(
-                        ScrollPositionDetector { atBottom in
-                            isUserAtBottom = atBottom
-                            if atBottom {
-                                shouldFollowContent = true
-                            } else if !isProgrammaticScroll && !isSettlingAfterAppear {
-                                // Only stop following when the user actively scrolls up,
-                                // not when content grows past the viewport, we're mid-scroll,
-                                // or the view is still settling after (re-)appearing.
-                                shouldFollowContent = false
-                            }
-                        }
-                    )
-                }
-                .onChange(of: messages.count) { oldCount, newCount in
-                    if newCount > oldCount || oldCount == 0 {
-                        if shouldFollowContent || oldCount == 0 {
-                            scrollToBottom(proxy: proxy)
-                            // Extra scroll after layout settles for initial load
-                            if oldCount == 0 {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    scrollToBottom(proxy: proxy)
-                                }
-                            }
-                        }
-                    }
-                }
-                .onChange(of: messages.last?.text) { _, _ in
-                    if shouldFollowContent {
-                        throttledScrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: messages.last?.contentBlocks.count) { _, _ in
-                    if shouldFollowContent {
-                        throttledScrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: isSending) { oldValue, newValue in
-                    // When streaming starts, follow if we're at/near bottom
-                    if newValue && !oldValue && isUserAtBottom {
-                        shouldFollowContent = true
-                    }
-                }
-                .background(
-                    UserScrollDetector {
-                        guard !isSettlingAfterAppear else { return }
-                        // Immediately break out of follow mode — no delay
-                        shouldFollowContent = false
-                        userIsScrolling = true
-                        // Cancel any pending programmatic scroll
-                        scrollThrottleWorkItem?.cancel()
-                        scrollThrottleWorkItem = nil
-                        // Clear the scrolling flag after a short idle period
-                        userScrollEndWorkItem?.cancel()
-                        let endWork = DispatchWorkItem {
-                            userIsScrolling = false
-                        }
-                        userScrollEndWorkItem = endWork
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
-                    }
-                )
-                .onAppear {
-                    // Suppress scroll-detection false positives while content settles
-                    isSettlingAfterAppear = true
-                    // Scroll immediately, after initial layout, and after full settle
+            // Invisible anchor lives OUTSIDE the LazyVStack so it is always
+            // eagerly rendered. Inside LazyVStack it may not exist in the view
+            // hierarchy when scrollTo is first called (lazy evaluation), causing
+            // the scroll to jump to an estimated — often empty — position.
+            if !messages.isEmpty {
+                Color.clear
+                    .frame(height: 1)
+                    .id("bottom-anchor")
+            }
+        }
+        .onChange(of: messages.count) { oldCount, newCount in
+            if newCount > oldCount || oldCount == 0 {
+                if shouldFollowContent || oldCount == 0 {
                     scrollToBottom(proxy: proxy)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        scrollToBottom(proxy: proxy)
+                    if oldCount == 0 {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            scrollToBottom(proxy: proxy)
+                        }
                     }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                        scrollToBottom(proxy: proxy)
-                    }
-                    // Allow normal scroll detection after content has settled
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        isSettlingAfterAppear = false
-                    }
-                }
-
-                // Scroll to bottom button
-                if !shouldFollowContent && !messages.isEmpty {
-                    Button {
-                        shouldFollowContent = true
-                        scrollToBottom(proxy: proxy)
-                    } label: {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .scaledFont(size: 32)
-                            .foregroundColor(OmiColors.purplePrimary)
-                            .background(
-                                Circle()
-                                    .fill(OmiColors.backgroundPrimary)
-                                    .frame(width: 28, height: 28)
-                            )
-                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 16)
-                    .transition(.scale.combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.2), value: shouldFollowContent)
                 }
             }
+        }
+        .onChange(of: messages.last?.text) { _, _ in
+            if shouldFollowContent {
+                throttledScrollToBottom(proxy: proxy)
+            }
+        }
+        .onChange(of: messages.last?.contentBlocks.count) { _, _ in
+            if shouldFollowContent {
+                throttledScrollToBottom(proxy: proxy)
+            }
+        }
+        .onChange(of: isSending) { oldValue, newValue in
+            if newValue && !oldValue && isUserAtBottom {
+                shouldFollowContent = true
+            }
+        }
+        .onAppear {
+            isSettlingAfterAppear = true
+            scrollToBottom(proxy: proxy)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                scrollToBottom(proxy: proxy)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                scrollToBottom(proxy: proxy)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                isSettlingAfterAppear = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadMoreButton: some View {
+        if hasMoreMessages {
+            Button {
+                Task {
+                    await onLoadMore()
+                }
+            } label: {
+                if isLoadingMoreMessages {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Load earlier messages")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var messageContent: some View {
+        if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text("Loading...")
+                    .scaledFont(size: 13)
+                    .foregroundColor(OmiColors.textTertiary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 80)
+        } else if let error = sessionsLoadError, messages.isEmpty {
+            errorContent(error: error)
+        } else if messages.isEmpty {
+            welcomeContent()
+        } else {
+            let dupeIds = duplicateMessageIds
+            ForEach(messages) { message in
+                ChatBubble(
+                    message: message,
+                    app: app,
+                    onRate: { rating in
+                        onRate(message.id, rating)
+                    },
+                    onCitationTap: { citation in
+                        onCitationTap?(citation)
+                    },
+                    isDuplicate: dupeIds.contains(message.id)
+                )
+                .id(message.id)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func errorContent(error: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle")
+                .scaledFont(size: 40)
+                .foregroundColor(OmiColors.warning)
+
+            Text("Failed to load chats")
+                .scaledFont(size: 16, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+            Text(error)
+                .scaledFont(size: 14)
+                .foregroundColor(OmiColors.textTertiary)
+                .multilineTextAlignment(.center)
+
+            if let onRetry {
+                Button(action: onRetry) {
+                    Text("Try Again")
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(OmiColors.purplePrimary)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(32)
+        .padding(.vertical, 48)
+    }
+
+    // Both detectors share the same .background so their NSViews land
+    // inside NSScrollView.documentView — the superview walk in each
+    // coordinator then correctly finds the enclosing NSScrollView.
+    private var scrollDetectors: some View {
+        ZStack {
+            ScrollPositionDetector { atBottom in
+                isUserAtBottom = atBottom
+                if atBottom {
+                    shouldFollowContent = true
+                } else if !isProgrammaticScroll && !isSettlingAfterAppear {
+                    shouldFollowContent = false
+                }
+            }
+            UserScrollDetector {
+                guard !isSettlingAfterAppear else { return }
+                shouldFollowContent = false
+                userIsScrolling = true
+                scrollThrottleWorkItem?.cancel()
+                scrollThrottleWorkItem = nil
+                userScrollEndWorkItem?.cancel()
+                let endWork = DispatchWorkItem {
+                    userIsScrolling = false
+                }
+                userScrollEndWorkItem = endWork
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
+        if !shouldFollowContent && !messages.isEmpty {
+            Button {
+                shouldFollowContent = true
+                scrollToBottom(proxy: proxy)
+            } label: {
+                Image(systemName: "arrow.down.circle.fill")
+                    .scaledFont(size: 32)
+                    .foregroundColor(OmiColors.purplePrimary)
+                    .background(
+                        Circle()
+                            .fill(OmiColors.backgroundPrimary)
+                            .frame(width: 28, height: 28)
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 16)
+            .transition(.scale.combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.2), value: shouldFollowContent)
         }
     }
 

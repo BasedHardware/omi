@@ -4,6 +4,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Collection name
@@ -465,4 +468,4 @@ def unlock_all_action_items(uid: str):
             count = 0
     if count > 0:
         batch.commit()
-    print(f"Unlocked all action items for user {uid}")
+    logger.info(f"Unlocked all action items for user {uid}")

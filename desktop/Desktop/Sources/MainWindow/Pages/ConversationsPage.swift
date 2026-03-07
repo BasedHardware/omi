@@ -156,6 +156,8 @@ struct ConversationsPage: View {
 
                 Spacer()
 
+                quickNoteButton
+
                 if !appState.isTranscribing {
                     startRecordingButton
                 }
@@ -166,6 +168,27 @@ struct ConversationsPage: View {
             // Conversation list
             conversationListSection
         }
+    }
+
+    private var quickNoteButton: some View {
+        Button {
+            NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "note.text")
+                    .scaledFont(size: 12)
+                Text("Quick Note")
+                    .scaledFont(size: 13, weight: .medium)
+            }
+            .foregroundColor(OmiColors.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(OmiColors.backgroundTertiary)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Conversation List Section

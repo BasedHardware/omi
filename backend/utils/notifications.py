@@ -16,6 +16,9 @@ from .llm.notifications import (
     generate_credit_limit_notification,
     generate_silent_user_notification,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 # iOS bundle ID for APNs
 IOS_BUNDLE_ID = 'com.friend-app-with-wearable.ios12'
@@ -142,7 +145,7 @@ def _send_to_user(
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
-        print(f"No tokens found for user {user_id}")
+        logger.info(f"No tokens found for user {user_id}")
         return 0
 
     # Build messages for all tokens
@@ -162,25 +165,25 @@ def _send_to_user(
                 error_code = getattr(result.exception, 'code', None)
                 if error_code in PERMANENT_FAILURE_CODES:
                     invalid_tokens.append(tokens[idx])
-                    print(f'Invalid token removed - Error: {error_code}')
+                    logger.error(f'Invalid token removed - Error: {error_code}')
                 else:
-                    print(f'FCM send failed: {result.exception}({error_code})')
+                    logger.error(f'FCM send failed: {result.exception}({error_code})')
 
         # Remove invalid tokens in bulk
         if invalid_tokens:
             notification_db.remove_bulk_tokens(invalid_tokens)
 
-        print(f'FCM batch send: {success_count}/{len(tokens)} successful')
+        logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
 
     except Exception as e:
-        print(f'FCM batch send error: {e}')
+        logger.error(f'FCM batch send error: {e}')
         return 0
 
 
 def send_notification(user_id: str, title: str, body: str, data: dict = None, tokens: list = None):
     """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
-    print(f'send_notification to user {user_id}')
+    logger.info(f'send_notification to user {user_id}')
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
@@ -197,7 +200,7 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: d
         if not name:
             name = "there"
     except Exception as e:
-        print(f"Error getting user info from Firebase Auth: {e}")
+        logger.error(f"Error getting user info from Firebase Auth: {e}")
         name = "there"
 
     # Generate welcome message for unlimited plan with user context
@@ -210,7 +213,7 @@ async def send_credit_limit_notification(user_id: str):
     """Send a personalized credit limit notification if not sent recently"""
     # Check if notification was sent recently (within 6 hours)
     if has_credit_limit_notification_been_sent(user_id):
-        print(f"Credit limit notification already sent recently for user {user_id}")
+        logger.info(f"Credit limit notification already sent recently for user {user_id}")
         return
 
     # Get user name from Firebase Auth
@@ -222,7 +225,7 @@ async def send_credit_limit_notification(user_id: str):
         if not name:
             name = "there"
     except Exception as e:
-        print(f"Error getting user info from Firebase Auth: {e}")
+        logger.error(f"Error getting user info from Firebase Auth: {e}")
         name = "there"
 
     # Generate personalized credit limit message
@@ -233,14 +236,14 @@ async def send_credit_limit_notification(user_id: str):
 
     # Cache that notification was sent (6 hours TTL)
     set_credit_limit_notification_sent(user_id)
-    print(f"Credit limit notification sent to user {user_id}")
+    logger.info(f"Credit limit notification sent to user {user_id}")
 
 
 async def send_silent_user_notification(user_id: str):
     """Send a notification if a basic-plan user is silent for too long."""
     # Check if notification was sent recently (within 24 hours)
     if has_silent_user_notification_been_sent(user_id):
-        print(f"Silent user notification already sent recently for user {user_id}")
+        logger.info(f"Silent user notification already sent recently for user {user_id}")
         return
 
     # Get user name from Firebase Auth
@@ -252,7 +255,7 @@ async def send_silent_user_notification(user_id: str):
         if not name:
             name = "there"
     except Exception as e:
-        print(f"Error getting user info from Firebase Auth: {e}")
+        logger.error(f"Error getting user info from Firebase Auth: {e}")
         name = "there"
 
     # Generate personalized credit limit message
@@ -263,7 +266,7 @@ async def send_silent_user_notification(user_id: str):
 
     # Cache that notification was sent (24 hours TTL)
     set_silent_user_notification_sent(user_id)
-    print(f"Silent user notification sent to user {user_id}")
+    logger.info(f"Silent user notification sent to user {user_id}")
 
 
 def send_training_data_submitted_notification(user_id: str):
@@ -277,14 +280,14 @@ def send_training_data_submitted_notification(user_id: str):
         if not name:
             name = "there"
     except Exception as e:
-        print(f"Error getting user info from Firebase Auth: {e}")
+        logger.error(f"Error getting user info from Firebase Auth: {e}")
         name = "there"
 
     title = "omi"
     body = f"Hey {name}! Thanks for your interest in our training data program. We've received your request and our team will review it shortly. We'll notify you as soon as it's approved!"
 
     send_notification(user_id, title, body)
-    print(f"Training data submitted notification sent to user {user_id}")
+    logger.info(f"Training data submitted notification sent to user {user_id}")
 
 
 async def send_bulk_notification(user_tokens: list, title: str, body: str):
@@ -306,7 +309,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
                     error_code = getattr(result.exception, 'code', None)
                     if error_code in PERMANENT_FAILURE_CODES:
                         invalid_tokens.append(batch_tokens[idx])
-                        print(f"Invalid token found - Error: {error_code}")
+                        logger.error(f"Invalid token found - Error: {error_code}")
 
             return response, invalid_tokens
 
@@ -319,11 +322,11 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
         # Remove invalid tokens
         invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
         if invalid_tokens:
-            print(f"Removing {len(invalid_tokens)} invalid tokens")
+            logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
             notification_db.remove_bulk_tokens(invalid_tokens)
 
     except Exception as e:
-        print("Error sending bulk notification:", e)
+        logger.error(f"Error sending bulk notification: {e}")
 
 
 def send_app_review_reply_notification(
@@ -355,7 +358,7 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
     """
-    print(f'send_action_item_data_message to user {user_id}')
+    logger.info(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
         'action_item_id': action_item_id,
@@ -381,7 +384,7 @@ def send_apple_reminders_sync_push(user_id: str, action_items: list) -> bool:
     if not action_items:
         return False
 
-    print(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
+    logger.info(f'send_apple_reminders_sync_push to user {user_id}, {len(action_items)} items')
 
     items_payload = []
     for item in action_items:
@@ -434,7 +437,7 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
         merged_conversation_id: ID of the primary (merged) conversation
         removed_conversation_ids: List of secondary conversation IDs that were removed
     """
-    print(f'send_merge_completed_message to user {user_id}')
+    logger.info(f'send_merge_completed_message to user {user_id}')
     data = {
         'type': 'merge_completed',
         'merged_conversation_id': merged_conversation_id,
@@ -458,7 +461,7 @@ def send_important_conversation_message(user_id: str, conversation_id: str):
     """
     tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
-        print(f"No notification tokens found for user {user_id} for important conversation notification")
+        logger.info(f"No notification tokens found for user {user_id} for important conversation notification")
         return
 
     # FCM data values must be strings
@@ -477,7 +480,7 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
     Sends a data-only FCM message when an action item is updated.
     The app receives this and reschedules the local notification.
     """
-    print(f'send_action_item_update_message to user {user_id}')
+    logger.info(f'send_action_item_update_message to user {user_id}')
     data = {
         'type': 'action_item_update',
         'action_item_id': action_item_id,
@@ -493,7 +496,7 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     Sends a data-only FCM message when an action item is deleted.
     The app receives this and cancels the scheduled local notification.
     """
-    print(f'send_action_item_deletion_message to user {user_id}')
+    logger.info(f'send_action_item_deletion_message to user {user_id}')
     data = {
         'type': 'action_item_delete',
         'action_item_id': action_item_id,
@@ -519,7 +522,7 @@ def send_action_item_created_notification(user_id: str, action_item_description:
     body = display_description
 
     send_notification(user_id, title, body)
-    print(f"Action item created notification sent to user {user_id}")
+    logger.info(f"Action item created notification sent to user {user_id}")
 
 
 def send_action_item_completed_notification(user_id: str, action_item_description: str):
@@ -539,4 +542,4 @@ def send_action_item_completed_notification(user_id: str, action_item_descriptio
     body = display_description
 
     send_notification(user_id, title, body)
-    print(f"Action item completed notification sent to user {user_id}")
+    logger.info(f"Action item completed notification sent to user {user_id}")

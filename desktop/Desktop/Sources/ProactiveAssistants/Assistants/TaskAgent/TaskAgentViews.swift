@@ -86,7 +86,6 @@ struct AgentStatusIndicator: View {
                             Image(systemName: "terminal")
                                 .scaledFont(size: 10)
                                 .foregroundColor(OmiColors.textTertiary)
-                                .frame(width: 20, height: 20)
                         }
 
                         Text(isLaunching ? "Launching..." : "Run Agent")

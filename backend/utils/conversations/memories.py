@@ -5,6 +5,9 @@ import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def process_external_integration_memory(
@@ -60,7 +63,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     extracted_memories = extract_memories_from_text(uid, tweets_text, "twitter_tweets", language=language)
 
     if not extracted_memories or len(extracted_memories) == 0:
-        print(f"No memories extracted from tweets for user {uid}")
+        logger.info(f"No memories extracted from tweets for user {uid}")
         return []
 
     # Convert extracted memories to database format

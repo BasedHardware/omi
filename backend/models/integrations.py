@@ -150,8 +150,10 @@ class SearchConversationsResponse(BaseModel):
     current_page: int = Field(description="Current page number")
     per_page: int = Field(description="Number of items per page")
 
+
 class TaskItem(BaseModel):
     """Task (action item) model for API responses"""
+
     id: str
     description: str
     completed: bool
@@ -160,7 +162,7 @@ class TaskItem(BaseModel):
     due_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
-    
+
     class Config:
         json_encoders = {
             datetime: lambda v: (

@@ -109,3 +109,10 @@ struct IndexedFileRecord: Codable, FetchableRecord, PersistableRecord, Identifia
         id = inserted.rowID
     }
 }
+
+// MARK: - TableDocumented
+
+extension IndexedFileRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["indexed_files"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["indexed_files"] ?? [:] }
+}

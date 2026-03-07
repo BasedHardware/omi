@@ -11,6 +11,9 @@ from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
 from .clients import llm_mini, llm_high
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
@@ -97,7 +100,7 @@ def new_memories_extractor(
 
         return response.facts
     except Exception as e:
-        print(f'Error extracting new facts: {e}')
+        logger.error(f'Error extracting new facts: {e}')
         return []
 
 
@@ -139,7 +142,7 @@ def extract_memories_from_text(
 
         return response.facts
     except Exception as e:
-        print(f'Error extracting facts from {text_source}: {e}')
+        logger.error(f'Error extracting facts from {text_source}: {e}')
         return []
 
 
@@ -184,7 +187,7 @@ def new_learnings_extractor(
         )
         return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
-        print(f'Error extracting new facts: {e}')
+        logger.error(f'Error extracting new facts: {e}')
         return []
 
 
@@ -224,7 +227,7 @@ Respond with ONLY "system" or "interesting" - nothing else."""
             return MemoryCategory.interesting
         return MemoryCategory.system
     except Exception as e:
-        print(f'Error identifying category for memory: {e}')
+        logger.error(f'Error identifying category for memory: {e}')
         return MemoryCategory.system
 
 
@@ -296,6 +299,6 @@ Respond with the action and reasoning."""
         response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
         return response
     except Exception as e:
-        print(f'Error resolving memory conflict: {e}')
+        logger.error(f'Error resolving memory conflict: {e}')
         # Default to keeping new if resolution fails
         return MemoryResolution(action='keep_new', reasoning=f'Resolution failed: {e}')

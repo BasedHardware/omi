@@ -7,7 +7,7 @@ macOS app for OMI — always-on AI companion. Swift/SwiftUI frontend, Rust backe
 ```
 Desktop/          Swift/SwiftUI macOS app (SPM package)
 Backend-Rust/     Rust API server (Firestore, Redis, auth, LLM)
-agent-bridge/     Claude agent integration (TypeScript)
+acp-bridge/       ACP bridge for Claude integration (TypeScript)
 agent-cloud/      Cloud agent service
 dmg-assets/       DMG installer resources
 ```

@@ -171,9 +171,12 @@ done
 
 if $LAUNCH_OK; then
     pass "App launched successfully"
-    # Kill the test instance
-    pkill -f "$TEST_APP" 2>/dev/null || true
-    pkill -x "Omi Computer" 2>/dev/null || true
+    # Kill only the test instance (by matching its path, not the process name)
+    # Avoid pkill -x "Omi Computer" which kills ALL instances including Dev/Production
+    TEST_PIDS=$(pgrep -f "$VERIFY_DIR" 2>/dev/null || true)
+    if [ -n "$TEST_PIDS" ]; then
+        echo "$TEST_PIDS" | xargs kill 2>/dev/null || true
+    fi
 else
     LAUNCH_ERROR=$(cat /tmp/omi-verify-launch-error.txt 2>/dev/null)
     # Also check Console for launch errors
@@ -185,8 +188,11 @@ else
     fail "RELEASE IS BROKEN — app won't start"
     echo ""
     echo "  Run rollback: see .claude/skills/rollback/SKILL.md"
-    # Clean up
-    pkill -f "$TEST_APP" 2>/dev/null || true
+    # Clean up — only kill the test instance
+    TEST_PIDS=$(pgrep -f "$VERIFY_DIR" 2>/dev/null || true)
+    if [ -n "$TEST_PIDS" ]; then
+        echo "$TEST_PIDS" | xargs kill 2>/dev/null || true
+    fi
     exit 1
 fi
 

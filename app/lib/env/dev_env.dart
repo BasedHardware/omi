@@ -55,4 +55,8 @@ final class DevEnv implements EnvFields {
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
+
+  @override
+  @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
+  final String? stagingApiUrl = _DevEnv.stagingApiUrl;
 }

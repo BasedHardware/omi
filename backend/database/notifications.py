@@ -15,6 +15,9 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def save_token(uid: str, data: dict):
@@ -320,7 +323,7 @@ async def get_users_for_daily_summary(timezones: list[str], target_local_hour: i
                     chunk_users.append((uid, tokens, time_zone))
 
             except Exception as e:
-                print(f"Error querying chunk for daily summary: {e}")
+                logger.error(f"Error querying chunk for daily summary: {e}")
             return chunk_users
 
         return await asyncio.to_thread(sync_query)
@@ -378,7 +381,7 @@ async def _get_users_in_timezones(timezones: list[str], filter: str):
                         chunk_users.append((uid, tokens, time_zone))
 
             except Exception as e:
-                print(f"Error querying chunk {chunk}: {e}")
+                logger.error(f"Error querying chunk {chunk}: {e}")
             return chunk_users
 
         return await asyncio.to_thread(sync_query)

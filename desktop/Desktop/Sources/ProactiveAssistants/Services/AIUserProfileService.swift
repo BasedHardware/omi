@@ -18,6 +18,13 @@ struct AIUserProfileRecord: Codable, FetchableRecord, PersistableRecord, Identif
     }
 }
 
+// MARK: - TableDocumented
+
+extension AIUserProfileRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["ai_user_profiles"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["ai_user_profiles"] ?? [:] }
+}
+
 // MARK: - Service
 
 /// Service that generates and maintains an AI-generated user profile.
@@ -27,7 +34,7 @@ struct AIUserProfileRecord: Codable, FetchableRecord, PersistableRecord, Identif
 actor AIUserProfileService {
     static let shared = AIUserProfileService()
 
-    private let model = "gemini-3-pro-preview"
+    private let model = "gemini-pro-latest"
     private let maxProfileLength = 10000
 
     /// Whether profile generation is currently in progress

@@ -110,6 +110,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Enable server-side speaker auto-assignment (backward compatibility flag)
     params += '&speaker_auto_assign=enabled';
 
+    if (SharedPreferencesUtil().vadGateEnabled) {
+      params += '&vad_gate=enabled';
+    }
+
     String url =
         Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
 

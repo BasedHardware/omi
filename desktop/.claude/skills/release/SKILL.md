@@ -70,27 +70,33 @@ Review the commits and create a concise changelog. Group changes by category:
 
 Keep it user-friendly - focus on what users will notice, not internal changes.
 
-### Step 3: Update CHANGELOG.json
+### Step 3: Verify changelog entries
 
-Add a new entry at the **top** of the `releases` array in `CHANGELOG.json`:
+Changelog entries are auto-accumulated by agents in the `unreleased` array of `CHANGELOG.json`. Before releasing, verify entries exist and add any missing ones:
 
-```json
-{
-  "releases": [
-    {
-      "version": "X.Y.Z",
-      "date": "YYYY-MM-DD",
-      "changes": [
-        "Your changelog item 1",
-        "Your changelog item 2"
-      ]
-    },
-    // ... previous releases remain below
-  ]
-}
+```bash
+# Check current unreleased entries
+python3 -c "import json; data=json.load(open('CHANGELOG.json')); print('\n'.join(data.get('unreleased', [])) or '(empty — add entries before releasing)')"
 ```
 
-The release script reads the first entry and uses it for both GitHub release notes and Sparkle appcast.
+If `unreleased` is empty, review the commits from Step 1 and add entries:
+
+```python
+python3 -c "
+import json
+with open('CHANGELOG.json', 'r') as f:
+    data = json.load(f)
+data.setdefault('unreleased', []).extend([
+    'Your changelog item 1',
+    'Your changelog item 2'
+])
+with open('CHANGELOG.json', 'w') as f:
+    json.dump(data, f, indent=2)
+    f.write('\n')
+"
+```
+
+The GitHub Actions workflow (`desktop_auto_release.yml`) consolidates these into a versioned release entry when the tag is created. The release script reads `releases[0]` for both GitHub release notes and Sparkle appcast.
 
 ### Step 4: Pre-flight checks
 

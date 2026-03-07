@@ -6,3 +6,4 @@
 ASSET_PREFIX=prod
 BUNDLE_NAME=Omi
 BUNDLE_DISPLAY_NAME=Omi
+GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as

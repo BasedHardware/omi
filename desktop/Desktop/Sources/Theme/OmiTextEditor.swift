@@ -92,26 +92,17 @@ struct OmiTextEditor: NSViewRepresentable {
             textView.string = text
             context.coordinator.isUpdating = false
 
-            // Force layout and resize the text view so NSScrollView shows
-            // the scrollbar for programmatic text changes (e.g. auto-inserted
-            // task prompts). ensureLayout alone isn't enough — we must also
-            // explicitly update the text view's frame height and re-tile the
-            // scroll view, which normally happens via NSTextView's internal
-            // editing flow during typing/pasting but is skipped for .string sets.
+            // Force layout so NSScrollView knows the new content size
+            // (needed for programmatic text changes to show scrollbar)
             if let layoutManager = textView.layoutManager,
                let textContainer = textView.textContainer {
                 layoutManager.ensureLayout(for: textContainer)
-                let usedRect = layoutManager.usedRect(for: textContainer)
-                let contentHeight = usedRect.height + textView.textContainerInset.height * 2
-                var tvFrame = textView.frame
-                tvFrame.size.height = contentHeight
-                textView.frame = tvFrame
             }
 
-            // Re-tile the scroll view after SwiftUI finishes its layout pass
-            // so it can compare document vs clip height and show scrollbar.
-            DispatchQueue.main.async {
-                scrollView.tile()
+            // When text is cleared (e.g. after submit), scroll back to the top
+            // so the empty input isn't left in a scrolled-down position.
+            if text.isEmpty {
+                textView.scrollRangeToVisible(NSRange(location: 0, length: 0))
             }
 
             if onHeightChange != nil {
@@ -119,9 +110,13 @@ struct OmiTextEditor: NSViewRepresentable {
             }
 
             // Re-focus the text view when content changes programmatically
-            // (e.g. switching between task chats reuses this NSView)
-            if focusOnAppear, let window = scrollView.window {
+            // (e.g. switching between task chats reuses this NSView).
+            // Guard: skip if the text view already has focus to avoid a
+            // focus-thrash loop with SwiftUI's SelectionOverlay.
+            if focusOnAppear, let window = scrollView.window,
+               window.firstResponder !== textView {
                 DispatchQueue.main.async {
+                    guard window.firstResponder !== textView else { return }
                     window.makeFirstResponder(textView)
                 }
             }
@@ -134,6 +129,27 @@ struct OmiTextEditor: NSViewRepresentable {
         if textView.font != newFont {
             textView.font = newFont
         }
+    }
+
+    /// Return a concrete size to SwiftUI's layout engine so it doesn't have to
+    /// recurse through the parent hierarchy to infer the editor's height.
+    /// Without this, NSViewRepresentable reports no intrinsic size and SwiftUI
+    /// keeps propagating unconstrained proposals upward, contributing to the
+    /// recursive StackLayout sizing loop seen in the task chat panel.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+        guard let minH = minHeight, let maxH = maxHeight else {
+            return nil  // no height tracking — let SwiftUI use default NSView sizing
+        }
+        guard let textView = nsView.documentView as? NSTextView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return CGSize(width: proposal.width ?? nsView.bounds.width, height: minH)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let contentHeight = usedRect.height + textView.textContainerInset.height * 2
+        let constrainedHeight = min(max(contentHeight, minH), maxH)
+        return CGSize(width: proposal.width ?? nsView.bounds.width, height: constrainedHeight)
     }
 
     func makeCoordinator() -> Coordinator {

@@ -8,7 +8,6 @@ class EnvironmentDetector {
 
   static Future<bool> isTestFlight() async {
     if (!Platform.isIOS) return false;
-    if (!kReleaseMode) return false;
     try {
       final bool result = await _channel.invokeMethod('isTestFlight');
       return result;

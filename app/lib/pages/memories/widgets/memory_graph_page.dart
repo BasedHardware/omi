@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,7 +8,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -52,11 +50,7 @@ class GraphEdge3D {
   final String targetId;
   final String label;
 
-  GraphEdge3D({
-    required this.sourceId,
-    required this.targetId,
-    required this.label,
-  });
+  GraphEdge3D({required this.sourceId, required this.targetId, required this.label});
 }
 
 class ForceDirectedSimulation3D {
@@ -225,7 +219,24 @@ class ForceDirectedSimulation3D {
 }
 
 class MemoryGraphPage extends StatefulWidget {
-  const MemoryGraphPage({super.key});
+  final bool embedded;
+  final bool showAppBar;
+  final bool showShareButton;
+  final bool trackOpenEvent;
+  final bool autoRebuildIfEmpty;
+  final bool hideRebuildButtonWhenEmpty;
+  final double initialZoom;
+
+  const MemoryGraphPage({
+    super.key,
+    this.embedded = false,
+    this.showAppBar = true,
+    this.showShareButton = true,
+    this.trackOpenEvent = true,
+    this.autoRebuildIfEmpty = false,
+    this.hideRebuildButtonWhenEmpty = false,
+    this.initialZoom = 1.0,
+  });
 
   @override
   State<MemoryGraphPage> createState() => _MemoryGraphPageState();
@@ -255,11 +266,14 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   String? _selectedNodeId;
   Set<String> _highlightedNodeIds = {};
+  int _autoRebuildAttempts = 0;
 
   @override
   void initState() {
     super.initState();
     simulation = ForceDirectedSimulation3D();
+    _zoom = widget.initialZoom;
+    _baseZoom = widget.initialZoom;
     WidgetsBinding.instance.addObserver(this);
 
     _ticker = createTicker((elapsed) {
@@ -270,7 +284,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       }
     });
 
-    MixpanelManager().brainMapOpened();
+    if (widget.trackOpenEvent) {
+      MixpanelManager().brainMapOpened();
+    }
     _loadGraph();
   }
 
@@ -393,50 +409,91 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     final userName = SharedPreferencesUtil().givenName;
     final userLabel = userName.isNotEmpty ? userName : 'Me';
-    bool userNodeFound = false;
+    final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
+    bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
+      final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
+      final nodeType = (nodeData['node_type'] as String? ?? '').trim().toLowerCase();
+      return knownUserLabels.contains(label) || nodeType == 'user';
+    }
 
-    for (var nodeData in nodes) {
-      final label = nodeData['label'] as String? ?? '';
-      final isUser = label.trim().toLowerCase() == userLabel.toLowerCase();
+    String? primaryUserId;
+    for (final nodeData in nodes) {
+      if (nodeData is Map && isUserLikeNode(nodeData)) {
+        primaryUserId = (nodeData['id'] ?? '').toString();
+        if (primaryUserId.isNotEmpty) break;
+      }
+    }
+    primaryUserId ??= 'user-node';
 
-      if (isUser) userNodeFound = true;
+    final remappedIds = <String, String>{};
+    final addedNodeIds = <String>{};
+
+    for (final rawNodeData in nodes) {
+      if (rawNodeData is! Map) continue;
+      final nodeData = rawNodeData;
+      final originalId = (nodeData['id'] ?? '').toString();
+      if (originalId.isEmpty) continue;
+
+      final isUserLike = isUserLikeNode(nodeData);
+      if (isUserLike && originalId != primaryUserId) {
+        remappedIds[originalId] = primaryUserId;
+        continue;
+      }
+
+      final nodeId = remappedIds[originalId] ?? originalId;
+      if (addedNodeIds.contains(nodeId)) continue;
+
+      final isUser = nodeId == primaryUserId;
+      final label = isUser ? userLabel : (nodeData['label'] as String? ?? '');
+      final nodeType = nodeData['node_type'] ?? 'concept';
 
       final node = GraphNode3D(
-        id: nodeData['id'] ?? '',
+        id: nodeId,
         label: label,
-        nodeType: nodeData['node_type'] ?? 'concept',
-        baseColor: isUser ? Colors.white : _colorForType(nodeData['node_type'] ?? 'concept'),
+        nodeType: nodeType,
+        baseColor: isUser ? Colors.white : _colorForType(nodeType),
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
 
       if (isUser) node.position.setZero();
-
       simulation.addNode(node);
+      addedNodeIds.add(nodeId);
     }
 
-    if (!userNodeFound) {
-      if (!simulation.nodeMap.containsKey('user-node')) {
-        final userNode = GraphNode3D(
-          id: 'user-node',
-          label: userLabel,
-          nodeType: 'person',
-          baseColor: Colors.white,
-          initialPosition: v.Vector3.zero(),
-          isFixed: true,
-        );
-        userNode.position.setZero();
-        simulation.addNode(userNode);
-      }
-    }
-
-    for (var edgeData in edges) {
-      final edge = GraphEdge3D(
-        sourceId: edgeData['source_id'] ?? '',
-        targetId: edgeData['target_id'] ?? '',
-        label: edgeData['label'] ?? '',
+    if (!simulation.nodeMap.containsKey(primaryUserId)) {
+      final userNode = GraphNode3D(
+        id: primaryUserId,
+        label: userLabel,
+        nodeType: 'person',
+        baseColor: Colors.white,
+        initialPosition: v.Vector3.zero(),
+        isFixed: true,
       );
-      simulation.addEdge(edge);
+      userNode.position.setZero();
+      simulation.addNode(userNode);
+      addedNodeIds.add(primaryUserId);
+    }
+
+    final edgeKeys = <String>{};
+    void addUniqueEdge(String sourceId, String targetId, String label) {
+      if (sourceId.isEmpty || targetId.isEmpty || sourceId == targetId) return;
+      final key = '$sourceId->$targetId::$label';
+      if (edgeKeys.contains(key)) return;
+      edgeKeys.add(key);
+      simulation.addEdge(GraphEdge3D(sourceId: sourceId, targetId: targetId, label: label));
+    }
+
+    for (final rawEdgeData in edges) {
+      if (rawEdgeData is! Map) continue;
+      final edgeData = rawEdgeData;
+      final sourceId =
+          remappedIds[(edgeData['source_id'] ?? '').toString()] ?? (edgeData['source_id'] ?? '').toString();
+      final targetId =
+          remappedIds[(edgeData['target_id'] ?? '').toString()] ?? (edgeData['target_id'] ?? '').toString();
+      final label = (edgeData['label'] ?? '').toString();
+      if (!addedNodeIds.contains(sourceId) || !addedNodeIds.contains(targetId)) continue;
+      addUniqueEdge(sourceId, targetId, label);
     }
 
     simulation.wake();
@@ -487,17 +544,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       // Draw minimal branding "omi.me" at top center
       final textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 72,
-          fontWeight: FontWeight.bold,
-          letterSpacing: -1.0,
-        ),
+        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
-      final textPainter = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      );
+      final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
@@ -522,28 +571,25 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      return ColoredBox(color: Colors.black, child: _buildBody());
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const Text(
-          'omi.me',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const FaIcon(FontAwesomeIcons.share, size: 20),
-            onPressed: _shareGraph,
-          ),
-        ],
-      ),
+      extendBodyBehindAppBar: widget.showAppBar,
+      appBar: widget.showAppBar
+          ? AppBar(
+              title: const Text('omi.me', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              centerTitle: true,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
+              actions: widget.showShareButton
+                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  : null,
+            )
+          : null,
       body: _buildBody(),
     );
   }
@@ -571,12 +617,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
             children: [
               const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
               const SizedBox(height: 16),
-              Text(_error!, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _loadGraph,
-                child: Text(context.l10n.retry),
+              Text(
+                _error!,
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: _loadGraph, child: Text(context.l10n.retry)),
             ],
           ),
         ),
@@ -588,6 +635,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
+      if (widget.autoRebuildIfEmpty && !_isRebuilding && _autoRebuildAttempts < 3) {
+        _autoRebuildAttempts++;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _rebuildGraph();
+        });
+      }
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
@@ -615,7 +669,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     borderRadius: BorderRadius.circular(2),
                   ),
                 )
-              else
+              else if (!widget.hideRebuildButtonWhenEmpty)
                 ElevatedButton.icon(
                   onPressed: _rebuildGraph,
                   icon: const Icon(Icons.auto_fix_high),
@@ -631,63 +685,65 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       );
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      return Stack(
-        children: [
-          GestureDetector(
-            onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
-            onScaleStart: (details) {
-              simulation.wake();
-              _lastPanStart = details.focalPoint;
-              _baseZoom = _zoom;
-            },
-            onScaleUpdate: (details) {
-              if (_lastPanStart != null) {
-                final delta = details.focalPoint - _lastPanStart!;
-
-                if (details.pointerCount >= 2) {
-                  _panX += delta.dx;
-                  _panY += delta.dy;
-                  if (details.scale != 1.0) {
-                    _zoom = _baseZoom * details.scale;
-                    _zoom = _zoom.clamp(0.2, 5.0);
-                  }
-                } else {
-                  _rotationY -= delta.dx * 0.005;
-                  _rotationX += delta.dy * 0.005;
-                }
-
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          children: [
+            GestureDetector(
+              onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
+              onScaleStart: (details) {
+                simulation.wake();
                 _lastPanStart = details.focalPoint;
-                _repaintNotifier.value++;
-              }
-            },
-            onScaleEnd: (_) => _lastPanStart = null,
-            child: RepaintBoundary(
-              key: _graphKey,
-              child: ValueListenableBuilder<int>(
-                valueListenable: _repaintNotifier,
-                builder: (context, _, __) {
-                  return CustomPaint(
-                    size: Size.infinite,
-                    painter: GraphPainter3D(
-                      nodes: simulation.nodes,
-                      edges: simulation.edges,
-                      nodeMap: simulation.nodeMap,
-                      rotationX: _rotationX,
-                      rotationY: _rotationY,
-                      panX: _panX,
-                      panY: _panY,
-                      zoom: _zoom,
-                      highlightedNodeIds: _highlightedNodeIds,
-                    ),
-                  );
-                },
+                _baseZoom = _zoom;
+              },
+              onScaleUpdate: (details) {
+                if (_lastPanStart != null) {
+                  final delta = details.focalPoint - _lastPanStart!;
+
+                  if (details.pointerCount >= 2) {
+                    _panX += delta.dx;
+                    _panY += delta.dy;
+                    if (details.scale != 1.0) {
+                      _zoom = _baseZoom * details.scale;
+                      _zoom = _zoom.clamp(0.2, 5.0);
+                    }
+                  } else {
+                    _rotationY -= delta.dx * 0.005;
+                    _rotationX += delta.dy * 0.005;
+                  }
+
+                  _lastPanStart = details.focalPoint;
+                  _repaintNotifier.value++;
+                }
+              },
+              onScaleEnd: (_) => _lastPanStart = null,
+              child: RepaintBoundary(
+                key: _graphKey,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _repaintNotifier,
+                  builder: (context, _, __) {
+                    return CustomPaint(
+                      size: Size.infinite,
+                      painter: GraphPainter3D(
+                        nodes: simulation.nodes,
+                        edges: simulation.edges,
+                        nodeMap: simulation.nodeMap,
+                        rotationX: _rotationX,
+                        rotationY: _rotationY,
+                        panX: _panX,
+                        panY: _panY,
+                        zoom: _zoom,
+                        highlightedNodeIds: _highlightedNodeIds,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    });
+          ],
+        );
+      },
+    );
   }
 
   void _handleTap(TapUpDetails details, Size size) {
@@ -915,10 +971,7 @@ class GraphPainter3D extends CustomPainter {
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
           text: edge.label,
-          style: TextStyle(
-            color: Colors.white54.withOpacity(alpha * 2),
-            fontSize: (9 * avgScale).clamp(7, 11),
-          ),
+          style: TextStyle(color: Colors.white54.withOpacity(alpha * 2), fontSize: (9 * avgScale).clamp(7, 11)),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();

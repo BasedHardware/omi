@@ -7,7 +7,7 @@ class ShortcutSettings: ObservableObject {
     static let shared = ShortcutSettings()
 
     /// Notification posted when the Ask Omi shortcut changes so hotkeys can be re-registered.
-    static let askOmiShortcutChanged = Notification.Name("ShortcutSettings.askOmiShortcutChanged")
+    nonisolated static let askOmiShortcutChanged = Notification.Name("ShortcutSettings.askOmiShortcutChanged")
 
     /// Available modifier keys for push-to-talk.
     enum PTTKey: String, CaseIterable {

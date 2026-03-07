@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import Foundation
 import Sentry
 
@@ -23,6 +24,11 @@ actor VideoChunkEncoder {
     /// Threshold for aspect ratio change that triggers a new chunk (20% difference)
     private let aspectRatioChangeThreshold: CGFloat = 0.2
 
+    /// Seconds the new aspect ratio must remain stable before switching chunks.
+    /// Prevents rapid app switching from spawning bursts of short-lived ffmpeg processes
+    /// that hang the hevc_videotoolbox hardware encoder during finalization (10s stall each).
+    private let aspectRatioStabilityDelay: TimeInterval = 2.0
+
     /// Maximum frames to buffer before forcing a flush (memory safety)
     /// Calculated from chunk duration + frame rate + padding so the normal
     /// duration-based finalization always fires before this safety limit.
@@ -41,6 +47,10 @@ actor VideoChunkEncoder {
 
     /// Track consecutive ffmpeg write failures for recovery
     private var consecutiveWriteFailures = 0
+
+    /// Pending aspect ratio debounce state
+    private var pendingAspectRatioSize: CGSize?
+    private var pendingAspectRatioSince: Date?
     private var currentChunkStartTime: Date?
     private(set) var currentChunkPath: String?
     private var frameOffsetInChunk: Int = 0
@@ -100,12 +110,38 @@ actor VideoChunkEncoder {
             try await emergencyReset()
         }
 
-        // Check if aspect ratio changed significantly - if so, start a new chunk
-        // This prevents frames from different window sizes being squished together
+        // Check if aspect ratio changed significantly.
+        // Debounce: require the new ratio to be stable for aspectRatioStabilityDelay before
+        // switching chunks. Rapid app switching (e.g. Firefox ↔ terminal) previously caused
+        // bursts of 1-3 frame chunks whose hevc_videotoolbox encoder hung on finalization,
+        // blocking the actor for 10s per event and chaining into a cascade.
         if let currentInputSize = currentChunkInputSize,
            hasSignificantAspectRatioChange(from: currentInputSize, to: newFrameSize) {
-            log("VideoChunkEncoder: Aspect ratio changed significantly (\(currentInputSize) -> \(newFrameSize)), starting new chunk")
-            try await finalizeCurrentChunk()
+            let now = Date()
+            let pendingMatches = pendingAspectRatioSize.map {
+                !hasSignificantAspectRatioChange(from: $0, to: newFrameSize)
+            } ?? false
+
+            if pendingMatches,
+               let since = pendingAspectRatioSince,
+               now.timeIntervalSince(since) >= aspectRatioStabilityDelay {
+                // New aspect ratio has been stable for the required delay — commit the switch
+                log("VideoChunkEncoder: Aspect ratio changed significantly (\(currentInputSize) -> \(newFrameSize)), starting new chunk")
+                pendingAspectRatioSize = nil
+                pendingAspectRatioSince = nil
+                try await finalizeCurrentChunk()
+            } else {
+                // Not yet stable — record/refresh the pending candidate and drop this frame
+                if !pendingMatches {
+                    pendingAspectRatioSize = newFrameSize
+                    pendingAspectRatioSince = now
+                }
+                return nil
+            }
+        } else {
+            // Aspect ratio matches current chunk — clear any pending transition
+            pendingAspectRatioSize = nil
+            pendingAspectRatioSince = nil
         }
 
         // Start new chunk if needed
@@ -302,14 +338,29 @@ actor VideoChunkEncoder {
             ffmpegStdin = nil
         }
 
-        // Wait for ffmpeg to finish
+        // Wait for ffmpeg to finish, but don't block forever.
+        // Under memory pressure, ffmpeg can hang in a disk I/O syscall and never respond
+        // to stdin close. A 10-second watchdog force-kills it so the cooperative thread
+        // isn't blocked indefinitely, which would deadlock the entire actor.
         if let process = ffmpegProcess {
+            let pid = process.processIdentifier
+            let frameCount = frameTimestamps.count
+
+            let watchdog = Task.detached(priority: .background) {
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
+                if process.isRunning {
+                    logError("VideoChunkEncoder: ffmpeg hung for 10s — force killing PID \(pid)")
+                    kill(pid, SIGKILL)
+                }
+            }
+
             process.waitUntilExit()
+            watchdog.cancel()
 
             if process.terminationStatus != 0 {
                 logError("VideoChunkEncoder: FFmpeg exited with status \(process.terminationStatus)")
             } else {
-                log("VideoChunkEncoder: Finalized chunk with \(frameTimestamps.count) frames")
+                log("VideoChunkEncoder: Finalized chunk with \(frameCount) frames")
             }
 
             ffmpegProcess = nil
@@ -323,6 +374,8 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+        pendingAspectRatioSize = nil
+        pendingAspectRatioSince = nil
     }
 
     // MARK: - Staleness Detection
@@ -486,8 +539,17 @@ actor VideoChunkEncoder {
 
         // Terminate ffmpeg process
         if let process = ffmpegProcess {
-            process.terminate()
+            let pid = process.processIdentifier
+            process.terminate() // SIGTERM
             ffmpegProcess = nil
+            // Force kill after 2s if ffmpeg didn't respond to SIGTERM
+            // (e.g., stuck in disk I/O under memory pressure)
+            Task.detached(priority: .background) {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if process.isRunning {
+                    kill(pid, SIGKILL)
+                }
+            }
         }
 
         frameTimestamps.removeAll()
@@ -525,10 +587,23 @@ actor VideoChunkEncoder {
             ffmpegStdin = nil
         }
 
-        // Terminate ffmpeg process forcefully
+        // Terminate ffmpeg process forcefully.
+        // Use SIGTERM first, then SIGKILL after 2s if it doesn't respond.
+        // ffmpeg can get stuck in disk I/O when the system is under memory pressure,
+        // causing SIGTERM to be ignored (process is in uninterruptible sleep in the kernel).
+        // Without the SIGKILL fallback, zombie ffmpeg processes accumulate and eventually
+        // push the app's memory to 7GB+, making the entire system unresponsive.
         if let process = ffmpegProcess {
-            process.terminate()
+            let pid = process.processIdentifier
+            process.terminate() // SIGTERM
             ffmpegProcess = nil
+            Task.detached(priority: .background) {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if process.isRunning {
+                    logError("VideoChunkEncoder: ffmpeg still running 2s after SIGTERM — force killing PID \(pid)")
+                    kill(pid, SIGKILL)
+                }
+            }
         }
 
         // Clear all state

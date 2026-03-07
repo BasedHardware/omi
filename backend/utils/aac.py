@@ -1,4 +1,7 @@
 import av
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Suppress FFmpeg duration estimation warnings
 av.logging.set_level(av.logging.ERROR)
@@ -55,5 +58,5 @@ class AACDecoder:
             # Expected for incomplete frames, return empty
             return b''
         except Exception as e:
-            print(f"[AAC] Decode error: {e}", self.uid, self.session_id)
+            logger.error(f"[AAC] Decode error: {e} {self.uid} {self.session_id}")
             return b''

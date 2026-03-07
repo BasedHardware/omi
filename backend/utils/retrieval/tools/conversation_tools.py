@@ -16,6 +16,9 @@ import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
 from utils.llm.clients import embeddings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Import agent_config_context for fallback config access
 try:
@@ -85,16 +88,16 @@ def get_conversations_tool(
         Formatted string with conversation details including title, overview, transcript, photos,
         action items, events, and attendees.
     """
-    print(f"🔧 get_conversations_tool called with params:")
-    print(f"   start_date: {start_date}")
-    print(f"   end_date: {end_date}")
-    print(f"   limit: {limit}")
-    print(f"   offset: {offset}")
-    print(f"   include_discarded: {include_discarded}")
-    print(f"   statuses: {statuses}")
-    print(f"   max_transcript_segments: {max_transcript_segments}")
-    print(f"   include_transcript: {include_transcript}")
-    print(f"   include_timestamps: {include_timestamps}")
+    logger.info(f"🔧 get_conversations_tool called with params:")
+    logger.info(f"   start_date: {start_date}")
+    logger.info(f"   end_date: {end_date}")
+    logger.info(f"   limit: {limit}")
+    logger.info(f"   offset: {offset}")
+    logger.info(f"   include_discarded: {include_discarded}")
+    logger.info(f"   statuses: {statuses}")
+    logger.info(f"   max_transcript_segments: {max_transcript_segments}")
+    logger.info(f"   include_transcript: {include_transcript}")
+    logger.info(f"   include_timestamps: {include_timestamps}")
     # print(f"   config: {config}")
 
     # Get config from parameter or context variable (like other tools do)
@@ -102,25 +105,25 @@ def get_conversations_tool(
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 get_conversations_tool - got config from context variable")
+                logger.info(f"🔧 get_conversations_tool - got config from context variable")
         except LookupError:
-            print(f"❌ get_conversations_tool - config not found in context variable")
+            logger.warning(f"❌ get_conversations_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ get_conversations_tool - config is None")
+        logger.info(f"❌ get_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ get_conversations_tool - error accessing config: {e}")
+        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ get_conversations_tool - no user_id in config")
+        logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    print(f"✅ get_conversations_tool - uid: {uid}")
+    logger.info(f"✅ get_conversations_tool - uid: {uid}")
 
     # Get safety guard from config if available
     safety_guard = config['configurable'].get('safety_guard')
@@ -128,7 +131,7 @@ def get_conversations_tool(
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
-        print(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
     # Parse dates if provided (always in UTC)
     start_dt = None
@@ -140,7 +143,7 @@ def get_conversations_tool(
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            print(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed start_date '{start_date}' as {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
@@ -150,7 +153,7 @@ def get_conversations_tool(
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            print(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
@@ -173,7 +176,9 @@ def get_conversations_tool(
         statuses=status_list,
     )
 
-    print(f"📊 get_conversations_tool - found {len(conversations_data) if conversations_data else 0} conversations")
+    logger.info(
+        f"📊 get_conversations_tool - found {len(conversations_data) if conversations_data else 0} conversations"
+    )
 
     if not conversations_data:
         date_info = ""
@@ -185,7 +190,7 @@ def get_conversations_tool(
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
         msg = f"No conversations found{date_info}. The user may not have recorded any conversations yet, or the date range may be outside their conversation history."
-        print(f"⚠️ get_conversations_tool - {msg}")
+        logger.info(f"⚠️ get_conversations_tool - {msg}")
         return msg
 
     try:
@@ -198,15 +203,15 @@ def get_conversations_tool(
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
 
-            print(f"🔍 get_conversations_tool - Found {len(all_person_ids)} unique person IDs")
+            logger.info(f"🔍 get_conversations_tool - Found {len(all_person_ids)} unique person IDs")
 
             # Fetch people data
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
                 people = [Person(**p) for p in people_data]
-                print(f"🔍 get_conversations_tool - Loaded {len(people)} people")
+                logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
         else:
-            print(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
+            logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
@@ -224,10 +229,10 @@ def get_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                print(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
                 continue
 
-        print(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
+        logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Store conversations in config for citation tracking (as lightweight dicts)
         conversations_collected = config['configurable'].get('conversations_collected', [])
@@ -238,7 +243,7 @@ def get_conversations_tool(
             conv_dict.pop('photos', None)
             conv_dict.pop('audio_files', None)
             conversations_collected.append(conv_dict)
-        print(
+        logger.info(
             f"📚 get_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
@@ -246,12 +251,12 @@ def get_conversations_tool(
         result = Conversation.conversations_to_string(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
-        print(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
+        logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
         return result
 
     except Exception as e:
         error_msg = f"Error formatting conversations: {str(e)}"
-        print(f"❌ get_conversations_tool - {error_msg}")
+        logger.info(f"❌ get_conversations_tool - {error_msg}")
         import traceback
 
         traceback.print_exc()
@@ -315,32 +320,32 @@ def search_conversations_tool(
         Formatted string with semantically matching conversations ranked by relevance, including transcripts,
         summaries, action items, events, and metadata.
     """
-    print(f"🔧 search_conversations_tool called with query: {query}")
+    logger.info(f"🔧 search_conversations_tool called with query: {query}")
 
     # Get config from parameter or context variable (like other tools do)
     if config is None:
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 search_conversations_tool - got config from context variable")
+                logger.info(f"🔧 search_conversations_tool - got config from context variable")
         except LookupError:
-            print(f"❌ search_conversations_tool - config not found in context variable")
+            logger.warning(f"❌ search_conversations_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ search_conversations_tool - config is None")
+        logger.info(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ search_conversations_tool - error accessing config: {e}")
+        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ search_conversations_tool - no user_id in config")
+        logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    print(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
 
     # Get safety guard from config if available
     safety_guard = config['configurable'].get('safety_guard')
@@ -348,7 +353,7 @@ def search_conversations_tool(
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
-        print(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
     # Parse dates to timestamps if provided
     starts_at = None
@@ -359,7 +364,7 @@ def search_conversations_tool(
             dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            print(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             starts_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
@@ -369,7 +374,7 @@ def search_conversations_tool(
             dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            print(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            logger.info(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
             ends_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
@@ -381,7 +386,7 @@ def search_conversations_tool(
         # Perform vector search
         conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
 
-        print(f"📊 search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
+        logger.info(f"📊 search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
 
         if not conversation_ids:
             date_info = ""
@@ -393,7 +398,7 @@ def search_conversations_tool(
                 date_info = f" before the specified end date"
 
             msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
-            print(f"⚠️ search_conversations_tool - {msg}")
+            logger.info(f"⚠️ search_conversations_tool - {msg}")
             return msg
 
         # Get full conversation data
@@ -402,7 +407,7 @@ def search_conversations_tool(
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
 
-        print(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+        logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
         # Only load people if transcripts will be included
         people = []
@@ -413,15 +418,15 @@ def search_conversations_tool(
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
 
-            print(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
+            logger.info(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
 
             # Fetch people data
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
                 people = [Person(**p) for p in people_data]
-                print(f"🔍 search_conversations_tool - Loaded {len(people)} people")
+                logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
-            print(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
+            logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
@@ -439,10 +444,10 @@ def search_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                print(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
                 continue
 
-        print(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
+        logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Store conversations in config for citation tracking (as lightweight dicts)
         conversations_collected = config['configurable'].get('conversations_collected', [])
@@ -453,7 +458,7 @@ def search_conversations_tool(
             conv_dict.pop('photos', None)
             conv_dict.pop('audio_files', None)
             conversations_collected.append(conv_dict)
-        print(
+        logger.info(
             f"📚 search_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
@@ -463,13 +468,13 @@ def search_conversations_tool(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
 
-        print(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
+        logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
 
         return result
 
     except Exception as e:
         error_msg = f"Error performing vector search: {str(e)}"
-        print(f"❌ search_conversations_tool - {error_msg}")
+        logger.info(f"❌ search_conversations_tool - {error_msg}")
         import traceback
 
         traceback.print_exc()

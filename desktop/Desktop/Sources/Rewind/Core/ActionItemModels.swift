@@ -710,6 +710,18 @@ struct StagedTaskRecord: Codable, FetchableRecord, PersistableRecord, Identifiab
     }
 }
 
+// MARK: - TableDocumented
+
+extension ActionItemRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["action_items"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["action_items"] ?? [:] }
+}
+
+extension StagedTaskRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["staged_tasks"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["staged_tasks"] ?? [:] }
+}
+
 // MARK: - Action Item Storage Error
 
 enum ActionItemStorageError: LocalizedError {

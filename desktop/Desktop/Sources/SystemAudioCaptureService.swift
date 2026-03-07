@@ -5,7 +5,7 @@ import CoreAudio
 /// Service for capturing system audio using Core Audio Taps (macOS 14.4+)
 /// Captures all system audio output and converts to 16-bit PCM at 16kHz for transcription
 @available(macOS 14.4, *)
-class SystemAudioCaptureService {
+class SystemAudioCaptureService: @unchecked Sendable {
 
     // MARK: - Types
 
@@ -94,7 +94,7 @@ class SystemAudioCaptureService {
     /// - Parameters:
     ///   - onAudioChunk: Callback receiving 16-bit PCM audio data chunks at 16kHz mono
     ///   - onAudioLevel: Optional callback receiving normalized audio level (0.0 - 1.0)
-    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) throws {
+    func startCapture(onAudioChunk: @escaping AudioChunkHandler, onAudioLevel: AudioLevelHandler? = nil) async throws {
         guard !isCapturing else {
             log("SystemAudioCapture: Already capturing")
             return
@@ -103,6 +103,28 @@ class SystemAudioCaptureService {
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
 
+        // All CoreAudio HAL calls (CreateTap, CreateAggregateDevice, AudioDeviceStart) are
+        // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
+        // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
+        // mirroring the pattern already used in stopCapture().
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            audioQueue.async { [weak self] in
+                guard let self else {
+                    continuation.resume()
+                    return
+                }
+                do {
+                    try self.startCaptureOnQueue()
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
+    private func startCaptureOnQueue() throws {
         // 1. Create tap description for all system audio
         let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
         tapDescription.uuid = tapUUID
