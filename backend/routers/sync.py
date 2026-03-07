@@ -647,8 +647,9 @@ def upload_wav_as_audio_chunks(
             # Validate WAV format matches expected PCM16 mono
             if n_channels != 1 or sampwidth != 2:
                 print(
-                    f"Warning: WAV format mismatch for {wav_path} - expected mono PCM16, got {n_channels}ch {sampwidth*8}bit"
+                    f"Error: WAV format mismatch for {wav_path} - expected mono PCM16, got {n_channels}ch {sampwidth*8}bit. Skipping upload."
                 )
+                return
 
             pcm_data = wav_file.readframes(n_frames)
 
