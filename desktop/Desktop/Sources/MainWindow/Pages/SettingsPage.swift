@@ -2315,6 +2315,8 @@ struct SettingsContentView: View {
             statsSubsection
             advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
             featureTiersSubsection
+            advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
+            focusAssistantSubsection
             advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
             taskAssistantSubsection
             advancedCategoryHeader(title: "Advice Assistant", icon: "lightbulb.fill")
