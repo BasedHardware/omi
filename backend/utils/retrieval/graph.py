@@ -65,6 +65,7 @@ class DateRangeFilters(TypedDict):
 class AsyncStreamingCallback(BaseCallbackHandler):
     def __init__(self):
         self.queue = asyncio.Queue()
+        self._loop = asyncio.get_event_loop()
 
     async def put_data(self, text):
         await self.queue.put(f"data: {text}")
@@ -73,7 +74,7 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         await self.queue.put(f"think: {text}")
 
     def put_thought_nowait(self, text):
-        self.queue.put_nowait(f"think: {text}")
+        self._loop.call_soon_threadsafe(self.queue.put_nowait, f"think: {text}")
 
     async def end(self):
         await self.queue.put(None)
@@ -89,10 +90,10 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         await self.end()
 
     def put_data_nowait(self, text):
-        self.queue.put_nowait(f"data: {text}")
+        self._loop.call_soon_threadsafe(self.queue.put_nowait, f"data: {text}")
 
     def end_nowait(self):
-        self.queue.put_nowait(None)
+        self._loop.call_soon_threadsafe(self.queue.put_nowait, None)
 
 
 class GraphState(TypedDict):
@@ -137,6 +138,7 @@ def determine_conversation_type(
     "no_context_conversation",
     "agentic_context_dependent_conversation",
     "persona_question",
+    "file_chat_question",
 ]:
     logger.info("determine_conversation_type")
 
@@ -144,6 +146,22 @@ def determine_conversation_type(
     app: App = state.get("plugin_selected")
     if app and app.is_a_persona():
         return "persona_question"
+
+    # file chat — check if the last message has file attachments
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+    if last_message and last_message.files_id and len(last_message.files_id) > 0:
+        chat_session = state.get("chat_session")
+        if chat_session:
+            logger.info(f"Routing to file_chat_question with {len(last_message.files_id)} files")
+            return "file_chat_question"
+
+    # file chat — user asks about previously uploaded files
+    chat_session = state.get("chat_session")
+    if chat_session and chat_session.file_ids and len(chat_session.file_ids) > 0:
+        question = state.get("parsed_question", "")
+        if question and retrieve_is_file_question(question):
+            return "file_chat_question"
 
     # chat
     # no context
@@ -458,13 +476,13 @@ workflow.add_node("no_context_conversation", no_context_conversation)
 # workflow.add_node("omi_question", omi_question)
 # workflow.add_node("context_dependent_conversation", context_dependent_conversation)
 workflow.add_node("agentic_context_dependent_conversation", agentic_context_dependent_conversation)
-# workflow.add_node("file_chat_question", file_chat_question)
+workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
 workflow.add_edge("no_context_conversation", END)
 # workflow.add_edge("omi_question", END)
 workflow.add_edge("persona_question", END)
-# workflow.add_edge("file_chat_question", END)
+workflow.add_edge("file_chat_question", END)
 workflow.add_edge("agentic_context_dependent_conversation", END)
 # workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 # workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")

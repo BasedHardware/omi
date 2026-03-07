@@ -299,10 +299,10 @@ class RewindViewModel: ObservableObject {
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
 
         do {
-            var results = try await RewindDatabase.shared.getScreenshots(
+            var results = try await RewindDatabase.shared.getScreenshotsSampled(
                 from: startOfDay,
                 to: endOfDay,
-                limit: 500
+                targetCount: 500
             )
 
             // Filter out frames from the active (unfinalized) video chunk — they can't be displayed yet
@@ -334,10 +334,10 @@ class RewindViewModel: ObservableObject {
         let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
 
         do {
-            var results = try await RewindDatabase.shared.getScreenshots(
+            var results = try await RewindDatabase.shared.getScreenshotsSampled(
                 from: startOfDay,
                 to: endOfDay,
-                limit: 500
+                targetCount: 500
             )
 
             // Filter out frames from the active (unfinalized) video chunk
@@ -373,18 +373,18 @@ class RewindViewModel: ObservableObject {
     func selectNextScreenshot() {
         guard let current = selectedScreenshot,
               let currentIndex = screenshots.firstIndex(where: { $0.id == current.id }),
-              currentIndex > 0 else { return }
+              currentIndex < screenshots.count - 1 else { return }
 
-        selectedScreenshot = screenshots[currentIndex - 1]
+        selectedScreenshot = screenshots[currentIndex + 1]
         AnalyticsManager.shared.rewindTimelineNavigated(direction: "next")
     }
 
     func selectPreviousScreenshot() {
         guard let current = selectedScreenshot,
               let currentIndex = screenshots.firstIndex(where: { $0.id == current.id }),
-              currentIndex < screenshots.count - 1 else { return }
+              currentIndex > 0 else { return }
 
-        selectedScreenshot = screenshots[currentIndex + 1]
+        selectedScreenshot = screenshots[currentIndex - 1]
         AnalyticsManager.shared.rewindTimelineNavigated(direction: "previous")
     }
 

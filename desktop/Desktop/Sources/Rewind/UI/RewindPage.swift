@@ -100,11 +100,6 @@ struct RewindPage: View {
             } else {
                 // Main content with persistent search field
                 VStack(spacing: 0) {
-                    // Recording bar (always visible when appState exists)
-                    if let appState = appState {
-                        rewindRecordingBar(appState: appState)
-                    }
-
                     if isTranscriptExpanded {
                         // Expanded transcript + notes view replaces timeline
                         expandedTranscriptView
@@ -160,6 +155,11 @@ struct RewindPage: View {
                 AssistantSettings.shared.screenAnalysisEnabled = false
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isTranscriptExpanded = true
+            }
+        }
         .onChange(of: isSearchFocused) { _, focused in
             if !focused {
                 isPageFocused = true
@@ -178,10 +178,8 @@ struct RewindPage: View {
                 currentIndex = newIndex
                 // No need to reload frame - it's the same screenshot
             } else if !newScreenshots.isEmpty {
-                // Can't find the current screenshot (first load, or it was deleted)
-                if currentIndex >= newScreenshots.count {
-                    currentIndex = 0
-                }
+                // First load or current screenshot deleted — start at newest (last index, ASC order)
+                currentIndex = newScreenshots.count - 1
                 selectedGroupIndex = 0
                 Task { await loadCurrentFrame() }
             }
@@ -225,15 +223,17 @@ struct RewindPage: View {
         }
         .onKeyPress(.leftArrow) {
             // Arrow keys only work in timeline mode
+            // Left = older = lower index (ASC order: oldest first)
             if searchViewMode != .results {
-                nextFrame()
+                previousFrame()
                 return .handled
             }
             return .ignored
         }
         .onKeyPress(.rightArrow) {
+            // Right = newer = higher index
             if searchViewMode != .results {
-                previousFrame()
+                nextFrame()
                 return .handled
             }
             return .ignored
@@ -278,7 +278,7 @@ struct RewindPage: View {
         }
 
         let sensitivity: CGFloat = 0.5  // Reduced from 3.0 - was too fast
-        let framesToMove = Int(-delta * sensitivity)
+        let framesToMove = Int(delta * sensitivity) // Positive delta (scroll right/down) = newer = higher index
 
         if framesToMove != 0 {
             let newIndex = max(0, min(activeScreenshots.count - 1, currentIndex + framesToMove))
@@ -355,8 +355,11 @@ struct RewindPage: View {
 
         if enabled && !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
             isMonitoring = false
-            ScreenCaptureService.requestAllScreenCapturePermissions()
+            // Open Settings FIRST, then request permissions after a delay
             ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                ScreenCaptureService.requestAllScreenCapturePermissions()
+            }
             return
         }
 
@@ -367,15 +370,6 @@ struct RewindPage: View {
 
         screenAnalysisEnabled = enabled
         AssistantSettings.shared.screenAnalysisEnabled = enabled
-
-        // Also toggle audio transcription
-        if let appState = appState {
-            if enabled && !appState.isTranscribing {
-                appState.startTranscription()
-            } else if !enabled && appState.isTranscribing {
-                appState.stopTranscription()
-            }
-        }
 
         if enabled {
             ProactiveAssistantsPlugin.shared.startMonitoring { success, _ in
@@ -501,7 +495,7 @@ struct RewindPage: View {
             .buttonStyle(.plain)
             .help("Rewind Settings")
 
-            // Rewind on/off toggle (controls both screen + audio)
+            // Rewind on/off toggle (screen capture only)
             rewindToggle
         }
         .padding(.horizontal, 16)
@@ -774,30 +768,17 @@ struct RewindPage: View {
                 }
             )
 
-            // Compact control bar: legend | position/timestamp | scroll hint
+            // Compact control bar: position/timestamp | scroll hint
             HStack(spacing: 12) {
-                // Left: Legend indicators
-                HStack(spacing: 12) {
-                    // Current indicator
+                // Left: Legend indicators (only when searching)
+                if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.white)
+                            .fill(Color.yellow.opacity(0.8))
                             .frame(width: 8, height: 8)
-                        Text("current")
+                        Text("match")
                             .scaledFont(size: 9)
                             .foregroundColor(.white.opacity(0.4))
-                    }
-
-                    // Match indicator (only when searching)
-                    if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
-                        HStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(Color.yellow.opacity(0.8))
-                                .frame(width: 8, height: 8)
-                            Text("match")
-                                .scaledFont(size: 9)
-                                .foregroundColor(.white.opacity(0.4))
-                        }
                     }
                 }
 
@@ -917,11 +898,11 @@ struct RewindPage: View {
     }
 
     private func nextFrame() {
-        seekToIndex(currentIndex - 1) // Screenshots are newest first
+        seekToIndex(currentIndex + 1) // Screenshots are oldest first — right/next = newer = higher index
     }
 
     private func previousFrame() {
-        seekToIndex(currentIndex + 1)
+        seekToIndex(currentIndex - 1)
     }
 
 
@@ -1038,8 +1019,11 @@ struct RewindPage: View {
                     // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
                     screenAnalysisEnabled = true
                     AssistantSettings.shared.screenAnalysisEnabled = true
-                    ScreenCaptureService.requestAllScreenCapturePermissions()
+                    // Open Settings FIRST, then request permissions after a delay
                     ScreenCaptureService.openScreenRecordingPreferences()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        ScreenCaptureService.requestAllScreenCapturePermissions()
+                    }
                 } label: {
                     Text("Grant Permission")
                         .scaledFont(size: 13, weight: .semibold)

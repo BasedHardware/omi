@@ -10,6 +10,7 @@ DerivedData/
 
 # Environment (both contain secrets)
 .env
+!.env.example
 .env.app
 .env.app.dev
 

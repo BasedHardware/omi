@@ -2514,6 +2514,58 @@ actor RewindDatabase {
         }
     }
 
+    /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).
+    /// If the total count for the range is <= targetCount, returns all rows ASC.
+    /// Otherwise picks every Nth screenshot to fit ~targetCount frames.
+    func getScreenshotsSampled(from startDate: Date, to endDate: Date, targetCount: Int) throws -> [Screenshot] {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+
+        return try dbQueue.read { db in
+            // Get total count for the range
+            let totalCount = try Screenshot
+                .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+                .fetchCount(db)
+
+            if totalCount <= targetCount {
+                // Return all, ordered ASC (oldest first)
+                return try Screenshot
+                    .filter(Column("timestamp") >= startDate && Column("timestamp") <= endDate)
+                    .order(Column("timestamp").asc)
+                    .fetchAll(db)
+            }
+
+            // Fetch all IDs + timestamps ordered ASC, then pick every Nth
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT id FROM screenshots
+                WHERE timestamp >= ? AND timestamp <= ?
+                ORDER BY timestamp ASC
+            """, arguments: [startDate, endDate])
+
+            let step = Double(totalCount) / Double(targetCount)
+            var sampledIds: [Int64] = []
+            var i: Double = 0
+            while Int(i) < totalCount && sampledIds.count < targetCount {
+                let index = Int(i)
+                if index < rows.count {
+                    sampledIds.append(rows[index]["id"])
+                }
+                i += step
+            }
+
+            // Batch-fetch the sampled rows and return in ASC order
+            guard !sampledIds.isEmpty else { return [] }
+            let placeholders = sampledIds.map { _ in "?" }.joined(separator: ",")
+            let sql = """
+                SELECT * FROM screenshots
+                WHERE id IN (\(placeholders))
+                ORDER BY timestamp ASC
+            """
+            return try Screenshot.fetchAll(db, sql: sql, arguments: StatementArguments(sampledIds))
+        }
+    }
+
     /// Get screenshots filtered by allowed apps and browser window title patterns.
     /// For non-browser apps in the allowed list, all windows are returned.
     /// For browser apps, only windows matching at least one pattern are returned.

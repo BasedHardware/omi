@@ -95,6 +95,20 @@ actor KnowledgeGraphStorage {
         log("KnowledgeGraphStorage: Merged \(nodes.count) nodes, \(edges.count) edges")
     }
 
+    /// Delete all local knowledge graph data
+    func clearAll() async {
+        guard let db = try? await ensureDB() else { return }
+        do {
+            try await db.write { database in
+                try database.execute(sql: "DELETE FROM local_kg_edges")
+                try database.execute(sql: "DELETE FROM local_kg_nodes")
+            }
+            log("KnowledgeGraphStorage: Cleared all graph data")
+        } catch {
+            log("KnowledgeGraphStorage: Failed to clear graph: \(error.localizedDescription)")
+        }
+    }
+
     /// Check if the local graph has any data
     func isEmpty() async -> Bool {
         guard let db = try? await ensureDB() else { return true }

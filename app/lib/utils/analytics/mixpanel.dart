@@ -1518,6 +1518,18 @@ class MixpanelManager {
     });
   }
 
+  void conversationVisibilityChanged({
+    required String conversationId,
+    required String fromVisibility,
+    required String toVisibility,
+  }) {
+    track('Conversation Visibility Changed', properties: {
+      'conversation_id': conversationId,
+      'from_visibility': fromVisibility,
+      'to_visibility': toVisibility,
+    });
+  }
+
   void starredFilterToggled({
     required bool enabled,
     String? selectedFolderId,

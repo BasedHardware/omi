@@ -87,7 +87,7 @@ struct ConversationRowView: View {
     private var sourceLabel: String {
         switch conversation.source {
         case .desktop: return "Desktop"
-        case .omi: return "Omi"
+        case .omi: return "omi"
         case .phone: return "Phone"
         case .appleWatch: return "Watch"
         case .workflow: return "Workflow"

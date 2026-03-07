@@ -1,16 +1,24 @@
 import os
 import re
 from typing import Optional, List, Dict
-from xml.etree.ElementTree import Element, SubElement, tostring
-from xml.dom import minidom
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
 
 router = APIRouter()
+
+VALID_CHANNELS = {"beta", "stable"}
+
+_XML_ATTR_ENTITIES = {'"': '&quot;', "'": '&apos;'}
+
+
+def _xml_attr(value: str) -> str:
+    """Escape a string for use inside XML double-quoted attributes."""
+    return xml_escape(value, _XML_ATTR_ENTITIES)
 
 
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
@@ -108,34 +116,19 @@ def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List
     return changes
 
 
-def _get_sparkle_zip_download_url(release: Dict, version: str, platform: str) -> Optional[str]:
-    """
-    Get the Sparkle ZIP download URL from GitHub release assets.
-
-    Args:
-        release: GitHub release object
-        version: Version string (e.g., "1.0.78+474")
-        platform: Platform name (macos, windows, linux)
-
-    Returns:
-        Download URL for the Sparkle ZIP file, or None if not found
-    """
-    assets = release.get("assets", [])
-
-    # Look for the Sparkle ZIP file: Omi.zip
-    expected_filename = f"Omi.zip"
-
-    for asset in assets:
-        asset_name = asset.get("name", "")
-        if asset_name == expected_filename:
+def _get_sparkle_zip_download_url(release: Dict) -> Optional[str]:
+    """Get the Sparkle ZIP download URL from GitHub release assets."""
+    for asset in release.get("assets", []):
+        if asset.get("name", "") == "Omi.zip":
             return asset.get("browser_download_url")
+    return None
 
-    # Fallback: look for any zip file that matches the pattern
-    for asset in assets:
-        asset_name = asset.get("name", "")
-        if asset_name.endswith(f"Omi.zip"):
+
+def _get_dmg_download_url(release: Dict) -> Optional[str]:
+    """Get the DMG installer download URL from GitHub release assets."""
+    for asset in release.get("assets", []):
+        if asset.get("name", "").endswith(".dmg"):
             return asset.get("browser_download_url")
-
     return None
 
 
@@ -143,30 +136,22 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
     Returns list of releases sorted by published date (newest first).
-
-    Args:
-        platform: Target platform (macos, windows, or linux)
-
-    Returns:
-        List of dicts containing release and version_info
+    Each entry includes release, version_info, metadata (KEY_VALUE_START fields),
+    and channel (beta or stable).
     """
-    # Fetch releases from GitHub
     cache_key = "github_releases_desktop"
     releases = await get_omi_github_releases(cache_key)
 
     if not releases:
         return []
 
-    # Filter for desktop releases
     desktop_releases = []
     for release in releases:
-        # Skip drafts and unpublished releases
         if release.get("draft") or not release.get("published_at"):
             continue
 
         tag_name = release.get("tag_name", "")
 
-        # Check if it's a desktop release (-desktop-cm, -{platform}-cm, -desktop-auto, or -{platform})
         if not (
             tag_name.endswith("-desktop-cm")
             or tag_name.endswith(f"-{platform}-cm")
@@ -175,22 +160,27 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         ):
             continue
 
-        # Parse version info
         version_info = _parse_desktop_version(tag_name)
         if not version_info:
             continue
 
-        # Check if release is live (only include live releases)
         kv = extract_key_value_pairs(release.get("body", ""))
         is_live = kv.get("isLive", "false").lower() == "true"
         if not is_live:
             continue
 
-        desktop_releases.append({"release": release, "version_info": version_info, "metadata": kv})
+        channel = kv.get("channel", "beta").lower()
+        if channel not in VALID_CHANNELS:
+            channel = "beta"
 
-    # Sort by published date (newest first)
+        desktop_releases.append({
+            "release": release,
+            "version_info": version_info,
+            "metadata": kv,
+            "channel": channel,
+        })
+
     desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
-
     return desktop_releases
 
 
@@ -203,137 +193,128 @@ def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
     for change in changes:
         change_type = change.get('type', 'improvement')
         message = change.get('message', '')
-
-        icon = {'feature': '✨', 'fix': '🐛', 'improvement': '⚡', 'breaking': '⚠️'}.get(change_type, '•')
-
-        html += f"<li>{icon} {message}</li>"
+        icon = {'feature': '&#10024;', 'fix': '&#128027;', 'improvement': '&#9889;', 'breaking': '&#9888;'}.get(
+            change_type, '&#8226;'
+        )
+        html += f"<li>{icon} {xml_escape(message)}</li>"
 
     html += "</ul>"
     return html
 
 
 def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
-    """Generate Sparkle 2.0 appcast XML"""
-    rss = Element('rss', {'version': '2.0', 'xmlns:sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'})
+    """
+    Generate Sparkle 2.0 appcast XML with channel support.
+    Stable items get no <sparkle:channel> tag (Sparkle default).
+    Beta items get <sparkle:channel>beta</sparkle:channel>.
+    """
+    lines = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">',
+        '  <channel>',
+        '    <title>Omi Desktop Updates</title>',
+        '    <description>Omi AI Desktop Application</description>',
+        '    <language>en</language>',
+    ]
 
-    channel = SubElement(rss, 'channel')
-    SubElement(channel, 'title').text = 'Omi Desktop Updates'
-    SubElement(channel, 'description').text = 'Omi AI Desktop Application'
-    SubElement(channel, 'language').text = 'en'
-
-    # Add each release
     for release_item in items:
-        item = SubElement(channel, 'item')
-
         version = release_item['version']
-        SubElement(item, 'title').text = f"Omi {version}"
+        short_version = release_item['shortVersion']
+        changes_html = _format_changelog_html(release_item.get('changes', []))
+        pub_date = release_item.get('date', '')
+        url = release_item.get('url', '')
+        ed_signature = release_item.get('edSignature', '').strip()
+        channel = release_item.get('channel', 'beta')
 
-        # For macOS, version fields go at item level (not in enclosure)
-        SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}version').text = str(
-            release_item['shortVersion']
-        )
-        SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}shortVersionString').text = version
-
-        # Release notes as HTML (CDATA will be added during serialization)
-        description = _format_changelog_html(release_item.get('changes', []))
-        desc_elem = SubElement(item, 'description')
-        desc_elem.text = description
-
-        SubElement(item, 'pubDate').text = release_item['date']
-
-        # Get download URL from release item
-        url = release_item.get('url')
         if not url:
             continue
 
-        # Enclosure with signature and OS
-        enclosure_attrs = {
-            'url': url,
-            'type': 'application/octet-stream',
-            '{http://www.andymatuschak.org/xml-namespaces/sparkle}os': platform,
-        }
+        # Escape CDATA-unsafe sequences in changelog HTML
+        safe_html = changes_html.replace(']]>', ']]]]><![CDATA[>')
 
-        # Add EdDSA signature if available
-        ed_signature = release_item.get('edSignature', '').strip()
+        lines.append('    <item>')
+        lines.append(f'      <title>Omi {xml_escape(version)}</title>')
+        lines.append(f'      <sparkle:version>{xml_escape(short_version)}</sparkle:version>')
+        lines.append(f'      <sparkle:shortVersionString>{xml_escape(version)}</sparkle:shortVersionString>')
+        lines.append(f'      <description><![CDATA[{safe_html}]]></description>')
+        lines.append(f'      <pubDate>{xml_escape(pub_date)}</pubDate>')
+
+        enclosure = f'      <enclosure url="{_xml_attr(url)}" type="application/octet-stream" sparkle:os="{_xml_attr(platform)}"'
         if ed_signature:
-            enclosure_attrs['{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature'] = ed_signature
+            enclosure += f' sparkle:edSignature="{_xml_attr(ed_signature)}"'
+        enclosure += ' />'
+        lines.append(enclosure)
 
-        enclosure = SubElement(item, 'enclosure', enclosure_attrs)
+        # Stable = no channel tag (Sparkle default). Beta = explicit tag.
+        if channel == "beta":
+            lines.append('      <sparkle:channel>beta</sparkle:channel>')
 
-        # Critical update (optional)
         if release_item.get('mandatory'):
-            SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}criticalUpdate')
+            lines.append('      <sparkle:criticalUpdate />')
 
-    # Pretty print
-    xml_str = tostring(rss, encoding='unicode')
-    dom = minidom.parseString(xml_str)
-    return dom.toprettyxml(indent='  ')
+        lines.append('    </item>')
+
+    lines.append('  </channel>')
+    lines.append('</rss>')
+    return '\n'.join(lines)
 
 
 @router.get("/v2/desktop/appcast.xml")
-async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
+async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern="^(macos|windows|linux)$")):
     """
-    Sparkle appcast XML endpoint for auto_updater package.
-    Returns Sparkle 2.0 compatible XML feed for macOS/Windows/Linux updates.
-
-    Args:
-        platform: Target platform (macos, windows, or linux)
-
-    Returns:
-        XML appcast feed
+    Sparkle appcast XML endpoint for desktop auto-updates.
+    Returns a single feed with both beta and stable channel items.
+    Sparkle clients filter by their configured allowed channels.
     """
     try:
-        # Get live desktop releases using shared helper
         desktop_releases = await _get_live_desktop_releases(platform)
 
         if not desktop_releases:
             raise HTTPException(status_code=404, detail=f"No desktop releases found for platform: {platform}")
 
-        # Transform to items format
+        # Deduplicate: latest release per channel
+        seen_channels = set()
         items = []
 
         for entry in desktop_releases:
+            channel = entry["channel"]
+            if channel in seen_channels:
+                continue
+            seen_channels.add(channel)
+
             release = entry["release"]
             version_info = entry["version_info"]
             kv = entry["metadata"]
 
             changelog = kv.get("changelog", [])
             mandatory = kv.get("mandatory", "false").lower() == "true"
-            ed_signature = kv.get("edSignature", "")  # EdDSA signature for Sparkle
+            ed_signature = kv.get("edSignature", "")
 
-            # Parse changes
             changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
+            download_url = _get_sparkle_zip_download_url(release)
 
-            # Use build number directly for sparkle:version
-            short_version = version_info["build"]
-
-            # Get Sparkle ZIP download URL from GitHub release assets
-            download_url = _get_sparkle_zip_download_url(release, version_info["version"], platform)
-
-            # Skip if no download URL found
             if not download_url:
+                seen_channels.discard(channel)
                 continue
 
-            items.append(
-                {
-                    "version": version_info["version"],
-                    "shortVersion": short_version,
-                    "changes": changes,
-                    "date": release.get("published_at"),
-                    "mandatory": mandatory,
-                    "url": download_url,
-                    "platform": platform,
-                    "edSignature": ed_signature,
-                }
-            )
+            items.append({
+                "version": version_info["version"],
+                "shortVersion": version_info["build"],
+                "changes": changes,
+                "date": release.get("published_at"),
+                "mandatory": mandatory,
+                "url": download_url,
+                "platform": platform,
+                "edSignature": ed_signature,
+                "channel": channel,
+            })
 
-        # Generate Sparkle XML
         xml_content = _generate_appcast_xml(items, platform)
 
         return Response(
             content=xml_content,
             media_type="application/xml",
-            headers={"Cache-Control": "max-age=300"},  # Cache for 5 minutes
+            headers={"Cache-Control": "max-age=300"},
         )
     except HTTPException:
         raise
@@ -342,24 +323,35 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 
 
 @router.get("/v2/desktop/download/latest")
-async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
+async def download_latest_desktop_release(
+    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
+    channel: str = Query(default="stable", pattern="^(beta|stable)$"),
+):
     """
-    Get the download URL for the latest desktop release installer.
-    Delegates to the desktop backend service which tracks releases via Firestore.
-
-    Args:
-        platform: Target platform (macos, windows, or linux)
-
-    Returns:
-        Redirect to the desktop backend download endpoint
+    Redirect to the latest desktop release DMG installer.
+    Resolves from GitHub release assets filtered by channel.
+    Defaults to stable channel (for macos.omi.me). Use channel=beta for QA.
     """
-    from fastapi.responses import RedirectResponse
+    desktop_releases = await _get_live_desktop_releases(platform)
+    if not desktop_releases:
+        raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
 
-    desktop_backend_url = os.getenv(
-        "DESKTOP_BACKEND_URL",
-        "https://desktop-backend-hhibjajaja-uc.a.run.app",
-    )
-    return RedirectResponse(url=f"{desktop_backend_url}/download", status_code=302)
+    # Find latest release matching the requested channel
+    for entry in desktop_releases:
+        if entry["channel"] != channel:
+            continue
+        dmg_url = _get_dmg_download_url(entry["release"])
+        if dmg_url:
+            return RedirectResponse(url=dmg_url, status_code=302)
+
+    # Fallback: if no stable release, try beta (for fresh installs before first promotion)
+    if channel == "stable":
+        for entry in desktop_releases:
+            dmg_url = _get_dmg_download_url(entry["release"])
+            if dmg_url:
+                return RedirectResponse(url=dmg_url, status_code=302)
+
+    raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
 
 
 @router.post("/v2/desktop/clear-cache")

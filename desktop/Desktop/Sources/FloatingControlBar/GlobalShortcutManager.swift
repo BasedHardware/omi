@@ -7,13 +7,11 @@ import Cocoa
 class GlobalShortcutManager {
     static let shared = GlobalShortcutManager()
 
-    static let toggleFloatingBarNotification = Notification.Name("com.omi.desktop.toggleFloatingBar")
     static let askAINotification = Notification.Name("com.omi.desktop.askAI")
 
     private var hotKeyRefs: [HotKeyID: EventHotKeyRef] = [:]
 
     private enum HotKeyID: UInt32 {
-        case toggleBar = 1
         case askOmi = 2
     }
 
@@ -44,8 +42,6 @@ class GlobalShortcutManager {
 
     func registerShortcuts() {
         unregisterShortcuts()
-        // Register Cmd+\ for toggle bar (keycode 42 = backslash)
-        registerHotKey(keyCode: 42, modifiers: Int(cmdKey), id: .toggleBar)
         // Register Ask Omi shortcut from user settings
         registerAskOmi()
     }
@@ -93,13 +89,10 @@ class GlobalShortcutManager {
         }
 
         switch id {
-        case .toggleBar:
-            NSLog("GlobalShortcutManager: Cmd+\\ detected, toggling floating bar")
-            NotificationCenter.default.post(name: GlobalShortcutManager.toggleFloatingBarNotification, object: nil)
         case .askOmi:
             NSLog("GlobalShortcutManager: Ask Omi shortcut detected")
             DispatchQueue.main.async {
-                FloatingControlBarManager.shared.openAIInput()
+                FloatingControlBarManager.shared.toggleAIInput()
             }
         }
 

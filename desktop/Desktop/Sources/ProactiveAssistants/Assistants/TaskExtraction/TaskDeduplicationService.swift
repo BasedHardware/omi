@@ -19,7 +19,7 @@ actor TaskDeduplicationService {
 
     private init() {
         do {
-            self.geminiClient = try GeminiClient(model: "gemini-3-pro-preview")
+            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
         } catch {
             log("TaskDedup: Failed to initialize GeminiClient: \(error)")
             self.geminiClient = nil

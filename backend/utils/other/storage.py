@@ -823,15 +823,19 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
         dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
     """
     bucket = storage_client.bucket(chat_files_bucket)
-    result = transfer_manager.upload_many_from_filenames(
-        bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/'
-    )
     dictFiles = {}
-    for name, result in zip(files_name, result):
-        if isinstance(result, Exception):
-            logger.error("Failed to upload {} due to exception: {}".format(name, result))
-        else:
+    for name in files_name:
+        try:
+            blob = bucket.blob(f'{uid}/{name}')
+            blob.cache_control = 'public, no-cache'
+            blob.upload_from_filename(f'./{name}')
+            try:
+                blob.make_public()
+            except Exception as e:
+                logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+        except Exception as e:
+            logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles
 
 

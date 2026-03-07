@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - 'desktop/**'
+      - '!desktop/CHANGELOG.json'
 
 permissions:
   contents: write
@@ -107,4 +108,6 @@ jobs:
             --base main \
             --head "$BRANCH"
 
-          gh pr merge "$BRANCH" --merge --admin || echo "PR merge requires manual approval"
+          gh pr merge "$BRANCH" --merge --admin || \
+          gh pr merge "$BRANCH" --merge --auto || \
+          echo "PR merge requires manual approval"

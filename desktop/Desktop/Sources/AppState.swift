@@ -282,6 +282,7 @@ class AppState: ObservableObject {
                 if self.isTranscribing {
                     log("App terminating - finalizing conversation")
                     _ = await self.finalizeConversation()
+                    self.clearTranscriptionState()
                 }
             }
         }
@@ -836,7 +837,10 @@ class AppState: ObservableObject {
                 }
             } else {
                 let hasPermission = status == noErr
-                log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                let previousValue = await MainActor.run { self.hasAutomationPermission }
+                if hasPermission != previousValue {
+                    log("AUTOMATION_CHECK: status=\(status), hasPermission=\(hasPermission)")
+                }
 
                 await MainActor.run {
                     self.hasAutomationPermission = hasPermission
@@ -897,15 +901,21 @@ class AppState: ObservableObject {
             // AXIsProcessTrusted() says not granted — but on macOS 26 this may be stale.
             // Probe via event tap which checks the live TCC database.
             if probeAccessibilityViaEventTap() {
-                log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                if !previouslyGranted {
+                    log("ACCESSIBILITY_CHECK: AXIsProcessTrusted() returned false but event tap succeeded — stale cache detected")
+                }
                 let axWorks = testAccessibilityPermission()
                 hasAccessibilityPermission = true
                 if !axWorks {
+                    if !isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
+                    }
                     isAccessibilityBroken = true
-                    log("ACCESSIBILITY_CHECK: Event tap OK but AX calls fail — marking as broken")
                 } else {
+                    if isAccessibilityBroken {
+                        log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
+                    }
                     isAccessibilityBroken = false
-                    log("ACCESSIBILITY_CHECK: Permission confirmed via event tap probe, AX calls working")
                 }
             } else {
                 // Event tap also failed — permission genuinely not granted
@@ -2139,7 +2149,7 @@ class AppState: ObservableObject {
             return .saved
         } catch {
             logError("Transcription: Failed to save conversation", error: error)
-            AnalyticsManager.shared.recordingError(error: "Failed to save: \(error.localizedDescription)")
+            // Error event deferred to TranscriptionRetryService after all retries are exhausted
 
             // Mark session as failed in DB for later retry
             if let sessionId = sessionId {
@@ -2455,7 +2465,8 @@ class AppState: ObservableObject {
             "hasTriggeredMicrophone",
             "hasTriggeredSystemAudio",
             "hasTriggeredAccessibility",
-            "hasTriggeredBluetooth"
+            "hasTriggeredBluetooth",
+            "onboardingJustCompleted"
         ]
         for key in onboardingKeys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -2463,14 +2474,54 @@ class AppState: ObservableObject {
         UserDefaults.standard.synchronize()
         log("Cleared onboarding UserDefaults keys")
 
+        // Clear onboarding chat persistence and messages
+        OnboardingChatPersistence.clear()
+        log("Cleared onboarding chat persistence")
+
+        // Clear all local user data: database, screenshots, videos, knowledge graph, etc.
+        let dataKeys = [
+            "omi.focus.sessions",
+            "omi.advice.history",
+            "TasksSavedFilterViews",
+        ]
+        for key in dataKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        log("Cleared local data UserDefaults keys")
+
+        // Close database and delete entire user data directory
+        Task {
+            await RewindDatabase.shared.close()
+            await RewindStorage.shared.reset()
+            await KnowledgeGraphStorage.shared.invalidateCache()
+
+            let fileManager = FileManager.default
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "anonymous"
+            let userDir = appSupport
+                .appendingPathComponent("Omi", isDirectory: true)
+                .appendingPathComponent("users", isDirectory: true)
+                .appendingPathComponent(userId, isDirectory: true)
+
+            if fileManager.fileExists(atPath: userDir.path) {
+                do {
+                    try fileManager.removeItem(at: userDir)
+                    log("Deleted user data directory: \(userDir.path)")
+                } catch {
+                    log("Failed to delete user data directory: \(error)")
+                }
+            }
+        }
+
         // Also clear UserDefaults for both bundle IDs
+        let allKeys = onboardingKeys + dataKeys
         if let prodDefaults = UserDefaults(suiteName: "com.omi.computer-macos") {
-            for key in onboardingKeys {
+            for key in allKeys {
                 prodDefaults.removeObject(forKey: key)
             }
         }
         if let devDefaults = UserDefaults(suiteName: "com.omi.desktop-dev") {
-            for key in onboardingKeys {
+            for key in allKeys {
                 devDefaults.removeObject(forKey: key)
             }
         }
@@ -2559,7 +2610,7 @@ class AppState: ObservableObject {
                     for buildDir in buildDirs {
                         let appPath = "\(buildProductsPath)/\(buildDir)/Omi.app"
                         let appPath2 = "\(buildProductsPath)/\(buildDir)/Omi Computer.app"
-                        let appPath3 = "\(buildProductsPath)/\(buildDir)/Omi Beta.app"
+                        let appPath3 = "\(buildProductsPath)/\(buildDir)/omi.app"
                         let appPath4 = "\(buildProductsPath)/\(buildDir)/Omi Dev.app"
                         for path in [appPath, appPath2, appPath3, appPath4] {
                             if fileManager.fileExists(atPath: path) {
@@ -2795,6 +2846,10 @@ extension Notification.Name {
     static let navigateToRewindSettings = Notification.Name("navigateToRewindSettings")
     /// Posted to navigate to Rewind page (global hotkey: Cmd+Option+R)
     static let navigateToRewind = Notification.Name("navigateToRewind")
+    /// Posted to navigate to Rewind page with notes panel expanded
+    static let navigateToRewindNotes = Notification.Name("navigateToRewindNotes")
+    /// Posted to expand the transcript/notes panel on the Rewind page
+    static let expandRewindTranscript = Notification.Name("expandRewindTranscript")
     /// Posted to navigate to Device settings
     static let navigateToDeviceSettings = Notification.Name("navigateToDeviceSettings")
     /// Posted to navigate to Task Assistant settings (Developer Settings)

@@ -25,8 +25,20 @@ class ScreenCaptureManager {
         let fileName = "screenshot-\(timestamp).jpg"
         let fileURL = screenshotsDirectory.appendingPathComponent(fileName)
 
-        guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
-            log("ScreenCaptureManager: Could not capture screen")
+        // Capture the screen where the mouse cursor is, not just the primary display
+        let displayID: CGDirectDisplayID = {
+            let mouseLocation = NSEvent.mouseLocation
+            for screen in NSScreen.screens {
+                if screen.frame.contains(mouseLocation),
+                   let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID {
+                    return screenNumber
+                }
+            }
+            return CGMainDisplayID()
+        }()
+
+        guard let image = CGDisplayCreateImage(displayID) else {
+            log("ScreenCaptureManager: Could not capture screen (display \(displayID))")
             return nil
         }
 

@@ -1,4 +1,5 @@
 /target
 .env
+!.env.example
 *.log
 .DS_Store

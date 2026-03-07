@@ -555,6 +555,22 @@ extension PostHogManager {
         ])
     }
 
+    func taskCompleted(source: String?) {
+        track("Task Completed", properties: [
+            "source": source ?? "unknown"
+        ])
+    }
+
+    func taskDeleted(source: String?) {
+        track("Task Deleted", properties: [
+            "source": source ?? "unknown"
+        ])
+    }
+
+    func taskAdded() {
+        track("Task Added")
+    }
+
     func memoryExtracted(memoryCount: Int) {
         track("Memory Extracted", properties: [
             "memory_count": memoryCount

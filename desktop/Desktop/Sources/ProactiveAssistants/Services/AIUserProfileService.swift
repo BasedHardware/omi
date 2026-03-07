@@ -34,7 +34,7 @@ extension AIUserProfileRecord: TableDocumented {
 actor AIUserProfileService {
     static let shared = AIUserProfileService()
 
-    private let model = "gemini-3-pro-preview"
+    private let model = "gemini-pro-latest"
     private let maxProfileLength = 10000
 
     /// Whether profile generation is currently in progress

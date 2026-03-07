@@ -184,7 +184,7 @@ struct FileIndexingView: View {
                     Image(systemName: "brain")
                         .scaledFont(size: 40)
                         .foregroundColor(.white.opacity(0.15))
-                    Text("Your knowledge graph will grow as Omi learns more about you")
+                    Text("Your knowledge graph will grow as omi learns more about you")
                         .scaledFont(size: 13)
                         .foregroundColor(.white.opacity(0.4))
                         .multilineTextAlignment(.center)
@@ -438,10 +438,6 @@ struct FileIndexingView: View {
         await graphViewModel.loadGraph()
 
         if graphViewModel.isEmpty {
-            // Last resort: fire-and-forget backend rebuild
-            Task {
-                _ = try? await APIClient.shared.rebuildKnowledgeGraph()
-            }
             AnalyticsManager.shared.knowledgeGraphBuildFailed(
                 reason: "local_empty_api_empty",
                 pollAttempts: maxAttempts,

@@ -102,6 +102,7 @@ struct OnboardingChatView: View {
     @State private var explorationCompleted = false
     @State private var explorationText = ""
     @State private var explorationTask: Task<Void, Never>?
+    @State private var showSkipConfirmation = false
 
     // Timer to periodically check permission status
     let permissionCheckTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
@@ -110,18 +111,24 @@ struct OnboardingChatView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Setting up Omi")
+                Text("Setting up omi")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
 
-                Button(action: onSkip) {
+                Button(action: { showSkipConfirmation = true }) {
                     Text("Skip")
                         .font(.system(size: 13))
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .alert("Are you sure?", isPresented: $showSkipConfirmation) {
+                    Button("Skip anyway", role: .destructive) { onSkip() }
+                    Button("Continue setup", role: .cancel) { }
+                } message: {
+                    Text("Omi won't be useful for you if it doesn't know enough about you.")
+                }
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 16)
@@ -134,8 +141,8 @@ struct OnboardingChatView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(chatProvider.messages) { message in
-                            OnboardingChatBubble(message: message)
-                                .id(message.id)
+                                OnboardingChatBubble(message: message)
+                                    .id(message.id)
                         }
 
                         // Parallel exploration card (appears after scan_files)
@@ -160,6 +167,14 @@ struct OnboardingChatView: View {
 
                         // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            // Show permission GIF when quick replies include a "Grant" button
+                            if let grantOption = quickReplyOptions.first(where: { isGrantButton($0) }),
+                               let permType = permissionType(from: grantOption) {
+                                OnboardingPermissionImage(permissionType: permType)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+                            }
+
                             HStack(spacing: 8) {
                                 ForEach(quickReplyOptions, id: \.self) { option in
                                     Button(action: {
@@ -190,12 +205,52 @@ struct OnboardingChatView: View {
                             .id("quick-replies")
                         }
 
-                        // "Continue to App" button — shown after AI calls complete_onboarding
-                        if onboardingCompleted && !chatProvider.isSending {
+                        // Retry "Open System Settings" button — shown when a permission grant
+                        // is pending but System Settings didn't open (or user closed it)
+                        if let pending = pendingPermissionType, quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            let isStillPending: Bool = {
+                                switch pending {
+                                case "screen_recording": return !appState.hasScreenRecordingPermission
+                                case "microphone": return !appState.hasMicrophonePermission
+                                case "notifications": return !appState.hasNotificationPermission
+                                case "accessibility": return !appState.hasAccessibilityPermission
+                                case "automation": return !appState.hasAutomationPermission
+                                default: return false
+                                }
+                            }()
+                            if isStillPending {
+                                OnboardingPermissionImage(permissionType: pending)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+
+                                Button(action: {
+                                    openSettingsForPermission(pending)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "gear")
+                                            .font(.system(size: 12))
+                                        Text("Open System Settings")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(OmiColors.purplePrimary)
+                                    .cornerRadius(20)
+                                }
+                                .buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 44)
+                            }
+                        }
+
+                        // "Continue" button — shown only after AI calls complete_onboarding
+                        // and no pending questions or permissions remain.
+                        if onboardingCompleted && !chatProvider.isSending && quickReplyOptions.isEmpty && pendingPermissionType == nil {
                             Button(action: {
                                 handleOnboardingComplete()
                             }) {
-                                Text("Continue to App")
+                                Text("Continue")
                                     .font(.system(size: 15, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: 220)
@@ -224,8 +279,7 @@ struct OnboardingChatView: View {
                 .onChange(of: chatProvider.messages.last?.text) { _, _ in
                     scrollToBottom(proxy: proxy)
                 }
-                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { oldCount, newCount in
-                    log("OnboardingChat: contentBlocks.count changed \(oldCount ?? -1) → \(newCount ?? -1)")
+                .onChange(of: chatProvider.messages.last?.contentBlocks.count) { _, _ in
                     // Multiple scroll attempts: first for the text/indicator layout,
                     // second for images/GIFs that load asynchronously and add height
                     scrollToBottom(proxy: proxy, delay: 0.15)
@@ -326,6 +380,29 @@ struct OnboardingChatView: View {
                 .frame(width: 32, height: 32)
                 .background(OmiColors.backgroundTertiary)
                 .clipShape(Circle())
+        }
+    }
+
+    /// Open System Settings to the correct pane for a permission type
+    private func openSettingsForPermission(_ type: String) {
+        let urlString: String? = {
+            switch type {
+            case "screen_recording":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+            case "microphone":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+            case "accessibility":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            case "automation":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"
+            case "notifications":
+                return "x-apple.systempreferences:com.apple.preference.security?Privacy_Notifications"
+            default:
+                return nil
+            }
+        }()
+        if let urlString, let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
         }
     }
 
@@ -440,14 +517,13 @@ struct OnboardingChatView: View {
                     resume: savedSessionId
                 )
             }
-        } else {
+        } else if chatProvider.messages.isEmpty {
             // Fresh start — clear stale messages, mark mid-onboarding, begin
-            chatProvider.messages.removeAll()
             OnboardingChatPersistence.saveMidOnboarding()
 
             Task {
                 await chatProvider.sendMessage(
-                    "Hi, I just installed Omi!",
+                    "Hi, I just installed omi!",
                     systemPromptPrefix: systemPrompt
                 )
             }
@@ -464,8 +540,9 @@ struct OnboardingChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         inputText = ""
 
-        // Clear quick replies when user types their own message
+        // Clear quick replies and unblock any pending ask_followup
         quickReplyOptions = []
+        ChatToolExecutor.resumeFollowup(with: text)
 
         Task {
             await chatProvider.sendMessage(text)
@@ -513,7 +590,8 @@ struct OnboardingChatView: View {
                 }
             }
         } else {
-            // Regular quick reply — just send as message
+            // Regular quick reply — resume the blocked ask_followup tool, then send as message
+            ChatToolExecutor.resumeFollowup(with: option)
             Task {
                 await chatProvider.sendMessage(option)
             }
@@ -521,51 +599,7 @@ struct OnboardingChatView: View {
     }
 
     private func handleOnboardingComplete() {
-        log("OnboardingChatView: Completing onboarding")
-
-        // Set flag so DesktopHomeView navigates to Chat page after transition
-        UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        // Mark onboarding as done
-        appState.hasCompletedOnboarding = true
-        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-
-        // Start cloud agent VM pipeline
-        Task {
-            await AgentVMService.shared.startPipeline()
-        }
-
-        // Enable launch at login
-        if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding")
-        }
-
-        // Start proactive monitoring
-        ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
-
-        // Start transcription if microphone is available
-        appState.startTranscription()
-
-        // Create welcome task (skip if it already exists from a previous onboarding)
-        Task {
-            let welcomeDescription = "Run Omi for two days to start receiving helpful advice"
-            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
-            if !alreadyExists {
-                await TasksStore.shared.createTask(
-                    description: welcomeDescription,
-                    dueAt: Date(),
-                    priority: "low"
-                )
-            }
-        }
-
-        // Send welcome notification
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            NotificationService.shared.sendNotification(
-                title: "You're all set!",
-                message: "Just go back to your work and run me in the background. I'll start sending you useful advice during your day."
-            )
-        }
+        log("OnboardingChatView: Chat step complete, advancing to next onboarding step")
 
         // Clean up parallel exploration
         explorationTask?.cancel()
@@ -575,14 +609,7 @@ struct OnboardingChatView: View {
         }
         explorationBridge = nil
 
-        // Clean up onboarding state and persisted chat data
-        chatProvider.isOnboarding = false
-        OnboardingChatPersistence.clear()
-
-        // Log analytics
-        AnalyticsManager.shared.onboardingCompleted()
-
-        // Notify parent
+        // Notify parent to advance to next step
         onComplete()
     }
 
@@ -637,6 +664,7 @@ struct OnboardingChatView: View {
         guard !explorationRunning else { return }
         explorationRunning = true
         log("OnboardingChat: Starting parallel exploration (\(fileCount) files indexed)")
+        AnalyticsManager.shared.onboardingChatToolUsed(tool: "exploration_started", properties: ["file_count": fileCount])
 
         explorationTask = Task {
             do {
@@ -645,7 +673,8 @@ struct OnboardingChatView: View {
                 try await bridge.start()
 
                 let userName = AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
-                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName)
+                let schema = await Self.loadDatabaseSchema()
+                let systemPrompt = ChatPromptBuilder.buildOnboardingExploration(userName: userName, databaseSchema: schema)
 
                 let result = try await bridge.query(
                     prompt: "Begin exploration. \(fileCount) files have been indexed in the indexed_files table.",
@@ -672,6 +701,11 @@ struct OnboardingChatView: View {
                 )
 
                 log("OnboardingChat: Exploration completed (cost=$\(String(format: "%.4f", result.costUsd)), tokens=\(result.inputTokens)+\(result.outputTokens))")
+                AnalyticsManager.shared.onboardingChatToolUsed(tool: "exploration_completed", properties: [
+                    "cost_usd": result.costUsd,
+                    "input_tokens": result.inputTokens,
+                    "output_tokens": result.outputTokens
+                ])
 
                 let finalText = await MainActor.run {
                     explorationCompleted = true
@@ -698,6 +732,77 @@ struct OnboardingChatView: View {
                     explorationBridge = nil
                 }
             }
+        }
+    }
+
+    /// Load a compact database schema string from sqlite_master for the exploration prompt.
+    /// This gives the AI the actual table/column names so it doesn't hallucinate them.
+    private static func loadDatabaseSchema() async -> String {
+        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+            return ""
+        }
+
+        do {
+            let tables = try await dbQueue.read { db -> [(name: String, sql: String)] in
+                let rows = try Row.fetchAll(db, sql: """
+                    SELECT name, sql FROM sqlite_master
+                    WHERE type='table' AND sql IS NOT NULL
+                    ORDER BY name
+                """)
+                return rows.compactMap { row -> (name: String, sql: String)? in
+                    guard let name: String = row["name"],
+                          let sql: String = row["sql"] else { return nil }
+                    return (name: name, sql: sql)
+                }
+            }
+
+            var lines: [String] = ["**Database schema (omi.db):**", ""]
+            for (name, sql) in tables {
+                if ChatPrompts.excludedTables.contains(name) { continue }
+                if ChatPrompts.excludedTablePrefixes.contains(where: { name.hasPrefix($0) }) { continue }
+                if name.contains("_fts") { continue }
+
+                // Extract column names from CREATE TABLE DDL
+                guard let openParen = sql.firstIndex(of: "("),
+                      let closeParen = sql.lastIndex(of: ")") else { continue }
+                let body = String(sql[sql.index(after: openParen)..<closeParen])
+                var columnDefs: [String] = []
+                var current = ""
+                var depth = 0
+                for char in body {
+                    if char == "(" { depth += 1 } else if char == ")" { depth -= 1 }
+                    if char == "," && depth == 0 {
+                        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty { columnDefs.append(trimmed) }
+                        current = ""
+                    } else { current.append(char) }
+                }
+                let last = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !last.isEmpty { columnDefs.append(last) }
+
+                let columnNames = columnDefs.filter { col in
+                    let upper = col.uppercased().trimmingCharacters(in: .whitespaces)
+                    return !upper.hasPrefix("UNIQUE") && !upper.hasPrefix("CHECK") &&
+                           !upper.hasPrefix("FOREIGN") && !upper.hasPrefix("CONSTRAINT") &&
+                           !upper.hasPrefix("PRIMARY KEY")
+                }.compactMap { col -> String? in
+                    let colName = col.components(separatedBy: .whitespaces).first?
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'`")) ?? ""
+                    return ChatPrompts.excludedColumns.contains(colName) || colName.isEmpty ? nil : colName
+                }
+                guard !columnNames.isEmpty else { continue }
+
+                let annotation = ChatPrompts.tableAnnotations[name] ?? ""
+                let header = annotation.isEmpty ? name : "\(name) — \(annotation)"
+                lines.append(header)
+                lines.append("  \(columnNames.joined(separator: ", "))")
+                lines.append("")
+            }
+            lines.append(ChatPrompts.schemaFooter)
+            return lines.joined(separator: "\n")
+        } catch {
+            logError("Failed to load schema for exploration", error: error)
+            return ""
         }
     }
 
@@ -808,7 +913,20 @@ struct OnboardingChatBubble: View {
                                     .cornerRadius(18)
                             }
                         } else {
-                            // Render content blocks in order — interleaving tool indicators with text
+                            // Use the full message text (which streams continuously) for a single bubble.
+                            // contentBlocks splits text around tool calls, but message.text is uninterrupted.
+                            let allText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                            if !allText.isEmpty {
+                                Markdown(allText)
+                                    .markdownTheme(.aiMessage())
+                                    .textSelection(.enabled)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(OmiColors.backgroundSecondary)
+                                    .cornerRadius(18)
+                            }
+
                             ForEach(message.contentBlocks) { block in
                                 switch block {
                                 case .toolCall(_, let name, let status, _, let input, _):
@@ -816,20 +934,10 @@ struct OnboardingChatBubble: View {
                                     if !indicator.isHidden {
                                         indicator
                                     }
-                                case .text(_, let text):
-                                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Markdown(text)
-                                            .markdownTheme(.aiMessage())
-                                            .textSelection(.enabled)
-                                            .padding(.horizontal, 14)
-                                            .padding(.vertical, 10)
-                                            .background(OmiColors.backgroundSecondary)
-                                            .cornerRadius(18)
-                                    }
-                                case .thinking:
-                                    EmptyView()
                                 case .discoveryCard(_, let title, let summary, let fullText):
                                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                                default:
+                                    EmptyView()
                                 }
                             }
                         }
@@ -859,6 +967,7 @@ struct OnboardingChatBubble: View {
             .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
         }
     }
+
 }
 
 // MARK: - Tool Activity Indicator

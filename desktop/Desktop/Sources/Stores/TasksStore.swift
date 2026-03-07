@@ -530,6 +530,57 @@ class TasksStore: ObservableObject {
 
         isLoadingIncomplete = false
         NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+
+        // Force reconciliation on initial load to clean up tasks deleted on other devices.
+        // This bypasses the 5-minute throttle since the first load should always reconcile.
+        // Awaited inline (not in a detached Task) so loadDashboardTasks() sees clean data.
+        if lastReconciliationDate == nil {
+            await forceReconcileOnLoad()
+        }
+    }
+
+    /// Reconcile on initial load: paginate ALL incomplete task IDs from API,
+    /// then hard-delete any local tasks that are absent. This catches tasks
+    /// deleted on other devices (e.g. mobile) that still exist in local SQLite.
+    private func forceReconcileOnLoad() async {
+        let batchSize = 500
+        var allApiIds = Set<String>()
+        var offset = 0
+
+        do {
+            while true {
+                let response = try await APIClient.shared.getActionItems(
+                    limit: batchSize,
+                    offset: offset,
+                    completed: false
+                )
+                allApiIds.formUnion(response.items.map { $0.id })
+                offset += response.items.count
+                if response.items.count < batchSize { break }
+            }
+
+            let deleted = try await ActionItemStorage.shared.hardDeleteAbsentTasks(apiIds: allApiIds)
+            lastReconciliationDate = Date()
+
+            if deleted > 0 {
+                log("TasksStore: Reconciled on load: hard-deleted \(deleted) absent tasks")
+                let reloadLimit = max(pageSize, incompleteTasks.count)
+                let refreshed = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: reloadLimit,
+                    offset: 0,
+                    completed: false
+                )
+                if refreshed != incompleteTasks {
+                    incompleteTasks = refreshed
+                    incompleteOffset = refreshed.count
+                }
+                await loadDashboardTasks()
+            } else {
+                log("TasksStore: Reconciled on load: all local tasks match API")
+            }
+        } catch {
+            logError("TasksStore: Force reconciliation on load failed", error: error)
+        }
     }
 
     /// Load completed tasks (Done) - called when user views Done tab
@@ -1048,7 +1099,12 @@ class TasksStore: ObservableObject {
             return
         }
 
-        // 3. Update in-memory arrays immediately (optimistic UI)
+        // 3. Track completion analytics
+        if newCompleted {
+            AnalyticsManager.shared.taskCompleted(source: task.source)
+        }
+
+        // 4. Update in-memory arrays immediately (optimistic UI)
         if newCompleted {
             incompleteTasks.removeAll { $0.id == task.id }
             completedTasks.insert(updatedTask, at: 0)
@@ -1074,7 +1130,10 @@ class TasksStore: ObservableObject {
             incompleteTasks.insert(updatedTask, at: 0)
         }
 
-        // 4. Call API in background, revert on failure
+        // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
+        await loadDashboardTasks()
+
+        // 6. Call API in background, revert on failure
         do {
             let apiResult = try await APIClient.shared.updateActionItem(
                 id: task.id,
@@ -1173,6 +1232,9 @@ class TasksStore: ObservableObject {
             let localTask = inserted.toTaskActionItem()
             let localId = inserted.id!
 
+            // Track task added analytics
+            AnalyticsManager.shared.taskAdded()
+
             // Instant UI update
             incompleteTasks.insert(localTask, at: 0)
 
@@ -1221,6 +1283,9 @@ class TasksStore: ObservableObject {
         } catch {
             logError("TasksStore: Failed to soft-delete task locally", error: error)
         }
+
+        // Track deletion analytics
+        AnalyticsManager.shared.taskDeleted(source: task.source)
 
         // Remove from in-memory arrays immediately
         if task.completed {
@@ -1287,7 +1352,14 @@ class TasksStore: ObservableObject {
         }
     }
 
-    func updateTask(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
+    func updateTask(
+        _ task: TaskActionItem,
+        description: String? = nil,
+        dueAt: Date? = nil,
+        clearDueAt: Bool = false,
+        priority: String? = nil,
+        recurrenceRule: String? = nil
+    ) async {
         // Track manual edits: if description is changed, mark as manually edited
         var metadata: [String: Any]? = nil
         if description != nil {
@@ -1299,11 +1371,13 @@ class TasksStore: ObservableObject {
         }
 
         // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
+        var localUpdateSucceeded = true
         do {
             try await ActionItemStorage.shared.updateActionItemFields(
                 backendId: task.id,
                 description: description,
                 dueAt: dueAt,
+                clearDueAt: clearDueAt,
                 priority: priority,
                 metadata: metadata,
                 recurrenceRule: recurrenceRule
@@ -1311,11 +1385,11 @@ class TasksStore: ObservableObject {
         } catch {
             logError("TasksStore: Failed to update task locally", error: error)
             self.error = error.localizedDescription
-            return
+            localUpdateSucceeded = false
         }
 
         // 2. Read back from SQLite and update in-memory arrays immediately
-        if let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
+        if localUpdateSucceeded, let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id) {
             if task.completed {
                 if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
                     completedTasks[index] = updatedTask
@@ -1333,12 +1407,21 @@ class TasksStore: ObservableObject {
                 id: task.id,
                 description: description,
                 dueAt: dueAt,
+                clearDueAt: clearDueAt,
                 priority: priority,
                 metadata: metadata,
                 recurrenceRule: recurrenceRule
             )
             // Sync API result to store server-side timestamps
             try await ActionItemStorage.shared.syncTaskActionItems([apiResult])
+            // Keep in-memory arrays aligned with server echo immediately.
+            if task.completed {
+                if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
+                    completedTasks[index] = apiResult
+                }
+            } else if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
+                incompleteTasks[index] = apiResult
+            }
         } catch {
             // Local change persists; next successful sync will reconcile
             self.error = error.localizedDescription

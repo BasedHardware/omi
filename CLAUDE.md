@@ -318,7 +318,7 @@ clang-format -i <files>
 ## Git
 
 ### After Completing Work
-When you finish implementing a task, **commit and push your changes** before ending the conversation:
+If instructed by user to push, you should **create a PR and push your changes** before ending the conversation:
 
 1. Stage only the files you modified:
    ```bash
@@ -328,10 +328,17 @@ When you finish implementing a task, **commit and push your changes** before end
    ```bash
    git commit -m "Fix race condition in VAD gate service"
    ```
-3. Push to the current branch:
+3. Push to the current branch and create a PR:
    ```bash
    git push
+     gh pr create --title "Fix race condition in VAD
+   gate service" --body "Summary of changes"
    ```
+4. If user says to merge, merge the PR (no
+  squash):
+   ```bash
+  gh pr merge --merge
+  ```
 
 ### Rules
 - **Always commit to the current branch** — never switch branches
@@ -339,6 +346,8 @@ When you finish implementing a task, **commit and push your changes** before end
 - Make individual commits per file, not bulk commits
 - The pre-commit hook auto-formats staged code — no need to format manually before committing
 - If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
+- Never push or create PRs unless explicitly asked
+— Commit locally by default
 
 ### RELEASE command
 When the user says "RELEASE", perform the full release flow:

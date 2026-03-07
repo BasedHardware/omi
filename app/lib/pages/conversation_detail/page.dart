@@ -35,6 +35,7 @@ import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/theme/app_theme.dart';
 import 'conversation_detail_provider.dart';
+import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/edit_segment_sheet.dart';

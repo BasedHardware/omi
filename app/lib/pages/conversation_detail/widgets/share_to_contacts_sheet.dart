@@ -6,9 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/theme/app_theme.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -182,6 +185,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
           _errorMessage = context.l10n.failedToPrepareConversationForSharing;
         });
         return;
+      }
+      if (mounted) {
+        context.read<ConversationDetailProvider>().updateVisibilityLocally(ConversationVisibility.shared);
       }
 
       // Build the share link and message

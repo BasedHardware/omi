@@ -65,7 +65,7 @@ enum DeviceType: String, CaseIterable, Codable {
     /// Human-readable display name
     var displayName: String {
         switch self {
-        case .omi: return "Omi"
+        case .omi: return "omi"
         case .openglass: return "OpenGlass"
         case .frame: return "Frame"
         case .appleWatch: return "Apple Watch"

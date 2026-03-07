@@ -83,6 +83,9 @@ async fn provision_agent_vm(
     let uid = user.uid.clone();
     let vm_name_clone = vm_name.clone();
     let auth_token_clone = auth_token.clone();
+    let gce_project = state.config.gce_project_id.clone();
+    let gce_source_image = state.config.gce_source_image.clone();
+    let agent_gcs_bucket = state.config.agent_gcs_bucket.clone();
     tokio::spawn(async move {
         tracing::info!("Starting GCE VM creation: {}", vm_name_clone);
 
@@ -90,6 +93,9 @@ async fn provision_agent_vm(
             &firestore,
             &vm_name_clone,
             &auth_token_clone,
+            &gce_project,
+            &gce_source_image,
+            &agent_gcs_bucket,
         )
         .await
         {
@@ -158,7 +164,7 @@ async fn get_agent_status(
                 || vm.status == AgentVmStatus::Error
                 || vm.status == AgentVmStatus::Stopped
             {
-                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone).await {
+                match check_gce_instance_status(&state.firestore, &vm.vm_name, &vm.zone, &state.config.gce_project_id).await {
                     Ok(gce_status) if gce_status == "TERMINATED" || gce_status == "STOPPED" => {
                         tracing::info!(
                             "VM {} is {} (idle auto-stop), restarting...",
@@ -186,9 +192,10 @@ async fn get_agent_status(
                         let vm_name = vm.vm_name.clone();
                         let zone = vm.zone.clone();
                         let auth_token = vm.auth_token.clone();
+                        let gce_project = state.config.gce_project_id.clone();
 
                         tokio::spawn(async move {
-                            match start_stopped_vm(&firestore, &vm_name, &zone).await {
+                            match start_stopped_vm(&firestore, &vm_name, &zone, &gce_project).await {
                                 Ok(ip) => {
                                     tracing::info!("VM {} restarted with IP {}", vm_name, ip);
                                     let now = chrono::Utc::now().to_rfc3339();
@@ -249,9 +256,10 @@ async fn get_agent_status(
                         let vm_name = vm.vm_name.clone();
                         let zone = vm.zone.clone();
                         let auth_token = vm.auth_token.clone();
+                        let gce_project = state.config.gce_project_id.clone();
 
                         tokio::spawn(async move {
-                            let project = "based-hardware";
+                            let project = &gce_project;
                             let instance_url = format!(
                                 "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
                                 project, zone, vm_name
@@ -328,8 +336,8 @@ async fn check_gce_instance_status(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     zone: &str,
+    project: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let project = "based-hardware";
     let url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
         project, zone, vm_name
@@ -354,8 +362,8 @@ async fn start_stopped_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     zone: &str,
+    project: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let project = "based-hardware";
 
     // Call GCE start API
     let start_url = format!(
@@ -431,16 +439,15 @@ async fn create_gce_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
     auth_token: &str,
+    project: &str,
+    source_image: &str,
+    gcs_bucket: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let project = "based-hardware";
     let zone = "us-central1-a";
 
     // Startup script: pull the real startup.sh from GCS and run it.
     // All logic lives in GCS so it can be updated without reprovisioning VMs.
-    let startup_script = r#"#!/bin/bash
-curl -sf https://storage.googleapis.com/based-hardware-agent/startup.sh -o /tmp/omi-startup.sh \
-  && bash /tmp/omi-startup.sh
-"#.to_string();
+    let startup_script = format!("#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n", gcs_bucket);
 
     // GCE instances.insert REST API
     let url = format!(
@@ -455,7 +462,7 @@ curl -sf https://storage.googleapis.com/based-hardware-agent/startup.sh -o /tmp/
             "boot": true,
             "autoDelete": true,
             "initializeParams": {
-                "sourceImage": format!("projects/{}/global/images/family/omi-agent", project),
+                "sourceImage": source_image,
                 "diskSizeGb": "50",
                 "diskType": format!("zones/{}/diskTypes/pd-ssd", zone)
             }
@@ -468,7 +475,7 @@ curl -sf https://storage.googleapis.com/based-hardware-agent/startup.sh -o /tmp/
             }]
         }],
         "tags": {
-            "items": ["http-server"]
+            "items": ["omi-agent-vm"]
         },
         "metadata": {
             "items": [{

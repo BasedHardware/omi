@@ -83,6 +83,14 @@ async fn rebuild_knowledge_graph(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
+    if memories.is_empty() {
+        tracing::info!("No memories found for user {}, skipping rebuild", user.uid);
+        return Ok(Json(RebuildGraphResponse {
+            status: "completed".to_string(),
+            message: "No memories to process".to_string(),
+        }));
+    }
+
     tracing::info!("Processing {} memories for knowledge graph", memories.len());
 
     // Create LLM client

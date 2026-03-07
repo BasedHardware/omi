@@ -542,6 +542,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     }
   }
 
+  void updateVisibilityLocally(ConversationVisibility newVisibility) {
+    if (_cachedConversation != null) {
+      _cachedConversation!.visibility = newVisibility;
+      conversationProvider?.updateConversation(_cachedConversation!);
+      notifyListeners();
+    }
+  }
+
   String? _preferredSummarizationAppId;
 
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
