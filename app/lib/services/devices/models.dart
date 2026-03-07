@@ -68,6 +68,8 @@ const String limitlessServiceUuid = "632de001-604c-446b-a80f-7963e950f3fb";
 const String limitlessTxCharUuid = "632de002-604c-446b-a80f-7963e950f3fb";
 const String limitlessRxCharUuid = "632de003-604c-446b-a80f-7963e950f3fb";
 
+const String pocketServiceUuid = '001120a0-2233-4455-6677-889912345678';
+
 // OmiGlass OTA Service UUIDs
 const String omiGlassOtaServiceUuid = "19b10010-e8f2-537e-4f6c-d104768a1214";
 const String omiGlassOtaControlCharacteristicUuid = "19b10011-e8f2-537e-4f6c-d104768a1214";
