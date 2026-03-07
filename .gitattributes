@@ -1,0 +1,15 @@
+# Fork-specific files: always keep ours on merge
+app/ios/Runner.xcodeproj/project.pbxproj merge=ours
+desktop/Desktop/Info.plist merge=ours
+desktop/Desktop/Sources/** merge=ours
+desktop/Desktop/Omi.entitlements merge=ours
+desktop/Desktop/Omi-local.entitlements merge=ours
+desktop/run.sh merge=ours
+codemagic.yaml merge=ours
+
+# Generated localization files: always keep ours
+app/lib/l10n/app_localizations.dart merge=ours
+app/lib/l10n/app_localizations_*.dart merge=ours
+
+# ARB translation files: accept new keys from upstream, keep our translations
+app/lib/l10n/*.arb merge=arb
