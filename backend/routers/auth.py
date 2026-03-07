@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import json
@@ -283,7 +284,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
         'grant_type': 'authorization_code',
     }
 
-    token_response = requests.post(token_url, data=token_data)
+    token_response = await asyncio.to_thread(requests.post, token_url, data=token_data)
     if token_response.status_code != 200:
         raise HTTPException(status_code=400, detail="Failed to exchange Google code")
 
@@ -340,7 +341,8 @@ async def _exchange_apple_code_for_oauth_credentials(code: str, session_data: di
             'redirect_uri': callback_url,
         }
 
-        token_response = requests.post(
+        token_response = await asyncio.to_thread(
+            requests.post,
             token_url, data=token_data, headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
 
@@ -407,7 +409,7 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         }
 
         # Call Firebase Auth REST API to sign in
-        response = requests.post(sign_in_url, json=payload)
+        response = await asyncio.to_thread(requests.post, sign_in_url, json=payload)
 
         if response.status_code != 200:
             logger.error(f"Firebase sign-in failed: {sanitize(response.text)}")

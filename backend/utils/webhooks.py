@@ -115,7 +115,8 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
             return
         webhook_url += f'?uid={uid}'
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 webhook_url,
                 json={'segments': segments, 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
@@ -163,7 +164,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             return
         webhook_url += f'?sample_rate={sample_rate}&uid={uid}'
         try:
-            response = requests.post(
+            response = await asyncio.to_thread(
+                requests.post,
                 webhook_url, data=data, headers={'Content-Type': 'application/octet-stream'}, timeout=15
             )
             logger.info(f'send_audio_bytes_developer_webhook: {webhook_url} {response.status_code}')
