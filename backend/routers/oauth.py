@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Form
@@ -139,7 +140,7 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         # Check Setup completes
         if app.works_externally() and app.external_integration.setup_completed_url:
             try:
-                res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                res = await asyncio.to_thread(requests.get, app.external_integration.setup_completed_url + f'?uid={uid}')
                 res.raise_for_status()
                 if not res.json().get('is_setup_completed', False):
                     raise HTTPException(
