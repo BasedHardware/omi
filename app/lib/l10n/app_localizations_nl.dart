@@ -8301,4 +8301,194 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
+
+  @override
+  String get phoneCallsWithOmi => 'Bellen met Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Bel met realtime transcriptie';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifieer uw telefoonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'We bellen u ter bevestiging';
+
+  @override
+  String get phoneSetupStep2Title => 'Voer een verificatiecode in';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Een korte code die u invoert tijdens het gesprek';
+
+  @override
+  String get phoneSetupStep3Title => 'Begin uw contacten te bellen';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Met ingebouwde live transcriptie';
+
+  @override
+  String get phoneGetStarted => 'Aan de slag';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Gespreksopname kan toestemming vereisen in uw rechtsgebied';
+
+  @override
+  String get enterYourNumber => 'Voer uw nummer in';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Na verificatie wordt dit uw beller-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefoonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kan verificatie niet starten';
+
+  @override
+  String get phoneContinue => 'Doorgaan';
+
+  @override
+  String get verifyYourNumber => 'Verifieer uw nummer';
+
+  @override
+  String get answerTheCallFrom => 'Beantwoord het gesprek van';
+
+  @override
+  String get onTheCallEnterThisCode => 'Voer tijdens het gesprek deze code in';
+
+  @override
+  String get followTheVoiceInstructions => 'Volg de spraakinstructies';
+
+  @override
+  String get statusCalling => 'Bellen...';
+
+  @override
+  String get statusCallInProgress => 'Gesprek gaande';
+
+  @override
+  String get statusVerifiedLabel => 'Geverifieerd';
+
+  @override
+  String get statusCallMissed => 'Gemist gesprek';
+
+  @override
+  String get statusTimedOut => 'Tijd verstreken';
+
+  @override
+  String get phoneTryAgain => 'Opnieuw proberen';
+
+  @override
+  String get phonePageTitle => 'Telefoon';
+
+  @override
+  String get phoneContactsTab => 'Contacten';
+
+  @override
+  String get phoneKeypadTab => 'Toetsenbord';
+
+  @override
+  String get grantContactsAccess => 'Geef toegang tot uw contacten';
+
+  @override
+  String get phoneAllow => 'Toestaan';
+
+  @override
+  String get phoneSearchHint => 'Zoeken';
+
+  @override
+  String get phoneNoContactsFound => 'Geen contacten gevonden';
+
+  @override
+  String get phoneEnterNumber => 'Voer nummer in';
+
+  @override
+  String get failedToStartCall => 'Kan gesprek niet starten';
+
+  @override
+  String get callStateConnecting => 'Verbinden...';
+
+  @override
+  String get callStateRinging => 'Gaat over...';
+
+  @override
+  String get callStateEnded => 'Gesprek beeindigd';
+
+  @override
+  String get callStateFailed => 'Gesprek mislukt';
+
+  @override
+  String get transcriptPlaceholder => 'Transcriptie verschijnt hier...';
+
+  @override
+  String get phoneUnmute => 'Demping opheffen';
+
+  @override
+  String get phoneMute => 'Dempen';
+
+  @override
+  String get phoneSpeaker => 'Luidspreker';
+
+  @override
+  String get phoneEndCall => 'Einde';
+
+  @override
+  String get phoneCallSettingsTitle => 'Gespreksinstellingen';
+
+  @override
+  String get yourVerifiedNumbers => 'Uw geverifieerde nummers';
+
+  @override
+  String get verifiedNumbersDescription => 'Wanneer u iemand belt, zien zij dit nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Geen geverifieerde nummers';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber verwijderen?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'U moet opnieuw verifieren om te bellen';
+
+  @override
+  String get phoneDeleteButton => 'Verwijderen';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '${minutes}min geleden geverifieerd';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '${hours}u geleden geverifieerd';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '${days}d geleden geverifieerd';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Geverifieerd op $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Geverifieerd';
+
+  @override
+  String get callAlreadyInProgress => 'Er is al een gesprek gaande';
+
+  @override
+  String get failedToGetCallToken => 'Kan token niet ophalen. Verifieer eerst uw nummer.';
+
+  @override
+  String get failedToInitializeCallService => 'Kan belservice niet initialiseren';
+
+  @override
+  String get speakerLabelYou => 'U';
+
+  @override
+  String get speakerLabelUnknown => 'Onbekend';
 }

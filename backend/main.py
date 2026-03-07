@@ -43,6 +43,7 @@ from routers import (
     folders,
     goals,
     announcements,
+    phone_calls,
     agent_tools,
 )
 
@@ -101,6 +102,7 @@ app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 app.include_router(goals.router)
 app.include_router(announcements.router)
+app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
 
 

@@ -245,6 +245,7 @@ class ConversationSource(str, Enum):
     friend_com = 'friend_com'
     apple_watch = 'apple_watch'
     phone = 'phone'
+    phone_call = 'phone_call'
     desktop = 'desktop'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
@@ -333,6 +334,7 @@ class Conversation(BaseModel):
     is_locked: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     def __init__(self, **data):
         super().__init__(**data)

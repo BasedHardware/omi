@@ -173,12 +173,14 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         if channel not in VALID_CHANNELS:
             channel = "beta"
 
-        desktop_releases.append({
-            "release": release,
-            "version_info": version_info,
-            "metadata": kv,
-            "channel": channel,
-        })
+        desktop_releases.append(
+            {
+                "release": release,
+                "version_info": version_info,
+                "metadata": kv,
+                "channel": channel,
+            }
+        )
 
     desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
     return desktop_releases
@@ -297,17 +299,19 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern
                 seen_channels.discard(channel)
                 continue
 
-            items.append({
-                "version": version_info["version"],
-                "shortVersion": version_info["build"],
-                "changes": changes,
-                "date": release.get("published_at"),
-                "mandatory": mandatory,
-                "url": download_url,
-                "platform": platform,
-                "edSignature": ed_signature,
-                "channel": channel,
-            })
+            items.append(
+                {
+                    "version": version_info["version"],
+                    "shortVersion": version_info["build"],
+                    "changes": changes,
+                    "date": release.get("published_at"),
+                    "mandatory": mandatory,
+                    "url": download_url,
+                    "platform": platform,
+                    "edSignature": ed_signature,
+                    "channel": channel,
+                }
+            )
 
         xml_content = _generate_appcast_xml(items, platform)
 

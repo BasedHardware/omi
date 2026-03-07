@@ -6054,7 +6054,7 @@ abstract class AppLocalizations {
   /// Error message when microphone permission is not granted
   ///
   /// In en, this message translates to:
-  /// **'Microphone permission is required for voice recording.'**
+  /// **'Microphone permission is required to make calls'**
   String get microphonePermissionRequired;
 
   /// Error message when microphone permission is denied
@@ -9756,7 +9756,7 @@ abstract class AppLocalizations {
   /// Placeholder text for country search field
   ///
   /// In en, this message translates to:
-  /// **'Search countries...'**
+  /// **'Search countries'**
   String get searchCountries;
 
   /// Loading text while checking Apple Watch status
@@ -15452,6 +15452,366 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This will only remove deadlines'**
   String get tasksCleanTodayMessage;
+
+  /// No description provided for @phoneCallsWithOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls with Omi'**
+  String get phoneCallsWithOmi;
+
+  /// No description provided for @phoneCallsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls with real-time transcription'**
+  String get phoneCallsSubtitle;
+
+  /// No description provided for @phoneSetupStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your phone number'**
+  String get phoneSetupStep1Title;
+
+  /// No description provided for @phoneSetupStep1Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll call you to confirm it\'s yours'**
+  String get phoneSetupStep1Subtitle;
+
+  /// No description provided for @phoneSetupStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a verification code'**
+  String get phoneSetupStep2Title;
+
+  /// No description provided for @phoneSetupStep2Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'A short code you\'ll type on the call'**
+  String get phoneSetupStep2Subtitle;
+
+  /// No description provided for @phoneSetupStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Start calling your contacts'**
+  String get phoneSetupStep3Title;
+
+  /// No description provided for @phoneSetupStep3Subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'With live transcription built in'**
+  String get phoneSetupStep3Subtitle;
+
+  /// No description provided for @phoneGetStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Started'**
+  String get phoneGetStarted;
+
+  /// No description provided for @callRecordingConsentDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Call recording may require consent in your jurisdiction'**
+  String get callRecordingConsentDisclaimer;
+
+  /// No description provided for @enterYourNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your number'**
+  String get enterYourNumber;
+
+  /// No description provided for @phoneNumberCallerIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Once verified, this becomes your caller ID'**
+  String get phoneNumberCallerIdHint;
+
+  /// No description provided for @phoneNumberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get phoneNumberHint;
+
+  /// No description provided for @failedToStartVerification.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start verification'**
+  String get failedToStartVerification;
+
+  /// No description provided for @phoneContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get phoneContinue;
+
+  /// No description provided for @verifyYourNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your number'**
+  String get verifyYourNumber;
+
+  /// No description provided for @answerTheCallFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer the call from'**
+  String get answerTheCallFrom;
+
+  /// No description provided for @onTheCallEnterThisCode.
+  ///
+  /// In en, this message translates to:
+  /// **'On the call, enter this code'**
+  String get onTheCallEnterThisCode;
+
+  /// No description provided for @followTheVoiceInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow the voice instructions'**
+  String get followTheVoiceInstructions;
+
+  /// No description provided for @statusCalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Calling...'**
+  String get statusCalling;
+
+  /// No description provided for @statusCallInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress'**
+  String get statusCallInProgress;
+
+  /// No description provided for @statusVerifiedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get statusVerifiedLabel;
+
+  /// No description provided for @statusCallMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Call missed'**
+  String get statusCallMissed;
+
+  /// No description provided for @statusTimedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Timed out'**
+  String get statusTimedOut;
+
+  /// No description provided for @phoneTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Again'**
+  String get phoneTryAgain;
+
+  /// No description provided for @phonePageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get phonePageTitle;
+
+  /// No description provided for @phoneContactsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get phoneContactsTab;
+
+  /// No description provided for @phoneKeypadTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Keypad'**
+  String get phoneKeypadTab;
+
+  /// No description provided for @grantContactsAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant access to your contacts'**
+  String get grantContactsAccess;
+
+  /// No description provided for @phoneAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get phoneAllow;
+
+  /// No description provided for @phoneSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get phoneSearchHint;
+
+  /// No description provided for @phoneNoContactsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts found'**
+  String get phoneNoContactsFound;
+
+  /// No description provided for @phoneEnterNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter number'**
+  String get phoneEnterNumber;
+
+  /// No description provided for @failedToStartCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start call'**
+  String get failedToStartCall;
+
+  /// No description provided for @callStateConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting...'**
+  String get callStateConnecting;
+
+  /// No description provided for @callStateRinging.
+  ///
+  /// In en, this message translates to:
+  /// **'Ringing...'**
+  String get callStateRinging;
+
+  /// No description provided for @callStateEnded.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Ended'**
+  String get callStateEnded;
+
+  /// No description provided for @callStateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Failed'**
+  String get callStateFailed;
+
+  /// No description provided for @transcriptPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript will appear here...'**
+  String get transcriptPlaceholder;
+
+  /// No description provided for @phoneUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get phoneUnmute;
+
+  /// No description provided for @phoneMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get phoneMute;
+
+  /// No description provided for @phoneSpeaker.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker'**
+  String get phoneSpeaker;
+
+  /// No description provided for @phoneEndCall.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get phoneEndCall;
+
+  /// No description provided for @phoneCallSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Call Settings'**
+  String get phoneCallSettingsTitle;
+
+  /// No description provided for @yourVerifiedNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Verified Numbers'**
+  String get yourVerifiedNumbers;
+
+  /// No description provided for @verifiedNumbersDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'When you call someone, they\'ll see this number on their phone'**
+  String get verifiedNumbersDescription;
+
+  /// No description provided for @noVerifiedNumbers.
+  ///
+  /// In en, this message translates to:
+  /// **'No verified numbers'**
+  String get noVerifiedNumbers;
+
+  /// No description provided for @deletePhoneNumberConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {phoneNumber}?'**
+  String deletePhoneNumberConfirm(String phoneNumber);
+
+  /// No description provided for @deletePhoneNumberWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll need to verify again to make calls'**
+  String get deletePhoneNumberWarning;
+
+  /// No description provided for @phoneDeleteButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get phoneDeleteButton;
+
+  /// No description provided for @verifiedMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {minutes}m ago'**
+  String verifiedMinutesAgo(int minutes);
+
+  /// No description provided for @verifiedHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {hours}h ago'**
+  String verifiedHoursAgo(int hours);
+
+  /// No description provided for @verifiedDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified {days}d ago'**
+  String verifiedDaysAgo(int days);
+
+  /// No description provided for @verifiedOnDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified on {date}'**
+  String verifiedOnDate(String date);
+
+  /// No description provided for @verifiedFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verifiedFallback;
+
+  /// No description provided for @callAlreadyInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'A call is already in progress'**
+  String get callAlreadyInProgress;
+
+  /// No description provided for @failedToGetCallToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to get call token. Verify your phone number first.'**
+  String get failedToGetCallToken;
+
+  /// No description provided for @failedToInitializeCallService.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to initialize call service'**
+  String get failedToInitializeCallService;
+
+  /// No description provided for @speakerLabelYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get speakerLabelYou;
+
+  /// No description provided for @speakerLabelUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get speakerLabelUnknown;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

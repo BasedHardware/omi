@@ -8344,4 +8344,195 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Dadurch werden nur Fristen entfernt';
+
+  @override
+  String get phoneCallsWithOmi => 'Telefonate mit Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Telefonieren mit Echtzeit-Transkription';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifizieren Sie Ihre Telefonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Wir rufen Sie an, um zu bestaetigen';
+
+  @override
+  String get phoneSetupStep2Title => 'Geben Sie einen Verifizierungscode ein';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Ein kurzer Code, den Sie beim Anruf eingeben';
+
+  @override
+  String get phoneSetupStep3Title => 'Beginnen Sie Ihre Kontakte anzurufen';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Mit integrierter Live-Transkription';
+
+  @override
+  String get phoneGetStarted => 'Loslegen';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Anrufaufzeichnung kann in Ihrer Gerichtsbarkeit eine Einwilligung erfordern';
+
+  @override
+  String get enterYourNumber => 'Geben Sie Ihre Nummer ein';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Nach der Verifizierung wird dies Ihre Anrufer-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Verifizierung konnte nicht gestartet werden';
+
+  @override
+  String get phoneContinue => 'Weiter';
+
+  @override
+  String get verifyYourNumber => 'Verifizieren Sie Ihre Nummer';
+
+  @override
+  String get answerTheCallFrom => 'Nehmen Sie den Anruf an von';
+
+  @override
+  String get onTheCallEnterThisCode => 'Geben Sie diesen Code waehrend des Anrufs ein';
+
+  @override
+  String get followTheVoiceInstructions => 'Folgen Sie den Sprachanweisungen';
+
+  @override
+  String get statusCalling => 'Anrufen...';
+
+  @override
+  String get statusCallInProgress => 'Anruf aktiv';
+
+  @override
+  String get statusVerifiedLabel => 'Verifiziert';
+
+  @override
+  String get statusCallMissed => 'Anruf verpasst';
+
+  @override
+  String get statusTimedOut => 'Zeit abgelaufen';
+
+  @override
+  String get phoneTryAgain => 'Erneut versuchen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakte';
+
+  @override
+  String get phoneKeypadTab => 'Tastatur';
+
+  @override
+  String get grantContactsAccess => 'Zugriff auf Ihre Kontakte gewaehren';
+
+  @override
+  String get phoneAllow => 'Erlauben';
+
+  @override
+  String get phoneSearchHint => 'Suchen';
+
+  @override
+  String get phoneNoContactsFound => 'Keine Kontakte gefunden';
+
+  @override
+  String get phoneEnterNumber => 'Nummer eingeben';
+
+  @override
+  String get failedToStartCall => 'Anruf konnte nicht gestartet werden';
+
+  @override
+  String get callStateConnecting => 'Verbinden...';
+
+  @override
+  String get callStateRinging => 'Klingelt...';
+
+  @override
+  String get callStateEnded => 'Anruf beendet';
+
+  @override
+  String get callStateFailed => 'Anruf fehlgeschlagen';
+
+  @override
+  String get transcriptPlaceholder => 'Transkription erscheint hier...';
+
+  @override
+  String get phoneUnmute => 'Stummschaltung aufheben';
+
+  @override
+  String get phoneMute => 'Stumm';
+
+  @override
+  String get phoneSpeaker => 'Lautsprecher';
+
+  @override
+  String get phoneEndCall => 'Beenden';
+
+  @override
+  String get phoneCallSettingsTitle => 'Anrufeinstellungen';
+
+  @override
+  String get yourVerifiedNumbers => 'Ihre verifizierten Nummern';
+
+  @override
+  String get verifiedNumbersDescription => 'Wenn Sie jemanden anrufen, sieht er diese Nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Keine verifizierten Nummern';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber loeschen?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Sie muessen erneut verifizieren, um Anrufe zu taetigen';
+
+  @override
+  String get phoneDeleteButton => 'Loeschen';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Vor ${minutes}Min verifiziert';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Vor ${hours}Std verifiziert';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Vor ${days}T verifiziert';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verifiziert am $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verifiziert';
+
+  @override
+  String get callAlreadyInProgress => 'Ein Anruf ist bereits aktiv';
+
+  @override
+  String get failedToGetCallToken => 'Token konnte nicht abgerufen werden. Verifizieren Sie zuerst Ihre Nummer.';
+
+  @override
+  String get failedToInitializeCallService => 'Anrufdienst konnte nicht initialisiert werden';
+
+  @override
+  String get speakerLabelYou => 'Sie';
+
+  @override
+  String get speakerLabelUnknown => 'Unbekannt';
 }

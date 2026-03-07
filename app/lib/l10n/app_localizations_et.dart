@@ -8271,4 +8271,194 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'See eemaldab ainult tähtajad';
+
+  @override
+  String get phoneCallsWithOmi => 'Koned Omiga';
+
+  @override
+  String get phoneCallsSubtitle => 'Helistage reaalajas transkriptsiooniga';
+
+  @override
+  String get phoneSetupStep1Title => 'Kinnitage oma telefoninumber';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Helistame teile kinnitamiseks';
+
+  @override
+  String get phoneSetupStep2Title => 'Sisestage kinnituskood';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Luhike kood, mille sisestate kone ajal';
+
+  @override
+  String get phoneSetupStep3Title => 'Hakake oma kontaktidele helistama';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Sisseehitatud otsetranskriptsiooniga';
+
+  @override
+  String get phoneGetStarted => 'Alusta';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Kone salvestamine voib teie jurisdiktsioonis nousoleku nousolekut';
+
+  @override
+  String get enterYourNumber => 'Sisestage oma number';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Parast kinnitamist saab see teie helistaja ID-ks';
+
+  @override
+  String get phoneNumberHint => 'Telefoninumber';
+
+  @override
+  String get failedToStartVerification => 'Kinnitamise alustamine ebaonnestus';
+
+  @override
+  String get phoneContinue => 'Jatka';
+
+  @override
+  String get verifyYourNumber => 'Kinnitage oma number';
+
+  @override
+  String get answerTheCallFrom => 'Vasta konesle numbrilt';
+
+  @override
+  String get onTheCallEnterThisCode => 'Kone ajal sisestage see kood';
+
+  @override
+  String get followTheVoiceInstructions => 'Jargige haaljuhiseid';
+
+  @override
+  String get statusCalling => 'Helistamine...';
+
+  @override
+  String get statusCallInProgress => 'Kone pooleli';
+
+  @override
+  String get statusVerifiedLabel => 'Kinnitatud';
+
+  @override
+  String get statusCallMissed => 'Vastamata kone';
+
+  @override
+  String get statusTimedOut => 'Aeg otsas';
+
+  @override
+  String get phoneTryAgain => 'Proovi uuesti';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontaktid';
+
+  @override
+  String get phoneKeypadTab => 'Klaviatuur';
+
+  @override
+  String get grantContactsAccess => 'Andke juurdepaus oma kontaktidele';
+
+  @override
+  String get phoneAllow => 'Luba';
+
+  @override
+  String get phoneSearchHint => 'Otsi';
+
+  @override
+  String get phoneNoContactsFound => 'Kontakte ei leitud';
+
+  @override
+  String get phoneEnterNumber => 'Sisestage number';
+
+  @override
+  String get failedToStartCall => 'Kone alustamine ebaonnestus';
+
+  @override
+  String get callStateConnecting => 'Uhendamine...';
+
+  @override
+  String get callStateRinging => 'Heliseb...';
+
+  @override
+  String get callStateEnded => 'Kone loppenud';
+
+  @override
+  String get callStateFailed => 'Kone ebaonnestus';
+
+  @override
+  String get transcriptPlaceholder => 'Transkriptsioon ilmub siia...';
+
+  @override
+  String get phoneUnmute => 'Eemalda vaigistus';
+
+  @override
+  String get phoneMute => 'Vaigista';
+
+  @override
+  String get phoneSpeaker => 'Kolar';
+
+  @override
+  String get phoneEndCall => 'Lopeta';
+
+  @override
+  String get phoneCallSettingsTitle => 'Kone seaded';
+
+  @override
+  String get yourVerifiedNumbers => 'Teie kinnitatud numbrid';
+
+  @override
+  String get verifiedNumbersDescription => 'Kui helistate kellelegi, naevad nad seda numbrit';
+
+  @override
+  String get noVerifiedNumbers => 'Kinnitatud numbreid pole';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Kustuta $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Helistamiseks peate uuesti kinnitama';
+
+  @override
+  String get phoneDeleteButton => 'Kustuta';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Kinnitatud ${minutes}m tagasi';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Kinnitatud ${hours}t tagasi';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Kinnitatud ${days}p tagasi';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Kinnitatud $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Kinnitatud';
+
+  @override
+  String get callAlreadyInProgress => 'Kone on juba pooleli';
+
+  @override
+  String get failedToGetCallToken => 'Tokeni hankimine ebaonnestus. Kinnitage esmalt oma number.';
+
+  @override
+  String get failedToInitializeCallService => 'Koneteenuse kaivitamine ebaonnestus';
+
+  @override
+  String get speakerLabelYou => 'Teie';
+
+  @override
+  String get speakerLabelUnknown => 'Tundmatu';
 }
