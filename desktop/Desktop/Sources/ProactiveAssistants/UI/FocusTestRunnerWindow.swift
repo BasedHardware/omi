@@ -637,12 +637,9 @@ enum FocusTestRunner {
         if let existing = coordAssistant as? FocusAssistant {
             focusAssistant = existing
         } else {
-            do {
-                focusAssistant = try FocusAssistant()
-            } catch {
-                log("FocusTestCLI: ERROR — Failed to create FocusAssistant: \(error)")
-                return
-            }
+            let service = BackendProactiveService()
+            service.connect()
+            focusAssistant = FocusAssistant(backendService: service)
         }
 
         // Get excluded apps
