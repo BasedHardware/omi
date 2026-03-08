@@ -431,6 +431,7 @@ async fn migrate_ai_tasks(
                     None,
                     Some(&prefixed),
                     None,
+                    false,
                     None,
                     None,
                     None,
