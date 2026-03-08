@@ -37,7 +37,7 @@ import database.users as user_db
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
-    check_and_clear_credits_invalidation,
+    check_credits_invalidation,
     get_cached_user_geolocation,
     try_acquire_listen_lock,
 )
@@ -331,7 +331,7 @@ async def _stream_handler(
             # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
             # Active invalidation: subscription changes set a Redis signal (#5446)
             now = time.time()
-            credits_invalidated = check_and_clear_credits_invalidation(uid)
+            credits_invalidated = check_credits_invalidation(uid)
             needs_refresh = (
                 not remaining_seconds_cache_initialized
                 or credits_invalidated
