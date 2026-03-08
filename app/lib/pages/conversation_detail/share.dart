@@ -7,8 +7,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -218,6 +221,11 @@ void showShareBottomSheet(
                                 SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
                               );
                               return;
+                            }
+                            if (context.mounted) {
+                              context
+                                  .read<ConversationDetailProvider>()
+                                  .updateVisibilityLocally(ConversationVisibility.shared);
                             }
                             Clipboard.setData(ClipboardData(text: 'https://h.omi.me/conversations/${conversation.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
