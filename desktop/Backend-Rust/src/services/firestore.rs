@@ -2165,6 +2165,7 @@ impl FirestoreService {
         completed: Option<bool>,
         description: Option<&str>,
         due_at: Option<DateTime<Utc>>,
+        clear_due_at: bool,
         priority: Option<&str>,
         category: Option<&str>,
         goal_id: Option<&str>,
@@ -2198,7 +2199,10 @@ impl FirestoreService {
             fields["description"] = json!({"stringValue": d});
         }
 
-        if let Some(due) = due_at {
+        if clear_due_at {
+            field_paths.push("due_at");
+            fields["due_at"] = json!({"nullValue": null});
+        } else if let Some(due) = due_at {
             field_paths.push("due_at");
             fields["due_at"] = json!({"timestampValue": due.to_rfc3339()});
         }

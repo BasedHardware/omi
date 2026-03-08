@@ -1551,6 +1551,7 @@ extension APIClient {
             let description: String?
             let dueAt: String?
             let includeDueAt: Bool
+            let clearDueAt: Bool
             let priority: String?
             let metadata: String?
             let goalId: String?
@@ -1560,6 +1561,7 @@ extension APIClient {
             enum CodingKeys: String, CodingKey {
                 case completed, description, priority, metadata
                 case dueAt = "due_at"
+                case clearDueAt = "clear_due_at"
                 case goalId = "goal_id"
                 case relevanceScore = "relevance_score"
                 case recurrenceRule = "recurrence_rule"
@@ -1575,6 +1577,9 @@ extension APIClient {
                     } else {
                         try container.encodeNil(forKey: .dueAt)
                     }
+                }
+                if clearDueAt {
+                    try container.encode(true, forKey: .clearDueAt)
                 }
                 try container.encodeIfPresent(priority, forKey: .priority)
                 try container.encodeIfPresent(metadata, forKey: .metadata)
@@ -1600,6 +1605,7 @@ extension APIClient {
             description: description,
             dueAt: dueAt.map { formatter.string(from: $0) },
             includeDueAt: clearDueAt || dueAt != nil,
+            clearDueAt: clearDueAt,
             priority: priority,
             metadata: metadataString,
             goalId: goalId,
