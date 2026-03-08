@@ -294,10 +294,17 @@ async def _stream_handler(
 
     freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
 
+    # Credit cache: avoid querying ~720 Firestore docs every 60s per stream (#5439 sub-task 1)
+    CREDITS_REFRESH_SECONDS = 900  # 15 min
+    remaining_seconds_cache: Optional[int] = None  # None = not yet fetched (distinct from unlimited)
+    remaining_seconds_cache_ts: float = 0.0
+    remaining_seconds_cache_initialized = False
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
         nonlocal freemium_threshold_sent
+        nonlocal remaining_seconds_cache, remaining_seconds_cache_ts, remaining_seconds_cache_initialized
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -307,6 +314,7 @@ async def _stream_handler(
             if use_custom_stt:
                 continue
 
+            transcription_seconds = 0
             if last_usage_record_timestamp:
                 current_time = time.time()
                 transcription_seconds = int(current_time - last_usage_record_timestamp)
@@ -318,8 +326,24 @@ async def _stream_handler(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            # Freemium: Check remaining credits and notify when threshold reached
-            remaining_seconds = get_remaining_transcription_seconds(uid)
+            # Freemium: Check remaining credits with local cache (#5439)
+            # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
+            now = time.time()
+            needs_refresh = (
+                not remaining_seconds_cache_initialized
+                or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
+                # Fast-refresh when credits exhausted (user may upgrade or month may roll over)
+                or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+            )
+            if needs_refresh:
+                remaining_seconds_cache = get_remaining_transcription_seconds(uid)
+                remaining_seconds_cache_ts = now
+                remaining_seconds_cache_initialized = True
+            elif remaining_seconds_cache is not None and transcription_seconds > 0:
+                # Decrement locally between refreshes (None = unlimited, don't decrement)
+                remaining_seconds_cache = max(0, remaining_seconds_cache - transcription_seconds)
+
+            remaining_seconds = remaining_seconds_cache
 
             # Notify user when approaching limit (3 minutes remaining)
             if (
