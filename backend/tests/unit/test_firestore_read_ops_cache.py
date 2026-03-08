@@ -408,3 +408,29 @@ class TestCreditCacheLogic:
         )
 
         assert needs_refresh is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Singleflight lock cleanup
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestFetchLockCleanup:
+    """Tests that singleflight locks are cleaned up after get_or_fetch."""
+
+    def test_fetch_lock_removed_after_fetch(self):
+        """Lock for a key should be removed from _fetch_locks after fetch completes."""
+        cache = InMemoryCacheManager(max_memory_mb=1)
+
+        cache.get_or_fetch("key1", lambda: "value1", ttl=30)
+
+        assert "key1" not in cache._fetch_locks
+
+    def test_fetch_locks_dont_grow_unbounded(self):
+        """Many unique keys should not leave orphaned locks."""
+        cache = InMemoryCacheManager(max_memory_mb=1)
+
+        for i in range(100):
+            cache.get_or_fetch(f"key_{i}", lambda: f"value_{i}", ttl=30)
+
+        assert len(cache._fetch_locks) == 0
