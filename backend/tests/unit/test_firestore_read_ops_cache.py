@@ -531,45 +531,48 @@ class TestRedisCreditsInvalidationSignal:
     """Tests for Redis-based credit cache invalidation signal."""
 
     def test_set_and_check_signal(self):
-        """set_credits_invalidation_signal should be consumable by check_and_clear."""
+        """set_credits_invalidation_signal should be readable by check_credits_invalidation."""
         mock_redis = MagicMock()
         mock_redis.set = MagicMock()
-        mock_redis.getdel = MagicMock(return_value=b'1')
+        mock_redis.get = MagicMock(return_value=b'1')
 
         with patch('database.redis_db.r', mock_redis):
-            from database.redis_db import set_credits_invalidation_signal, check_and_clear_credits_invalidation
+            from database.redis_db import set_credits_invalidation_signal, check_credits_invalidation
 
             set_credits_invalidation_signal('user123')
-            mock_redis.set.assert_called_once_with('credits_invalidated:user123', '1', ex=1800)
+            mock_redis.set.assert_called_once_with('credits_invalidated:user123', '1', ex=120)
 
-            result = check_and_clear_credits_invalidation('user123')
+            result = check_credits_invalidation('user123')
             assert result is True
-            mock_redis.getdel.assert_called_once_with('credits_invalidated:user123')
+            mock_redis.get.assert_called_once_with('credits_invalidated:user123')
 
     def test_check_returns_false_when_no_signal(self):
-        """check_and_clear should return False when no invalidation signal exists."""
+        """check_credits_invalidation should return False when no signal exists."""
         mock_redis = MagicMock()
-        mock_redis.getdel = MagicMock(return_value=None)
+        mock_redis.get = MagicMock(return_value=None)
 
         with patch('database.redis_db.r', mock_redis):
-            from database.redis_db import check_and_clear_credits_invalidation
+            from database.redis_db import check_credits_invalidation
 
-            result = check_and_clear_credits_invalidation('user_no_signal')
+            result = check_credits_invalidation('user_no_signal')
             assert result is False
 
-    def test_signal_consumed_on_first_check(self):
-        """Signal should be consumed (deleted) on first check via GETDEL."""
+    def test_signal_visible_to_multiple_readers(self):
+        """Multiple streams (GET, not GETDEL) should all see the invalidation signal."""
         mock_redis = MagicMock()
-        # First call returns the value, second returns None (consumed)
-        mock_redis.getdel = MagicMock(side_effect=[b'1', None])
+        # GET returns value on every call until TTL expires
+        mock_redis.get = MagicMock(return_value=b'1')
 
         with patch('database.redis_db.r', mock_redis):
-            from database.redis_db import check_and_clear_credits_invalidation
+            from database.redis_db import check_credits_invalidation
 
-            first = check_and_clear_credits_invalidation('user_consume')
-            second = check_and_clear_credits_invalidation('user_consume')
+            first = check_credits_invalidation('user_multi')
+            second = check_credits_invalidation('user_multi')
+            third = check_credits_invalidation('user_multi')
             assert first is True
-            assert second is False
+            assert second is True
+            assert third is True
+            assert mock_redis.get.call_count == 3
 
 
 class TestWebhookInvalidationCoverage:
@@ -627,12 +630,19 @@ class TestWebhookInvalidationCoverage:
         assert 'set_credits_invalidation_signal(uid)' in section
 
     def test_transcribe_imports_invalidation_check(self):
-        """transcribe.py must import check_and_clear_credits_invalidation."""
+        """transcribe.py must import check_credits_invalidation."""
         source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
-        assert 'check_and_clear_credits_invalidation' in source
+        assert 'check_credits_invalidation' in source
 
     def test_transcribe_calls_invalidation_check(self):
         """transcribe.py must check invalidation signal in the refresh logic."""
         source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
-        assert 'credits_invalidated = check_and_clear_credits_invalidation(uid)' in source
+        assert 'credits_invalidated = check_credits_invalidation(uid)' in source
         assert 'or credits_invalidated' in source
+
+    def test_transcribe_uses_get_not_getdel(self):
+        """transcribe.py must use check_credits_invalidation (GET), not GETDEL."""
+        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+        assert 'check_credits_invalidation' in source
+        # Must NOT use the old consumed-on-read pattern
+        assert 'check_and_clear_credits_invalidation' not in source
