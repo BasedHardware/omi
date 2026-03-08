@@ -478,7 +478,11 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void groupConversationsByDate() {
-    _groupConversationsByDateWithoutNotify();
+    if (previousQuery.isNotEmpty) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     notifyListeners();
   }
 
@@ -609,7 +613,15 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    _groupConversationsByDateWithoutNotify();
+    if (previousQuery.isNotEmpty) {
+      int si = searchedConversations.indexWhere((element) => element.id == conversation.id);
+      if (si != -1) {
+        searchedConversations[si] = conversation;
+      }
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     notifyListeners();
   }
 
