@@ -126,8 +126,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     // MARK: - Environment Loading
 
     private func loadEnvironment() {
+        let bundledEnvPath = Bundle.main.path(forResource: ".env", ofType: nil)
         let envPaths = [
-            Bundle.main.path(forResource: ".env", ofType: nil),
+            bundledEnvPath,
             FileManager.default.currentDirectoryPath + "/.env",
             NSHomeDirectory() + "/.omi.env",
             NSHomeDirectory() + "/.hartford.env"
@@ -139,6 +140,9 @@ public class ProactiveAssistantsPlugin: NSObject {
                     let parts = line.split(separator: "=", maxSplits: 1)
                     if parts.count == 2 {
                         let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                        if shouldSkipBundledAnthropicKey(key: key, sourcePath: path, bundledEnvPath: bundledEnvPath) {
+                            continue
+                        }
                         let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
                         setenv(key, value, 1)
@@ -148,6 +152,13 @@ public class ProactiveAssistantsPlugin: NSObject {
                 break
             }
         }
+    }
+
+    private func shouldSkipBundledAnthropicKey(key: String, sourcePath: String, bundledEnvPath: String?) -> Bool {
+        guard key == "ANTHROPIC_API_KEY" else { return false }
+        guard let bundledEnvPath, sourcePath == bundledEnvPath else { return false }
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        return bundleId == "com.omi.computer-macos"
     }
 
     // MARK: - Assistant Management
