@@ -858,3 +858,25 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+@try_catch_decorator
+def set_credits_invalidation_signal(uid: str, ttl: int = 1800):
+    """Signal active WebSocket sessions to refresh credits immediately.
+
+    Called when subscription changes (Stripe webhook, upgrade, etc.).
+    Active transcribe loops check this on each 60s tick and force a Firestore refresh.
+    TTL is 30 min — longer than any reasonable refresh interval.
+    """
+    r.set(f'credits_invalidated:{uid}', '1', ex=ttl)
+
+
+@try_catch_decorator
+def check_and_clear_credits_invalidation(uid: str) -> bool:
+    """Check if credits need immediate refresh and clear the signal.
+
+    Returns True if invalidation signal was present (caller should refresh).
+    Uses getdel for atomicity — signal is consumed on first check.
+    """
+    result = r.getdel(f'credits_invalidated:{uid}')
+    return result is not None
