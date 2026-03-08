@@ -154,5 +154,5 @@ dependencies {
     implementation 'androidx.multidex:multidex:2.0.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
-    implementation 'io.intercom.android:intercom-sdk:latest.release'
+    implementation 'io.intercom.android:intercom-sdk:16.1.0'
 }
