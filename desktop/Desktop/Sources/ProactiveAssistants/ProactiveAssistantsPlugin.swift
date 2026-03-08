@@ -576,7 +576,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
 
         // Get current window info (use real app name, not cached)
-        let (realAppName, windowTitle, windowID) = WindowMonitor.getActiveWindowInfoStatic()
+        let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
 
         // Check if the current app is excluded from Rewind capture
         let isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
