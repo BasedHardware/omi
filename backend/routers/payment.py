@@ -13,6 +13,7 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
+from database.redis_db import set_credits_invalidation_signal
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import Subscription, PlanType, SubscriptionStatus, PlanLimits
 from utils.subscription import get_basic_plan_limits, get_plan_type_from_price_id, get_plan_limits
@@ -468,6 +469,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     )
 
             _update_subscription_from_session(uid, session)
+            set_credits_invalidation_signal(uid)
             subscription = users_db.get_user_subscription(uid)
             if subscription and subscription.plan == PlanType.unlimited:
                 conversations_db.unlock_all_conversations(uid)
@@ -521,6 +523,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                     memories_db.unlock_all_memories(uid)
                     action_items_db.unlock_all_action_items(uid)
                 users_db.update_user_subscription(uid, new_subscription.dict())
+                set_credits_invalidation_signal(uid)
                 logger.info(f"Subscription for user {uid} updated from webhook event: {event['type']}.")
 
     # Handle subscription schedule events
@@ -540,6 +543,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_stripe_sub = stripe.Subscription.retrieve(new_subscription_id)
                         new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
                         users_db.update_user_subscription(uid, new_subscription.dict())
+                        set_credits_invalidation_signal(uid)
                         logger.info(
                             f"Scheduled upgrade completed for user {uid}. New subscription: {new_subscription_id}"
                         )
@@ -558,6 +562,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_subscription.cancel_at_period_end = True
 
                         users_db.update_user_subscription(uid, new_subscription.dict())
+                        set_credits_invalidation_signal(uid)
                         logger.info(f"Subscription schedule canceled for user {uid}. Subscription: {subscription_id}")
                 except Exception as e:
                     logger.error(f"Error updating subscription after schedule cancellation: {e}")
@@ -752,8 +757,7 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 async def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -761,14 +765,12 @@ async def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 async def stripe_cancel():
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -776,8 +778,7 @@ async def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.post('/v1/payments/customer-portal')
@@ -810,8 +811,7 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 async def portal_return():
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -819,8 +819,7 @@ async def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.get("/v1/payment-methods/status")
