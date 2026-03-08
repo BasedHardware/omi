@@ -646,3 +646,191 @@ class TestWebhookInvalidationCoverage:
         assert 'check_credits_invalidation' in source
         # Must NOT use the old consumed-on-read pattern
         assert 'check_and_clear_credits_invalidation' not in source
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RedisPubSubManager cross-pod invalidation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRedisPubSubManager:
+    """Tests for RedisPubSubManager with mock Redis client."""
+
+    def _make_manager(self):
+        from database.redis_pubsub import RedisPubSubManager
+
+        mock_redis = MagicMock()
+        mock_pubsub = MagicMock()
+        mock_redis.pubsub.return_value = mock_pubsub
+        manager = RedisPubSubManager(mock_redis)
+        return manager, mock_redis, mock_pubsub
+
+    def test_publish_invalidation_sends_message(self):
+        """publish_invalidation should call redis.publish with correct channel and payload."""
+        import json
+
+        manager, mock_redis, _ = self._make_manager()
+
+        manager.publish_invalidation(['key1', 'key2'])
+
+        mock_redis.publish.assert_called_once()
+        call_args = mock_redis.publish.call_args
+        assert call_args[0][0] == 'cache_invalidation'
+        payload = json.loads(call_args[0][1])
+        assert payload['event'] == 'invalidate'
+        assert payload['keys'] == ['key1', 'key2']
+        assert 'timestamp' in payload
+
+    def test_register_and_trigger_exact_callback(self):
+        """Exact key match should trigger the registered callback."""
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('my_exact_key', lambda keys: received_keys.extend(keys))
+        manager._trigger_callbacks(['my_exact_key'])
+
+        assert received_keys == ['my_exact_key']
+
+    def test_trigger_callbacks_no_match(self):
+        """Keys that don't match any pattern should not trigger callbacks."""
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('other_key', lambda keys: received_keys.extend(keys))
+        manager._trigger_callbacks(['unrelated_key'])
+
+        assert received_keys == []
+
+    def test_wildcard_pattern_matching(self):
+        """Wildcard pattern 'prefix*' should match keys starting with 'prefix'."""
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('get_public_approved_apps_data*', lambda keys: received_keys.extend(keys))
+
+        manager._trigger_callbacks(['get_public_approved_apps_data:v1'])
+        assert received_keys == ['get_public_approved_apps_data:v1']
+
+        received_keys.clear()
+        manager._trigger_callbacks(['get_public_approved_apps_data'])
+        assert received_keys == ['get_public_approved_apps_data']
+
+        received_keys.clear()
+        manager._trigger_callbacks(['get_public_approved_apps_data:v2:extra'])
+        assert received_keys == ['get_public_approved_apps_data:v2:extra']
+
+    def test_wildcard_no_false_positive(self):
+        """Wildcard pattern should not match keys that don't start with prefix."""
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('get_public_approved*', lambda keys: received_keys.extend(keys))
+        manager._trigger_callbacks(['get_private_apps:user1'])
+
+        assert received_keys == []
+
+    def test_multiple_callbacks_same_pattern(self):
+        """Multiple callbacks registered for the same pattern should all fire."""
+        manager, _, _ = self._make_manager()
+        results_a = []
+        results_b = []
+
+        manager.register_callback('shared_key', lambda keys: results_a.extend(keys))
+        manager.register_callback('shared_key', lambda keys: results_b.extend(keys))
+
+        manager._trigger_callbacks(['shared_key'])
+
+        assert results_a == ['shared_key']
+        assert results_b == ['shared_key']
+
+    def test_callback_exception_doesnt_break_others(self):
+        """An exception in one callback should not prevent others from firing."""
+        manager, _, _ = self._make_manager()
+        results = []
+
+        def bad_callback(keys):
+            raise RuntimeError("boom")
+
+        manager.register_callback('key_with_error', bad_callback)
+        manager.register_callback('key_with_error', lambda keys: results.extend(keys))
+
+        manager._trigger_callbacks(['key_with_error'])
+
+        assert results == ['key_with_error']
+
+    def test_handle_message_dispatches_invalidation(self):
+        """_handle_message should parse JSON and trigger callbacks for 'invalidate' events."""
+        import json
+
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('cache_key_1', lambda keys: received_keys.extend(keys))
+
+        msg_data = json.dumps({'event': 'invalidate', 'keys': ['cache_key_1'], 'timestamp': time.time()}).encode()
+        manager._handle_message(msg_data)
+
+        assert received_keys == ['cache_key_1']
+
+    def test_handle_message_ignores_unknown_events(self):
+        """_handle_message should ignore events that are not 'invalidate'."""
+        import json
+
+        manager, _, _ = self._make_manager()
+        received_keys = []
+
+        manager.register_callback('some_key', lambda keys: received_keys.extend(keys))
+
+        msg_data = json.dumps({'event': 'unknown', 'keys': ['some_key']}).encode()
+        manager._handle_message(msg_data)
+
+        assert received_keys == []
+
+    def test_end_to_end_publish_to_callback(self):
+        """Simulate publish on instance A → _handle_message on instance B → callback fires → cache.delete."""
+        import json
+
+        manager_a, mock_redis_a, _ = self._make_manager()
+        manager_b, _, _ = self._make_manager()
+
+        # Instance B has a local cache
+        local_cache = InMemoryCacheManager(max_memory_mb=1)
+        local_cache.set('get_public_approved_apps_data:v1', {'apps': [1, 2, 3]}, ttl=30)
+        assert local_cache.get('get_public_approved_apps_data:v1') is not None
+
+        # Register invalidation callback on instance B
+        manager_b.register_callback(
+            'get_public_approved_apps_data*', lambda keys: [local_cache.delete(k) for k in keys]
+        )
+
+        # Instance A publishes invalidation
+        manager_a.publish_invalidation(['get_public_approved_apps_data:v1'])
+
+        # Capture what was published
+        published_data = mock_redis_a.publish.call_args[0][1]
+
+        # Instance B receives the message (simulating Redis delivery)
+        manager_b._handle_message(published_data.encode() if isinstance(published_data, str) else published_data)
+
+        # Local cache on instance B should now be empty for that key
+        assert local_cache.get('get_public_approved_apps_data:v1') is None
+
+    def test_start_subscribes_to_channel(self):
+        """start() should subscribe to the correct Redis channel."""
+        manager, _, mock_pubsub = self._make_manager()
+
+        manager.start()
+        mock_pubsub.subscribe.assert_called_once_with('cache_invalidation')
+        assert manager.running is True
+
+        manager.stop()
+
+    def test_stop_unsubscribes_and_closes(self):
+        """stop() should unsubscribe and close the pub/sub connection."""
+        manager, _, mock_pubsub = self._make_manager()
+
+        manager.start()
+        manager.stop()
+
+        mock_pubsub.unsubscribe.assert_called_with('cache_invalidation')
+        mock_pubsub.close.assert_called_once()
