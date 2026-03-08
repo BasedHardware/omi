@@ -80,6 +80,12 @@ struct OMIApp: App {
 
     /// Window title with version number (different for rewind mode)
     private var windowTitle: String {
+        // Keep a distinct title in dev builds so users can visually distinguish
+        // dev and production windows during side-by-side testing.
+        if Bundle.main.bundleIdentifier == "com.omi.desktop-dev" {
+            return Self.launchMode == .rewind ? "Omi Rewind Dev" : "Omi Dev"
+        }
+
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
         let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
         return version.isEmpty ? baseName : "\(baseName) v\(version)"

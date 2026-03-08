@@ -84,7 +84,7 @@ step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir
 rm -rf "$BUILD_DIR/Omi Computer.app" 2>/dev/null
 CONFLICTING_APPS=(
-    "/Applications/Omi Computer.app"
+    "/Applications/Omi Dev.app"
     "$HOME/Desktop/Omi Dev.app"
     "$HOME/Downloads/Omi Dev.app"
     "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
@@ -96,8 +96,8 @@ for app in "${CONFLICTING_APPS[@]}"; do
         rm -rf "$app"
     fi
 done
-# Also remove any "Omi Computer.app" nested inside Flutter builds (any config: Debug/Release/Release-prod/etc.)
-find "$(dirname "$0")/../app/build" -name "Omi Computer.app" -type d -exec rm -rf {} + 2>/dev/null || true
+# Also remove any stale dev app bundles nested inside Flutter builds.
+find "$(dirname "$0")/../app/build" -name "Omi Dev.app" -type d -exec rm -rf {} + 2>/dev/null || true
 # Kill stale "Omi Dev.app" bundles from other repo clones (e.g. ~/omi-desktop/)
 # These confuse LaunchServices and get launched instead of /Applications/Omi Dev.app
 find "$HOME" -maxdepth 4 -name "Omi Dev.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
@@ -114,14 +114,29 @@ step "Starting Rust backend..."
 cd "$BACKEND_DIR"
 
 # Copy .env if not present
-if [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
+if [ ! -f ".env" ] && [ -f "../backend/.env" ]; then
+    cp "../backend/.env" ".env"
+elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
 
 # Symlink google-credentials.json if not present
-if [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.json" ]; then
+if [ ! -f "google-credentials.json" ] && [ -f "../backend/google-credentials.json" ]; then
+    ln -sf "../backend/google-credentials.json" "google-credentials.json"
+elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.json" ]; then
     ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
+
+# Force local backend to use prod Firestore credentials for testing.
+CREDS_PATH="$BACKEND_DIR/google-credentials.json"
+if [ ! -f "$CREDS_PATH" ]; then
+    echo "Missing credentials file: $CREDS_PATH"
+    exit 1
+fi
+export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
+export FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-based-hardware}"
+substep "Using Firestore creds: $GOOGLE_APPLICATION_CREDENTIALS"
+substep "Using Firebase project: $FIREBASE_PROJECT_ID"
 
 # Build if binary doesn't exist or source is newer
 if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
@@ -252,7 +267,11 @@ elif [ -f ".env.app" ]; then
 else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
-echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
@@ -331,8 +350,15 @@ if [ -n "$SIGN_IDENTITY" ]; then
     substep "Signing app bundle"
     codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else
-    substep "Warning: No signing identity found. Using ad-hoc (permissions will reset each build)."
-    codesign --force --deep --sign - "$APP_BUNDLE"
+    echo ""
+    echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
+    echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
+    echo ""
+    echo "  Fix: Install an Apple Development certificate in Keychain Access,"
+    echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
+    echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
+    echo ""
+    exit 1
 fi
 
 step "Removing quarantine attributes..."

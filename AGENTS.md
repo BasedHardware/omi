@@ -6,6 +6,11 @@ These rules apply to Codex when working in this repository.
 
 - Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
 
+## Safety Rules
+
+- Never kill, stop, or restart the production macOS app (`/Applications/omi.app`, bundle id `com.omi.computer-macos`) during local development or testing.
+- Development scripts/commands must target only dev app processes (for example `Omi Dev.app` / `com.omi.desktop-dev`), never production.
+
 ## Coding Guidelines
 
 ### Backend

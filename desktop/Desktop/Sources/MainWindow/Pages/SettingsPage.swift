@@ -270,6 +270,9 @@ struct SettingsContentView: View {
 
     @State private var showResetOnboardingAlert: Bool = false
     @State private var showRescanFilesAlert: Bool = false
+    @State private var showDeleteAccountAlert: Bool = false
+    @State private var isDeletingAccount: Bool = false
+    @State private var deleteAccountError: String?
 
     init(
         appState: AppState,
@@ -1507,32 +1510,84 @@ struct SettingsContentView: View {
     private var accountSection: some View {
         VStack(spacing: 20) {
             settingsCard(settingId: "account.account") {
-                HStack(spacing: 16) {
-                    Image(systemName: "person.circle.fill")
-                        .scaledFont(size: 40)
-                        .foregroundColor(OmiColors.textTertiary)
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 16) {
+                        Image(systemName: "person.circle.fill")
+                            .scaledFont(size: 40)
+                            .foregroundColor(OmiColors.textTertiary)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
-                            .scaledFont(size: 16, weight: .semibold)
-                            .foregroundColor(OmiColors.textPrimary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
 
-                        if let email = AuthState.shared.userEmail {
-                            Text(email)
+                            if let email = AuthState.shared.userEmail {
+                                Text(email)
+                                    .scaledFont(size: 13)
+                                    .foregroundColor(OmiColors.textTertiary)
+                            }
+                        }
+
+                        Spacer()
+
+                        Button("Sign Out") {
+                            appState.stopTranscription()
+                            ProactiveAssistantsPlugin.shared.stopMonitoring()
+                            try? AuthService.shared.signOut()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDeletingAccount)
+                    }
+
+                    Divider()
+                        .overlay(OmiColors.backgroundQuaternary)
+
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Delete Account & Data")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(OmiColors.error)
+
+                            Text("Permanently deletes server data, clears local data for this account, resets onboarding, and signs you out.")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
                         }
+
+                        Spacer()
+
+                        Button(action: {
+                            AnalyticsManager.shared.deleteAccountClicked()
+                            showDeleteAccountAlert = true
+                        }) {
+                            if isDeletingAccount {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Text("Delete")
+                                    .scaledFont(size: 13, weight: .semibold)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(OmiColors.error)
+                        .disabled(isDeletingAccount)
                     }
 
-                    Spacer()
-
-                    Button("Sign Out") {
-                        appState.stopTranscription()
-                        ProactiveAssistantsPlugin.shared.stopMonitoring()
-                        try? AuthService.shared.signOut()
+                    if let deleteAccountError {
+                        Text(deleteAccountError)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.warning)
                     }
-                    .buttonStyle(.bordered)
                 }
+            }
+            .alert("Delete Account and Data?", isPresented: $showDeleteAccountAlert) {
+                Button("Cancel", role: .cancel) {
+                    AnalyticsManager.shared.deleteAccountCancelled()
+                }
+                Button("Delete Permanently", role: .destructive) {
+                    deleteAccountAndData()
+                }
+            } message: {
+                Text("This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding.")
             }
 
 //            settingsCard {
@@ -4577,6 +4632,36 @@ struct SettingsContentView: View {
                 )
             } catch {
                 logError("Failed to update transcription preferences", error: error)
+            }
+        }
+    }
+
+    private func deleteAccountAndData() {
+        guard !isDeletingAccount else { return }
+
+        deleteAccountError = nil
+        isDeletingAccount = true
+        AnalyticsManager.shared.deleteAccountConfirmed()
+
+        Task {
+            do {
+                try await APIClient.shared.deleteAccount()
+                await MainActor.run {
+                    appState.stopTranscription()
+                    ProactiveAssistantsPlugin.shared.stopMonitoring()
+                    do {
+                        try AuthService.shared.signOut()
+                        isDeletingAccount = false
+                    } catch {
+                        deleteAccountError = "Account deleted, but sign out failed: \(error.localizedDescription)"
+                        isDeletingAccount = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    deleteAccountError = "Failed to delete account: \(error.localizedDescription)"
+                    isDeletingAccount = false
+                }
             }
         }
     }
