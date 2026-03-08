@@ -409,6 +409,42 @@ class TestCreditCacheLogic:
 
         assert needs_refresh is False
 
+    def test_active_invalidation_triggers_refresh(self):
+        """Redis invalidation signal should force refresh even within TTL."""
+        CREDITS_REFRESH_SECONDS = 900
+        now = time.time()
+        remaining_seconds_cache = 0
+        remaining_seconds_cache_ts = now - 5  # Only 5 seconds ago (well within TTL)
+        remaining_seconds_cache_initialized = True
+        credits_invalidated = True  # Subscription changed
+
+        needs_refresh = (
+            not remaining_seconds_cache_initialized
+            or credits_invalidated
+            or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
+            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+        )
+
+        assert needs_refresh is True
+
+    def test_no_invalidation_no_refresh_within_ttl(self):
+        """Without invalidation signal, should not refresh within TTL."""
+        CREDITS_REFRESH_SECONDS = 900
+        now = time.time()
+        remaining_seconds_cache = 3600
+        remaining_seconds_cache_ts = now - 5
+        remaining_seconds_cache_initialized = True
+        credits_invalidated = False
+
+        needs_refresh = (
+            not remaining_seconds_cache_initialized
+            or credits_invalidated
+            or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
+            or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+        )
+
+        assert needs_refresh is False
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Singleflight lock cleanup
