@@ -269,15 +269,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Day after tomorrow
         return DateTime(now.year, now.month, now.day + 2, 23, 59);
       case TaskCategory.overdue:
-        return null;
+        // Yesterday, so the task stays in overdue after rebuild
+        return DateTime(now.year, now.month, now.day - 1, 23, 59);
     }
   }
 
   void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
-    if (newCategory == TaskCategory.overdue) {
-      // Overdue is determined by date, not by manually assigning it.
-      return;
-    }
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
     provider.updateActionItemDueDate(item, newDueDate);
