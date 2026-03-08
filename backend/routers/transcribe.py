@@ -37,6 +37,7 @@ import database.users as user_db
 from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
+    check_and_clear_credits_invalidation,
     get_cached_user_geolocation,
     try_acquire_listen_lock,
 )
@@ -328,9 +329,12 @@ async def _stream_handler(
 
             # Freemium: Check remaining credits with local cache (#5439)
             # Refresh from Firestore only every CREDITS_REFRESH_SECONDS; decrement locally between refreshes
+            # Active invalidation: subscription changes set a Redis signal (#5446)
             now = time.time()
+            credits_invalidated = check_and_clear_credits_invalidation(uid)
             needs_refresh = (
                 not remaining_seconds_cache_initialized
+                or credits_invalidated
                 or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
                 # Fast-refresh when credits exhausted (user may upgrade or month may roll over)
                 or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
