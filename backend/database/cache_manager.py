@@ -127,7 +127,12 @@ class InMemoryCacheManager:
             value = fetch_fn()
             if value is not None:
                 self.set(key, value, ttl=ttl)
-            return value
+
+        # Clean up singleflight lock to prevent unbounded growth (#5443)
+        with self._fetch_lock_manager:
+            self._fetch_locks.pop(key, None)
+
+        return value
 
     def set(self, key: str, data: Any, ttl: int = 30):
         """
