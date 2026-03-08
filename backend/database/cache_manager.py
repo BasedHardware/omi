@@ -60,8 +60,9 @@ class InMemoryCacheManager:
         self.misses = 0
         self.evictions = 0
 
-        # Singleflight: per-key locks to prevent thundering herd
+        # Singleflight: per-key locks with refcount to prevent thundering herd
         self._fetch_locks: Dict[str, threading.Lock] = {}
+        self._fetch_refcounts: Dict[str, int] = {}
         self._fetch_lock_manager = threading.Lock()
 
     def get(self, key: str) -> Optional[Any]:
@@ -111,28 +112,33 @@ class InMemoryCacheManager:
         if (value := self.get(key)) is not None:
             return value
 
-        # Get or create lock for this key
+        # Get or create lock for this key, increment refcount
         with self._fetch_lock_manager:
             if key not in self._fetch_locks:
                 self._fetch_locks[key] = threading.Lock()
+                self._fetch_refcounts[key] = 0
+            self._fetch_refcounts[key] += 1
             fetch_lock = self._fetch_locks[key]
 
         # Only one request fetches, others wait
-        with fetch_lock:
-            # Double-check after acquiring lock (another thread may have fetched)
-            if (value := self.get(key)) is not None:
+        try:
+            with fetch_lock:
+                # Double-check after acquiring lock (another thread may have fetched)
+                if (value := self.get(key)) is not None:
+                    return value
+
+                # Fetch and cache
+                value = fetch_fn()
+                if value is not None:
+                    self.set(key, value, ttl=ttl)
                 return value
-
-            # Fetch and cache
-            value = fetch_fn()
-            if value is not None:
-                self.set(key, value, ttl=ttl)
-
-        # Clean up singleflight lock to prevent unbounded growth (#5443)
-        with self._fetch_lock_manager:
-            self._fetch_locks.pop(key, None)
-
-        return value
+        finally:
+            # Decrement refcount; delete lock only when no waiters remain
+            with self._fetch_lock_manager:
+                self._fetch_refcounts[key] -= 1
+                if self._fetch_refcounts[key] == 0:
+                    del self._fetch_locks[key]
+                    del self._fetch_refcounts[key]
 
     def set(self, key: str, data: Any, ttl: int = 30):
         """
