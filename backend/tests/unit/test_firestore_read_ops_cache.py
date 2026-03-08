@@ -520,3 +520,119 @@ class TestFetchLockCleanup:
 
         assert "error_key" not in cache._fetch_locks
         assert "error_key" not in cache._fetch_refcounts
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Active credit invalidation via Redis (#5446)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestRedisCreditsInvalidationSignal:
+    """Tests for Redis-based credit cache invalidation signal."""
+
+    def test_set_and_check_signal(self):
+        """set_credits_invalidation_signal should be consumable by check_and_clear."""
+        mock_redis = MagicMock()
+        mock_redis.set = MagicMock()
+        mock_redis.getdel = MagicMock(return_value=b'1')
+
+        with patch('database.redis_db.r', mock_redis):
+            from database.redis_db import set_credits_invalidation_signal, check_and_clear_credits_invalidation
+
+            set_credits_invalidation_signal('user123')
+            mock_redis.set.assert_called_once_with('credits_invalidated:user123', '1', ex=1800)
+
+            result = check_and_clear_credits_invalidation('user123')
+            assert result is True
+            mock_redis.getdel.assert_called_once_with('credits_invalidated:user123')
+
+    def test_check_returns_false_when_no_signal(self):
+        """check_and_clear should return False when no invalidation signal exists."""
+        mock_redis = MagicMock()
+        mock_redis.getdel = MagicMock(return_value=None)
+
+        with patch('database.redis_db.r', mock_redis):
+            from database.redis_db import check_and_clear_credits_invalidation
+
+            result = check_and_clear_credits_invalidation('user_no_signal')
+            assert result is False
+
+    def test_signal_consumed_on_first_check(self):
+        """Signal should be consumed (deleted) on first check via GETDEL."""
+        mock_redis = MagicMock()
+        # First call returns the value, second returns None (consumed)
+        mock_redis.getdel = MagicMock(side_effect=[b'1', None])
+
+        with patch('database.redis_db.r', mock_redis):
+            from database.redis_db import check_and_clear_credits_invalidation
+
+            first = check_and_clear_credits_invalidation('user_consume')
+            second = check_and_clear_credits_invalidation('user_consume')
+            assert first is True
+            assert second is False
+
+
+class TestWebhookInvalidationCoverage:
+    """Tests that subscription mutation paths call set_credits_invalidation_signal.
+
+    Uses source-level verification since payment.py imports the full Firestore
+    dependency chain which can't be cleanly stubbed in unit tests.
+    """
+
+    PAYMENT_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'payment.py')
+    TRANSCRIBE_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+
+    def _read_source(self, path):
+        with open(path) as f:
+            return f.read()
+
+    def test_payment_imports_invalidation_signal(self):
+        """payment.py must import set_credits_invalidation_signal."""
+        source = self._read_source(self.PAYMENT_SOURCE_FILE)
+        assert 'from database.redis_db import set_credits_invalidation_signal' in source
+
+    def test_checkout_completed_calls_invalidation(self):
+        """checkout.session.completed path must call set_credits_invalidation_signal."""
+        source = self._read_source(self.PAYMENT_SOURCE_FILE)
+        # The invalidation call should appear after _update_subscription_from_session
+        idx_update = source.find('_update_subscription_from_session(uid, session)')
+        idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update)
+        assert idx_signal > idx_update, "set_credits_invalidation_signal must be called after _update_subscription_from_session"
+
+    def test_subscription_webhook_calls_invalidation(self):
+        """customer.subscription.updated/deleted/created must call set_credits_invalidation_signal."""
+        source = self._read_source(self.PAYMENT_SOURCE_FILE)
+        # Find the subscription update webhook section
+        idx_update_sub = source.find("users_db.update_user_subscription(uid, new_subscription.dict())")
+        assert idx_update_sub > 0, "update_user_subscription call not found"
+        # Signal should appear near the update call
+        idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update_sub)
+        assert idx_signal > idx_update_sub, "set_credits_invalidation_signal must be called after update_user_subscription"
+
+    def test_schedule_completed_calls_invalidation(self):
+        """subscription_schedule.completed must call set_credits_invalidation_signal."""
+        source = self._read_source(self.PAYMENT_SOURCE_FILE)
+        idx_scheduled = source.find("Scheduled upgrade completed for user")
+        assert idx_scheduled > 0
+        # Find the invalidation call before the log line (it's called right after update)
+        section = source[idx_scheduled - 200:idx_scheduled]
+        assert 'set_credits_invalidation_signal(uid)' in section
+
+    def test_schedule_canceled_calls_invalidation(self):
+        """subscription_schedule.canceled must call set_credits_invalidation_signal."""
+        source = self._read_source(self.PAYMENT_SOURCE_FILE)
+        idx_canceled = source.find("Subscription schedule canceled for user")
+        assert idx_canceled > 0
+        section = source[idx_canceled - 200:idx_canceled]
+        assert 'set_credits_invalidation_signal(uid)' in section
+
+    def test_transcribe_imports_invalidation_check(self):
+        """transcribe.py must import check_and_clear_credits_invalidation."""
+        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+        assert 'check_and_clear_credits_invalidation' in source
+
+    def test_transcribe_calls_invalidation_check(self):
+        """transcribe.py must check invalidation signal in the refresh logic."""
+        source = self._read_source(self.TRANSCRIBE_SOURCE_FILE)
+        assert 'credits_invalidated = check_and_clear_credits_invalidation(uid)' in source
+        assert 'or credits_invalidated' in source
