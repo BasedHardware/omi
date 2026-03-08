@@ -8283,4 +8283,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Disimpan. Tutup dan buka semula aplikasi untuk menggunakan perubahan.';
+
+  @override
+  String get shared => 'Dikongsi';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Hanya anda boleh melihat perbualan ini';
+
+  @override
+  String get anyoneWithLinkCanView => 'Sesiapa yang mempunyai pautan boleh melihat';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bersihkan tugasan hari ini?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ini hanya akan mengalih keluar tarikh akhir';
+
+  @override
+  String get tasksOverdue => 'Tertunggak';
 }

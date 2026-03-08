@@ -2654,5 +2654,11 @@
     "switchAndRestart": "Tukar",
     "switchApiConfirmBody": "Tukar ke {environment}? Anda perlu menutup dan membuka semula aplikasi untuk perubahan berkuat kuasa.",
     "switchApiConfirmTitle": "Tukar Persekitaran API",
-    "switchRequiresRestart": "Penukaran memerlukan permulaan semula aplikasi"
+    "switchRequiresRestart": "Penukaran memerlukan permulaan semula aplikasi",
+    "shared": "Dikongsi",
+    "onlyYouCanSeeConversation": "Hanya anda boleh melihat perbualan ini",
+    "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
+    "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
+    "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
+  "tasksOverdue": "Tertunggak"
 }

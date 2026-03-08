@@ -25,10 +25,16 @@ struct DesktopHomeView: View {
 
     // Settings sidebar state
     @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
-    @State private var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection? = nil
     @State private var highlightedSettingId: String? = nil
     @State private var previousIndexBeforeSettings: Int = 0
     @State private var logoPulse = false
+
+    // Pre-loaded hero logo to avoid NSImage init crashes during SwiftUI body evaluation
+    private static let heroLogoImage: NSImage? = {
+        guard let url = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return NSImage(data: data)
+    }()
 
 
     /// Whether we're currently viewing the settings page
@@ -41,8 +47,7 @@ struct DesktopHomeView: View {
             if authState.isRestoringAuth {
                 // State 0: Restoring auth session - show loading
                 VStack(spacing: 16) {
-                    if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                       let nsImage = NSImage(contentsOf: iconURL) {
+                    if let nsImage = Self.heroLogoImage {
                         Image(nsImage: nsImage)
                             .resizable()
                             .scaledToFit()
@@ -78,14 +83,14 @@ struct DesktopHomeView: View {
             } else {
                 // State 3: Signed in and onboarded - show main content
                 ZStack {
-                    // After onboarding completes, navigate to Chat page so the conversation continues
+                    // After onboarding completes, navigate to Tasks page
                     Color.clear
                         .frame(width: 0, height: 0)
                         .onAppear {
                             if UserDefaults.standard.bool(forKey: "onboardingJustCompleted") {
                                 UserDefaults.standard.removeObject(forKey: "onboardingJustCompleted")
-                                log("DesktopHomeView: Onboarding just completed — navigating to Chat page")
-                                selectedIndex = SidebarNavItem.chat.rawValue
+                                log("DesktopHomeView: Onboarding just completed — navigating to Tasks page")
+                                selectedIndex = SidebarNavItem.tasks.rawValue
                             }
                         }
                     mainContent
@@ -227,8 +232,7 @@ struct DesktopHomeView: View {
 
                     if !viewModelContainer.isInitialLoadComplete {
                         VStack(spacing: 24) {
-                            if let iconURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-                               let nsImage = NSImage(contentsOf: iconURL) {
+                            if let nsImage = Self.heroLogoImage {
                                 Image(nsImage: nsImage)
                                     .resizable()
                                     .scaledToFit()
@@ -271,7 +275,7 @@ struct DesktopHomeView: View {
             // The window's min size is enforced at the AppKit level instead.
             DispatchQueue.main.async {
                 for window in NSApp.windows {
-                    if window.title.hasPrefix("Omi") {
+                    if window.title.lowercased().hasPrefix("omi") {
                         window.appearance = NSAppearance(named: .darkAqua)
                         window.minSize = NSSize(width: 900, height: 600)
                         // Remove .minSize from hosting view's sizingOptions.
@@ -389,7 +393,6 @@ struct DesktopHomeView: View {
                 if isInSettings {
                     SettingsSidebar(
                         selectedSection: $selectedSettingsSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         onBack: {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -421,7 +424,6 @@ struct DesktopHomeView: View {
                     appState: appState,
                     viewModelContainer: viewModelContainer,
                     selectedSettingsSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
                     highlightedSettingId: $highlightedSettingId,
                     selectedTabIndex: $selectedIndex
                 )
@@ -445,7 +447,6 @@ struct DesktopHomeView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
             // Set the section directly and navigate to settings
-            selectedSettingsSection = .device
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
@@ -453,14 +454,12 @@ struct DesktopHomeView: View {
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             // Navigate to settings > advanced > task assistant subsection
             selectedSettingsSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
             selectedSettingsSection = .advanced
-            selectedAdvancedSubsection = .askOmiFloatingBar
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.settings.rawValue
             }
@@ -476,6 +475,14 @@ struct DesktopHomeView: View {
             log("DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))")
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedIndex = SidebarNavItem.rewind.rawValue
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex = SidebarNavItem.rewind.rawValue
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
@@ -514,7 +521,6 @@ private struct PageContentView: View {
     let appState: AppState
     let viewModelContainer: ViewModelContainer
     @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
     @Binding var selectedTabIndex: Int
 
@@ -544,7 +550,6 @@ private struct PageContentView: View {
                 SettingsPage(
                     appState: appState,
                     selectedSection: $selectedSettingsSection,
-                    selectedAdvancedSubsection: $selectedAdvancedSubsection,
                     highlightedSettingId: $highlightedSettingId,
                     chatProvider: viewModelContainer.chatProvider
                 )

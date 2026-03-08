@@ -8215,4 +8215,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'บันทึกแล้ว ปิดและเปิดแอปใหม่เพื่อใช้งานการเปลี่ยนแปลง';
+
+  @override
+  String get shared => 'แชร์แล้ว';
+
+  @override
+  String get onlyYouCanSeeConversation => 'เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้';
+
+  @override
+  String get anyoneWithLinkCanView => 'ใครก็ตามที่มีลิงก์สามารถดูได้';
+
+  @override
+  String get tasksCleanTodayTitle => 'ล้างงานของวันนี้ไหม?';
+
+  @override
+  String get tasksCleanTodayMessage => 'การดำเนินการนี้จะลบเฉพาะกำหนดส่ง';
+
+  @override
+  String get tasksOverdue => 'เกินกำหนด';
 }

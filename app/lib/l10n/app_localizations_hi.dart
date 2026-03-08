@@ -8239,4 +8239,22 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'सहेजा गया। बदलाव लागू करने के लिए ऐप बंद करें और फिर से खोलें।';
+
+  @override
+  String get shared => 'साझा';
+
+  @override
+  String get onlyYouCanSeeConversation => 'केवल आप ही इस बातचीत को देख सकते हैं';
+
+  @override
+  String get anyoneWithLinkCanView => 'लिंक वाला कोई भी व्यक्ति देख सकता है';
+
+  @override
+  String get tasksCleanTodayTitle => 'आज के कार्य साफ़ करें?';
+
+  @override
+  String get tasksCleanTodayMessage => 'यह केवल समय-सीमाएँ हटाएगा';
+
+  @override
+  String get tasksOverdue => 'अतिदेय';
 }

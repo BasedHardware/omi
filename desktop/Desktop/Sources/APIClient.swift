@@ -1539,6 +1539,7 @@ extension APIClient {
         completed: Bool? = nil,
         description: String? = nil,
         dueAt: Date? = nil,
+        clearDueAt: Bool = false,
         priority: String? = nil,
         metadata: [String: Any]? = nil,
         goalId: String? = nil,
@@ -1549,6 +1550,7 @@ extension APIClient {
             let completed: Bool?
             let description: String?
             let dueAt: String?
+            let includeDueAt: Bool
             let priority: String?
             let metadata: String?
             let goalId: String?
@@ -1561,6 +1563,24 @@ extension APIClient {
                 case goalId = "goal_id"
                 case relevanceScore = "relevance_score"
                 case recurrenceRule = "recurrence_rule"
+            }
+
+            func encode(to encoder: Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encodeIfPresent(completed, forKey: .completed)
+                try container.encodeIfPresent(description, forKey: .description)
+                if includeDueAt {
+                    if let dueAt {
+                        try container.encode(dueAt, forKey: .dueAt)
+                    } else {
+                        try container.encodeNil(forKey: .dueAt)
+                    }
+                }
+                try container.encodeIfPresent(priority, forKey: .priority)
+                try container.encodeIfPresent(metadata, forKey: .metadata)
+                try container.encodeIfPresent(goalId, forKey: .goalId)
+                try container.encodeIfPresent(relevanceScore, forKey: .relevanceScore)
+                try container.encodeIfPresent(recurrenceRule, forKey: .recurrenceRule)
             }
         }
 
@@ -1579,6 +1599,7 @@ extension APIClient {
             completed: completed,
             description: description,
             dueAt: dueAt.map { formatter.string(from: $0) },
+            includeDueAt: clearDueAt || dueAt != nil,
             priority: priority,
             metadata: metadataString,
             goalId: goalId,
@@ -3607,14 +3628,12 @@ struct UserProfileResponse: Codable {
     let useCase: String?
     let job: String?
     let company: String?
-    let desktopUpdateChannel: String?
 
     enum CodingKeys: String, CodingKey {
         case uid, email, name, motivation, job, company
         case timeZone = "time_zone"
         case createdAt = "created_at"
         case useCase = "use_case"
-        case desktopUpdateChannel = "desktop_update_channel"
     }
 
     init(from decoder: Decoder) throws {
@@ -3628,7 +3647,6 @@ struct UserProfileResponse: Codable {
         useCase = try container.decodeIfPresent(String.self, forKey: .useCase)
         job = try container.decodeIfPresent(String.self, forKey: .job)
         company = try container.decodeIfPresent(String.self, forKey: .company)
-        desktopUpdateChannel = try container.decodeIfPresent(String.self, forKey: .desktopUpdateChannel)
     }
 }
 
@@ -4375,7 +4393,8 @@ extension APIClient {
         cacheReadTokens: Int,
         cacheWriteTokens: Int,
         totalTokens: Int,
-        costUsd: Double
+        costUsd: Double,
+        account: String = "omi"
     ) async {
         struct Req: Encodable {
             let input_tokens: Int
@@ -4384,6 +4403,7 @@ extension APIClient {
             let cache_write_tokens: Int
             let total_tokens: Int
             let cost_usd: Double
+            let account: String
         }
         struct Res: Decodable { let status: String }
         do {
@@ -4393,7 +4413,8 @@ extension APIClient {
                 cache_read_tokens: cacheReadTokens,
                 cache_write_tokens: cacheWriteTokens,
                 total_tokens: totalTokens,
-                cost_usd: costUsd
+                cost_usd: costUsd,
+                account: account
             ))
         } catch {
             log("APIClient: LLM usage record failed: \(error.localizedDescription)")

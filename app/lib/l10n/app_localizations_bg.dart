@@ -8293,4 +8293,22 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Запазено. Затворете и отворете отново приложението, за да приложите промените.';
+
+  @override
+  String get shared => 'Споделено';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Само вие можете да видите този разговор';
+
+  @override
+  String get anyoneWithLinkCanView => 'Всеки с връзката може да преглежда';
+
+  @override
+  String get tasksCleanTodayTitle => 'Да изчистим днешните задачи?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Това само ще премахне крайните срокове';
+
+  @override
+  String get tasksOverdue => 'Просрочени';
 }

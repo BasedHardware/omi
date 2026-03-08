@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
@@ -696,6 +697,8 @@ class TasksViewModel: ObservableObject {
     /// Minimum interval between pagination triggers (seconds)
     private var lastLoadMoreTime: Date = .distantPast
     private let loadMoreThrottleInterval: TimeInterval = 0.5
+    /// Guards against transient DB re-query flicker during optimistic bulk updates.
+    private var suppressDatabaseRequery = false
 
     // MARK: - Cached Properties (avoid recomputation on every render)
 
@@ -1257,7 +1260,7 @@ class TasksViewModel: ObservableObject {
         // Otherwise just recompute from the in-memory store arrays.
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
-        if hasNonStatusFilters {
+        if hasNonStatusFilters && !suppressDatabaseRequery {
             Task { [weak self] in
                 guard let self, self.recomputeVersion == version else { return }
                 await self.loadFilteredTasksFromDatabase()
@@ -1934,12 +1937,107 @@ class TasksViewModel: ObservableObject {
         showingCreateTask = false
     }
 
-    func updateTaskDetails(_ task: TaskActionItem, description: String? = nil, dueAt: Date? = nil, priority: String? = nil, recurrenceRule: String? = nil) async {
-        await store.updateTask(task, description: description, dueAt: dueAt, priority: priority, recurrenceRule: recurrenceRule)
+    func updateTaskDetails(
+        _ task: TaskActionItem,
+        description: String? = nil,
+        dueAt: Date? = nil,
+        clearDueAt: Bool = false,
+        priority: String? = nil,
+        recurrenceRule: String? = nil
+    ) async {
+        await store.updateTask(
+            task,
+            description: description,
+            dueAt: dueAt,
+            clearDueAt: clearDueAt,
+            priority: priority,
+            recurrenceRule: recurrenceRule
+        )
         // Read the updated task back from the store for surgical update
         if let updated = store.tasks.first(where: { $0.id == task.id }) {
+            // Keep optimistic clear when a stale read still has dueAt set.
+            if clearDueAt && updated.dueAt != nil {
+                return
+            }
             updateInDisplay(updated)
         }
+    }
+
+    @MainActor
+    func clearTodayDeadlinesForIncompleteTasks() async {
+        // Clear deadlines for every visible incomplete task in "Today".
+        // This matches user intent ("clean today's plan") even if items are overdue.
+        let tasksToClear = getOrderedTasks(for: .today).filter { !$0.completed }
+
+        guard !tasksToClear.isEmpty else { return }
+        // Optimistic UI update so tasks leave "Today" immediately.
+        let idsToClear = Set(tasksToClear.map(\.id))
+        func taskWithClearedDueDate(_ task: TaskActionItem) -> TaskActionItem {
+            TaskActionItem(
+                id: task.id,
+                description: task.description,
+                completed: task.completed,
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt,
+                dueAt: nil,
+                completedAt: task.completedAt,
+                conversationId: task.conversationId,
+                source: task.source,
+                priority: task.priority,
+                metadata: task.metadata,
+                category: task.category,
+                deleted: task.deleted,
+                deletedBy: task.deletedBy,
+                deletedAt: task.deletedAt,
+                deletedReason: task.deletedReason,
+                keptTaskId: task.keptTaskId,
+                goalId: task.goalId,
+                fromStaged: task.fromStaged,
+                recurrenceRule: task.recurrenceRule,
+                recurrenceParentId: task.recurrenceParentId,
+                sortOrder: task.sortOrder,
+                indentLevel: task.indentLevel,
+                relevanceScore: task.relevanceScore,
+                contextSummary: task.contextSummary,
+                currentActivity: task.currentActivity,
+                agentEditedFiles: task.agentEditedFiles,
+                agentStatus: task.agentStatus,
+                agentPrompt: task.agentPrompt,
+                agentPlan: task.agentPlan,
+                agentSessionId: task.agentSessionId,
+                agentStartedAt: task.agentStartedAt,
+                agentCompletedAt: task.agentCompletedAt,
+                chatSessionId: task.chatSessionId
+            )
+        }
+
+        suppressDatabaseRequery = true
+
+        for index in store.incompleteTasks.indices {
+            let task = store.incompleteTasks[index]
+            if idsToClear.contains(task.id) {
+                store.incompleteTasks[index] = taskWithClearedDueDate(task)
+            }
+        }
+
+        for index in filteredFromDatabase.indices {
+            let task = filteredFromDatabase[index]
+            if idsToClear.contains(task.id) {
+                filteredFromDatabase[index] = taskWithClearedDueDate(task)
+            }
+        }
+        recomputeDisplayCaches()
+
+        for task in tasksToClear {
+            // Local/staged tasks can still move categories via optimistic update even without backend sync.
+            if task.id.hasPrefix("local_") || task.id.hasPrefix("staged_") {
+                continue
+            }
+            await updateTaskDetails(task, clearDueAt: true)
+        }
+
+        suppressDatabaseRequery = false
+        recomputeAllCaches()
     }
 
     func updateTaskTags(_ task: TaskActionItem, tags: [String]) async {
@@ -2198,7 +2296,7 @@ struct TasksPage: View {
     /// Expand or shrink the main window to accommodate the chat panel.
     /// Saves the user's original width before expanding so it can be restored exactly.
     private func adjustWindowWidth(expand: Bool) {
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
 
         let expandAmount = chatPanelWidth + 1 // +1 for divider
         var frame = window.frame
@@ -2241,7 +2339,7 @@ struct TasksPage: View {
     /// Uses no animation since the app is just opening.
     private func shrinkWindowIfNeeded() {
         guard preChatWindowWidth > 0 else { return }
-        guard let window = NSApp.windows.first(where: { $0.title.hasPrefix("Omi") && $0.isVisible }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else { return }
         var frame = window.frame
         frame.size.width = preChatWindowWidth
         window.setFrame(frame, display: true)
@@ -3025,6 +3123,7 @@ struct TasksPage: View {
                                     onIncrementIndent: { viewModel.incrementIndent(for: $0) },
                                     onDecrementIndent: { viewModel.decrementIndent(for: $0) },
                                     onMoveTask: { task, index, cat in viewModel.moveTaskToCategory(task, toIndex: index, inCategory: cat) },
+                                    onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                                     onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled) ? { task in openChatForTask(task) } : nil,
                                     onInvestigate: { task in investigateTask(task) },
                                     onSelect: { task in selectTask(task) },
@@ -3245,6 +3344,7 @@ struct TaskCategorySection: View {
     var onIncrementIndent: ((String) -> Void)?
     var onDecrementIndent: ((String) -> Void)?
     var onMoveTask: ((TaskActionItem, Int, TaskCategory) -> Void)?
+    var onClearTodayDeadlines: (() async -> Void)?
     var onOpenChat: ((TaskActionItem) -> Void)?
     var onInvestigate: ((TaskActionItem) -> Void)?
     var onSelect: ((TaskActionItem) -> Void)?
@@ -3295,17 +3395,32 @@ struct TaskCategorySection: View {
                     .scaledFont(size: 15, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
-                Text("\(orderedTasks.count)")
-                    .scaledFont(size: 12, weight: .medium)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(OmiColors.textTertiary.opacity(0.1))
-                    )
-
                 Spacer()
+
+                if category == .today {
+                    Button {
+                        confirmClearTodayDeadlines()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .scaledFont(size: 10, weight: .semibold)
+                            .foregroundColor(OmiColors.textTertiary)
+                            .frame(width: 18, height: 18)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .help("Clean today's tasks")
+                } else {
+                    Text("\(orderedTasks.count)")
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(OmiColors.textTertiary.opacity(0.1))
+                        )
+                }
+
             }
             .padding(.horizontal, 4)
 
@@ -3406,6 +3521,22 @@ struct TaskCategorySection: View {
 
                 }
             }
+        }
+    }
+
+    private func confirmClearTodayDeadlines() {
+        let alert = NSAlert()
+        alert.messageText = "Clean today's tasks?"
+        alert.informativeText = "This will only remove deadlines"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Confirm")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else { return }
+
+        Task {
+            await onClearTodayDeadlines?()
         }
     }
 }

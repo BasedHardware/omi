@@ -263,26 +263,118 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+    // Optimistic update: update locally first for instant UI feedback
+    final index = _actionItems.indexWhere((i) => i.id == item.id);
+    ActionItemWithMetadata? originalItem;
+    if (index != -1) {
+      originalItem = _actionItems[index];
+      _actionItems[index] = ActionItemWithMetadata(
+        id: originalItem.id,
+        description: originalItem.description,
+        completed: originalItem.completed,
+        createdAt: originalItem.createdAt,
+        updatedAt: originalItem.updatedAt,
+        dueAt: dueDate,
+        completedAt: originalItem.completedAt,
+        conversationId: originalItem.conversationId,
+        isLocked: originalItem.isLocked,
+        exported: originalItem.exported,
+        exportDate: originalItem.exportDate,
+        exportPlatform: originalItem.exportPlatform,
+        sortOrder: originalItem.sortOrder,
+        indentLevel: originalItem.indentLevel,
+      );
+      notifyListeners();
+    }
+
     try {
       final updatedItem = await api.updateActionItem(
         item.id,
         dueAt: dueDate,
-        clearDueAt: dueDate == null, // Explicitly clear if null
+        clearDueAt: dueDate == null,
       );
 
       if (updatedItem != null) {
-        // Update the local item with server response
-        final index = _actionItems.indexWhere((i) => i.id == item.id);
-        if (index != -1) {
-          _actionItems[index] = updatedItem;
+        final idx = _actionItems.indexWhere((i) => i.id == item.id);
+        if (idx != -1) {
+          _actionItems[idx] = updatedItem;
           notifyListeners();
         }
       } else {
+        // Revert on failure
+        if (index != -1 && originalItem != null) {
+          _actionItems[index] = originalItem;
+          notifyListeners();
+        }
         Logger.debug('Failed to update action item due date on server');
       }
     } catch (e) {
+      // Revert on error
+      if (index != -1 && originalItem != null) {
+        _actionItems[index] = originalItem;
+        notifyListeners();
+      }
       Logger.debug('Error updating action item due date: $e');
     }
+  }
+
+  Future<int> clearTodayDeadlinesForIncompleteTasks() async {
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    final startOfTomorrow = startOfToday.add(const Duration(days: 1));
+
+    final itemsToClear = _actionItems.where((item) {
+      final dueAt = item.dueAt;
+      if (item.completed || dueAt == null) return false;
+      return !dueAt.isBefore(startOfToday) && dueAt.isBefore(startOfTomorrow);
+    }).toList();
+
+    if (itemsToClear.isEmpty) return 0;
+
+    final originalItemsById = <String, ActionItemWithMetadata>{};
+    for (final item in itemsToClear) {
+      final index = _actionItems.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        originalItemsById[item.id] = _actionItems[index];
+        _actionItems[index] = _actionItems[index].copyWith(dueAt: null);
+      }
+    }
+    notifyListeners();
+
+    int successCount = 0;
+    for (final item in itemsToClear) {
+      try {
+        final updatedItem = await api.updateActionItem(
+          item.id,
+          clearDueAt: true,
+        );
+
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (updatedItem != null) {
+          if (index != -1) {
+            _actionItems[index] = updatedItem;
+          }
+          successCount++;
+        } else if (index != -1) {
+          final originalItem = originalItemsById[item.id];
+          if (originalItem != null) {
+            _actionItems[index] = originalItem;
+          }
+        }
+      } catch (e) {
+        final index = _actionItems.indexWhere((i) => i.id == item.id);
+        if (index != -1) {
+          final originalItem = originalItemsById[item.id];
+          if (originalItem != null) {
+            _actionItems[index] = originalItem;
+          }
+        }
+        Logger.debug('Error clearing today deadline for item ${item.id}: $e');
+      }
+    }
+
+    notifyListeners();
+    return successCount;
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {

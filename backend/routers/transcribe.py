@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import io
 import json
 import logging
@@ -657,9 +658,11 @@ async def _stream_handler(
                 segment_person_assignment_map,
                 speaker_to_person_map,
             )
+            segments_dicts = [segment.dict() for segment in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
-                uid, conversation.id, [segment.dict() for segment in conversation.transcript_segments]
+                uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
             )
+            _update_cached_segments(segments_dicts)
 
         if photos:
             conversations_db.store_conversation_photos(uid, conversation.id, photos)
@@ -908,8 +911,10 @@ async def _stream_handler(
 
         last_synced_conversation_id = None
 
-        # Conversation processing
-        pending_conversation_requests: Set[str] = set()
+        # Conversation processing — maps conversation_id to {sent_at, retries}
+        PENDING_REQUEST_TIMEOUT = 120  # seconds before retrying a pending request
+        MAX_RETRIES_PER_REQUEST = 3
+        pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
@@ -920,16 +925,26 @@ async def _stream_handler(
             """Request pusher to process a conversation."""
             nonlocal pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             if not pusher_connected or not pusher_ws:
-                logger.info(
-                    f"Pusher not connected, falling back to local processing for {conversation_id} {uid} {session_id}"
-                )
+                logger.info(f"Pusher not connected for {conversation_id}, will retry on reconnect {uid} {session_id}")
+                # Track as pending so it gets retried on reconnect
+                if conversation_id not in pending_conversation_requests:
+                    pending_conversation_requests[conversation_id] = {'sent_at': time.time(), 'retries': 0}
+                    pending_request_event.set()
                 return False
             # Prevent unbounded growth of pending requests
             if len(pending_conversation_requests) >= MAX_PENDING_REQUESTS:
-                logger.info(f"Too many pending requests, dropping one to add {conversation_id} {uid} {session_id}")
-                pending_conversation_requests.pop()  # Remove arbitrary element (set has no order)
+                oldest_id = min(
+                    pending_conversation_requests, key=lambda k: pending_conversation_requests[k]['sent_at']
+                )
+                logger.info(
+                    f"Too many pending requests, dropping {oldest_id} to add {conversation_id} {uid} {session_id}"
+                )
+                del pending_conversation_requests[oldest_id]
             try:
-                pending_conversation_requests.add(conversation_id)
+                pending_conversation_requests[conversation_id] = {
+                    'sent_at': time.time(),
+                    'retries': pending_conversation_requests.get(conversation_id, {}).get('retries', 0),
+                }
                 pending_request_event.set()  # Signal the receiver
                 data = bytearray()
                 data.extend(struct.pack("I", 104))
@@ -939,7 +954,6 @@ async def _stream_handler(
                 return True
             except Exception as e:
                 logger.error(f"Failed to send process_conversation request: {e} {uid} {session_id}")
-                pending_conversation_requests.discard(conversation_id)
                 return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
@@ -1063,7 +1077,7 @@ async def _stream_handler(
                     await _audio_bytes_flush(auto_reconnect=True)
 
         async def pusher_receive():
-            """Receive and handle messages from pusher."""
+            """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
             nonlocal websocket_active, pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             while websocket_active:
                 # Wait efficiently until there's work to do
@@ -1088,7 +1102,7 @@ async def _stream_handler(
                     if header_type == 201:
                         result = json.loads(msg[4:].decode("utf-8"))
                         conversation_id = result.get("conversation_id")
-                        pending_conversation_requests.discard(conversation_id)
+                        pending_conversation_requests.pop(conversation_id, None)
 
                         if "error" in result:
                             logger.error(f"Conversation processing failed: {result['error']} {uid} {session_id}")
@@ -1099,7 +1113,7 @@ async def _stream_handler(
                             on_conversation_processed(conversation_id)
 
                 except asyncio.TimeoutError:
-                    continue  # Check loop conditions again
+                    pass  # Fall through to retry check below
                 except asyncio.CancelledError:
                     break
                 except ConnectionClosed as e:
@@ -1108,6 +1122,29 @@ async def _stream_handler(
                 except Exception as e:
                     logger.error(f"Pusher receive error: {e} {uid} {session_id}")
                     await asyncio.sleep(0.5)
+
+                # Retry timed-out pending requests (handles silent WS death)
+                now = time.time()
+                timed_out = [
+                    cid
+                    for cid, info in list(pending_conversation_requests.items())
+                    if now - info['sent_at'] > PENDING_REQUEST_TIMEOUT
+                ]
+                for cid in timed_out:
+                    info = pending_conversation_requests.get(cid)
+                    if not info:
+                        continue
+                    if info['retries'] >= MAX_RETRIES_PER_REQUEST:
+                        logger.error(
+                            f"Conversation {cid} failed after {MAX_RETRIES_PER_REQUEST} retries, giving up {uid} {session_id}"
+                        )
+                        pending_conversation_requests.pop(cid, None)
+                        continue
+                    info['retries'] += 1
+                    logger.warning(
+                        f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {uid} {session_id}"
+                    )
+                    await request_conversation_processing(cid)
 
                 # Reconnect outside try/except (same pattern as flush functions)
                 if pusher_connected is False and websocket_active:
@@ -1147,6 +1184,14 @@ async def _stream_handler(
                     # Session ended during connection attempt
                     return
                 pusher_connected = True
+                # Re-send any pending conversation requests after reconnect
+                if pending_conversation_requests:
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(pending_conversation_requests)} pending requests {uid} {session_id}"
+                    )
+                    for cid in list(pending_conversation_requests.keys()):
+                        pending_conversation_requests[cid]['sent_at'] = time.time()
+                        await request_conversation_processing(cid)
             except Exception as e:
                 logger.error(f"Exception in connect: {e}")
 
@@ -1241,69 +1286,200 @@ async def _stream_handler(
     language_cache = TranscriptSegmentLanguageCache()
     translation_service = TranslationService()
 
+    # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
+    translation_language_base = translation_language.split('-')[0] if translation_language else None
+
+    # Debounce state: segment_id -> {text_hash, task, version}
+    pending_translations = {}
+    TRANSLATION_DEBOUNCE_SECONDS = 1.0
+    translation_persist_lock = asyncio.Lock()
+    translation_flushing = False
+    translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
+
+    # Translation metrics counters
+    translate_metrics = {
+        'api_calls': 0,
+        'cache_hits_memory': 0,
+        'cache_hits_redis': 0,
+        'debounce_skips': 0,
+        'lang_cache_skips': 0,
+        'same_text_skips': 0,
+        'segments_translated': 0,
+        'total_translate_calls': 0,
+    }
+
+    async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
+        """Translate a single segment and persist/notify. Used by debounce."""
+        if not translation_language:
+            return
+        # Allow translation during flush (translation_flushing=True) but not after full shutdown
+        if not websocket_active and not translation_flushing:
+            return
+
+        try:
+            segment_text = segment.text.strip()
+            if not segment_text:
+                return
+
+            # Pre-API stale-write check: abort if a newer version exists or entry was pruned
+            pending = pending_translations.get(segment.id)
+            if not pending or pending.get('version', 0) != version:
+                return
+
+            translated_text, detected_lang = translation_service.translate_text_by_sentence(
+                translation_language, segment_text
+            )
+
+            # Post-API stale-write check: abort if a newer version exists or entry was pruned
+            pending = pending_translations.get(segment.id)
+            if not pending or pending.get('version', 0) != version:
+                return
+
+            # Update language cache from translate response (free detection)
+            if detected_lang:
+                language_cache.update_from_translate_response(
+                    segment.id, detected_lang, translation_language_base or translation_language
+                )
+
+            # Create/Update Translation object
+            trans = Translation(lang=translation_language, text=translated_text)
+            if segment.translations is not None:
+                existing_idx = next(
+                    (i for i, t in enumerate(segment.translations) if t.lang == translation_language), None
+                )
+                if existing_idx is not None:
+                    segment.translations[existing_idx] = trans
+                else:
+                    segment.translations.append(trans)
+
+            # Persist with lock to prevent concurrent read-modify-write clobbering
+            async with translation_persist_lock:
+                # Use cache only if conversation_id matches current; fall back to DB otherwise
+                if conversation_id == current_conversation_id:
+                    conversation = _get_cached_conversation()
+                    protection_level = _cached_protection_level
+                else:
+                    conversation = conversations_db.get_conversation(uid, conversation_id)
+                    protection_level = None  # let DB function read it
+                if conversation:
+                    for i, existing_segment in enumerate(conversation['transcript_segments']):
+                        if existing_segment['id'] == segment.id:
+                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
+                            conversations_db.update_conversation_segments(
+                                uid, conversation_id, conversation['transcript_segments'],
+                                data_protection_level=protection_level,
+                            )
+                            if conversation_id == current_conversation_id:
+                                _update_cached_segments(conversation['transcript_segments'])
+                            break
+
+            if websocket_active:
+                _send_message_event(TranslationEvent(segments=[segment.dict()]))
+
+            # Prune completed entry
+            pending_translations.pop(segment.id, None)
+
+        except Exception as e:
+            logger.error(f"Translation error: {e} {uid} {session_id}")
+            # Prune failed entry so it doesn't block future translations for this segment
+            pending = pending_translations.get(segment.id)
+            if pending and pending.get('version', 0) == version:
+                pending_translations.pop(segment.id, None)
+
+    def _is_segment_final(segment_text: str) -> bool:
+        """Check if segment text indicates a finalized utterance from STT.
+
+        Deepgram with punctuate=True and endpointing=300ms adds terminal punctuation
+        when an utterance is complete. Text ending with .?! signals the segment is final.
+        """
+        return bool(segment_text) and segment_text[-1] in '.?!'
+
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         if not translation_language:
             return
 
-        try:
-            translated_segments = []
-            for segment in segments:
-                if not segment or not segment.id:
-                    continue
+        for segment in segments:
+            if not segment or not segment.id:
+                continue
 
-                segment_text = segment.text.strip()
-                if not segment_text:
-                    continue
+            segment_text = segment.text.strip()
+            if not segment_text:
+                continue
 
-                # Language Detection
-                if language_cache.is_in_target_language(segment.id, segment_text, translation_language):
-                    continue
+            # Free local language detection pre-filter (use base language for comparison)
+            if language_cache.is_in_target_language(
+                segment.id, segment_text, translation_language_base or translation_language
+            ):
+                translate_metrics['lang_cache_skips'] += 1
+                continue
 
-                # Translation
-                translated_text = translation_service.translate_text_by_sentence(translation_language, segment_text)
+            text_hash = hashlib.md5(segment_text.encode()).hexdigest()
+            pending = pending_translations.get(segment.id)
 
-                if translated_text == segment_text:
-                    # If translation is same as original, it's likely in the target language.
-                    # Delete from cache to allow re-evaluation if more text is added.
-                    language_cache.delete_cache(segment.id)
-                    continue
+            if pending and pending.get('text_hash') == text_hash:
+                # Same text, skip (already translating or translated)
+                translate_metrics['same_text_skips'] += 1
+                continue
 
-                # Create/Update Translation object
-                translation = Translation(lang=translation_language, text=translated_text)
-                if segment.translations is not None:
-                    existing_translation_index = next(
-                        (i for i, t in enumerate(segment.translations) if t.lang == language), None
-                    )
-                    if existing_translation_index is not None:
-                        segment.translations[existing_translation_index] = translation
-                    else:
-                        segment.translations.append(translation)
+            # Monotonic version for stale-write protection (never reuses values after prune)
+            nonlocal translation_version_counter
+            translation_version_counter += 1
+            new_version = translation_version_counter
 
-                translated_segments.append(segment)
+            # Cancel any pending debounce task for this segment
+            if pending and pending.get('task') and not pending['task'].done():
+                pending['task'].cancel()
 
-            if not translated_segments:
-                return
+            # Detect if STT has finalized this segment (terminal punctuation)
+            segment_is_final = _is_segment_final(segment_text)
 
-            # Persist and notify
-            conversation = conversations_db.get_conversation(uid, conversation_id)
-            if conversation:
-                should_update = False
-                for segment in translated_segments:
-                    for i, existing_segment in enumerate(conversation['transcript_segments']):
-                        if existing_segment['id'] == segment.id:
-                            conversation['transcript_segments'][i]['translations'] = segment.dict()['translations']
-                            should_update = True
-                            break
-                if should_update:
-                    conversations_db.update_conversation_segments(
-                        uid, conversation_id, conversation['transcript_segments']
-                    )
+            if not pending or segment_is_final:
+                # First appearance or final segment — translate immediately (zero UX delay)
+                translate_metrics['segments_translated'] += 1
+                action = 'immediate_first' if not pending else 'immediate_final'
+                logger.info(f"translate [{action}] seg={segment.id[:8]} v={new_version} {uid}")
+                pending_translations[segment.id] = {
+                    'text_hash': text_hash,
+                    'version': new_version,
+                    'task': asyncio.ensure_future(_translate_segment(segment, conversation_id, new_version)),
+                }
+            else:
+                # Update — debounce with trailing window
+                translate_metrics['debounce_skips'] += 1
+                logger.info(f"translate [debounce] seg={segment.id[:8]} v={new_version} {uid}")
 
-            if websocket_active:
-                _send_message_event(TranslationEvent(segments=[s.dict() for s in translated_segments]))
+                async def _debounced_translate(seg=segment, conv_id=conversation_id, ver=new_version):
+                    await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
+                    await _translate_segment(seg, conv_id, ver)
 
-        except Exception as e:
-            logger.error(f"Translation error: {e} {uid} {session_id}")
+                pending_translations[segment.id] = {
+                    'text_hash': text_hash,
+                    'version': new_version,
+                    'task': asyncio.ensure_future(_debounced_translate()),
+                }
+
+    async def flush_pending_translations():
+        """Flush all pending debounced translations before cleanup."""
+        nonlocal translation_flushing
+        translation_flushing = True
+        for seg_id, pending in list(pending_translations.items()):
+            task = pending.get('task')
+            if task and not task.done():
+                try:
+                    await asyncio.wait_for(task, timeout=5.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+        pending_translations.clear()
+        translation_flushing = False
+        # Log session translation metrics summary
+        m = translate_metrics
+        total_handled = m['segments_translated'] + m['debounce_skips'] + m['lang_cache_skips'] + m['same_text_skips']
+        logger.info(
+            f"translate_summary {uid} session={session_id} "
+            f"translated={m['segments_translated']} debounced={m['debounce_skips']} "
+            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']} "
+            f"total_events={total_handled}"
+        )
 
     async def conversation_lifecycle_manager():
         """Background task that checks conversation timeout and triggers processing every 5 seconds."""
@@ -1522,6 +1698,33 @@ async def _stream_handler(
         except Exception as e:
             logger.error(f"Speaker ID: match error for speaker {speaker_id}: {e} {uid} {session_id}")
 
+    # In-memory conversation cache to avoid Firestore re-reads every 0.6s
+    _cached_conversation_data = None
+    _cached_conversation_id = None
+    _cached_conversation_time = 0.0  # monotonic
+    _cached_protection_level = 'standard'
+    CONVERSATION_CACHE_REFRESH_SECONDS = 30
+
+    def _get_cached_conversation(force_refresh=False):
+        nonlocal _cached_conversation_data, _cached_conversation_id, _cached_conversation_time, _cached_protection_level
+        now = time.monotonic()
+        id_changed = current_conversation_id != _cached_conversation_id
+        stale = (now - _cached_conversation_time) >= CONVERSATION_CACHE_REFRESH_SECONDS
+        if _cached_conversation_data is None or id_changed or stale or force_refresh:
+            data = conversations_db.get_conversation(uid, current_conversation_id)
+            if data:
+                _cached_conversation_data = data
+                _cached_conversation_id = current_conversation_id
+                _cached_conversation_time = now
+                _cached_protection_level = data.get('data_protection_level', 'standard')
+            return data
+        return _cached_conversation_data
+
+    def _update_cached_segments(segments_dicts):
+        """Update the cached conversation's transcript_segments in-place after a write."""
+        if _cached_conversation_data is not None:
+            _cached_conversation_data['transcript_segments'] = segments_dicts
+
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
         nonlocal current_conversation_id, translation_enabled, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
@@ -1543,8 +1746,8 @@ async def _stream_handler(
 
             finished_at = datetime.now(timezone.utc)
 
-            # Get conversation
-            conversation_data = conversations_db.get_conversation(uid, current_conversation_id)
+            # Get conversation (cached — refreshes on ID change or every 30s)
+            conversation_data = _get_cached_conversation()
             if not conversation_data:
                 logger.warning(
                     f"Warning: conversation {current_conversation_id} not found during segment processing {uid} {session_id}"
@@ -2101,6 +2304,13 @@ async def _stream_handler(
             words_to_record = words_transcribed_since_last_record
             if transcription_seconds > 0 or words_to_record > 0:
                 record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
+
+        # Flush pending debounced translations BEFORE setting websocket_active=False
+        try:
+            await flush_pending_translations()
+        except Exception as e:
+            logger.error(f"Error flushing pending translations: {e} {uid} {session_id}")
+
         websocket_active = False
 
         # STT sockets
@@ -2146,7 +2356,7 @@ async def _stream_handler(
             await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
         bg_tasks.clear()
 
-        # Clean up collections to aid garbage collection
+        # Clean up collections and heavy objects to aid garbage collection
         try:
             locked_conversation_ids.clear()
             speaker_to_person_map.clear()
@@ -2157,9 +2367,22 @@ async def _stream_handler(
             realtime_photo_buffers.clear()
             image_chunks.clear()
             person_embeddings_cache.clear()
+            # Release conversation cache
+            _cached_conversation_data = None
         except NameError as e:
             # Variables might not be defined if an error occurred early
             logger.error(f"Cleanup error (safe to ignore): {e} {uid} {session_id}")
+
+        # Release heavy objects that hold model state / native resources
+        try:
+            if vad_gate is not None:
+                del vad_gate
+            if language_cache is not None:
+                language_cache.cache.clear()
+            if translation_service is not None:
+                translation_service.translation_cache.clear()
+        except NameError:
+            pass
 
     logger.info(f"_stream_handler ended {uid} {session_id}")
 

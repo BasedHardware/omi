@@ -10,10 +10,11 @@ struct OnboardingView: View {
     @AppStorage("onboardingStep") private var currentStep = 0
     @StateObject private var graphViewModel = MemoryGraphViewModel()
     @State private var graphHasData = false
+    @State private var showTrustPreview = true
     @State private var showGraphHints = false
     @State private var hintsHovered = false
 
-    let steps = ["Video", "Chat"]
+    let steps = ["Video", "Chat", "Notifications", "FloatingBar", "VoiceInput", "Tasks"]
 
     var body: some View {
         ZStack {
@@ -43,17 +44,13 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            // If currentStep is beyond the new 2-step flow (e.g. user was on old step 3+),
-            // clamp to step 1 (chat) so they don't get stuck
-            if currentStep > 1 {
-                currentStep = 1
+            // If currentStep is beyond the 6-step flow (0-5), clamp to last step
+            if currentStep > 5 {
+                currentStep = 5
             }
         }
         .task {
-            // Pre-warm the ACP bridge while the user watches the intro video.
-            // Without this, the first chat message waits 4-6s for the Node.js
-            // bridge to cold-start. By starting it here, it's ready by the time
-            // the user clicks "Continue" and reaches the chat step.
+            // Pre-warm the ACP bridge during the video step
             await chatProvider.warmupBridge()
         }
     }
@@ -87,7 +84,7 @@ struct OnboardingView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            } else if currentStep == 1 {
                 // Step 1: Interactive AI Chat + Live Knowledge Graph
                 HStack(spacing: 0) {
                     OnboardingChatView(
@@ -96,12 +93,10 @@ struct OnboardingView: View {
                         graphViewModel: graphViewModel,
                         onComplete: {
                             AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat")
-                            if let onComplete = onComplete {
-                                onComplete()
-                            }
+                            currentStep = 2
                         },
                         onSkip: {
-                            handleSkip()
+                            currentStep = 2
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -110,13 +105,32 @@ struct OnboardingView: View {
                     ZStack {
                         OmiColors.backgroundSecondary.ignoresSafeArea()
 
-                        if graphHasData {
+                        if graphHasData && !showTrustPreview {
                             MemoryGraphSceneView(viewModel: graphViewModel)
                                 .ignoresSafeArea()
                                 .transition(.opacity)
                         }
+
+                        if showTrustPreview {
+                            OnboardingTrustPreviewCard()
+                                .padding(.horizontal, 48)
+                                .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .top) {
+                        if graphHasData && !showTrustPreview {
+                            Text("This is your second brain.")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.black.opacity(0.35))
+                                .cornerRadius(8)
+                                .padding(.top, 18)
+                                .transition(.opacity)
+                        }
+                    }
                     // Use .overlay so hints composite above the NSViewRepresentable SCNView
                     .overlay(alignment: .bottom) {
                         HStack(spacing: 20) {
@@ -142,23 +156,67 @@ struct OnboardingView: View {
                         .animation(.easeInOut(duration: 0.3), value: graphHasData)
                     }
                     .onAppear {
+                        showTrustPreview = true
                         // Handle case where graph already has data on appear
                         if !graphViewModel.isEmpty && !graphHasData {
-                            withAnimation(.easeIn(duration: 0.5)) {
-                                graphHasData = true
-                            }
-                            flashGraphHints()
+                            handleGraphDataArrival()
                         }
                     }
                     .onChange(of: graphViewModel.isEmpty) { _, isEmpty in
                         if !isEmpty && !graphHasData {
-                            withAnimation(.easeIn(duration: 0.5)) {
-                                graphHasData = true
-                            }
-                            flashGraphHints()
+                            handleGraphDataArrival()
                         }
                     }
                 }
+            } else if currentStep == 2 {
+                // Step 2: Smart Notifications Demo
+                OnboardingNotificationStepView(
+                    appState: appState,
+                    onContinue: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Notifications")
+                        currentStep = 3
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "Notifications_Skipped")
+                        currentStep = 3
+                    }
+                )
+            } else if currentStep == 3 {
+                // Step 3: Floating Bar Demo
+                OnboardingFloatingBarDemoView(
+                    appState: appState,
+                    chatProvider: chatProvider,
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar")
+                        currentStep = 4
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "FloatingBar_Skipped")
+                        currentStep = 4
+                    }
+                )
+            } else if currentStep == 4 {
+                // Step 4: Voice Input Demo
+                OnboardingVoiceInputDemoView(
+                    appState: appState,
+                    chatProvider: chatProvider,
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "VoiceInput")
+                        currentStep = 5
+                    },
+                    onSkip: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "VoiceInput_Skipped")
+                        currentStep = 5
+                    }
+                )
+            } else {
+                // Step 5: Tasks
+                OnboardingTasksStepView(
+                    onComplete: {
+                        AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "Tasks")
+                        handleOnboardingComplete()
+                    }
+                )
             }
         }
     }
@@ -180,30 +238,55 @@ struct OnboardingView: View {
         }
     }
 
-    /// Skip onboarding — complete with minimal setup
-    private func handleSkip() {
-        log("OnboardingView: User skipped onboarding chat")
-        AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Chat_Skipped")
+    private func handleGraphDataArrival() {
+        withAnimation(.easeIn(duration: 0.35)) {
+            graphHasData = true
+        }
+
+        // Keep the trust panel visible briefly, then transition to the graph.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.easeInOut(duration: 0.45)) {
+                showTrustPreview = false
+            }
+            flashGraphHints()
+        }
+    }
+
+    /// Complete onboarding — start all services and transition to the app
+    private func handleOnboardingComplete() {
+        log("OnboardingView: Onboarding complete")
         AnalyticsManager.shared.onboardingCompleted()
 
         // Stop the AI if it's still running
         chatProvider.stopAgent()
 
-        // Navigate to Chat page after transition (not Dashboard)
+        // Navigate to Tasks page after transition
         UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-
-        appState.hasCompletedOnboarding = true
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
         // Start essential services
         Task {
             await AgentVMService.shared.startPipeline()
+            await GoalGenerationService.shared.generateNow()
         }
         if LaunchAtLoginManager.shared.setEnabled(true) {
-            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_skip")
+            AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
         }
         ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
         appState.startTranscription()
+
+        // Create welcome task
+        Task {
+            let welcomeDescription = "Run omi for two days to start receiving helpful advice"
+            let alreadyExists = await ActionItemStorage.shared.actionItemExists(description: welcomeDescription)
+            if !alreadyExists {
+                await TasksStore.shared.createTask(
+                    description: welcomeDescription,
+                    dueAt: Date(),
+                    priority: "low"
+                )
+            }
+        }
 
         // Clean up onboarding state and persisted chat data
         chatProvider.isOnboarding = false
@@ -211,6 +294,96 @@ struct OnboardingView: View {
 
         if let onComplete = onComplete {
             onComplete()
+        }
+
+        // Defer the view hierarchy change so SwiftUI finishes rendering the
+        // current button before the OnboardingView is removed from the tree.
+        // Setting this synchronously crashes in Button.body.getter.
+        DispatchQueue.main.async {
+            appState.hasCompletedOnboarding = true
+        }
+    }
+}
+
+private struct OnboardingTrustPreviewCard: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(OmiColors.purplePrimary.opacity(0.15))
+                        .frame(width: 72, height: 72)
+                        .blur(radius: 12)
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(OmiColors.purpleLightGradient)
+                }
+
+                Text("Trust & Privacy")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(OmiColors.textPrimary)
+
+                Text("omi protects your data.")
+                    .font(.system(size: 13))
+                    .foregroundColor(OmiColors.textTertiary)
+                    .multilineTextAlignment(.center)
+            }
+
+            VStack(spacing: 10) {
+                trustRow(icon: "chevron.left.forwardslash.chevron.right", title: "Open Source", detail: "Code is ")
+                trustRow(icon: "lock.shield", title: "Encrypted", detail: "Cloud sync data is encrypted in transit and at rest.")
+                trustRow(icon: "externaldrive.badge.person.crop", title: "User-Owned", detail: "Primary data stays local and belongs to you.")
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(OmiColors.backgroundTertiary.opacity(0.75))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(OmiColors.purplePrimary.opacity(0.25), lineWidth: 1)
+                    )
+            )
+
+            Text("Your memory chart appears here next.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(OmiColors.textQuaternary)
+        }
+        .frame(maxWidth: 560)
+        .padding(.vertical, 24)
+    }
+
+    @ViewBuilder
+    private func trustRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(OmiColors.purplePrimary)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(OmiColors.textPrimary)
+                if title == "Open Source" {
+                    HStack(spacing: 0) {
+                        Text(detail)
+                            .foregroundColor(OmiColors.textSecondary)
+                        if let url = URL(string: "https://github.com/basedhardware/omi/") {
+                            Link("public", destination: url)
+                                .foregroundColor(OmiColors.purpleSecondary)
+                                .underline()
+                        }
+                        Text(" and auditable.")
+                            .foregroundColor(OmiColors.textSecondary)
+                    }
+                    .font(.system(size: 12))
+                } else {
+                    Text(detail)
+                        .font(.system(size: 12))
+                        .foregroundColor(OmiColors.textSecondary)
+                }
+            }
+            Spacer()
         }
     }
 }

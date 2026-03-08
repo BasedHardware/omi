@@ -238,7 +238,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
 
 Future<bool> setConversationVisibility(String conversationId, {String visibility = 'shared'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/visibility?value=$visibility&visibility=$visibility',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/visibility?value=$visibility',
     headers: {},
     method: 'PATCH',
     body: '',

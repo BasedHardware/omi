@@ -2,6 +2,43 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.82",
+      "date": "2026-03-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.81",
+      "date": "2026-03-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.80",
+      "date": "2026-03-07",
+      "changes": [
+        "Rewind timeline now shows full day with oldest screenshots on the left and newest on the right",
+        "Consolidated Advanced settings into a single scrollable page and removed Device section from settings",
+        "Floating bar now follows your active app across monitors",
+        "Screenshots now capture the screen where your cursor is, not just the primary display",
+        "Fixed focus notifications not detecting distractions like YouTube and TikTok",
+        "Improved advice/tips quality with better prompts",
+        "Removed notification sound from focus alerts",
+        "Improved onboarding: added voice input step, use real floating bar for CMD+Enter demo, clearer key combination hints"
+      ]
+    },
+    {
+      "version": "0.11.48",
+      "date": "2026-03-03",
+      "changes": [
+        "Fixed focus time tracking to show actual minutes instead of counting each session as 1 minute",
+        "Focus assistant now uses your goals, tasks, and memories for smarter distraction detection",
+        "Added Focus Analysis Test Runner for validating focus detection prompts"
+      ]
+    },
+    {
       "version": "0.11.38",
       "date": "2026-03-01",
       "changes": [

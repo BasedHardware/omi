@@ -2621,5 +2621,11 @@
     "switchAndRestart": "تبديل",
     "switchApiConfirmBody": "التبديل إلى {environment}؟ ستحتاج إلى إغلاق التطبيق وإعادة فتحه لتطبيق التغييرات.",
     "switchApiConfirmTitle": "تبديل بيئة API",
-    "switchRequiresRestart": "يتطلب التبديل إعادة تشغيل التطبيق"
+    "switchRequiresRestart": "يتطلب التبديل إعادة تشغيل التطبيق",
+    "shared": "مشترك",
+    "onlyYouCanSeeConversation": "أنت فقط من يمكنه رؤية هذه المحادثة",
+    "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
+    "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
+    "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
+  "tasksOverdue": "متأخرة"
 }

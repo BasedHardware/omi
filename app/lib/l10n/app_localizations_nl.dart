@@ -8286,4 +8286,22 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get apiEnvSavedRestartRequired =>
       'Opgeslagen. Sluit de app en open deze opnieuw om de wijzigingen toe te passen.';
+
+  @override
+  String get shared => 'Gedeeld';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Alleen jij kunt dit gesprek zien';
+
+  @override
+  String get anyoneWithLinkCanView => 'Iedereen met de link kan bekijken';
+
+  @override
+  String get tasksCleanTodayTitle => 'Taken van vandaag opschonen?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
+
+  @override
+  String get tasksOverdue => 'Achterstallig';
 }

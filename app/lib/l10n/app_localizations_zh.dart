@@ -8108,4 +8108,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => '已保存。请关闭并重新打开应用以应用更改。';
+
+  @override
+  String get shared => '已共享';
+
+  @override
+  String get onlyYouCanSeeConversation => '只有您可以看到此对话';
+
+  @override
+  String get anyoneWithLinkCanView => '任何拥有链接的人都可以查看';
+
+  @override
+  String get tasksCleanTodayTitle => '清理今天的任务？';
+
+  @override
+  String get tasksCleanTodayMessage => '这只会移除截止日期';
+
+  @override
+  String get tasksOverdue => '逾期';
 }

@@ -2654,5 +2654,11 @@
     "switchAndRestart": "Перемкнути",
     "switchApiConfirmBody": "Перемкнути на {environment}? Вам потрібно буде закрити та знову відкрити додаток, щоб зміни набули чинності.",
     "switchApiConfirmTitle": "Перемикання середовища API",
-    "switchRequiresRestart": "Перемикання потребує перезапуску додатку"
+    "switchRequiresRestart": "Перемикання потребує перезапуску додатку",
+    "shared": "Спільний",
+    "onlyYouCanSeeConversation": "Лише ви можете бачити цю розмову",
+    "anyoneWithLinkCanView": "Будь-хто з посиланням може переглядати",
+    "tasksCleanTodayTitle": "Очистити завдання на сьогодні?",
+    "tasksCleanTodayMessage": "Це видалить лише дедлайни",
+  "tasksOverdue": "Прострочені"
 }

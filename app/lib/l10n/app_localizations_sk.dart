@@ -8248,4 +8248,22 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Uložené. Zatvorte a znova otvorte aplikáciu na použitie zmien.';
+
+  @override
+  String get shared => 'Zdieľané';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Túto konverzáciu môžete vidieť iba vy';
+
+  @override
+  String get anyoneWithLinkCanView => 'Ktokoľvek s odkazom môže zobraziť';
+
+  @override
+  String get tasksCleanTodayTitle => 'Vyčistiť dnešné úlohy?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Týmto sa odstránia iba termíny';
+
+  @override
+  String get tasksOverdue => 'Po termíne';
 }

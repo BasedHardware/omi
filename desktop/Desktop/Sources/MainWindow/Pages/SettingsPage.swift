@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 struct SettingsPage: View {
     @ObservedObject var appState: AppState
     @Binding var selectedSection: SettingsContentView.SettingsSection
-    @Binding var selectedAdvancedSubsection: SettingsContentView.AdvancedSubsection?
     @Binding var highlightedSettingId: String?
     var chatProvider: ChatProvider? = nil
 
@@ -16,9 +15,7 @@ struct SettingsPage: View {
                 VStack(spacing: 0) {
                     // Section header
                     HStack {
-                        Text(selectedSection == .advanced && selectedAdvancedSubsection != nil
-                             ? selectedAdvancedSubsection!.rawValue
-                             : selectedSection.rawValue)
+                        Text(selectedSection.rawValue)
                             .scaledFont(size: 28, weight: .bold)
                             .foregroundColor(OmiColors.textPrimary)
                             .id(selectedSection)
@@ -35,7 +32,6 @@ struct SettingsPage: View {
                     SettingsContentView(
                         appState: appState,
                         selectedSection: $selectedSection,
-                        selectedAdvancedSubsection: $selectedAdvancedSubsection,
                         highlightedSettingId: $highlightedSettingId,
                         chatProvider: chatProvider
                     )
@@ -56,11 +52,6 @@ struct SettingsPage: View {
         .background(OmiColors.backgroundSecondary.opacity(0.3))
         .onAppear {
             AnalyticsManager.shared.settingsPageOpened()
-        }
-        .onChange(of: selectedSection) { _, newValue in
-            if newValue == .advanced && selectedAdvancedSubsection == nil {
-                selectedAdvancedSubsection = .aiUserProfile
-            }
         }
     }
 }
@@ -130,6 +121,9 @@ struct SettingsContentView: View {
     // Glow preview state
     @State private var isPreviewRunning: Bool = false
 
+    // Downgrade confirmation alert
+    @State private var showDowngradeAlert = false
+
     // Tier gating (0 = show all, 1-6 = sequential tiers)
     @AppStorage("currentTierLevel") private var currentTierLevel = 0
 
@@ -150,7 +144,6 @@ struct SettingsContentView: View {
 
     // Selected section (passed in from parent)
     @Binding var selectedSection: SettingsSection
-    @Binding var selectedAdvancedSubsection: AdvancedSubsection?
     @Binding var highlightedSettingId: String?
 
     // Notification settings (from backend)
@@ -233,8 +226,6 @@ struct SettingsContentView: View {
 
     enum SettingsSection: String, CaseIterable {
         case general = "General"
-        case device = "Device"
-        case focus = "Focus"
         case rewind = "Rewind"
         case transcription = "Transcription"
         case notifications = "Notifications"
@@ -283,13 +274,11 @@ struct SettingsContentView: View {
     init(
         appState: AppState,
         selectedSection: Binding<SettingsSection>,
-        selectedAdvancedSubsection: Binding<AdvancedSubsection?>,
         highlightedSettingId: Binding<String?> = .constant(nil),
         chatProvider: ChatProvider? = nil
     ) {
         self.appState = appState
         self._selectedSection = selectedSection
-        self._selectedAdvancedSubsection = selectedAdvancedSubsection
         self._highlightedSettingId = highlightedSettingId
         self.chatProvider = chatProvider
         let settings = AssistantSettings.shared
@@ -343,10 +332,6 @@ struct SettingsContentView: View {
                 switch selectedSection {
                 case .general:
                     generalSection
-                case .device:
-                    DeviceSettingsPage()
-                case .focus:
-                    FocusPage()
                 case .rewind:
                     rewindSection
                 case .transcription:
@@ -388,11 +373,15 @@ struct SettingsContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .taskAssistant
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.taskassistant"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
             selectedSection = .advanced
-            selectedAdvancedSubsection = .askOmiFloatingBar
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                highlightedSettingId = "advanced.askomifloatingbar"
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Refresh notification permission when app becomes active (user may have changed it in System Settings)
@@ -404,46 +393,79 @@ struct SettingsContentView: View {
 
     private var generalSection: some View {
         VStack(spacing: 20) {
-            // Rewind toggle (controls both screen + audio)
-            settingsCard(settingId: "general.rewind") {
+            // Screen Capture toggle
+            settingsCard(settingId: "general.screencapture") {
                 HStack(spacing: 16) {
                     Circle()
-                        .fill((isMonitoring || isTranscribing) ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
                         .frame(width: 12, height: 12)
-                        .shadow(color: (isMonitoring || isTranscribing) ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "rectangle.dashed.badge.record")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Rewind")
+                        Text("Screen Capture")
                             .scaledFont(size: 16, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        Text(permissionError ?? transcriptionError ?? {
-                            if isMonitoring && isTranscribing {
-                                return "Screen capture and audio are active"
-                            } else if !isMonitoring && !isTranscribing {
-                                return "Screen capture and audio are paused"
-                            } else if isMonitoring {
-                                return "Screen capture is active, audio is paused"
-                            } else {
-                                return "Audio is active, screen capture is paused"
-                            }
-                        }())
+                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
                             .scaledFont(size: 13)
-                            .foregroundColor((permissionError ?? transcriptionError) != nil ? OmiColors.warning : OmiColors.textTertiary)
+                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
                     }
 
                     Spacer()
 
-                    if isToggling || isTogglingTranscription {
+                    if isToggling {
                         ProgressView()
                             .scaleEffect(0.8)
                     } else {
                         Toggle("", isOn: Binding(
-                            get: { isMonitoring || isTranscribing },
+                            get: { isMonitoring },
                             set: { newValue in
                                 isMonitoring = newValue
-                                isTranscribing = newValue
                                 toggleMonitoring(enabled: newValue)
+                            }
+                        ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                    }
+                }
+            }
+
+            // Audio Recording toggle
+            settingsCard(settingId: "general.audiorecording") {
+                HStack(spacing: 16) {
+                    Circle()
+                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+                        .frame(width: 12, height: 12)
+                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+
+                    Image(systemName: "mic.fill")
+                        .scaledFont(size: 16)
+                        .foregroundColor(OmiColors.purplePrimary)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Audio Recording")
+                            .scaledFont(size: 16, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+
+                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
+                            .scaledFont(size: 13)
+                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isTogglingTranscription {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Toggle("", isOn: Binding(
+                            get: { isTranscribing },
+                            set: { newValue in
+                                isTranscribing = newValue
                                 toggleTranscription(enabled: newValue)
                             }
                         ))
@@ -667,88 +689,6 @@ struct SettingsContentView: View {
 
     private var rewindSection: some View {
         VStack(spacing: 20) {
-            // Screen Capture toggle
-            settingsCard(settingId: "rewind.screencapture") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isMonitoring ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isMonitoring ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    Image(systemName: "rectangle.dashed.badge.record")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Screen Capture")
-                            .scaledFont(size: 15, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(permissionError ?? (isMonitoring ? "Capturing screen content" : "Screen capture is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(permissionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isToggling {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: Binding(
-                            get: { isMonitoring },
-                            set: { newValue in
-                                isMonitoring = newValue
-                                toggleMonitoring(enabled: newValue)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                }
-            }
-
-            // Audio Recording toggle
-            settingsCard(settingId: "rewind.audiorecording") {
-                HStack(spacing: 16) {
-                    Circle()
-                        .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                        .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
-
-                    Image(systemName: "mic.fill")
-                        .scaledFont(size: 16)
-                        .foregroundColor(OmiColors.purplePrimary)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Audio Recording")
-                            .scaledFont(size: 15, weight: .medium)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Text(transcriptionError ?? (isTranscribing ? "Recording and transcribing audio" : "Audio recording is paused"))
-                            .scaledFont(size: 13)
-                            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isTogglingTranscription {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Toggle("", isOn: Binding(
-                            get: { isTranscribing },
-                            set: { newValue in
-                                isTranscribing = newValue
-                                toggleTranscription(enabled: newValue)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                }
-            }
-
             // Storage Stats
             settingsCard(settingId: "rewind.storage") {
                 VStack(alignment: .leading, spacing: 16) {
@@ -2354,34 +2294,45 @@ struct SettingsContentView: View {
         let memoriesTotal: Int
     }
 
+    private func advancedCategoryHeader(title: String, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .scaledFont(size: 16)
+                .foregroundColor(OmiColors.purplePrimary)
+            Text(title)
+                .scaledFont(size: 18, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+        }
+        .padding(.top, 16)
+    }
+
     private var advancedSection: some View {
-        Group {
-            switch selectedAdvancedSubsection {
-            case .aiUserProfile, .none:
-                aiUserProfileSubsection
-            case .stats:
-                statsSubsection
-            case .featureTiers:
-                featureTiersSubsection
-            case .focusAssistant:
-                focusAssistantSubsection
-            case .taskAssistant:
-                taskAssistantSubsection
-            case .adviceAssistant:
-                adviceAssistantSubsection
-            case .memoryAssistant:
-                memoryAssistantSubsection
-            case .analysisThrottle:
-                analysisThrottleSubsection
-            case .goals:
-                goalsSubsection
-            case .askOmiFloatingBar:
-                askOmiFloatingBarSubsection
-            case .preferences:
-                preferencesSubsection
-            case .troubleshooting:
-                troubleshootingSubsection
-            }
+        VStack(spacing: 24) {
+            advancedCategoryHeader(title: "AI User Profile", icon: "brain")
+            aiUserProfileSubsection
+            advancedCategoryHeader(title: "Your Stats", icon: "chart.bar")
+            statsSubsection
+            advancedCategoryHeader(title: "Feature Tiers", icon: "lock.shield")
+            featureTiersSubsection
+            advancedCategoryHeader(title: "Focus Assistant", icon: "eye.fill")
+            focusAssistantSubsection
+            advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+            taskAssistantSubsection
+            advancedCategoryHeader(title: "Advice Assistant", icon: "lightbulb.fill")
+            adviceAssistantSubsection
+            advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+            memoryAssistantSubsection
+            advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+            analysisThrottleSubsection
+            advancedCategoryHeader(title: "Goals", icon: "target")
+            goalsSubsection
+            advancedCategoryHeader(title: "Ask omi Floating Bar", icon: "sparkles")
+            askOmiFloatingBarSubsection
+            advancedCategoryHeader(title: "Preferences", icon: "slider.horizontal.3")
+            preferencesSubsection
+            advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
+            troubleshootingSubsection
         }
     }
 
@@ -2762,18 +2713,33 @@ struct SettingsContentView: View {
                     }
 
                     settingRow(title: "Focus Analysis Prompt", subtitle: "Customize AI instructions for focus analysis", settingId: "advanced.focusassistant.prompt") {
-                        Button(action: {
-                            PromptEditorWindow.show()
-                        }) {
-                            HStack(spacing: 4) {
-                                Text("Edit")
-                                    .scaledFont(size: 12)
-                                Image(systemName: "arrow.up.right.square")
-                                    .scaledFont(size: 11)
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                FocusTestRunnerWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "play.circle")
+                                        .scaledFont(size: 11)
+                                    Text("Test Run")
+                                        .scaledFont(size: 12)
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            Button(action: {
+                                PromptEditorWindow.show()
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text("Edit")
+                                        .scaledFont(size: 12)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .scaledFont(size: 11)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
                     }
 
                     Divider()
@@ -4006,16 +3972,7 @@ struct SettingsContentView: View {
                             Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                                 .scaledFont(size: 13)
                                 .foregroundColor(OmiColors.textTertiary)
-                                .onTapGesture {
-                                    // Hidden: Option+click to enable staging channel
-                                    if NSEvent.modifierFlags.contains(.option) {
-                                        // Set staging directly in UserDefaults, bypassing the
-                                        // updateChannel didSet which would overwrite with "beta"
-                                        UserDefaults.standard.set("staging", forKey: "update_channel")
-                                        updaterViewModel.activeChannelLabel = "Staging"
-                                        logSync("Settings: Staging channel enabled via hidden gesture")
-                                    }
-                                }
+                                .textSelection(.enabled)
                         }
 
                         Spacer()
@@ -4095,7 +4052,17 @@ struct SettingsContentView: View {
                         .background(OmiColors.backgroundQuaternary)
 
                     settingRow(title: "Update Channel", subtitle: updaterViewModel.updateChannel.description, settingId: "about.channel") {
-                        Picker("", selection: $updaterViewModel.updateChannel) {
+                        Picker("", selection: Binding(
+                            get: { updaterViewModel.updateChannel },
+                            set: { newChannel in
+                                // Switching beta → stable with a newer build: confirm first
+                                if updaterViewModel.updateChannel == .beta && newChannel == .stable && updaterViewModel.isDowngradeToStable {
+                                    showDowngradeAlert = true
+                                } else {
+                                    updaterViewModel.updateChannel = newChannel
+                                }
+                            }
+                        )) {
                             ForEach(UpdateChannel.allCases, id: \.self) { channel in
                                 Text(channel.displayName).tag(channel)
                             }
@@ -4105,6 +4072,18 @@ struct SettingsContentView: View {
                         .frame(width: 100)
                     }
                 }
+            }
+            .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
+                Button("Stay on Beta", role: .cancel) { }
+                Button("Switch to Stable") {
+                    updaterViewModel.updateChannel = .stable
+                    if let url = URL(string: "https://macos.omi.me") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } message: {
+                let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
+                Text("You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now.")
             }
 
             settingsCard(settingId: "about.reportissue") {
@@ -4522,8 +4501,6 @@ struct SettingsContentView: View {
                     isLoadingSettings = false
                 }
 
-                // Sync update channel from user profile (separate from assistant settings)
-                UpdaterViewModel.shared.syncUpdateChannelFromServer()
             } catch {
                 logError("Failed to load backend settings", error: error)
                 await MainActor.run {
@@ -4948,7 +4925,6 @@ struct RunningAppChip: View {
     SettingsPage(
         appState: AppState(),
         selectedSection: .constant(.advanced),
-        selectedAdvancedSubsection: .constant(.aiUserProfile),
         highlightedSettingId: .constant(nil)
     )
 }

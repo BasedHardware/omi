@@ -8269,4 +8269,22 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Tersimpan. Tutup dan buka kembali aplikasi untuk menerapkan perubahan.';
+
+  @override
+  String get shared => 'Dibagikan';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Hanya Anda yang dapat melihat percakapan ini';
+
+  @override
+  String get anyoneWithLinkCanView => 'Siapa pun yang memiliki tautan dapat melihat';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bersihkan tugas hari ini?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ini hanya akan menghapus tenggat waktu';
+
+  @override
+  String get tasksOverdue => 'Terlambat';
 }

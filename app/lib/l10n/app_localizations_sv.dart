@@ -8262,4 +8262,22 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Sparat. Stäng och öppna appen igen för att tillämpa ändringarna.';
+
+  @override
+  String get shared => 'Delad';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bara du kan se den här konversationen';
+
+  @override
+  String get anyoneWithLinkCanView => 'Alla med länken kan visa';
+
+  @override
+  String get tasksCleanTodayTitle => 'Rensa dagens uppgifter?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
+
+  @override
+  String get tasksOverdue => 'Försenade';
 }

@@ -2689,5 +2689,11 @@
     "switchAndRestart": "Değiştir",
     "switchApiConfirmBody": "{environment} ortamına geçilsin mi? Değişikliklerin geçerli olması için uygulamayı kapatıp yeniden açmanız gerekecek.",
     "switchApiConfirmTitle": "API Ortamını Değiştir",
-    "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir"
+    "switchRequiresRestart": "Değiştirme uygulama yeniden başlatma gerektirir",
+    "shared": "Paylaşıldı",
+    "onlyYouCanSeeConversation": "Bu konuşmayı yalnızca siz görebilirsiniz",
+    "anyoneWithLinkCanView": "Bağlantıya sahip olan herkes görüntüleyebilir",
+    "tasksCleanTodayTitle": "Bugünün görevleri temizlensin mi?",
+    "tasksCleanTodayMessage": "Bu işlem yalnızca son tarihleri kaldırır",
+  "tasksOverdue": "Gecikmiş"
 }

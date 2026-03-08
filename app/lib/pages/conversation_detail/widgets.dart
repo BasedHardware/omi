@@ -7,7 +7,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -22,6 +21,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -152,6 +152,16 @@ class GetSummaryWidgets extends StatelessWidget {
               conversationId: conversation.id,
               currentFolderId: conversation.folderId,
             ),
+            // Visibility chip — needs its own Selector to detect mutation on the same object
+            Selector<ConversationDetailProvider, ConversationVisibility>(
+              selector: (_, provider) => provider.conversation.visibility,
+              builder: (context, _, __) {
+                return _buildVisibilityChip(
+                  context: context,
+                  conversation: context.read<ConversationDetailProvider>().conversation,
+                );
+              },
+            ),
           ],
         );
       },
@@ -228,6 +238,179 @@ class GetSummaryWidgets extends StatelessWidget {
               size: 16,
               color: folder != null ? folder.colorValue : Colors.grey.shade300,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVisibilityChip({
+    required BuildContext context,
+    required ServerConversation conversation,
+  }) {
+    final isPrivate = conversation.visibility == ConversationVisibility.private_;
+    final color = isPrivate ? Colors.grey.shade300 : Colors.green;
+    final label = isPrivate ? context.l10n.private : context.l10n.shared;
+    final icon = isPrivate ? Icons.lock_outline : Icons.public;
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        _showVisibilitySheet(context, conversation);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showVisibilitySheet(BuildContext context, ServerConversation conversation) {
+    final provider = context.read<ConversationDetailProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      context.l10n.visibility,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(sheetContext),
+                      child: Icon(Icons.close, color: Colors.grey.shade500, size: 24),
+                    ),
+                  ],
+                ),
+              ),
+              // Private option
+              _buildVisibilityOption(
+                context: sheetContext,
+                icon: Icons.lock_outline,
+                label: context.l10n.private,
+                description: context.l10n.onlyYouCanSeeConversation,
+                isSelected: conversation.visibility == ConversationVisibility.private_,
+                onTap: () async {
+                  if (conversation.visibility == ConversationVisibility.private_) {
+                    Navigator.pop(sheetContext);
+                    return;
+                  }
+                  final previousVisibility = conversation.visibility;
+                  provider.updateVisibilityLocally(ConversationVisibility.private_);
+                  Navigator.pop(sheetContext);
+                  bool success = await setConversationVisibility(conversation.id,
+                      visibility: ConversationVisibility.private_.value);
+                  if (!success) {
+                    provider.updateVisibilityLocally(previousVisibility);
+                    return;
+                  }
+                  MixpanelManager().conversationVisibilityChanged(
+                    conversationId: conversation.id,
+                    fromVisibility: previousVisibility.value,
+                    toVisibility: ConversationVisibility.private_.value,
+                  );
+                },
+              ),
+              // Shared option
+              _buildVisibilityOption(
+                context: sheetContext,
+                icon: Icons.public,
+                label: context.l10n.shared,
+                description: context.l10n.anyoneWithLinkCanView,
+                isSelected: conversation.visibility == ConversationVisibility.shared,
+                onTap: () async {
+                  if (conversation.visibility == ConversationVisibility.shared) {
+                    Navigator.pop(sheetContext);
+                    return;
+                  }
+                  final previousVisibility = conversation.visibility;
+                  provider.updateVisibilityLocally(ConversationVisibility.shared);
+                  Navigator.pop(sheetContext);
+                  bool success =
+                      await setConversationVisibility(conversation.id, visibility: ConversationVisibility.shared.value);
+                  if (!success) {
+                    provider.updateVisibilityLocally(previousVisibility);
+                    return;
+                  }
+                  MixpanelManager().conversationVisibilityChanged(
+                    conversationId: conversation.id,
+                    fromVisibility: previousVisibility.value,
+                    toVisibility: ConversationVisibility.shared.value,
+                  );
+                  if (context.mounted) shareConversationLink(conversation);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVisibilityOption({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required String description,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.15)) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: isSelected ? Colors.green : Colors.grey.shade400),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                ],
+              ),
+            ),
+            if (isSelected) const Icon(Icons.check_circle, color: Colors.green, size: 22),
           ],
         ),
       ),
@@ -1078,180 +1261,4 @@ _getLoadingIndicator() {
       child: CircularProgressIndicator(
         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
       ));
-}
-
-class GetShareOptions extends StatefulWidget {
-  final ServerConversation conversation;
-
-  const GetShareOptions({
-    super.key,
-    required this.conversation,
-  });
-
-  @override
-  State<GetShareOptions> createState() => _GetShareOptionsState();
-}
-
-class _GetShareOptionsState extends State<GetShareOptions> {
-  bool loadingShareConversationViaURL = false;
-  bool loadingShareTranscript = false;
-  bool loadingShareSummary = false;
-
-  final GlobalKey _shareUrlKey = GlobalKey();
-  final GlobalKey _shareTranscriptKey = GlobalKey();
-  final GlobalKey _shareSummaryKey = GlobalKey();
-
-  void changeLoadingShareConversationViaURL(bool value) {
-    setState(() {
-      loadingShareConversationViaURL = value;
-    });
-  }
-
-  void changeLoadingShareTranscript(bool value) {
-    setState(() {
-      loadingShareTranscript = value;
-    });
-  }
-
-  void changeLoadingShareSummary(bool value) {
-    setState(() {
-      loadingShareSummary = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: ListTile(
-            key: _shareUrlKey,
-            title: Text(context.l10n.sendWebUrl),
-            leading: loadingShareConversationViaURL ? _getLoadingIndicator() : const Icon(Icons.link),
-            onTap: () async {
-              if (loadingShareConversationViaURL) return;
-              changeLoadingShareConversationViaURL(true);
-              bool shared = await setConversationVisibility(widget.conversation.id);
-              if (!shared) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
-                );
-                return;
-              }
-              String content =
-                  '''https://h.omi.me/conversations/${widget.conversation.id}'''.replaceAll('  ', '').trim();
-              print(content);
-              final RenderBox? box = _shareUrlKey.currentContext?.findRenderObject() as RenderBox?;
-              if (box != null) {
-                final Offset position = box.localToGlobal(Offset.zero);
-                final Size size = box.size;
-                await Share.share(
-                  content,
-                  sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
-                );
-              } else {
-                await Share.share(content);
-              }
-              changeLoadingShareConversationViaURL(false);
-            },
-          ),
-        ),
-        const SizedBox(height: 4),
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: Column(
-            children: [
-              ListTile(
-                key: _shareTranscriptKey,
-                title: Text(context.l10n.sendTranscript),
-                leading: loadingShareTranscript ? _getLoadingIndicator() : const Icon(Icons.description),
-                onTap: () async {
-                  if (loadingShareTranscript) return;
-                  changeLoadingShareTranscript(true);
-                  String content = '''
-              ${widget.conversation.structured.title}
-
-              ${widget.conversation.getTranscript(generate: true)}
-              '''
-                      .replaceAll('  ', '')
-                      .trim();
-                  // TODO: Deeplink that let people download the app.
-                  final RenderBox? box = _shareTranscriptKey.currentContext?.findRenderObject() as RenderBox?;
-                  if (box != null) {
-                    final Offset position = box.localToGlobal(Offset.zero);
-                    final Size size = box.size;
-                    await Share.share(
-                      content,
-                      sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
-                    );
-                  } else {
-                    await Share.share(content);
-                  }
-                  changeLoadingShareTranscript(false);
-                },
-              ),
-              widget.conversation.discarded
-                  ? const SizedBox()
-                  : ListTile(
-                      key: _shareSummaryKey,
-                      title: Text(context.l10n.sendSummary),
-                      leading: loadingShareSummary ? _getLoadingIndicator() : const Icon(Icons.summarize),
-                      onTap: () async {
-                        if (loadingShareSummary) return;
-                        changeLoadingShareSummary(true);
-                        // Use app-generated summary if available, otherwise fall back to structured summary
-                        String content = (widget.conversation.appResults.isNotEmpty &&
-                                    widget.conversation.appResults[0].content.trim().isNotEmpty
-                                ? widget.conversation.appResults[0].content.trim()
-                                : widget.conversation.structured.toString())
-                            .replaceAll('  ', '')
-                            .trim();
-                        final RenderBox? box = _shareSummaryKey.currentContext?.findRenderObject() as RenderBox?;
-                        if (box != null) {
-                          final Offset position = box.localToGlobal(Offset.zero);
-                          final Size size = box.size;
-                          await Share.share(
-                            content,
-                            sharePositionOrigin: Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
-                          );
-                        } else {
-                          await Share.share(content);
-                        }
-                        changeLoadingShareSummary(false);
-                      },
-                    )
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: Column(
-            children: [
-              ListTile(
-                title: Text(context.l10n.copyTranscript),
-                leading: const Icon(Icons.copy),
-                onTap: () => _copyContent(context, widget.conversation.getTranscript(generate: true)),
-              ),
-              widget.conversation.discarded
-                  ? const SizedBox()
-                  : ListTile(
-                      title: Text(context.l10n.copySummary),
-                      leading: const Icon(Icons.file_copy),
-                      onTap: () => _copyContent(
-                        context,
-                        // Use app-generated summary if available, otherwise fall back to structured summary
-                        widget.conversation.appResults.isNotEmpty &&
-                                widget.conversation.appResults[0].content.trim().isNotEmpty
-                            ? widget.conversation.appResults[0].content.trim()
-                            : widget.conversation.structured.toString(),
-                      ),
-                    )
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }

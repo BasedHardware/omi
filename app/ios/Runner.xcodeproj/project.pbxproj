@@ -65,10 +65,11 @@
 		};
 		422906722E75A21E00F49E67 /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 8;
+			buildActionMask = 2147483647;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
+				42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -374,6 +375,7 @@
 			);
 			dependencies = (
 				468E5B26D379E32080A67B11 /* PBXTargetDependency */,
+				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;

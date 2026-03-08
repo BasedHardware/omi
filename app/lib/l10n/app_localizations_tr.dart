@@ -8271,4 +8271,22 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Kaydedildi. Değişiklikleri uygulamak için uygulamayı kapatıp yeniden açın.';
+
+  @override
+  String get shared => 'Paylaşıldı';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Bu konuşmayı yalnızca siz görebilirsiniz';
+
+  @override
+  String get anyoneWithLinkCanView => 'Bağlantıya sahip olan herkes görüntüleyebilir';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bugünün görevleri temizlensin mi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bu işlem yalnızca son tarihleri kaldırır';
+
+  @override
+  String get tasksOverdue => 'Gecikmiş';
 }

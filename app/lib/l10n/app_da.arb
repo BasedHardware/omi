@@ -2663,5 +2663,11 @@
     "switchAndRestart": "Skift",
     "switchApiConfirmBody": "Skift til {environment}? Du skal lukke og genåbne appen for at ændringerne træder i kraft.",
     "switchApiConfirmTitle": "Skift API-miljø",
-    "switchRequiresRestart": "Skift kræver genstart af appen"
+    "switchRequiresRestart": "Skift kræver genstart af appen",
+    "shared": "Delt",
+    "onlyYouCanSeeConversation": "Kun du kan se denne samtale",
+    "anyoneWithLinkCanView": "Alle med linket kan se",
+    "tasksCleanTodayTitle": "Ryd dagens opgaver?",
+    "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
+  "tasksOverdue": "Forfaldne"
 }

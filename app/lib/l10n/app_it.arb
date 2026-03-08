@@ -2654,5 +2654,11 @@
     "switchAndRestart": "Cambia",
     "switchApiConfirmBody": "Passare a {environment}? Dovrai chiudere e riaprire l'app perché le modifiche abbiano effetto.",
     "switchApiConfirmTitle": "Cambiare ambiente API?",
-    "switchRequiresRestart": "Il cambio di ambiente richiede il riavvio dell'app"
+    "switchRequiresRestart": "Il cambio di ambiente richiede il riavvio dell'app",
+    "shared": "Condiviso",
+    "onlyYouCanSeeConversation": "Solo tu puoi vedere questa conversazione",
+    "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
+    "tasksCleanTodayTitle": "Pulire le attività di oggi?",
+    "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
+  "tasksOverdue": "Scadute"
 }

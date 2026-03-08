@@ -2659,5 +2659,11 @@
     "switchAndRestart": "Prepnúť",
     "switchApiConfirmBody": "Prepnúť na {environment}? Budete musieť zatvoriť a znova otvoriť aplikáciu, aby sa zmeny prejavili.",
     "switchApiConfirmTitle": "Prepnúť API prostredie",
-    "switchRequiresRestart": "Prepnutie vyžaduje reštart aplikácie"
+    "switchRequiresRestart": "Prepnutie vyžaduje reštart aplikácie",
+    "shared": "Zdieľané",
+    "onlyYouCanSeeConversation": "Túto konverzáciu môžete vidieť iba vy",
+    "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
+    "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
+    "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
+  "tasksOverdue": "Po termíne"
 }

@@ -15422,6 +15422,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved. Close and reopen the app to apply.'**
   String get apiEnvSavedRestartRequired;
+
+  /// No description provided for @shared.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared'**
+  String get shared;
+
+  /// No description provided for @onlyYouCanSeeConversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this conversation'**
+  String get onlyYouCanSeeConversation;
+
+  /// No description provided for @anyoneWithLinkCanView.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone with the link can view'**
+  String get anyoneWithLinkCanView;
+
+  /// Confirmation dialog title for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'Clean today\'s tasks?'**
+  String get tasksCleanTodayTitle;
+
+  /// Confirmation dialog message for cleaning today task deadlines
+  ///
+  /// In en, this message translates to:
+  /// **'This will only remove deadlines'**
+  String get tasksCleanTodayMessage;
+
+  /// No description provided for @tasksOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get tasksOverdue;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

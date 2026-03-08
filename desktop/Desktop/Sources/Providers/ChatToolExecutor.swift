@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import AppKit
 
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
@@ -14,12 +15,20 @@ class ChatToolExecutor {
     static var onCompleteOnboarding: (() -> Void)?
     /// Called when AI invokes ask_followup — delivers quick-reply options to the UI
     static var onQuickReplyOptions: ((_ options: [String]) -> Void)?
+    /// Called when AI invokes ask_followup — delivers the question text to the UI
+    static var onQuickReplyQuestion: ((_ question: String) -> Void)?
     /// Called when AI invokes save_knowledge_graph — notifies the graph view to update
     static var onKnowledgeGraphUpdated: (() -> Void)?
     /// Called when scan_files completes — used to kick off parallel exploration
     static var onScanFilesCompleted: ((_ fileCount: Int) -> Void)?
 
     private static var fileScanFileCount = 0
+    private static var followupContinuation: CheckedContinuation<String, Never>?
+
+    static func resumeFollowup(with reply: String) {
+        followupContinuation?.resume(returning: reply)
+        followupContinuation = nil
+    }
 
     /// Execute a tool call and return the result as a string
     static func execute(_ toolCall: ToolCall) async -> String {
@@ -514,6 +523,10 @@ class ChatToolExecutor {
             }
 
         case "notifications":
+            if !isInstalledInApplications() {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications"))
+                return "pending - move omi to /Applications first, reopen it, then retry notifications"
+            }
             appState.requestNotificationPermission()
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             appState.checkNotificationPermission()
@@ -549,6 +562,11 @@ class ChatToolExecutor {
         default:
             return "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, notifications, accessibility, automation"
         }
+    }
+
+    private static func isInstalledInApplications() -> Bool {
+        let path = Bundle.main.bundlePath
+        return path.hasPrefix("/Applications/") || path.contains("/Applications/")
     }
 
     /// Check status of all macOS permissions
@@ -846,6 +864,7 @@ class ChatToolExecutor {
 
         // Notify the UI to render quick-reply buttons
         onQuickReplyOptions?(options)
+        onQuickReplyQuestion?(question)
 
         return "Presented to user: \"\(question)\" with options: \(options.joined(separator: ", "))"
     }
@@ -882,6 +901,7 @@ class ChatToolExecutor {
         onboardingAppState = nil
         onCompleteOnboarding = nil
         onQuickReplyOptions = nil
+        onQuickReplyQuestion = nil
         onKnowledgeGraphUpdated = nil
         onScanFilesCompleted = nil
         fileScanFileCount = 0

@@ -8254,4 +8254,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Uloženo. Zavřete a znovu otevřete aplikaci pro použití změn.';
+
+  @override
+  String get shared => 'Sdíleno';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tuto konverzaci můžete vidět pouze vy';
+
+  @override
+  String get anyoneWithLinkCanView => 'Kdokoli s odkazem může zobrazit';
+
+  @override
+  String get tasksCleanTodayTitle => 'Vyčistit dnešní úkoly?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tímto se odstraní pouze termíny';
+
+  @override
+  String get tasksOverdue => 'Po termínu';
 }

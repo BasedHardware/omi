@@ -309,7 +309,9 @@ def delete_syncing_temporal_file(file_path: str):
 # ************************************************
 
 
-def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float) -> str:
+def upload_audio_chunk(
+    chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: str = None
+) -> str:
     """
     Upload an audio chunk to Google Cloud Storage with optional encryption.
 
@@ -318,12 +320,16 @@ def upload_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timest
         uid: User ID
         conversation_id: Conversation ID
         timestamp: Unix timestamp when chunk was recorded
+        data_protection_level: Optional cached protection level. When provided,
+            skips the per-chunk Firestore read. Falls back to DB read when None.
 
     Returns:
         GCS path of the uploaded chunk
     """
     bucket = storage_client.bucket(private_cloud_sync_bucket)
-    protection_level = users_db.get_data_protection_level(uid)
+    protection_level = (
+        data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
+    )
 
     # Format timestamp to 3 decimal places for cleaner filenames
     formatted_timestamp = f'{timestamp:.3f}'
@@ -823,15 +829,19 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
         dict: A dictionary mapping original filenames to their Google Cloud Storage URLs
     """
     bucket = storage_client.bucket(chat_files_bucket)
-    result = transfer_manager.upload_many_from_filenames(
-        bucket, files_name, source_directory="./", blob_name_prefix=f'{uid}/'
-    )
     dictFiles = {}
-    for name, result in zip(files_name, result):
-        if isinstance(result, Exception):
-            logger.error("Failed to upload {} due to exception: {}".format(name, result))
-        else:
+    for name in files_name:
+        try:
+            blob = bucket.blob(f'{uid}/{name}')
+            blob.cache_control = 'public, no-cache'
+            blob.upload_from_filename(f'./{name}')
+            try:
+                blob.make_public()
+            except Exception as e:
+                logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
+        except Exception as e:
+            logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles
 
 

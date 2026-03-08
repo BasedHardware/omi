@@ -2623,5 +2623,11 @@
     "switchAndRestart": "Canvia",
     "switchApiConfirmBody": "Canviar a {environment}? Hauràs de tancar i tornar a obrir l'aplicació perquè els canvis tinguin efecte.",
     "switchApiConfirmTitle": "Canviar l'entorn de l'API?",
-    "switchRequiresRestart": "Canviar d'entorn requereix reiniciar l'aplicació"
+    "switchRequiresRestart": "Canviar d'entorn requereix reiniciar l'aplicació",
+    "shared": "Compartit",
+    "onlyYouCanSeeConversation": "Només tu pots veure aquesta conversa",
+    "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure",
+    "tasksCleanTodayTitle": "Netejar les tasques d'avui?",
+    "tasksCleanTodayMessage": "Això només eliminarà els terminis",
+  "tasksOverdue": "Endarrerits"
 }

@@ -87,6 +87,27 @@ extension FlutterError: Error {}
         }
     }
 
+    // Audio session configuration for Bluetooth microphone support
+    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
+    audioSessionChannel.setMethodCallHandler { (call, result) in
+        if call.method == "configureForBluetooth" {
+            let audioSession = AVAudioSession.sharedInstance()
+            do {
+                try audioSession.setCategory(
+                    .playAndRecord,
+                    mode: .default,
+                    options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                )
+                try audioSession.setActive(true)
+                result(true)
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
 

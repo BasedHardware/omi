@@ -8276,4 +8276,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Saglabāts. Aizveriet un atveriet lietotni vēlreiz, lai piemērotu izmaiņas.';
+
+  @override
+  String get shared => 'Kopīgots';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tikai jūs varat redzēt šo sarunu';
+
+  @override
+  String get anyoneWithLinkCanView => 'Ikviens, kam ir saite, var skatīt';
+
+  @override
+  String get tasksCleanTodayTitle => 'Notīrīt šodienas uzdevumus?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tas noņems tikai termiņus';
+
+  @override
+  String get tasksOverdue => 'Nokavētas';
 }

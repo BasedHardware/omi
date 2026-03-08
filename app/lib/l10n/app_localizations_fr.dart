@@ -8336,4 +8336,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Enregistré. Fermez et rouvrez l\'application pour appliquer.';
+
+  @override
+  String get shared => 'Partagé';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Vous seul pouvez voir cette conversation';
+
+  @override
+  String get anyoneWithLinkCanView => 'Toute personne disposant du lien peut voir';
+
+  @override
+  String get tasksCleanTodayTitle => 'Nettoyer les tâches d’aujourd’hui ?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Cela supprimera uniquement les échéances';
+
+  @override
+  String get tasksOverdue => 'En retard';
 }

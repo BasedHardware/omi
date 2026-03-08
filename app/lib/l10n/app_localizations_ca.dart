@@ -8309,4 +8309,22 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Desat. Tanca i torna a obrir l\'aplicació per aplicar els canvis.';
+
+  @override
+  String get shared => 'Compartit';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Només tu pots veure aquesta conversa';
+
+  @override
+  String get anyoneWithLinkCanView => 'Qualsevol persona amb l\'enllaç pot veure';
+
+  @override
+  String get tasksCleanTodayTitle => 'Netejar les tasques d\'avui?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Això només eliminarà els terminis';
+
+  @override
+  String get tasksOverdue => 'Endarrerits';
 }

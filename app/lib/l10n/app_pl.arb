@@ -2689,5 +2689,11 @@
     "switchAndRestart": "Przełącz",
     "switchApiConfirmBody": "Przełączyć na {environment}? Aby zmiany zaczęły obowiązywać, musisz zamknąć i ponownie otworzyć aplikację.",
     "switchApiConfirmTitle": "Przełącz środowisko API",
-    "switchRequiresRestart": "Przełączenie wymaga ponownego uruchomienia aplikacji"
+    "switchRequiresRestart": "Przełączenie wymaga ponownego uruchomienia aplikacji",
+    "shared": "Udostępniono",
+    "onlyYouCanSeeConversation": "Tylko Ty możesz zobaczyć tę rozmowę",
+    "anyoneWithLinkCanView": "Każdy, kto ma link, może wyświetlić",
+    "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
+    "tasksCleanTodayMessage": "To usunie tylko terminy",
+  "tasksOverdue": "Zaległe"
 }

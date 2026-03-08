@@ -8277,4 +8277,22 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get apiEnvSavedRestartRequired => 'Zapisano. Zamknij i ponownie otwórz aplikację, aby zastosować zmiany.';
+
+  @override
+  String get shared => 'Udostępniono';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tylko Ty możesz zobaczyć tę rozmowę';
+
+  @override
+  String get anyoneWithLinkCanView => 'Każdy, kto ma link, może wyświetlić';
+
+  @override
+  String get tasksCleanTodayTitle => 'Wyczyścić dzisiejsze zadania?';
+
+  @override
+  String get tasksCleanTodayMessage => 'To usunie tylko terminy';
+
+  @override
+  String get tasksOverdue => 'Zaległe';
 }

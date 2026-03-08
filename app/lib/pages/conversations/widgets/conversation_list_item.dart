@@ -122,7 +122,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
-          provider.onConversationTap(widget.conversationIdx);
+          provider.onConversationTap(widget.conversation.id);
 
           await routeToPage(
             context,

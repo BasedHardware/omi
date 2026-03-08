@@ -6,13 +6,11 @@ import Sparkle
 enum UpdateChannel: String, CaseIterable {
     case stable = "stable"
     case beta = "beta"
-    case staging = "staging"
 
     var displayName: String {
         switch self {
         case .stable: return "Stable"
         case .beta: return "Beta"
-        case .staging: return "Staging"
         }
     }
 
@@ -20,8 +18,13 @@ enum UpdateChannel: String, CaseIterable {
         switch self {
         case .stable: return "Recommended for most users"
         case .beta: return "Early access to new features"
-        case .staging: return "Internal testing builds"
         }
+    }
+
+    /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
+    static var appDisplayName: String {
+        let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
+        return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
     }
 }
 
@@ -48,6 +51,23 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Called when Sparkle finishes loading the appcast
     func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
         logSync("Sparkle: Appcast loaded (\(appcast.items.count) items)")
+
+        // Capture latest stable build metadata for downgrade detection
+        var bestStableBuild: Int?
+        var bestStableVersion: String?
+        for item in appcast.items {
+            let isStable = item.channel == nil || item.channel?.isEmpty == true
+            guard isStable, let build = Int(item.versionString) else { continue }
+            if bestStableBuild == nil || build > bestStableBuild! {
+                bestStableBuild = build
+                bestStableVersion = item.displayVersionString
+            }
+        }
+        // Always update (including nil) so stale data doesn't produce false downgrade alerts
+        Task { @MainActor in
+            self.viewModel?.latestStableBuildNumber = bestStableBuild
+            self.viewModel?.latestStableVersionString = bestStableVersion
+        }
     }
 
     /// Called when Sparkle finds a valid update
@@ -130,14 +150,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     /// Channels are additive: the default (stable) channel is always included.
     func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        switch raw {
-        case "staging":
-            return Set(["staging", "beta"])
-        case "beta":
+        if raw == "beta" || raw == "staging" {
             return Set(["beta"])
-        default:
-            return Set() // empty = default (stable) channel only
         }
+        return Set() // empty = default (stable) channel only
     }
 
     /// Called after Sparkle has launched the installer and submitted launchd jobs.
@@ -238,10 +254,15 @@ final class UpdaterViewModel: ObservableObject {
     /// Selected update channel (persisted to UserDefaults)
     @Published var updateChannel: UpdateChannel {
         didSet {
+            guard oldValue != updateChannel else { return }
+
+            // Must happen before check; Sparkle delegate reads from UserDefaults
             UserDefaults.standard.set(updateChannel.rawValue, forKey: kUpdateChannelKey)
             activeChannelLabel = updateChannel == .stable ? "" : updateChannel.displayName
+
             if isInitialized {
                 AnalyticsManager.shared.settingToggled(setting: "update_channel", enabled: updateChannel != .stable)
+                checkForUpdatesInBackground()
             }
         }
     }
@@ -251,6 +272,12 @@ final class UpdaterViewModel: ObservableObject {
 
     /// Version string of the available update
     @Published var availableVersion: String = ""
+
+    /// Latest stable build number from the appcast (for downgrade detection)
+    @Published var latestStableBuildNumber: Int?
+
+    /// Latest stable version string from the appcast (e.g. "0.11.48+11048")
+    @Published var latestStableVersionString: String?
 
     /// The date of the last update check
     var lastUpdateCheckDate: Date? {
@@ -270,7 +297,9 @@ final class UpdaterViewModel: ObservableObject {
         automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
         // Initialize update channel from UserDefaults
-        let storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        // Normalize legacy "staging" → "beta" for users upgrading from older builds
+        var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+        if storedChannel == "staging" { storedChannel = "beta" }
         updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
 
         // Wire up delegate back-reference
@@ -301,26 +330,9 @@ final class UpdaterViewModel: ObservableObject {
         updaterController.checkForUpdates(nil)
     }
 
-    /// Sync update channel from server.
-    /// If the backend has a `desktop_update_channel` field set on the user doc,
-    /// override the local channel preference. Triggers a Sparkle check if the channel changed.
-    func syncUpdateChannelFromServer() {
-        Task {
-            do {
-                let profile = try await APIClient.shared.getUserProfile()
-                guard let serverChannel = profile.desktopUpdateChannel,
-                      let channel = UpdateChannel(rawValue: serverChannel) else { return }
-                if updateChannel != channel {
-                    log("Sparkle: Server assigned update channel: \(serverChannel)")
-                    updateChannel = channel
-                    // Trigger an immediate update check so the new channel takes effect
-                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s for Sparkle to pick up new channel
-                    updaterController.updater.checkForUpdatesInBackground()
-                }
-            } catch {
-                // Non-fatal — channel sync is best-effort
-            }
-        }
+    /// Background update check (no UI). Used after channel changes.
+    func checkForUpdatesInBackground() {
+        updaterController.updater.checkForUpdatesInBackground()
     }
 
     /// Get the current app version string
@@ -333,13 +345,18 @@ final class UpdaterViewModel: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "Unknown"
     }
 
-    /// The active channel label, including the hidden "staging" option
+    /// The active channel label
     @Published var activeChannelLabel: String = {
         let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-        switch raw {
-        case "staging": return "Staging"
-        case "beta": return "Beta"
-        default: return ""
-        }
+        return (raw == "beta" || raw == "staging") ? "Beta" : ""
     }()
+
+    /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
+    var isDowngradeToStable: Bool {
+        guard let currentBuild = Int(buildNumber),
+              let stableBuild = latestStableBuildNumber else {
+            return false
+        }
+        return currentBuild > stableBuild
+    }
 }
