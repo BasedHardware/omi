@@ -216,17 +216,16 @@ void showShareBottomSheet(
                           onTap: () async {
                             // TODO: include loading indicator
                             bool shared = await setConversationVisibility(conversation.id);
+                            if (!context.mounted) return;
                             if (!shared) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
                               );
                               return;
                             }
-                            if (context.mounted) {
-                              context
-                                  .read<ConversationDetailProvider>()
-                                  .updateVisibilityLocally(ConversationVisibility.shared);
-                            }
+                            context
+                                .read<ConversationDetailProvider>()
+                                .updateVisibilityLocally(ConversationVisibility.shared);
                             Clipboard.setData(ClipboardData(text: 'https://h.omi.me/conversations/${conversation.id}'));
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(context.l10n.urlCopiedToClipboard)),

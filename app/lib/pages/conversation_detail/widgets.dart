@@ -1318,7 +1318,8 @@ class _GetShareOptionsState extends State<GetShareOptions> {
               changeLoadingShareConversationViaURL(true);
               bool shared = await setConversationVisibility(widget.conversation.id);
               if (!shared) {
-                changeLoadingShareConversationViaURL(false);
+                if (mounted) changeLoadingShareConversationViaURL(false);
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(context.l10n.conversationUrlCouldNotBeShared)),
                 );
