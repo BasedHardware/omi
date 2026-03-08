@@ -2694,5 +2694,6 @@
     "onlyYouCanSeeConversation": "Tylko Ty możesz zobaczyć tę rozmowę",
     "anyoneWithLinkCanView": "Każdy, kto ma link, może wyświetlić",
     "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
-    "tasksCleanTodayMessage": "To usunie tylko terminy"
+    "tasksCleanTodayMessage": "To usunie tylko terminy",
+  "tasksOverdue": "Zaległe"
 }

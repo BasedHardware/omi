@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Bara du kan se den här konversationen",
     "anyoneWithLinkCanView": "Alla med länken kan visa",
     "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
-    "tasksCleanTodayMessage": "Detta tar bara bort deadlines"
+    "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
+  "tasksOverdue": "Försenade"
 }

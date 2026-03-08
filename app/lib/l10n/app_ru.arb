@@ -2694,5 +2694,6 @@
     "onlyYouCanSeeConversation": "Только вы можете видеть этот разговор",
     "anyoneWithLinkCanView": "Любой, у кого есть ссылка, может просматривать",
     "tasksCleanTodayTitle": "Очистить задачи на сегодня?",
-    "tasksCleanTodayMessage": "Это удалит только сроки"
+    "tasksCleanTodayMessage": "Это удалит только сроки",
+  "tasksOverdue": "Просроченные"
 }

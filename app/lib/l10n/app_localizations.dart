@@ -15452,6 +15452,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This will only remove deadlines'**
   String get tasksCleanTodayMessage;
+
+  /// No description provided for @tasksOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get tasksOverdue;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

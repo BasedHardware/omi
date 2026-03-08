@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Alleen jij kunt dit gesprek zien",
     "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
     "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
-    "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd"
+    "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
+  "tasksOverdue": "Achterstallig"
 }

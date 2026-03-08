@@ -2668,5 +2668,6 @@
     "onlyYouCanSeeConversation": "Kun du kan se denne samtale",
     "anyoneWithLinkCanView": "Alle med linket kan se",
     "tasksCleanTodayTitle": "Ryd dagens opgaver?",
-    "tasksCleanTodayMessage": "Dette fjerner kun deadlines"
+    "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
+  "tasksOverdue": "Forfaldne"
 }

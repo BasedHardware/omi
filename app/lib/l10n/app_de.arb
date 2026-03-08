@@ -2627,5 +2627,6 @@
     "onlyYouCanSeeConversation": "Nur Sie können diese Unterhaltung sehen",
     "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen",
     "tasksCleanTodayTitle": "Heutige Aufgaben bereinigen?",
-    "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt"
+    "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt",
+  "tasksOverdue": "Überfällig"
 }

@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Μόνο εσείς μπορείτε να δείτε αυτή τη συνομιλία",
     "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
     "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
-    "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες"
+    "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
+  "tasksOverdue": "Εκπρόθεσμα"
 }

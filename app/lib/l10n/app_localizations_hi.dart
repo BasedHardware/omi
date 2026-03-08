@@ -8254,4 +8254,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'यह केवल समय-सीमाएँ हटाएगा';
+
+  @override
+  String get tasksOverdue => 'अतिदेय';
 }

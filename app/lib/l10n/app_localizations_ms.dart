@@ -8298,4 +8298,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Ini hanya akan mengalih keluar tarikh akhir';
+
+  @override
+  String get tasksOverdue => 'Tertunggak';
 }

@@ -8230,4 +8230,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'การดำเนินการนี้จะลบเฉพาะกำหนดส่ง';
+
+  @override
+  String get tasksOverdue => 'เกินกำหนด';
 }

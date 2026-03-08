@@ -8270,4 +8270,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'This will only remove deadlines';
+
+  @override
+  String get tasksOverdue => 'Overdue';
 }

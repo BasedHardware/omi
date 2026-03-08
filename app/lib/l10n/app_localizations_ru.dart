@@ -8301,4 +8301,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Это удалит только сроки';
+
+  @override
+  String get tasksOverdue => 'Просроченные';
 }

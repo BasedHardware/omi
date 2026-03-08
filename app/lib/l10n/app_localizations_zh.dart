@@ -8123,4 +8123,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => '这只会移除截止日期';
+
+  @override
+  String get tasksOverdue => '逾期';
 }

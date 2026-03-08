@@ -8272,4 +8272,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Tämä poistaa vain määräajat';
+
+  @override
+  String get tasksOverdue => 'Myöhässä';
 }

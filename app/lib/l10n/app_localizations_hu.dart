@@ -8311,4 +8311,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
+
+  @override
+  String get tasksOverdue => 'Lejárt';
 }

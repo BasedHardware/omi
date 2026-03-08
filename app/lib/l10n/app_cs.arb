@@ -2628,5 +2628,6 @@
     "onlyYouCanSeeConversation": "Tuto konverzaci můžete vidět pouze vy",
     "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
     "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
-    "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny"
+    "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
+  "tasksOverdue": "Po termínu"
 }

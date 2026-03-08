@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Bare du kan se denne samtalen",
     "anyoneWithLinkCanView": "Alle med lenken kan se",
     "tasksCleanTodayTitle": "Rydde dagens oppgaver?",
-    "tasksCleanTodayMessage": "Dette vil kun fjerne frister"
+    "tasksCleanTodayMessage": "Dette vil kun fjerne frister",
+  "tasksOverdue": "Forfalt"
 }

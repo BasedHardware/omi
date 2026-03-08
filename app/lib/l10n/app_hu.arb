@@ -2755,5 +2755,6 @@
     "onlyYouCanSeeConversation": "Csak Ön láthatja ezt a beszélgetést",
     "anyoneWithLinkCanView": "Bárki megtekintheti, akinek megvan a link",
     "tasksCleanTodayTitle": "Törlöd a mai feladatokat?",
-    "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el"
+    "tasksCleanTodayMessage": "Ez csak a határidőket távolítja el",
+  "tasksOverdue": "Lejárt"
 }

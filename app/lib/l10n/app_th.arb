@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "เฉพาะคุณเท่านั้นที่สามารถดูการสนทนานี้ได้",
     "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
     "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
-    "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง"
+    "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
+  "tasksOverdue": "เกินกำหนด"
 }

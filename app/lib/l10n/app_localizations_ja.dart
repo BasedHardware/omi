@@ -8133,4 +8133,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => '期限のみ削除されます';
+
+  @override
+  String get tasksOverdue => '期限切れ';
 }

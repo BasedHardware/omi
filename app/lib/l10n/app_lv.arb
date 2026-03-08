@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Tikai jūs varat redzēt šo sarunu",
     "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
     "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
-    "tasksCleanTodayMessage": "Tas noņems tikai termiņus"
+    "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
+  "tasksOverdue": "Nokavētas"
 }

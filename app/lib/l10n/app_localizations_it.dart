@@ -8324,4 +8324,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Questo rimuoverà solo le scadenze';
+
+  @override
+  String get tasksOverdue => 'Scadute';
 }

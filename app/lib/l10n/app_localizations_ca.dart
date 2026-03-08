@@ -8324,4 +8324,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Això només eliminarà els terminis';
+
+  @override
+  String get tasksOverdue => 'Endarrerits';
 }
