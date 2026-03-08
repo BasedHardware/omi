@@ -225,7 +225,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         }
       } else {
         final dueDate = item.dueAt!;
-        if (dueDate.isBefore(startOfToday)) {
+        if (!showCompleted && dueDate.isBefore(startOfToday)) {
           // Due date in the past → overdue
           categorized[TaskCategory.overdue]!.add(item);
         } else if (dueDate.isBefore(startOfTomorrow)) {
@@ -274,6 +274,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
+    if (newCategory == TaskCategory.overdue) {
+      // Overdue is determined by date, not by manually assigning it.
+      return;
+    }
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
     final newDueDate = _getDefaultDueDateForCategory(newCategory);
     provider.updateActionItemDueDate(item, newDueDate);
@@ -798,13 +802,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ),
             ),
           ),
-          if (_overdueExpanded)
+          if (_overdueExpanded) ...[
+            _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
             ...orderedItems.map((item) => _buildTaskItem(
                   item,
                   provider,
                   category: TaskCategory.overdue,
                   categoryItems: orderedItems,
                 )),
+          ],
           const SizedBox(height: 8),
         ],
       ),
