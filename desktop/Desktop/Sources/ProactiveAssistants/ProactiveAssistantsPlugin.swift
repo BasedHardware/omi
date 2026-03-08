@@ -14,6 +14,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     private var screenCaptureService: ScreenCaptureService?
     private var windowMonitor: WindowMonitor?
+    private var backendProactiveService: BackendProactiveService?
     private var focusAssistant: FocusAssistant?
 
     /// Public read-only accessor for memory diagnostics
@@ -319,8 +320,14 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Initialize services
         screenCaptureService = ScreenCaptureService()
 
+        // Start backend proactive AI WebSocket (Phase 2 — server-side LLM)
+        let proactiveService = BackendProactiveService()
+        proactiveService.connect()
+        backendProactiveService = proactiveService
+
         do {
-            focusAssistant = try FocusAssistant(
+            focusAssistant = FocusAssistant(
+                backendService: proactiveService,
                 onAlert: { [weak self] message in
                     self?.sendEvent(type: "alert", data: ["message": message])
                 },
@@ -459,6 +466,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             }
         }
 
+        backendProactiveService?.disconnect()
+        backendProactiveService = nil
         focusAssistant = nil
         taskAssistant = nil
         adviceAssistant = nil
