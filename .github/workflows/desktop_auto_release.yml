@@ -11,6 +11,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: desktop-auto-release-main
+  cancel-in-progress: false
+
 jobs:
   tag-release:
     runs-on: ubuntu-latest
@@ -19,6 +23,47 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Wait for previous desktop release build
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "PAT_TOKEN is not configured; cannot inspect previous release build status."
+            exit 1
+          fi
+
+          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
+          if [ -z "$LATEST" ]; then
+            echo "No previous macOS tag found."
+            exit 0
+          fi
+
+          SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/$LATEST" --jq '.object.sha')
+          echo "Latest tag: $LATEST ($SHA)"
+
+          for i in {1..120}; do
+            STATUS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
+              --jq '.check_runs[] | select(.name=="Release OMI Desktop (Swift)") | .status' | head -n1 || true)
+            CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
+              --jq '.check_runs[] | select(.name=="Release OMI Desktop (Swift)") | .conclusion' | head -n1 || true)
+
+            if [ -z "$STATUS" ]; then
+              echo "No Codemagic release check found for $LATEST yet; continuing."
+              exit 0
+            fi
+
+            echo "Previous release build status: $STATUS (${CONCLUSION:-n/a})"
+
+            if [ "$STATUS" = "completed" ]; then
+              exit 0
+            fi
+
+            sleep 60
+          done
+
+          echo "Timed out waiting for previous desktop release build to finish."
+          exit 1
 
       - name: Compute next version and consolidate changelog
         id: version
