@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import GRDB
 
@@ -19,7 +18,7 @@ actor AdviceAssistant: ProactiveAssistant {
 
     // MARK: - Properties
 
-    private let geminiClient: GeminiClient
+    private let backendService: BackendProactiveService
     private var isRunning = false
     private var lastAnalysisTime: Date = .distantPast
     private var previousAdvice: [ExtractedAdvice] = [] // Dedup window for advice context
@@ -32,15 +31,6 @@ actor AdviceAssistant: ProactiveAssistant {
     private var processingTask: Task<Void, Never>?
     private let frameSignal: AsyncStream<Void>
     private let frameSignalContinuation: AsyncStream<Void>.Continuation
-
-    /// Get the current system prompt from settings (accessed on MainActor for thread safety)
-    private var systemPrompt: String {
-        get async {
-            await MainActor.run {
-                AdviceAssistantSettings.shared.analysisPrompt
-            }
-        }
-    }
 
     /// Get the extraction interval from settings
     private var extractionInterval: TimeInterval {
@@ -62,9 +52,8 @@ actor AdviceAssistant: ProactiveAssistant {
 
     // MARK: - Initialization
 
-    init(apiKey: String? = nil) throws {
-        // Use Gemini 3.1 Pro for better advice quality (3-pro-preview retires March 9, 2026)
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
+    init(backendService: BackendProactiveService) {
+        self.backendService = backendService
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         self.frameSignal = stream
@@ -138,25 +127,6 @@ actor AdviceAssistant: ProactiveAssistant {
         }
 
         log("Advice assistant stopped")
-    }
-
-    // MARK: - Test Analysis (for test runner)
-
-    /// Run the extraction pipeline on arbitrary JPEG data without side effects (no saving, no events).
-    /// Used by the test runner to replay past screenshots.
-    /// `screenshotTime` anchors the activity summary to the screenshot's actual timestamp.
-    /// Returns (result, sqlQueryCount) where sqlQueryCount is the number of execute_sql tool calls made.
-    func testAnalyze(jpegData: Data, appName: String, windowTitle: String? = nil, screenshotTime: Date) async throws -> (AdviceExtractionResult?, Int) {
-        let interval = await extractionInterval
-        let lookbackStart = screenshotTime.addingTimeInterval(-interval)
-        return try await runAdviceExtraction(
-            jpegData: nil,
-            appName: appName,
-            windowTitle: windowTitle,
-            referenceTime: screenshotTime,
-            lookbackStart: lookbackStart,
-            trackSqlCount: true
-        )
     }
 
     // MARK: - ProactiveAssistant Protocol Methods
@@ -379,62 +349,34 @@ actor AdviceAssistant: ProactiveAssistant {
         pendingFrame = nil
     }
 
-    // MARK: - Image Processing
+    // MARK: - Test Analysis (for test runner)
 
-    /// Resize and compress an image for Gemini analysis (max 1280px wide, JPEG quality 0.4)
-    private static func compressForGemini(_ data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-
-        let maxWidth = 1280
-        let width = cgImage.width
-        let height = cgImage.height
-        let scale = width > maxWidth ? Double(maxWidth) / Double(width) : 1.0
-        let newWidth = Int(Double(width) * scale)
-        let newHeight = Int(Double(height) * scale)
-
-        guard let context = CGContext(
-            data: nil, width: newWidth, height: newHeight,
-            bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-
-        context.interpolationQuality = .high
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
-
-        guard let resized = context.makeImage() else { return nil }
-
-        let mutableData = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(mutableData as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(dest, resized, [kCGImageDestinationLossyCompressionQuality: 0.4] as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { return nil }
-        return mutableData as Data
+    /// Run extraction via backend for test runner. Returns (result, 0) for compatibility.
+    func testAnalyze(jpegData: Data, appName: String, windowTitle: String? = nil, screenshotTime: Date) async throws -> (AdviceExtractionResult?, Int) {
+        let base64 = autoreleasepool { jpegData.base64EncodedString() }
+        let backendResult = try await backendService.generateAdvice(
+            imageBase64: base64, appName: appName, windowTitle: windowTitle ?? ""
+        )
+        guard let adviceDict = backendResult.advice as? [String: Any] else {
+            return (AdviceExtractionResult(hasAdvice: false, advice: nil, contextSummary: "Analyzed \(appName)", currentActivity: ""), 0)
+        }
+        let hasAdvice = adviceDict["has_advice"] as? Bool ?? !adviceDict.isEmpty
+        guard hasAdvice, let adviceText = adviceDict["content"] as? String ?? adviceDict["advice"] as? String, !adviceText.isEmpty else {
+            return (AdviceExtractionResult(hasAdvice: false, advice: nil, contextSummary: "Analyzed \(appName)", currentActivity: ""), 0)
+        }
+        let categoryStr = adviceDict["category"] as? String ?? "other"
+        let category = AdviceCategory(rawValue: categoryStr) ?? .other
+        let confidence = adviceDict["confidence"] as? Double ?? 0.5
+        let advice = ExtractedAdvice(
+            advice: adviceText, headline: adviceDict["headline"] as? String,
+            reasoning: adviceDict["reasoning"] as? String, category: category,
+            sourceApp: appName, confidence: confidence
+        )
+        let result = AdviceExtractionResult(hasAdvice: true, advice: advice, contextSummary: "Analyzed \(appName)", currentActivity: "")
+        return (result, 0)
     }
 
-    // MARK: - Helpers
-
-    /// Get user's preferred language, cached for 1 hour
-    private func getUserLanguage() async -> String? {
-        // Return cached value if fresh (< 1 hour)
-        if let cached = cachedLanguage, Date().timeIntervalSince(languageFetchedAt) < 3600 {
-            return cached
-        }
-
-        do {
-            let response = try await APIClient.shared.getUserLanguage()
-            let lang = response.language
-            cachedLanguage = lang
-            languageFetchedAt = Date()
-            return lang.isEmpty ? nil : lang
-        } catch {
-            // Fall back to transcription language setting
-            let fallback = await MainActor.run { AssistantSettings.shared.transcriptionLanguage }
-            return fallback.isEmpty || fallback == "en" ? nil : fallback
-        }
-    }
-
-    // MARK: - Analysis
+    // MARK: - Backend Analysis (Phase 2 thin client)
 
     private func processFrame(_ frame: CapturedFrame) async {
         guard await isEnabled else { return }
@@ -443,7 +385,6 @@ actor AdviceAssistant: ProactiveAssistant {
                 return
             }
 
-            // Handle the result with screenshot ID for SQLite storage
             await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, windowTitle: frame.windowTitle) { type, data in
                 Task { @MainActor in
                     AssistantCoordinator.shared.sendEvent(type: type, data: data)
@@ -455,549 +396,68 @@ actor AdviceAssistant: ProactiveAssistant {
     }
 
     private func extractAdvice(from frame: CapturedFrame) async throws -> AdviceExtractionResult? {
-        let now = Date()
-        // Cap lookback: since last analysis or max 1 hour ago
-        let lookbackStart = max(lastAnalysisTime, now.addingTimeInterval(-3600))
-        let (result, _) = try await runAdviceExtraction(
-            jpegData: nil,
+        let base64 = autoreleasepool { frame.jpegData.base64EncodedString() }
+        let backendResult = try await backendService.generateAdvice(
+            imageBase64: base64,
             appName: frame.appName,
-            windowTitle: frame.windowTitle,
-            referenceTime: now,
-            lookbackStart: lookbackStart,
-            trackSqlCount: false
+            windowTitle: frame.windowTitle ?? ""
         )
-        return result
-    }
 
-    // MARK: - Core Extraction (shared by production + test)
-
-    /// Two-phase advice extraction:
-    /// Phase 1 (text-only): Activity summary + SQL investigation loop. Model investigates via
-    ///   execute_sql, then calls `request_screenshot` with an ID and its findings so far.
-    /// Phase 2 (single vision call): Load the chosen screenshot + Phase 1 findings → single
-    ///   Gemini call with image → provide_advice or no_advice.
-    /// Returns (result, sqlQueryCount).
-    private func runAdviceExtraction(
-        jpegData: Data?,
-        appName: String,
-        windowTitle: String?,
-        referenceTime: Date,
-        lookbackStart: Date,
-        trackSqlCount: Bool
-    ) async throws -> (AdviceExtractionResult?, Int) {
-        var sqlCount = 0
-
-        // Build prompt with current context
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "h:mm a, EEEE"
-        var prompt = "CURRENT APP: \(appName)."
-        if let windowTitle = windowTitle, !windowTitle.isEmpty {
-            prompt += " Window: \"\(windowTitle)\"."
-        }
-        prompt += " Time: \(timeFormatter.string(from: referenceTime))."
-
-        // Add activity summary from database, anchored to the reference time
-        let elapsed = referenceTime.timeIntervalSince(lookbackStart)
-        log("Advice: Activity lookback: \(String(format: "%.0f", elapsed))s (\(lookbackStart) to \(referenceTime))")
-        let activitySummary = await buildActivitySummary(from: lookbackStart, to: referenceTime)
-        if !activitySummary.isEmpty {
-            prompt += "\n\n" + activitySummary
-            log("Advice: --- ACTIVITY SUMMARY ---\n\(activitySummary)")
-        } else {
-            log("Advice: --- ACTIVITY SUMMARY --- (empty, no screenshots in range)")
-        }
-
-        // Add user profile for context
-        if let profile = await AIUserProfileService.shared.getLatestProfile() {
-            prompt += "\n\nUSER PROFILE (who this user is):\n"
-            prompt += profile.profileText + "\n"
-        }
-
-        // Add previous advice for dedup
-        if !previousAdvice.isEmpty {
-            prompt += "\n\nPREVIOUSLY PROVIDED ADVICE (do not repeat these or semantically similar):\n"
-            let adviceToInclude = previousAdvice.prefix(maxAdviceInPrompt)
-            for (index, advice) in adviceToInclude.enumerated() {
-                prompt += "\(index + 1). \(advice.advice)"
-                if let reasoning = advice.reasoning {
-                    prompt += " (Reasoning: \(reasoning))"
-                }
-                prompt += "\n"
-            }
-            prompt += "\nOnly provide advice if there's a genuinely NEW non-obvious insight not covered above."
-        } else {
-            prompt += "\n\nOnly provide advice if there's something specific and non-obvious that would help."
-        }
-
-        prompt += "\n\nInvestigate the activity summary. Scan OCR from the TOP 3-5 apps (not just the dominant one) — the best insights often come from browsers, communication apps, and notes, not just the app with the most screenshots. Skip apps with < 10 screenshots. When you've identified the most interesting screenshot, call request_screenshot with the ID and your findings. Or call no_advice if nothing qualifies."
-
-        log("Advice: --- PROMPT ---\n\(prompt)")
-
-        // Build system prompt
-        var currentSystemPrompt = await systemPrompt
-        if let language = await getUserLanguage(), language != "en" {
-            currentSystemPrompt += "\n\nIMPORTANT: Respond in the user's preferred language: \(language)"
-        }
-        currentSystemPrompt += "\n\nDATABASE SCHEMA for execute_sql:\nscreenshots table columns: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT"
-
-        // =============================================
-        // PHASE 1: Text-only investigation loop
-        // =============================================
-
-        let phase1Tools = buildPhase1Tools()
-        var contents: [GeminiImageToolRequest.Content] = [
-            GeminiImageToolRequest.Content(
-                role: "user",
-                parts: [GeminiImageToolRequest.Part(text: prompt)]
+        // Parse backend response into AdviceExtractionResult
+        guard let adviceDict = backendResult.advice as? [String: Any] else {
+            return AdviceExtractionResult(
+                hasAdvice: false,
+                advice: nil,
+                contextSummary: "Analyzed \(frame.appName)",
+                currentActivity: ""
             )
-        ]
-
-        let client = self.geminiClient
-        var chosenScreenshotId: Int64?
-        var investigationFindings: String?
-
-        for iteration in 0..<7 {
-            let iterContents = contents
-            let iterSystemPrompt = currentSystemPrompt
-            let iterTools = [phase1Tools]
-            let iterForce = iteration == 0
-            let result: ToolChatResult
-            do {
-                result = try await withThrowingTimeout(seconds: 120) {
-                    try await client.sendImageToolLoop(
-                        contents: iterContents,
-                        systemPrompt: iterSystemPrompt,
-                        tools: iterTools,
-                        forceToolCall: iterForce
-                    )
-                }
-            } catch {
-                log("Advice: Phase 1 failed on iteration \(iteration): \(error.localizedDescription)")
-                throw error
-            }
-
-            guard let toolCall = result.toolCalls.first else {
-                log("Advice: Phase 1 — no tool call on iteration \(iteration), breaking")
-                break
-            }
-
-            switch toolCall.name {
-            case "execute_sql":
-                let query = toolCall.arguments["query"] as? String ?? ""
-                sqlCount += 1
-                log("Advice: P1 execute_sql iter \(iteration): \(query)")
-                let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
-                let resultStr = await ChatToolExecutor.execute(sqlToolCall)
-                let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
-                log("Advice: P1 sql result (\(resultStr.count) chars): \(truncated)")
-
-                contents.append(GeminiImageToolRequest.Content(
-                    role: "model",
-                    parts: [GeminiImageToolRequest.Part(
-                        functionCall: .init(name: toolCall.name, args: ["query": query]),
-                        thoughtSignature: toolCall.thoughtSignature
-                    )]
-                ))
-                contents.append(GeminiImageToolRequest.Content(
-                    role: "user",
-                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
-                        name: toolCall.name,
-                        response: .init(result: resultStr)
-                    ))]
-                ))
-                continue
-
-            case "request_screenshot":
-                let findings = toolCall.arguments["findings"] as? String ?? ""
-                investigationFindings = findings
-                if let idInt = toolCall.arguments["screenshot_id"] as? Int {
-                    chosenScreenshotId = Int64(idInt)
-                } else if let idInt64 = toolCall.arguments["screenshot_id"] as? Int64 {
-                    chosenScreenshotId = idInt64
-                } else if let idStr = toolCall.arguments["screenshot_id"] as? String, let parsed = Int64(idStr) {
-                    chosenScreenshotId = parsed
-                } else if let idDouble = toolCall.arguments["screenshot_id"] as? Double {
-                    chosenScreenshotId = Int64(idDouble)
-                }
-                log("Advice: P1 request_screenshot iter \(iteration): id=\(chosenScreenshotId ?? 0), findings=\(findings.prefix(200))")
-                break // Exit phase 1
-
-            case "no_advice":
-                let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
-                let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-                log("Advice: P1 no_advice — \(contextSummary)")
-                return (AdviceExtractionResult(
-                    hasAdvice: false,
-                    advice: nil,
-                    contextSummary: contextSummary,
-                    currentActivity: currentActivity
-                ), sqlCount)
-
-            default:
-                log("Advice: P1 unknown tool: \(toolCall.name), breaking")
-                break
-            }
-
-            // Break out of loop if request_screenshot was called
-            if chosenScreenshotId != nil { break }
         }
 
-        // If Phase 1 exhausted without choosing a screenshot, no advice
-        guard let screenshotId = chosenScreenshotId, let findings = investigationFindings else {
-            log("Advice: Phase 1 exhausted without request_screenshot")
-            return (nil, sqlCount)
-        }
-
-        // =============================================
-        // PHASE 2: Single vision call with chosen screenshot
-        // =============================================
-
-        log("Advice: Phase 2 — loading screenshot \(screenshotId)")
-
-        // Load the screenshot image
-        let imageData: Data
-        do {
-            guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotId) else {
-                log("Advice: P2 screenshot not in DB: \(screenshotId)")
-                return (nil, sqlCount)
-            }
-            // Check active chunk
-            if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath {
-                let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
-                if chunk == activeChunk {
-                    log("Advice: P2 screenshot is in active chunk, skipping")
-                    return (nil, sqlCount)
-                }
-            }
-            let rawData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
-            imageData = Self.compressForGemini(rawData) ?? rawData
-            log("Advice: P2 loaded \(imageData.count) bytes (\(rawData.count) raw) from \(screenshot.appName)")
-        } catch {
-            log("Advice: P2 screenshot load failed: \(error.localizedDescription)")
-            return (nil, sqlCount)
-        }
-
-        // Build Phase 2 prompt — compact findings + image + cross-reference instruction
-        let phase2Prompt = """
-            INVESTIGATION FINDINGS:
-            \(findings)
-
-            The screenshot below is from the app/window identified during investigation.
-
-            Before giving advice, CROSS-REFERENCE your findings:
-            - Use execute_sql to check if this issue was resolved in later screenshots
-            - Check if the user moved on to something else (the issue may be stale)
-            - Verify the context is still relevant by looking at nearby timestamps
-
-            Then call provide_advice if the insight is still valid, or no_advice if it was resolved or is no longer relevant.
-            """
-
-        let phase2Tools = buildPhase2Tools()
-        let base64 = imageData.base64EncodedString()
-        var phase2Contents: [GeminiImageToolRequest.Content] = [
-            GeminiImageToolRequest.Content(
-                role: "user",
-                parts: [
-                    GeminiImageToolRequest.Part(text: phase2Prompt),
-                    GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64),
-                ]
+        let hasAdvice = adviceDict["has_advice"] as? Bool ?? !adviceDict.isEmpty
+        guard hasAdvice else {
+            return AdviceExtractionResult(
+                hasAdvice: false,
+                advice: nil,
+                contextSummary: "Analyzed \(frame.appName)",
+                currentActivity: ""
             )
-        ]
-
-        // Phase 2 loop — model can cross-reference via SQL before deciding
-        for p2Iteration in 0..<5 {
-            let p2Contents = phase2Contents
-            let p2SystemPrompt = currentSystemPrompt
-            let p2Tools = [phase2Tools]
-            let p2Force = p2Iteration == 0
-            let phase2Result: ToolChatResult
-            do {
-                phase2Result = try await withThrowingTimeout(seconds: 120) {
-                    try await client.sendImageToolLoop(
-                        contents: p2Contents,
-                        systemPrompt: p2SystemPrompt,
-                        tools: p2Tools,
-                        forceToolCall: p2Force
-                    )
-                }
-            } catch {
-                log("Advice: Phase 2 failed on iteration \(p2Iteration): \(error.localizedDescription)")
-                throw error
-            }
-
-            guard let toolCall = phase2Result.toolCalls.first else {
-                log("Advice: Phase 2 — no tool call on iteration \(p2Iteration), breaking")
-                break
-            }
-
-            switch toolCall.name {
-            case "execute_sql":
-                let query = toolCall.arguments["query"] as? String ?? ""
-                sqlCount += 1
-                log("Advice: P2 execute_sql iter \(p2Iteration): \(query)")
-                let sqlToolCall = ToolCall(name: "execute_sql", arguments: ["query": query], thoughtSignature: nil)
-                let resultStr = await ChatToolExecutor.execute(sqlToolCall)
-                let truncated = resultStr.count > 2000 ? String(resultStr.prefix(2000)) + "... (truncated)" : resultStr
-                log("Advice: P2 sql result (\(resultStr.count) chars): \(truncated)")
-
-                phase2Contents.append(GeminiImageToolRequest.Content(
-                    role: "model",
-                    parts: [GeminiImageToolRequest.Part(
-                        functionCall: .init(name: toolCall.name, args: ["query": query]),
-                        thoughtSignature: toolCall.thoughtSignature
-                    )]
-                ))
-                phase2Contents.append(GeminiImageToolRequest.Content(
-                    role: "user",
-                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
-                        name: toolCall.name,
-                        response: .init(result: resultStr)
-                    ))]
-                ))
-                continue
-
-            case "provide_advice":
-                log("Advice: P2 provide_advice (after \(p2Iteration) cross-reference iterations)")
-                return (parseProvideAdvice(toolCall), sqlCount)
-
-            case "no_advice":
-                let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No context"
-                let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
-                log("Advice: P2 no_advice — \(contextSummary)")
-                return (AdviceExtractionResult(
-                    hasAdvice: false,
-                    advice: nil,
-                    contextSummary: contextSummary,
-                    currentActivity: currentActivity
-                ), sqlCount)
-
-            default:
-                log("Advice: P2 unexpected tool: \(toolCall.name)")
-                break
-            }
-            break // Break on unexpected tool
-        }
-        return (nil, sqlCount)
-    }
-
-    // MARK: - Activity Summary
-
-    /// Query the screenshots table to build a summary of recent activity.
-    /// - `from`: lower bound (e.g. last analysis time or screenshot.timestamp - interval)
-    /// - `to`: upper bound (e.g. now or the screenshot's timestamp)
-    private func buildActivitySummary(from lookbackStart: Date, to referenceTime: Date) async -> String {
-        guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
-            return ""
         }
 
-        do {
-            return try await dbQueue.read { db in
-                // Pass Date objects directly — GRDB encodes them as UTC strings
-                // matching the stored format. Manual DateFormatter uses local timezone
-                // which causes mismatches.
-                let rows = try Row.fetchAll(db, sql: """
-                    SELECT appName, windowTitle, COUNT(*) as count,
-                           MIN(timestamp) as first_seen, MAX(timestamp) as last_seen
-                    FROM screenshots
-                    WHERE timestamp >= ? AND timestamp <= ?
-                      AND appName IS NOT NULL AND appName != ''
-                    GROUP BY appName, windowTitle
-                    ORDER BY count DESC
-                    LIMIT 30
-                    """, arguments: [lookbackStart, referenceTime])
-
-                if rows.isEmpty {
-                    return ""
-                }
-
-                let totalScreenshots = rows.reduce(0) { $0 + (($1["count"] as? Int64).map(Int.init) ?? ($1["count"] as? Int) ?? 0) }
-                let elapsedMin = referenceTime.timeIntervalSince(lookbackStart) / 60.0
-
-                let timeOnlyFormatter = DateFormatter()
-                timeOnlyFormatter.dateFormat = "HH:mm:ss"
-
-                var lines: [String] = []
-                lines.append("ACTIVITY SUMMARY (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots):")
-                lines.append("Time range: \(timeOnlyFormatter.string(from: lookbackStart)) – \(timeOnlyFormatter.string(from: referenceTime))")
-                lines.append("")
-                lines.append("App | Window | Screenshots | Est. Duration")
-                lines.append(String(repeating: "-", count: 60))
-
-                for row in rows {
-                    let app = row["appName"] as? String ?? "Unknown"
-                    let window = row["windowTitle"] as? String ?? ""
-                    let count = (row["count"] as? Int64).map(Int.init) ?? (row["count"] as? Int) ?? 0
-                    let estMinutes = String(format: "%.1f", Double(count) / 60.0)
-                    let windowDisplay = window.isEmpty ? "(no title)" : String(window.prefix(50))
-                    lines.append("\(app) | \(windowDisplay) | \(count) | \(estMinutes) min")
-                }
-
-                let summary = lines.joined(separator: "\n")
-                log("Advice: Activity summary (last \(Int(elapsedMin)) min, \(totalScreenshots) screenshots)")
-                return summary
-            }
-        } catch {
-            logError("Advice: Failed to build activity summary", error: error)
-            return ""
+        let adviceText = adviceDict["content"] as? String ?? adviceDict["advice"] as? String ?? ""
+        guard !adviceText.isEmpty else {
+            return AdviceExtractionResult(
+                hasAdvice: false,
+                advice: nil,
+                contextSummary: "Analyzed \(frame.appName)",
+                currentActivity: ""
+            )
         }
-    }
 
-    // MARK: - Tool Definitions
-
-    /// Phase 1 tools: text-only investigation (execute_sql, request_screenshot, no_advice)
-    private func buildPhase1Tools() -> GeminiTool {
-        GeminiTool(functionDeclarations: [
-            GeminiTool.FunctionDeclaration(
-                name: "execute_sql",
-                description: "Execute a SQL query on the local database to investigate screen activity. The screenshots table has: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT. Use this to read OCR text from interesting windows, check what the user was doing, etc. SELECT queries only. Auto-limited to 200 rows.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "query": .init(type: "string", description: "SQL SELECT query to execute on the screenshots table")
-                    ],
-                    required: ["query"]
-                )
-            ),
-            GeminiTool.FunctionDeclaration(
-                name: "request_screenshot",
-                description: "Request to view a specific screenshot. Call this when you've found something interesting via SQL and want to see the actual screen. Provide the screenshot ID and a summary of your findings so far. The screenshot will be shown to you for final analysis.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "screenshot_id": .init(type: "integer", description: "The screenshot ID from the screenshots table"),
-                        "findings": .init(type: "string", description: "Summary of what you found during investigation — what app, what OCR text caught your attention, and what you suspect might be worth advising about")
-                    ],
-                    required: ["screenshot_id", "findings"]
-                )
-            ),
-            GeminiTool.FunctionDeclaration(
-                name: "no_advice",
-                description: "Call this when there is nothing worth advising about. Nothing qualifies as a specific, non-obvious insight. This ends the analysis.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
-                        "current_activity": .init(type: "string", description: "High-level description of user's activity")
-                    ],
-                    required: ["context_summary", "current_activity"]
-                )
-            ),
-        ])
-    }
-
-    /// Phase 2 tools: vision call with screenshot + SQL cross-referencing (execute_sql, provide_advice, no_advice)
-    private func buildPhase2Tools() -> GeminiTool {
-        GeminiTool(functionDeclarations: [
-            GeminiTool.FunctionDeclaration(
-                name: "execute_sql",
-                description: "Cross-reference your findings by querying the database. Use this to check if an issue was resolved in later screenshots, verify context across time, or look up related activity. The screenshots table has: id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, focusStatus TEXT. SELECT queries only.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "query": .init(type: "string", description: "SQL SELECT query to execute on the screenshots table")
-                    ],
-                    required: ["query"]
-                )
-            ),
-            GeminiTool.FunctionDeclaration(
-                name: "provide_advice",
-                description: "Call this when you have a specific, non-obvious insight for the user based on the screenshot and your investigation findings. You should cross-reference first using execute_sql to verify the issue is still relevant.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "advice": .init(type: "string", description: "The advice text (1-2 sentences, max 100 chars). Start with what you noticed, then why it matters."),
-                        "headline": .init(type: "string", description: "Ultra-short observation (max 5 words) for notification preview. E.g. 'Draft saved in /tmp', 'Credentials visible in terminal'"),
-                        "reasoning": .init(type: "string", description: "Brief explanation of why this advice is relevant"),
-                        "category": .init(type: "string", description: "Category of advice", enumValues: ["productivity", "communication", "learning", "other"]),
-                        "source_app": .init(type: "string", description: "App where context was observed"),
-                        "confidence": .init(type: "number", description: "Confidence score 0.0-1.0. 0.90+: preventing clear mistake. 0.75-0.89: highly relevant non-obvious tip. 0.60-0.74: useful but user might know."),
-                        "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
-                        "current_activity": .init(type: "string", description: "High-level description of user's activity")
-                    ],
-                    required: ["advice", "headline", "category", "source_app", "confidence", "context_summary", "current_activity"]
-                )
-            ),
-            GeminiTool.FunctionDeclaration(
-                name: "no_advice",
-                description: "Call this when the screenshot doesn't reveal anything worth advising about, or when cross-referencing shows the issue was already resolved.",
-                parameters: GeminiTool.FunctionDeclaration.Parameters(
-                    type: "object",
-                    properties: [
-                        "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
-                        "current_activity": .init(type: "string", description: "High-level description of user's activity")
-                    ],
-                    required: ["context_summary", "current_activity"]
-                )
-            ),
-        ])
-    }
-
-    // MARK: - Parse Tool Results
-
-    /// Parse the provide_advice tool call into an AdviceExtractionResult
-    private func parseProvideAdvice(_ toolCall: ToolCall) -> AdviceExtractionResult {
-        let adviceText = toolCall.arguments["advice"] as? String ?? ""
-        let headline = toolCall.arguments["headline"] as? String
-        let reasoning = toolCall.arguments["reasoning"] as? String
-        let categoryStr = toolCall.arguments["category"] as? String ?? "other"
+        let categoryStr = adviceDict["category"] as? String ?? "other"
         let category = AdviceCategory(rawValue: categoryStr) ?? .other
-        let sourceApp = toolCall.arguments["source_app"] as? String ?? ""
-        let contextSummary = toolCall.arguments["context_summary"] as? String ?? ""
-        let currentActivity = toolCall.arguments["current_activity"] as? String ?? ""
-
         let confidence: Double
-        if let confValue = toolCall.arguments["confidence"] as? Double {
+        if let confValue = adviceDict["confidence"] as? Double {
             confidence = confValue
-        } else if let confInt = toolCall.arguments["confidence"] as? Int {
+        } else if let confInt = adviceDict["confidence"] as? Int {
             confidence = Double(confInt)
-        } else if let confStr = toolCall.arguments["confidence"] as? String, let parsed = Double(confStr) {
-            confidence = parsed
         } else {
             confidence = 0.5
         }
 
         let advice = ExtractedAdvice(
             advice: adviceText,
-            headline: headline,
-            reasoning: reasoning,
+            headline: adviceDict["headline"] as? String,
+            reasoning: adviceDict["reasoning"] as? String,
             category: category,
-            sourceApp: sourceApp,
+            sourceApp: frame.appName,
             confidence: confidence
         )
 
-        log("Advice: --- PROVIDE_ADVICE ---")
-        log("Advice:   advice: \(adviceText)")
-        log("Advice:   headline: \(headline ?? "(none)")")
-        log("Advice:   reasoning: \(reasoning ?? "(none)")")
-        log("Advice:   category: \(categoryStr)")
-        log("Advice:   source_app: \(sourceApp)")
-        log("Advice:   confidence: \(confidence)")
-        log("Advice:   context: \(contextSummary)")
-        log("Advice:   activity: \(currentActivity)")
         return AdviceExtractionResult(
             hasAdvice: true,
             advice: advice,
-            contextSummary: contextSummary,
-            currentActivity: currentActivity
+            contextSummary: adviceDict["context_summary"] as? String ?? "Analyzed \(frame.appName)",
+            currentActivity: adviceDict["current_activity"] as? String ?? ""
         )
-    }
-}
-
-// MARK: - Timeout Helper
-
-/// Run an async operation with a timeout. Throws `CancellationError` if the timeout expires.
-private func withThrowingTimeout<T: Sendable>(seconds: Double, operation: @escaping @Sendable () async throws -> T) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await operation()
-        }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-            throw CancellationError()
-        }
-        // First task to complete wins; cancel the other
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
     }
 }
