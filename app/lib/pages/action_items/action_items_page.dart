@@ -269,7 +269,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         // Day after tomorrow
         return DateTime(now.year, now.month, now.day + 2, 23, 59);
       case TaskCategory.overdue:
-        return DateTime(now.year, now.month, now.day, 23, 59);
+        return null;
     }
   }
 
@@ -1136,6 +1136,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
     if (item.dueAt == null) {
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
+        return TaskCategory.overdue;
+      }
       return TaskCategory.noDeadline;
     }
     final dueDate = item.dueAt!;
