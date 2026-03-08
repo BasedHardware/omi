@@ -8286,4 +8286,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Це видалить лише дедлайни';
+
+  @override
+  String get tasksOverdue => 'Прострочені';
 }

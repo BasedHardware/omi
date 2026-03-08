@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Solo tu puoi vedere questa conversazione",
     "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
     "tasksCleanTodayTitle": "Pulire le attività di oggi?",
-    "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze"
+    "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
+  "tasksOverdue": "Scadute"
 }

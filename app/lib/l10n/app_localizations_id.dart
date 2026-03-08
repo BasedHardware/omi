@@ -8284,4 +8284,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Ini hanya akan menghapus tenggat waktu';
+
+  @override
+  String get tasksOverdue => 'Terlambat';
 }

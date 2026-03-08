@@ -8351,4 +8351,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Cela supprimera uniquement les échéances';
+
+  @override
+  String get tasksOverdue => 'En retard';
 }

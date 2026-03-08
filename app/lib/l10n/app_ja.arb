@@ -2660,5 +2660,6 @@
     "onlyYouCanSeeConversation": "この会話を見ることができるのはあなただけです",
     "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます",
     "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
-    "tasksCleanTodayMessage": "期限のみ削除されます"
+    "tasksCleanTodayMessage": "期限のみ削除されます",
+  "tasksOverdue": "期限切れ"
 }

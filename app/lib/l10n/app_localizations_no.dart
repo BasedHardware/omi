@@ -8268,4 +8268,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Dette vil kun fjerne frister';
+
+  @override
+  String get tasksOverdue => 'Forfalt';
 }

@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "이 대화는 본인만 볼 수 있습니다",
     "anyoneWithLinkCanView": "링크가 있는 사람은 누구나 볼 수 있습니다",
     "tasksCleanTodayTitle": "오늘 할 일을 정리할까요?",
-    "tasksCleanTodayMessage": "마감일만 제거됩니다"
+    "tasksCleanTodayMessage": "마감일만 제거됩니다",
+  "tasksOverdue": "기한 초과"
 }

@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Ainult teie saate seda vestlust näha",
     "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
     "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
-    "tasksCleanTodayMessage": "See eemaldab ainult tähtajad"
+    "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
+  "tasksOverdue": "Tähtaja ületanud"
 }

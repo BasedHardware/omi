@@ -2664,5 +2664,6 @@
     "onlyYouCanSeeConversation": "Túto konverzáciu môžete vidieť iba vy",
     "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
     "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
-    "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny"
+    "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
+  "tasksOverdue": "Po termíne"
 }

@@ -2660,5 +2660,6 @@
     "onlyYouCanSeeConversation": "केवल आप ही इस बातचीत को देख सकते हैं",
     "anyoneWithLinkCanView": "लिंक वाला कोई भी व्यक्ति देख सकता है",
     "tasksCleanTodayTitle": "आज के कार्य साफ़ करें?",
-    "tasksCleanTodayMessage": "यह केवल समय-सीमाएँ हटाएगा"
+    "tasksCleanTodayMessage": "यह केवल समय-सीमाएँ हटाएगा",
+  "tasksOverdue": "अतिदेय"
 }

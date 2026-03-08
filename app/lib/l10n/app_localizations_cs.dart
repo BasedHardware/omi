@@ -8269,4 +8269,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Tímto se odstraní pouze termíny';
+
+  @override
+  String get tasksOverdue => 'Po termínu';
 }

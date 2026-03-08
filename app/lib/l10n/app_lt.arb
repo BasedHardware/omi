@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Tik jūs galite matyti šį pokalbį",
     "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
     "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
-    "tasksCleanTodayMessage": "Bus pašalinti tik terminai"
+    "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
+  "tasksOverdue": "Vėluojančios"
 }

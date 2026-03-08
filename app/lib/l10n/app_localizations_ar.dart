@@ -8215,4 +8215,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'سيؤدي هذا فقط إلى إزالة المواعيد النهائية';
+
+  @override
+  String get tasksOverdue => 'متأخرة';
 }

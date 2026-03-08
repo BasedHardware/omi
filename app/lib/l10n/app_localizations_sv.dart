@@ -8277,4 +8277,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
+
+  @override
+  String get tasksOverdue => 'Försenade';
 }

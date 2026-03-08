@@ -8291,4 +8291,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Tas noņems tikai termiņus';
+
+  @override
+  String get tasksOverdue => 'Nokavētas';
 }

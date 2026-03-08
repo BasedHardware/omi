@@ -10085,5 +10085,6 @@
     "tasksCleanTodayMessage": "This will only remove deadlines",
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
-    }
+    },
+  "tasksOverdue": "Overdue"
 }

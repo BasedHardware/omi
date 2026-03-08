@@ -8308,4 +8308,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Това само ще премахне крайните срокове';
+
+  @override
+  String get tasksOverdue => 'Просрочени';
 }

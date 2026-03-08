@@ -8135,4 +8135,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => '마감일만 제거됩니다';
+
+  @override
+  String get tasksOverdue => '기한 초과';
 }

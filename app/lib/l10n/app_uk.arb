@@ -2659,5 +2659,6 @@
     "onlyYouCanSeeConversation": "Лише ви можете бачити цю розмову",
     "anyoneWithLinkCanView": "Будь-хто з посиланням може переглядати",
     "tasksCleanTodayTitle": "Очистити завдання на сьогодні?",
-    "tasksCleanTodayMessage": "Це видалить лише дедлайни"
+    "tasksCleanTodayMessage": "Це видалить лише дедлайни",
+  "tasksOverdue": "Прострочені"
 }

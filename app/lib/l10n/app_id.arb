@@ -2701,5 +2701,6 @@
     "onlyYouCanSeeConversation": "Hanya Anda yang dapat melihat percakapan ini",
     "anyoneWithLinkCanView": "Siapa pun yang memiliki tautan dapat melihat",
     "tasksCleanTodayTitle": "Bersihkan tugas hari ini?",
-    "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu"
+    "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu",
+  "tasksOverdue": "Terlambat"
 }

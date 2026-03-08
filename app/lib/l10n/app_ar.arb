@@ -2626,5 +2626,6 @@
     "onlyYouCanSeeConversation": "أنت فقط من يمكنه رؤية هذه المحادثة",
     "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
     "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
-    "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية"
+    "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
+  "tasksOverdue": "متأخرة"
 }

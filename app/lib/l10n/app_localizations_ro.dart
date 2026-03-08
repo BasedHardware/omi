@@ -8315,4 +8315,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Aceasta va elimina doar termenele limită';
+
+  @override
+  String get tasksOverdue => 'Întârziate';
 }

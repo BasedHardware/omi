@@ -8257,4 +8257,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get tasksCleanTodayMessage => 'Dette fjerner kun deadlines';
+
+  @override
+  String get tasksOverdue => 'Forfaldne';
 }
