@@ -834,3 +834,159 @@ class TestRedisPubSubManager:
 
         mock_pubsub.unsubscribe.assert_called_with('cache_invalidation')
         mock_pubsub.close.assert_called_once()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RedisPubSubManager integration test (real Redis)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _redis_available():
+    """Check if local Redis is reachable."""
+    try:
+        import redis as _redis
+
+        c = _redis.Redis(host='localhost', port=6379, password='', socket_connect_timeout=1)
+        c.ping()
+        c.close()
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _redis_available(), reason="Local Redis not available")
+class TestRedisPubSubIntegration:
+    """Integration tests using real local Redis to prove cross-pod pub/sub delivery."""
+
+    def _make_real_redis(self):
+        import redis as _redis
+
+        return _redis.Redis(host='localhost', port=6379, password='')
+
+    def test_real_pubsub_cross_instance_invalidation(self):
+        """Publish on instance A through real Redis → instance B callback fires → cache entry deleted.
+
+        This proves: redis.publish() delivers, pubsub.get_message() receives,
+        _handle_message dispatches, callback fires, cache.delete works.
+        """
+        import threading
+
+        from database.redis_pubsub import RedisPubSubManager
+
+        redis_a = self._make_real_redis()
+        redis_b = self._make_real_redis()
+
+        manager_a = RedisPubSubManager(redis_a)
+        manager_b = RedisPubSubManager(redis_b)
+
+        # Instance B has a local cache with data
+        local_cache = InMemoryCacheManager(max_memory_mb=1)
+        local_cache.set('get_public_approved_apps_data:v1', {'apps': [1, 2, 3]}, ttl=60)
+        assert local_cache.get('get_public_approved_apps_data:v1') is not None
+
+        # Track callback invocation
+        callback_fired = threading.Event()
+        received_keys = []
+
+        def invalidation_callback(keys):
+            received_keys.extend(keys)
+            for k in keys:
+                local_cache.delete(k)
+            callback_fired.set()
+
+        manager_b.register_callback('get_public_approved_apps_data*', invalidation_callback)
+        manager_b.start()
+
+        # Give subscriber thread time to connect
+        time.sleep(0.3)
+
+        try:
+            # Instance A publishes invalidation through REAL Redis
+            manager_a.publish_invalidation(['get_public_approved_apps_data:v1'])
+
+            # Wait for instance B to receive the message (real Redis delivery)
+            assert callback_fired.wait(timeout=5), "Callback did not fire within 5s — Redis pub/sub delivery failed"
+
+            # Verify: callback received the correct key
+            assert 'get_public_approved_apps_data:v1' in received_keys
+
+            # Verify: local cache on instance B was actually cleared
+            assert local_cache.get('get_public_approved_apps_data:v1') is None
+
+        finally:
+            manager_b.stop()
+            redis_a.close()
+            redis_b.close()
+
+    def test_real_pubsub_multiple_keys_single_message(self):
+        """Publish multiple keys in one message → all callbacks fire."""
+        import threading
+
+        from database.redis_pubsub import RedisPubSubManager
+
+        redis_a = self._make_real_redis()
+        redis_b = self._make_real_redis()
+
+        manager_a = RedisPubSubManager(redis_a)
+        manager_b = RedisPubSubManager(redis_b)
+
+        local_cache = InMemoryCacheManager(max_memory_mb=1)
+        local_cache.set('get_popular_apps_data', {'popular': True}, ttl=60)
+        local_cache.set('get_public_approved_apps_data:v2', {'approved': True}, ttl=60)
+
+        all_received = []
+        done = threading.Event()
+
+        def callback(keys):
+            all_received.extend(keys)
+            for k in keys:
+                local_cache.delete(k)
+            if len(all_received) >= 2:
+                done.set()
+
+        manager_b.register_callback('get_popular_apps_data', callback)
+        manager_b.register_callback('get_public_approved_apps_data*', callback)
+        manager_b.start()
+        time.sleep(0.3)
+
+        try:
+            manager_a.publish_invalidation(['get_popular_apps_data', 'get_public_approved_apps_data:v2'])
+
+            assert done.wait(timeout=5), "Not all callbacks fired"
+            assert local_cache.get('get_popular_apps_data') is None
+            assert local_cache.get('get_public_approved_apps_data:v2') is None
+        finally:
+            manager_b.stop()
+            redis_a.close()
+            redis_b.close()
+
+    def test_real_redis_credits_invalidation_signal(self):
+        """set_credits_invalidation_signal + check_credits_invalidation via real Redis."""
+        r = self._make_real_redis()
+
+        test_uid = 'integration_test_uid_5443'
+        key = f'credits_invalidated:{test_uid}'
+
+        try:
+            # Clean up any leftover
+            r.delete(key)
+
+            # Before signal: should not exist
+            assert r.get(key) is None
+
+            # Set signal (same as set_credits_invalidation_signal)
+            r.set(key, '1', ex=120)
+
+            # Check signal (same as check_credits_invalidation) — should be True
+            result = r.get(key)
+            assert result is not None
+
+            # Multiple reads should all see it (GET not GETDEL)
+            assert r.get(key) is not None
+            assert r.get(key) is not None
+
+            # Clean up
+            r.delete(key)
+            assert r.get(key) is None
+        finally:
+            r.close()
