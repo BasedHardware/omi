@@ -133,6 +133,29 @@ class TestGetPeopleDocIdInjection:
         assert result[0]['id'] == 'pid-1'
         users_mod.db.get_all.assert_called_once()
 
+    def test_get_people_by_ids_handles_large_batch(self):
+        """get_people_by_ids() should handle >30 IDs (old where-in limit was 30)."""
+        from database import users as users_mod
+
+        ids = [f'pid-{i}' for i in range(50)]
+        mock_docs = [self._make_mock_doc(pid, {'name': f'Person {pid}'}) for pid in ids]
+
+        users_mod.db = MagicMock()
+        users_mod.db.get_all.return_value = mock_docs
+
+        result = users_mod.get_people_by_ids('uid-123', ids)
+        assert len(result) == 50
+        # All should have IDs injected
+        for i, r in enumerate(result):
+            assert r['id'] == f'pid-{i}'
+
+    def test_get_people_by_ids_empty_list(self):
+        """get_people_by_ids() should return empty list for empty input."""
+        from database import users as users_mod
+
+        result = users_mod.get_people_by_ids('uid-123', [])
+        assert result == []
+
 
 class TestConversationsListNoPhotos:
     """#5424: List endpoint should not load photo base64 content."""
@@ -161,3 +184,55 @@ class TestConversationsListNoPhotos:
         sig_block = source[start : source.index('):', start) + 2]
         assert 'folder_id' in sig_block
         assert 'starred' in sig_block
+
+    def test_without_photos_function_not_decorated_with_photos(self):
+        """Verify get_conversations_without_photos does NOT have @with_photos decorator.
+
+        This is the core architectural guarantee: the list function must not
+        load full base64 photo content for every conversation.
+        """
+        import os
+        import re
+
+        db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
+        with open(db_path) as f:
+            source = f.read()
+
+        # Find the function definition and the lines preceding it (decorators)
+        lines = source.split('\n')
+        func_line_idx = None
+        for i, line in enumerate(lines):
+            if 'def get_conversations_without_photos(' in line:
+                func_line_idx = i
+                break
+        assert func_line_idx is not None
+
+        # Check the 5 lines before the function def for @with_photos
+        decorator_lines = lines[max(0, func_line_idx - 5) : func_line_idx]
+        decorator_text = '\n'.join(decorator_lines)
+        assert '@with_photos' not in decorator_text, (
+            'get_conversations_without_photos must NOT have @with_photos decorator'
+        )
+
+    def test_with_photos_present_on_get_conversations(self):
+        """Verify the original get_conversations DOES have @with_photos (for individual use)."""
+        import os
+
+        db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
+        with open(db_path) as f:
+            source = f.read()
+
+        lines = source.split('\n')
+        func_line_idx = None
+        for i, line in enumerate(lines):
+            if 'def get_conversations(' in line and 'without_photos' not in line:
+                func_line_idx = i
+                break
+        assert func_line_idx is not None
+
+        # Check the 5 lines before for @with_photos
+        decorator_lines = lines[max(0, func_line_idx - 5) : func_line_idx]
+        decorator_text = '\n'.join(decorator_lines)
+        assert '@with_photos' in decorator_text, (
+            'get_conversations must have @with_photos for individual conversation use'
+        )
