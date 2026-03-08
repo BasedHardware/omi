@@ -7,7 +7,7 @@ import Foundation
 actor TaskPrioritizationService {
     static let shared = TaskPrioritizationService()
 
-    private var geminiClient: GeminiClient?
+    private var backendService: BackendProactiveService?
     private var timer: Task<Void, Never>?
     private var isRunning = false
     private(set) var isScoringInProgress = false
@@ -29,19 +29,17 @@ actor TaskPrioritizationService {
         // Restore persisted timestamps
         self.lastFullRunTime = UserDefaults.standard.object(forKey: Self.fullRunKey) as? Date
 
-        do {
-            self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
-        } catch {
-            log("TaskPrioritize: Failed to initialize GeminiClient: \(error)")
-            self.geminiClient = nil
-        }
-
         if let last = self.lastFullRunTime {
             let hoursAgo = Int(Date().timeIntervalSince(last) / 3600)
             log("TaskPrioritize: Last full rescore was \(hoursAgo)h ago")
         } else {
             log("TaskPrioritize: No previous full rescore recorded")
         }
+    }
+
+    /// Set the backend service for Phase 2 server-side reranking.
+    func configure(backendService: BackendProactiveService) {
+        self.backendService = backendService
     }
 
     // MARK: - Lifecycle
@@ -101,187 +99,48 @@ actor TaskPrioritizationService {
 
     // MARK: - Full Rescore (Hourly)
 
-    /// Send ALL staged tasks to Gemini, get back only the ones that need re-ranking
+    /// Request server-side reranking via backend WebSocket.
     private func runFullRescore() async {
         guard !isScoringInProgress else {
             log("TaskPrioritize: [FULL] Skipping — scoring already in progress")
             return
         }
-        guard let client = geminiClient else {
-            log("TaskPrioritize: Skipping full rescore — Gemini client not initialized")
+        guard let service = backendService else {
+            log("TaskPrioritize: Skipping full rescore — backend service not configured")
             return
         }
 
         isScoringInProgress = true
         defer { isScoringInProgress = false }
 
-        log("TaskPrioritize: [FULL] Starting hourly rescore of staged tasks")
+        log("TaskPrioritize: [FULL] Starting server-side rescore")
 
-        // Get ALL staged tasks (not action_items)
-        let allTasks: [TaskActionItem]
         do {
-            allTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 10000)
-        } catch {
-            log("TaskPrioritize: [FULL] Failed to fetch staged tasks: \(error)")
-            return
-        }
+            let result = try await service.rerankTasks()
 
-        log("TaskPrioritize: [FULL] Found \(allTasks.count) staged tasks")
-
-        guard allTasks.count >= minimumTaskCount else {
-            log("TaskPrioritize: [FULL] Only \(allTasks.count) staged tasks, skipping")
-            lastFullRunTime = Date()
-            return
-        }
-
-        // Fetch context
-        let (referenceContext, profile, goals) = await fetchContext()
-
-        // Build the current ranking: tasks ordered by relevanceScore ASC (1 = top)
-        let sortedTasks = allTasks.sorted { a, b in
-            let scoreA = a.relevanceScore ?? Int.max
-            let scoreB = b.relevanceScore ?? Int.max
-            return scoreA < scoreB
-        }
-
-        // Build task list for the prompt with current positions
-        let taskLines = sortedTasks.enumerated().map { (index, task) -> String in
-            var parts = ["\(index + 1). [id:\(task.id)] \(task.description)"]
-            if let priority = task.priority {
-                parts.append("[\(priority)]")
+            if result.updatedTasks.isEmpty {
+                log("TaskPrioritize: [FULL] No tasks need re-ranking, current order is good")
+                lastFullRunTime = Date()
+                return
             }
-            if let due = task.dueAt {
-                let formatter = ISO8601DateFormatter()
-                parts.append("[due: \(formatter.string(from: due))]")
+
+            // Parse server response into reranking tuples
+            let reranks: [(backendId: String, newPosition: Int)] = result.updatedTasks.compactMap { dict in
+                guard let id = dict["id"] as? String,
+                      let newPos = dict["new_position"] as? Int else { return nil }
+                return (backendId: id, newPosition: newPos)
             }
-            return parts.joined(separator: " ")
-        }.joined(separator: "\n")
 
-        // Build context sections
-        var contextParts: [String] = []
-
-        if let profile = profile, !profile.isEmpty {
-            contextParts.append("USER PROFILE:\n\(profile)")
-        }
-
-        if !goals.isEmpty {
-            let goalsText = goals.enumerated().map { (i, goal) in
-                var text = "\(i + 1). \(goal.title)"
-                if let desc = goal.description {
-                    text += " — \(desc)"
+            if !reranks.isEmpty {
+                do {
+                    try await StagedTaskStorage.shared.applySelectiveReranking(reranks)
+                    log("TaskPrioritize: [FULL] Applied server re-ranking for \(reranks.count) staged tasks")
+                } catch {
+                    log("TaskPrioritize: [FULL] Failed to apply re-ranking: \(error)")
                 }
-                text += " (\(Int(goal.progress))% complete)"
-                return text
-            }.joined(separator: "\n")
-            contextParts.append("ACTIVE GOALS:\n\(goalsText)")
-        }
-
-        if !referenceContext.isEmpty {
-            contextParts.append(referenceContext)
-        }
-
-        let contextSection = contextParts.isEmpty ? "" : contextParts.joined(separator: "\n\n") + "\n\n"
-
-        let prompt = """
-        Review the user's staged task list (ranked 1 = most important, \(sortedTasks.count) = least important).
-
-        Identify tasks that are MISRANKED — tasks whose current position doesn't match their actual importance.
-        Only return tasks that need to move. Do NOT return tasks that are already well-positioned.
-
-        Consider:
-        1. Alignment with the user's goals and current priorities
-        2. Time urgency (due date proximity)
-        3. Actionability — specific tasks rank higher than vague ones
-        4. Real-world importance (financial, health, commitments to others)
-        5. Most AI-extracted tasks are noise — push vague/irrelevant tasks down
-
-        \(contextSection)CURRENT TASK RANKING (1 = most important):
-        \(taskLines)
-
-        Return ONLY the tasks that need re-ranking, with their new position numbers.
-        New positions should be relative to the current list size (1 to \(sortedTasks.count)).
-        """
-
-        let systemPrompt = """
-        You are a task prioritization assistant. You review a ranked task list and identify \
-        tasks that are misranked. Be selective — only return tasks that genuinely need to move. \
-        If the ranking looks reasonable, return an empty list. Be decisive about pushing noise \
-        and vague tasks down and promoting urgent, goal-aligned tasks up.
-        """
-
-        let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
-            type: "object",
-            properties: [
-                "reranked_tasks": .init(
-                    type: "array",
-                    description: "Tasks that need to be moved, with new positions",
-                    items: .init(
-                        type: "object",
-                        properties: [
-                            "task_id": .init(type: "string", description: "The task ID"),
-                            "new_position": .init(type: "integer", description: "New rank position (1 = most important)")
-                        ],
-                        required: ["task_id", "new_position"]
-                    )
-                ),
-                "reasoning": .init(type: "string", description: "Brief explanation of major ranking changes")
-            ],
-            required: ["reranked_tasks", "reasoning"]
-        )
-
-        log("TaskPrioritize: [FULL] Sending \(sortedTasks.count) staged tasks to Gemini")
-
-        let responseText: String
-        do {
-            responseText = try await client.sendRequest(
-                prompt: prompt,
-                systemPrompt: systemPrompt,
-                responseSchema: responseSchema
-            )
-        } catch {
-            log("TaskPrioritize: [FULL] Gemini request failed: \(error)")
-            return
-        }
-
-        let truncated = responseText.prefix(500)
-        log("TaskPrioritize: [FULL] Gemini response (\(responseText.count) chars): \(truncated)\(responseText.count > 500 ? "..." : "")")
-
-        guard let data = responseText.data(using: .utf8) else {
-            log("TaskPrioritize: [FULL] Failed to convert response to data")
-            return
-        }
-
-        let result: ReRankingResponse
-        do {
-            result = try JSONDecoder().decode(ReRankingResponse.self, from: data)
-        } catch {
-            log("TaskPrioritize: [FULL] Failed to parse re-ranking response: \(error)")
-            return
-        }
-
-        log("TaskPrioritize: [FULL] Gemini returned \(result.rerankedTasks.count) tasks to re-rank")
-        if !result.reasoning.isEmpty {
-            log("TaskPrioritize: [FULL] Reasoning: \(result.reasoning.prefix(300))")
-        }
-
-        // Validate: only keep task IDs that exist in our list
-        let validIds = Set(allTasks.map { $0.id })
-        let validReranks = result.rerankedTasks.filter { validIds.contains($0.taskId) }
-
-        if validReranks.count != result.rerankedTasks.count {
-            log("TaskPrioritize: [FULL] Filtered out \(result.rerankedTasks.count - validReranks.count) invalid task IDs")
-        }
-
-        if !validReranks.isEmpty {
-            let reranks = validReranks.map { (backendId: $0.taskId, newPosition: $0.newPosition) }
-            do {
-                try await StagedTaskStorage.shared.applySelectiveReranking(reranks)
-                log("TaskPrioritize: [FULL] Applied selective re-ranking for \(validReranks.count) staged tasks")
-            } catch {
-                log("TaskPrioritize: [FULL] Failed to apply re-ranking: \(error)")
             }
-        } else {
-            log("TaskPrioritize: [FULL] No tasks need re-ranking, current order is good")
+        } catch {
+            log("TaskPrioritize: [FULL] Server reranking failed: \(error)")
         }
 
         lastFullRunTime = Date()
@@ -304,68 +163,4 @@ actor TaskPrioritizationService {
         }
     }
 
-    // MARK: - Shared Context Fetching
-
-    private func fetchContext() async -> (referenceContext: String, profile: String?, goals: [Goal]) {
-        let userProfile = await AIUserProfileService.shared.getLatestProfile()
-
-        let goals: [Goal]
-        do {
-            goals = try await APIClient.shared.getGoals()
-        } catch {
-            log("TaskPrioritize: Failed to fetch goals: \(error)")
-            goals = []
-        }
-
-        let referenceTasks: [TaskActionItem]
-        do {
-            referenceTasks = try await ActionItemStorage.shared.getLocalActionItems(
-                limit: 100,
-                completed: true
-            )
-        } catch {
-            log("TaskPrioritize: Failed to fetch reference tasks: \(error)")
-            referenceTasks = []
-        }
-        let referenceContext = buildReferenceContext(referenceTasks)
-
-        return (referenceContext, userProfile?.profileText, goals)
-    }
-
-    // MARK: - Context Builders
-
-    private func buildReferenceContext(_ tasks: [TaskActionItem]) -> String {
-        guard !tasks.isEmpty else { return "" }
-
-        let completed = tasks.filter { !($0.description.isEmpty) }.prefix(50)
-        guard !completed.isEmpty else { return "" }
-
-        let lines = completed.map { task -> String in
-            "- [completed] \(task.description)"
-        }.joined(separator: "\n")
-
-        return "TASKS THE USER HAS COMPLETED (for reference — do NOT rank these):\n\(lines)"
-    }
-}
-
-// MARK: - Response Models
-
-private struct ReRankingResponse: Codable {
-    let rerankedTasks: [ReRankedTask]
-    let reasoning: String
-
-    struct ReRankedTask: Codable {
-        let taskId: String
-        let newPosition: Int
-
-        enum CodingKeys: String, CodingKey {
-            case taskId = "task_id"
-            case newPosition = "new_position"
-        }
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case rerankedTasks = "reranked_tasks"
-        case reasoning
-    }
 }
