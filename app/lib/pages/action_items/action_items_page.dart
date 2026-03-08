@@ -16,7 +16,7 @@ import 'widgets/action_item_form_sheet.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
-enum TaskCategory { today, tomorrow, later, noDeadline }
+enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -37,6 +37,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   // Track the item being hovered over during drag
   String? _hoveredItemId;
   bool _hoverAbove = false; // true = insert above, false = insert below
+
+  // Overdue section collapsed by default
+  bool _overdueExpanded = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -195,10 +198,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
       List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-
-    // Filter out old tasks without a future due date (older than 7 days)
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
@@ -206,6 +208,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       TaskCategory.tomorrow: [],
       TaskCategory.noDeadline: [],
       TaskCategory.later: [],
+      TaskCategory.overdue: [],
     };
 
     for (var item in items) {
@@ -213,20 +216,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (item.completed && !showCompleted) continue;
       if (!item.completed && showCompleted) continue;
 
-      // Skip old tasks without a future due date (only for non-completed)
-      if (!showCompleted) {
-        if (item.dueAt != null) {
-          if (item.dueAt!.isBefore(sevenDaysAgo)) continue;
-        } else {
-          if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) continue;
-        }
-      }
-
       if (item.dueAt == null) {
-        categorized[TaskCategory.noDeadline]!.add(item);
+        // No deadline tasks older than 7 days go to overdue
+        if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
+          categorized[TaskCategory.overdue]!.add(item);
+        } else {
+          categorized[TaskCategory.noDeadline]!.add(item);
+        }
       } else {
         final dueDate = item.dueAt!;
-        if (dueDate.isBefore(startOfTomorrow)) {
+        if (dueDate.isBefore(startOfToday)) {
+          // Due date in the past → overdue
+          categorized[TaskCategory.overdue]!.add(item);
+        } else if (dueDate.isBefore(startOfTomorrow)) {
           categorized[TaskCategory.today]!.add(item);
         } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
           categorized[TaskCategory.tomorrow]!.add(item);
@@ -249,6 +251,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return context.l10n.tasksNoDeadline;
       case TaskCategory.later:
         return context.l10n.tasksLater;
+      case TaskCategory.overdue:
+        return context.l10n.tasksOverdue;
     }
   }
 
@@ -264,6 +268,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       case TaskCategory.later:
         // Day after tomorrow
         return DateTime(now.year, now.month, now.day + 2, 23, 59);
+      case TaskCategory.overdue:
+        return DateTime(now.year, now.month, now.day, 23, 59);
     }
   }
 
@@ -519,9 +525,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-        // Build each category section (skip empty ones)
+        // Build each category section (skip empty ones, skip overdue — rendered separately below)
         for (final category in TaskCategory.values)
-          if ((categorizedItems[category] ?? []).isNotEmpty)
+          if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
             SliverToBoxAdapter(
               child: _buildCategorySection(
                 category: category,
@@ -529,6 +535,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 provider: provider,
               ),
             ),
+
+        // Overdue section — collapsible, collapsed by default
+        if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
+          SliverToBoxAdapter(
+            child: _buildOverdueSection(
+              items: categorizedItems[TaskCategory.overdue]!,
+              provider: provider,
+            ),
+          ),
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -733,6 +748,65 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildOverdueSection({
+    required List<ActionItemWithMetadata> items,
+    required ActionItemsProvider provider,
+  }) {
+    final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _overdueExpanded = !_overdueExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+              child: Row(
+                children: [
+                  Icon(
+                    _overdueExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.grey[500],
+                    size: 20,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.tasksOverdue,
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${orderedItems.length}',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_overdueExpanded)
+            ...orderedItems.map((item) => _buildTaskItem(
+                  item,
+                  provider,
+                  category: TaskCategory.overdue,
+                  categoryItems: orderedItems,
+                )),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
@@ -1057,6 +1131,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
     final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
@@ -1064,7 +1139,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return TaskCategory.noDeadline;
     }
     final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfTomorrow)) {
+    if (dueDate.isBefore(startOfToday)) {
+      return TaskCategory.overdue;
+    } else if (dueDate.isBefore(startOfTomorrow)) {
       return TaskCategory.today;
     } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
       return TaskCategory.tomorrow;
