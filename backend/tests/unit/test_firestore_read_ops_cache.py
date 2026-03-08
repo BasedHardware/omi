@@ -425,6 +425,7 @@ class TestFetchLockCleanup:
         cache.get_or_fetch("key1", lambda: "value1", ttl=30)
 
         assert "key1" not in cache._fetch_locks
+        assert "key1" not in cache._fetch_refcounts
 
     def test_fetch_locks_dont_grow_unbounded(self):
         """Many unique keys should not leave orphaned locks."""
@@ -434,3 +435,52 @@ class TestFetchLockCleanup:
             cache.get_or_fetch(f"key_{i}", lambda: f"value_{i}", ttl=30)
 
         assert len(cache._fetch_locks) == 0
+        assert len(cache._fetch_refcounts) == 0
+
+    def test_concurrent_singleflight_no_overlap(self):
+        """Concurrent callers for the same key must not overlap fetch_fn execution."""
+        import threading
+
+        cache = InMemoryCacheManager(max_memory_mb=1)
+        overlap_count = 0
+        max_overlap = 0
+        overlap_lock = threading.Lock()
+
+        def slow_fetch():
+            nonlocal overlap_count, max_overlap
+            with overlap_lock:
+                overlap_count += 1
+                if overlap_count > max_overlap:
+                    max_overlap = overlap_count
+            time.sleep(0.05)
+            with overlap_lock:
+                overlap_count -= 1
+            return None  # Return None to force re-fetch each time
+
+        threads = []
+        for _ in range(10):
+            t = threading.Thread(target=cache.get_or_fetch, args=("contended_key", slow_fetch, 30))
+            threads.append(t)
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert max_overlap == 1, f"Singleflight violated: max concurrent fetches = {max_overlap}"
+        assert "contended_key" not in cache._fetch_locks
+
+    def test_lock_cleanup_on_exception(self):
+        """Lock should be cleaned up even if fetch_fn raises."""
+        cache = InMemoryCacheManager(max_memory_mb=1)
+
+        def failing_fetch():
+            raise ValueError("boom")
+
+        try:
+            cache.get_or_fetch("error_key", failing_fetch, ttl=30)
+        except ValueError:
+            pass
+
+        assert "error_key" not in cache._fetch_locks
+        assert "error_key" not in cache._fetch_refcounts
