@@ -3418,6 +3418,11 @@ extension APIClient {
         let _: UserProfileResponse = try await patch("v1/users/profile", body: body)
     }
 
+    /// Deletes the authenticated user's account and all server data.
+    func deleteAccount() async throws {
+        try await delete("v1/users/delete-account")
+    }
+
     // MARK: - Assistant Settings API
 
     /// Fetches assistant settings from the backend
