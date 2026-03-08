@@ -314,62 +314,58 @@ public class ProactiveAssistantsPlugin: NSObject {
         proactiveService.connect()
         backendProactiveService = proactiveService
 
-        do {
-            focusAssistant = FocusAssistant(
-                backendService: proactiveService,
-                onAlert: { [weak self] message in
-                    self?.sendEvent(type: "alert", data: ["message": message])
-                },
-                onStatusChange: { [weak self] status in
-                    Task { @MainActor in
-                        self?.lastStatus = status
-                        self?.sendEvent(type: "statusChange", data: ["status": status.rawValue])
-                    }
-                },
-                onRefocus: {
-                    Task { @MainActor in
-                        OverlayService.shared.showGlowAroundActiveWindow(colorMode: .focused)
-                    }
-                },
-                onDistraction: {
-                    Task { @MainActor in
-                        OverlayService.shared.showGlowAroundActiveWindow(colorMode: .distracted)
-                    }
+        focusAssistant = FocusAssistant(
+            backendService: proactiveService,
+            onAlert: { [weak self] message in
+                self?.sendEvent(type: "alert", data: ["message": message])
+            },
+            onStatusChange: { [weak self] status in
+                Task { @MainActor in
+                    self?.lastStatus = status
+                    self?.sendEvent(type: "statusChange", data: ["status": status.rawValue])
                 }
-            )
-
-            if let focus = focusAssistant {
-                AssistantCoordinator.shared.register(focus)
+            },
+            onRefocus: {
+                Task { @MainActor in
+                    OverlayService.shared.showGlowAroundActiveWindow(colorMode: .focused)
+                }
+            },
+            onDistraction: {
+                Task { @MainActor in
+                    OverlayService.shared.showGlowAroundActiveWindow(colorMode: .distracted)
+                }
             }
+        )
 
-            taskAssistant = try TaskAssistant()
+        if let focus = focusAssistant {
+            AssistantCoordinator.shared.register(focus)
+        }
 
-            if let task = taskAssistant {
-                AssistantCoordinator.shared.register(task)
-            }
+        taskAssistant = TaskAssistant(backendService: proactiveService)
 
-            Task { await TaskDeduplicationService.shared.start() }
-            Task { await TaskPrioritizationService.shared.start() }
-            Task { await TaskPromotionService.shared.start() }
+        if let task = taskAssistant {
+            AssistantCoordinator.shared.register(task)
+        }
 
-            adviceAssistant = try AdviceAssistant()
+        // Configure text-only services with backend service
+        Task { await TaskDeduplicationService.shared.configure(backendService: proactiveService) }
+        Task { await TaskPrioritizationService.shared.configure(backendService: proactiveService) }
+        Task { await AIUserProfileService.shared.configure(backendService: proactiveService) }
 
-            if let advice = adviceAssistant {
-                AssistantCoordinator.shared.register(advice)
-            }
+        Task { await TaskDeduplicationService.shared.start() }
+        Task { await TaskPrioritizationService.shared.start() }
+        Task { await TaskPromotionService.shared.start() }
 
-            memoryAssistant = try MemoryAssistant()
+        adviceAssistant = AdviceAssistant(backendService: proactiveService)
 
-            if let memory = memoryAssistant {
-                AssistantCoordinator.shared.register(memory)
-            }
+        if let advice = adviceAssistant {
+            AssistantCoordinator.shared.register(advice)
+        }
 
-        } catch {
-            log("ProactiveAssistantsPlugin: Failed to initialize assistants: \(error.localizedDescription)")
-            logError("ProactiveAssistantsPlugin: Assistant initialization failed", error: error)
-            isStartingMonitoring = false
-            completion(false, error.localizedDescription)
-            return
+        memoryAssistant = MemoryAssistant(backendService: proactiveService)
+
+        if let memory = memoryAssistant {
+            AssistantCoordinator.shared.register(memory)
         }
 
         // Get initial app state
