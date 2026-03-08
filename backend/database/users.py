@@ -93,14 +93,14 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     if not person_ids:
         return []
     people_ref = db.collection('users').document(uid).collection('people')
-    # Firestore 'in' query supports up to 30 items.
+    # Use document ID fetches instead of where("id", "in", ...) to handle
+    # legacy docs that may not have a stored 'id' field.
+    doc_refs = [people_ref.document(pid) for pid in person_ids]
     all_people = []
-    for i in range(0, len(person_ids), 30):
-        chunk_ids = person_ids[i : i + 30]
-        people_query = people_ref.where("id", 'in', chunk_ids)
-        for person in people_query.stream():
-            data = person.to_dict()
-            data.setdefault('id', person.id)
+    for doc in db.get_all(doc_refs):
+        if doc.exists:
+            data = doc.to_dict()
+            data.setdefault('id', doc.id)
             all_people.append(data)
     return all_people
 
