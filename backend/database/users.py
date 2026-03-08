@@ -90,6 +90,11 @@ def get_person_by_name(uid: str, name: str):
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
+    """Fetch people docs by ID using db.get_all().
+
+    Note: db.get_all() returns results in arbitrary order (Firestore behavior).
+    Callers must not assume the result order matches person_ids order.
+    """
     if not person_ids:
         return []
     people_ref = db.collection('users').document(uid).collection('people')
