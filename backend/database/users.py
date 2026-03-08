@@ -1096,12 +1096,7 @@ def get_profiles_shared_with_user(target_uid: str):
 
 def remove_shared_profile_from_me(owner_uid: str, target_uid: str):
     """Allow the target user to remove/reject a speech profile shared with them by owner_uid."""
-    shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles').document(target_uid)
-    doc = shared_ref.get()
-    if doc.exists and doc.to_dict().get('revoked_at') is None:
-        shared_ref.update({'revoked_at': datetime.now(timezone.utc)})
-        return True
-    return False
+    return revoke_speech_profile_share(owner_uid, target_uid)
 
 
 def get_users_shared_with(owner_uid: str):

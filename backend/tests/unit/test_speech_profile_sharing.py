@@ -762,7 +762,7 @@ def test_spoofed_shared_pid_rejected_by_ownership_check():
         'utils.shared_profiles.get_user_name'
     ) as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid']
-        mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
+        mock_users.get_user_profiles_batch.return_value = {'alice_uid': {'speaker_embedding': [0.1]}}
         mock_name.return_value = 'Alice'
 
         people = resolve_shared_people(['shared:alice_uid', 'shared:attacker_uid'], 'bob_uid')
@@ -785,7 +785,10 @@ def test_all_valid_shared_pids_resolved():
         'utils.shared_profiles.get_user_name'
     ) as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
-        mock_users.get_user_profile.return_value = {'speaker_embedding': [0.1]}
+        mock_users.get_user_profiles_batch.return_value = {
+            'alice_uid': {'speaker_embedding': [0.1]},
+            'charlie_uid': {'speaker_embedding': [0.1]},
+        }
         mock_name.side_effect = mock_name_fn
 
         people = resolve_shared_people(['shared:alice_uid', 'shared:charlie_uid'], 'bob_uid')
@@ -801,7 +804,7 @@ def test_shared_pid_with_missing_profile_skipped():
 
     with patch('utils.shared_profiles.users_db') as mock_users:
         mock_users.get_profiles_shared_with_user.return_value = ['ghost_uid']
-        mock_users.get_user_profile.return_value = {}
+        mock_users.get_user_profiles_batch.return_value = {}
 
         people = resolve_shared_people(['shared:ghost_uid'], 'bob_uid')
 

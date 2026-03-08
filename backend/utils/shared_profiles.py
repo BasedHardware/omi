@@ -12,18 +12,21 @@ def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
     if not shared_pids:
         return []
     valid_shared_owners = set(users_db.get_profiles_shared_with_user(uid))
+    valid_owner_uids = list(dict.fromkeys(
+        pid.split(":", 1)[1] for pid in shared_pids if pid.split(":", 1)[1] in valid_shared_owners
+    ))
+    if not valid_owner_uids:
+        return []
+    profiles = users_db.get_user_profiles_batch(valid_owner_uids)
     people = []
-    for shared_pid in shared_pids:
-        owner_uid = shared_pid.split(":", 1)[1]
-        if owner_uid not in valid_shared_owners:
-            continue
-        profile = users_db.get_user_profile(owner_uid)
+    for owner_uid in valid_owner_uids:
+        profile = profiles.get(owner_uid)
         if not profile:
             continue
         name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
         people.append(
             Person(
-                id=shared_pid,
+                id=f"shared:{owner_uid}",
                 name=name,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
