@@ -15,6 +15,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from ._client import db
+from .cache import get_memory_cache
 import logging
 
 logger = logging.getLogger(__name__)
@@ -155,12 +156,20 @@ def get_mentor_notification_frequency(uid: str) -> int:
     - 1 = ultra selective (least frequent)
     - 3 = balanced (default)
     - 5 = very proactive (most frequent)
+
+    Uses in-memory cache (30s TTL) + field projection to avoid reading the full
+    user doc every 1s per stream. (#5439 sub-task 2)
     """
-    user_ref = db.collection('users').document(uid).get()
-    if user_ref.exists:
-        user_data = user_ref.to_dict()
-        return user_data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
-    return DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+    cache = get_memory_cache()
+
+    def fetch():
+        doc = db.collection('users').document(uid).get(field_paths=['mentor_notification_frequency'])
+        if doc.exists:
+            data = doc.to_dict()
+            return data.get('mentor_notification_frequency', DEFAULT_MENTOR_NOTIFICATION_FREQUENCY)
+        return DEFAULT_MENTOR_NOTIFICATION_FREQUENCY
+
+    return cache.get_or_fetch(f"mentor_frequency:{uid}", fetch, ttl=30)
 
 
 def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
@@ -182,6 +191,8 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
 
     user_ref = db.collection('users').document(uid)
     user_ref.set({'mentor_notification_frequency': frequency}, merge=True)
+    # Invalidate local cache so this instance sees the update immediately
+    get_memory_cache().delete(f"mentor_frequency:{uid}")
     return True
 
 
