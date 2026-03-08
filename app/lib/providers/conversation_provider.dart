@@ -156,16 +156,11 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onConversationTap(int idx) {
-    if (idx < 0 || idx > conversations.length - 1) {
-      return;
-    }
-    var changed = false;
+  void onConversationTap(String conversationId) {
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return;
     if (conversations[idx].isNew) {
       conversations[idx].isNew = false;
-      changed = true;
-    }
-    if (changed) {
       groupConversationsByDate();
     }
   }
