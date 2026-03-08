@@ -60,14 +60,22 @@ def create_person(uid: str, data: dict):
 
 def get_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_data = person_ref.get().to_dict()
+    person_doc = person_ref.get()
+    if not person_doc.exists:
+        return None
+    person_data = person_doc.to_dict()
+    person_data.setdefault('id', person_doc.id)
     return person_data
 
 
 def get_people(uid: str):
     people_ref = db.collection('users').document(uid).collection('people')
-    people = people_ref.stream()
-    return [person.to_dict() for person in people]
+    result = []
+    for person in people_ref.stream():
+        data = person.to_dict()
+        data.setdefault('id', person.id)
+        result.append(data)
+    return result
 
 
 def get_person_by_name(uid: str, name: str):
@@ -75,7 +83,9 @@ def get_person_by_name(uid: str, name: str):
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
     docs = list(query.stream())
     if docs:
-        return docs[0].to_dict()
+        data = docs[0].to_dict()
+        data.setdefault('id', docs[0].id)
+        return data
     return None
 
 
@@ -88,8 +98,10 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     for i in range(0, len(person_ids), 30):
         chunk_ids = person_ids[i : i + 30]
         people_query = people_ref.where("id", 'in', chunk_ids)
-        people = people_query.stream()
-        all_people.extend([person.to_dict() for person in people])
+        for person in people_query.stream():
+            data = person.to_dict()
+            data.setdefault('id', person.id)
+            all_people.append(data)
     return all_people
 
 
