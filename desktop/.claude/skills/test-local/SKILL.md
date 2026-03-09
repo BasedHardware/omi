@@ -84,18 +84,17 @@ Once the app is running, use **agent-swift** to interact with and verify the UI:
 
 ```bash
 # Connect to the running app
-agent-swift connect --bundle com.omi.desktop-dev
+agent-swift connect --bundle-id com.omi.desktop-dev
 
 # See interactive elements on screen
 agent-swift snapshot -i
 
 # Interact (re-snapshot after each mutation — refs go stale)
 agent-swift press @e3                # click a button
-agent-swift fill @e5 "test text"     # type into a field
 agent-swift snapshot -i              # refresh refs after interaction
 
 # Capture screenshot evidence
-agent-swift screenshot /tmp/test-result.png
+screencapture /tmp/test-result.png   # macOS native screenshot
 ```
 
 Install once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app.
