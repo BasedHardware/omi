@@ -6,12 +6,89 @@ actor GoalsAIService {
 
   private var geminiClient: GeminiClient?
 
+  struct NormalizedGoalInput {
+    let title: String
+    let goalType: GoalType
+    let targetValue: Double
+    let unit: String?
+  }
+
   private init() {
     do {
       self.geminiClient = try GeminiClient(model: "gemini-pro-latest")
     } catch {
       log("GoalsAIService: Failed to initialize GeminiClient: \(error)")
       self.geminiClient = nil
+    }
+  }
+
+  /// Response schema for normalizing ad-hoc onboarding goal text.
+  private var onboardingGoalNormalizationSchema: GeminiRequest.GenerationConfig.ResponseSchema {
+    GeminiRequest.GenerationConfig.ResponseSchema(
+      type: "object",
+      properties: [
+        "title": .init(type: "string", description: "Concise goal title without filler words"),
+        "goal_type": .init(type: "string", enum: ["boolean", "scale", "numeric"]),
+        "target_value": .init(type: "number", description: "Numeric target value"),
+        "unit": .init(type: "string", description: "Optional unit like users, sales, hours"),
+      ],
+      required: ["title", "goal_type", "target_value"]
+    )
+  }
+
+  /// Normalize free-form onboarding goal input into structured goal fields.
+  /// Example: "My goal is 200k users" -> title: "200k users", goalType: .numeric, targetValue: 200000, unit: "users"
+  func normalizeOnboardingGoalInput(_ rawInput: String) async -> NormalizedGoalInput? {
+    guard let client = geminiClient else { return nil }
+
+    struct Response: Codable {
+      let title: String
+      let goalType: String
+      let targetValue: Double
+      let unit: String?
+
+      enum CodingKeys: String, CodingKey {
+        case title, unit
+        case goalType = "goal_type"
+        case targetValue = "target_value"
+      }
+    }
+
+    let prompt = """
+    Normalize this onboarding goal input into clean structured fields.
+
+    Input: "\(rawInput)"
+
+    Rules:
+    - Remove conversational filler like "my goal is", "i want to", "i need to".
+    - Keep title short and noun/action focused.
+    - If a numeric target is explicit (e.g., 200k, 10M), use goal_type=numeric and expand value (200k -> 200000).
+    - If no explicit number, use goal_type=boolean and target_value=1.
+    - Return JSON only.
+    """
+
+    do {
+      let responseText = try await client.sendRequest(
+        prompt: prompt,
+        systemPrompt: "You clean and structure user goal text for product onboarding.",
+        responseSchema: onboardingGoalNormalizationSchema
+      )
+
+      guard let data = responseText.data(using: .utf8) else { return nil }
+      let parsed = try JSONDecoder().decode(Response.self, from: data)
+      guard let type = GoalType(rawValue: parsed.goalType) else { return nil }
+      let title = parsed.title.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !title.isEmpty else { return nil }
+
+      return NormalizedGoalInput(
+        title: title,
+        goalType: type,
+        targetValue: parsed.targetValue > 0 ? parsed.targetValue : 1,
+        unit: parsed.unit?.trimmingCharacters(in: .whitespacesAndNewlines)
+      )
+    } catch {
+      log("GoalsAI: normalizeOnboardingGoalInput failed: \(error.localizedDescription)")
+      return nil
     }
   }
 

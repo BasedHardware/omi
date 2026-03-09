@@ -653,19 +653,76 @@ struct OnboardingChatView: View {
         let lower = text.lowercased()
         return lower.contains("top one goal")
             || lower.contains("top goal")
+            || lower.contains("#1 goal")
+            || lower.contains("number 1 goal")
+            || lower.contains("goal this month")
+            || lower.contains("what's your #1 goal")
             || lower.contains("top priority")
             || lower.contains("priority right now")
     }
 
     private func isTypeYourOwnOption(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return lower.contains("type my own") || lower.contains("i'll type my own") || lower.contains("i’ll type my own")
+        return lower.contains("type my own")
+            || lower.contains("i'll type my own")
+            || lower.contains("i’ll type my own")
+            || lower.contains("i'll type it")
+            || lower.contains("i’ll type it")
+            || lower.contains("type it")
     }
 
     private func normalizedGoalTitle(_ text: String) -> String {
         text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    private func heuristicGoalTitle(_ text: String) -> String {
+        var cleaned = normalizedGoalTitle(text)
+        let lower = cleaned.lowercased()
+        let prefixes = [
+            "my goal is ",
+            "goal is ",
+            "my goal: ",
+            "goal: ",
+            "i want to ",
+            "i wanna ",
+            "i need to ",
+            "i will ",
+            "i'm going to ",
+        ]
+        for prefix in prefixes where lower.hasPrefix(prefix) {
+            cleaned = String(cleaned.dropFirst(prefix.count))
+            break
+        }
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func fallbackGoalConfig(from title: String) -> (goalType: GoalType, targetValue: Double, unit: String?) {
+        let lower = title.lowercased()
+        let pattern = #"\b(\d+(?:\.\d+)?)\s*(k|m|b)?\s*(users?|customers?|clients?|sales?|revenue|downloads?)?\b"#
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)) {
+            let numberRange = match.range(at: 1)
+            let suffixRange = match.range(at: 2)
+            let unitRange = match.range(at: 3)
+            if let numberSwiftRange = Range(numberRange, in: lower),
+               let baseNumber = Double(lower[numberSwiftRange]) {
+                var multiplier = 1.0
+                if let suffixSwiftRange = Range(suffixRange, in: lower) {
+                    switch lower[suffixSwiftRange] {
+                    case "k": multiplier = 1_000
+                    case "m": multiplier = 1_000_000
+                    case "b": multiplier = 1_000_000_000
+                    default: break
+                    }
+                }
+                let unit: String? = Range(unitRange, in: lower).map { String(lower[$0]) }
+                return (.numeric, max(baseNumber * multiplier, 1), unit)
+            }
+        }
+
+        return (.boolean, 1, nil)
     }
 
     private func shouldSkipGoalCreation(_ title: String) -> Bool {
@@ -680,25 +737,33 @@ struct OnboardingChatView: View {
     }
 
     private func maybeCreateGoal(from rawText: String, source: String) async {
-        let title = normalizedGoalTitle(rawText)
+        let rawTitle = normalizedGoalTitle(rawText)
+        guard !shouldSkipGoalCreation(rawTitle) else { return }
+
+        let aiNormalized = await GoalsAIService.shared.normalizeOnboardingGoalInput(rawTitle)
+        let title = aiNormalized?.title ?? heuristicGoalTitle(rawTitle)
         guard !shouldSkipGoalCreation(title) else { return }
 
-            let dedupeKey = title.lowercased()
-            guard !createdGoalTitles.contains(dedupeKey) else { return }
+        let config: (goalType: GoalType, targetValue: Double, unit: String?) =
+            aiNormalized.map { (goalType: $0.goalType, targetValue: $0.targetValue, unit: $0.unit) }
+            ?? fallbackGoalConfig(from: title)
+        let dedupeKey = title.lowercased()
+        guard !createdGoalTitles.contains(dedupeKey) else { return }
 
         do {
             let goal = try await APIClient.shared.createGoal(
                 title: title,
                 description: "Added from onboarding",
-                goalType: .boolean,
-                targetValue: 1,
+                goalType: config.goalType,
+                targetValue: config.targetValue,
                 currentValue: 0,
+                unit: config.unit,
                 source: "onboarding_\(source)"
             )
             _ = try? await GoalStorage.shared.syncServerGoal(goal)
             createdGoalTitles.insert(dedupeKey)
             awaitingGoalInput = false
-            log("OnboardingChat: Created goal from onboarding input: \(title)")
+            log("OnboardingChat: Created goal from onboarding input: \(title) (\(config.goalType.rawValue), target: \(config.targetValue))")
         } catch {
             logError("OnboardingChat: Failed to create goal from onboarding input", error: error)
         }
