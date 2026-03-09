@@ -284,3 +284,24 @@ After making changes, always run the appropriate test script to verify your chan
 
 - **Backend changes**: Run `backend/test.sh`
 - **App changes**: Run `app/test.sh`
+
+### Backend Test Prerequisites
+Run `backend/test-preflight.sh` to verify your environment before running tests.
+
+**Required** (unit tests will fail without these):
+- `python3` with `pytest` installed
+- Python packages from `backend/requirements.txt` (at minimum: `pydantic`, `fastapi`, `firebase_admin`, `redis`)
+- `ENCRYPTION_SECRET` — set automatically by `test.sh`
+
+**Optional** (integration tests, skipped if missing):
+- `OPENAI_API_KEY` — LLM-dependent tests
+- `DEEPGRAM_API_KEY` — STT tests
+- `ADMIN_KEY` — admin endpoint tests
+- `REDIS_DB_HOST`, `REDIS_DB_PASSWORD` — Redis-backed tests (default: localhost:6379)
+- `GOOGLE_APPLICATION_CREDENTIALS` — Firestore integration tests
+
+### App Test Prerequisites
+- Flutter SDK installed and on PATH
+- Generated files present (auto-created by `app/test.sh` if missing):
+  - `lib/firebase_options_dev.dart`, `lib/firebase_options_prod.dart`
+  - `lib/env/dev_env.g.dart`, `lib/env/prod_env.g.dart`
