@@ -89,6 +89,40 @@ class TestWebSocketAuthDependency(unittest.TestCase):
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-789")
 
+    @patch('utils.other.endpoints.try_acquire_listen_lock')
+    def test_ws_new_no_auth_does_not_call_rate_limiter(self, mock_lock):
+        """Missing auth header should short-circuit before rate limiter is called."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new"):
+                pass
+        self.assertEqual(ctx.exception.code, 1008)
+        mock_lock.assert_not_called()
+
+    @patch('utils.other.endpoints.try_acquire_listen_lock')
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('expired'))
+    def test_ws_new_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
+        """Invalid token should short-circuit before rate limiter is called."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer bad"}):
+                pass
+        self.assertEqual(ctx.exception.code, 1008)
+        mock_lock.assert_not_called()
+
+    def test_ws_new_empty_bearer_token_sends_close_1008(self):
+        """Authorization: 'Bearer ' (empty token) -> close with 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer "}):
+                pass
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=RuntimeError('unexpected error'))
+    def test_ws_new_unexpected_verify_error_sends_close_1008(self, mock_verify):
+        """Unexpected error from verify_token -> close with 1008, not handshake crash."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer token"}):
+                self.fail("Expected connection to fail")
+        self.assertEqual(ctx.exception.code, 1008)
+
 
 class TestWebSocketCloseFrameBehavior(unittest.TestCase):
     """Test that WebSocketException actually sends ASGI close message (vs HTTPException which doesn't)."""
