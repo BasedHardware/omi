@@ -1,8 +1,8 @@
 """Tests for WebSocket auth handshake fix (#5447).
 
 Verifies that:
-1. WebSocket endpoints send proper close frames on auth failure (not HTTPException)
-2. Per-UID rate limiting blocks retry storms
+1. get_current_user_uid_ws_listen sends proper close frames on auth failure (no rate limiter)
+2. get_current_user_uid_ws adds per-UID rate limiting on top of auth
 3. /v4/web/listen is NOT affected (uses accept-first pattern)
 """
 
@@ -15,56 +15,97 @@ from fastapi.testclient import TestClient
 from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
 
-from utils.other.endpoints import get_current_user_uid_ws, get_current_user_uid
+from utils.other.endpoints import get_current_user_uid_ws_listen, get_current_user_uid_ws, get_current_user_uid
 
 
-class TestWebSocketAuthDependency(unittest.TestCase):
-    """Test that get_current_user_uid_ws raises WebSocketException instead of HTTPException."""
+class TestWebSocketAuthListen(unittest.TestCase):
+    """Test get_current_user_uid_ws_listen — auth-only, no rate limiter (used by /v4/listen)."""
 
     def setUp(self):
         self.app = FastAPI()
 
-        @self.app.websocket("/ws-new")
-        async def ws_new(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws)):
-            await websocket.accept()
-            await websocket.send_json({"uid": uid})
-            await websocket.close()
-
-        @self.app.websocket("/ws-old")
-        async def ws_old(websocket: WebSocket, uid: str = Depends(get_current_user_uid)):
+        @self.app.websocket("/ws-listen")
+        async def ws_listen(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws_listen)):
             await websocket.accept()
             await websocket.send_json({"uid": uid})
             await websocket.close()
 
         self.client = TestClient(self.app)
 
-    def test_ws_new_no_auth_header_sends_close_1008(self):
+    def test_no_auth_header_sends_close_1008(self):
         """No auth header -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new"):
+            with self.client.websocket_connect("/ws-listen"):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
-    def test_ws_new_invalid_token_sends_close_1008(self, mock_verify):
+    def test_invalid_token_sends_close_1008(self, mock_verify):
         """Invalid token -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer invalid_token"}):
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
-    def test_ws_new_malformed_auth_header_sends_close_1008(self):
+    def test_malformed_auth_header_sends_close_1008(self):
         """Malformed auth header -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "malformed"}):
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "malformed"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', return_value='test-uid-123')
+    def test_valid_token_connects(self, mock_verify):
+        """Valid token -> successful connection (no rate limiter involved)."""
+        with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer valid_token"}) as ws:
+            data = ws.receive_json()
+            self.assertEqual(data["uid"], "test-uid-123")
+        mock_verify.assert_called_once_with("valid_token")
+
+    def test_empty_bearer_token_sends_close_1008(self):
+        """Authorization: 'Bearer ' (empty token) -> close with 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer "}):
+                pass
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=RuntimeError('unexpected error'))
+    def test_unexpected_verify_error_sends_close_1008(self, mock_verify):
+        """Unexpected error from verify_token -> close with 1008, not handshake crash."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer token"}):
+                self.fail("Expected connection to fail")
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.try_acquire_listen_lock')
+    @patch('utils.other.endpoints.verify_token', return_value='test-uid-123')
+    def test_no_rate_limiter_called(self, mock_verify, mock_lock):
+        """get_current_user_uid_ws_listen must NOT call the rate limiter."""
+        with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer valid_token"}) as ws:
+            data = ws.receive_json()
+            self.assertEqual(data["uid"], "test-uid-123")
+        mock_lock.assert_not_called()
+
+
+class TestWebSocketAuthWithRateLimit(unittest.TestCase):
+    """Test get_current_user_uid_ws — auth + rate limiting."""
+
+    def setUp(self):
+        self.app = FastAPI()
+
+        @self.app.websocket("/ws-ratelimited")
+        async def ws_ratelimited(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws)):
+            await websocket.accept()
+            await websocket.send_json({"uid": uid})
+            await websocket.close()
+
+        self.client = TestClient(self.app)
 
     @patch('utils.other.endpoints.try_acquire_listen_lock', return_value=True)
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-123')
-    def test_ws_new_valid_token_connects(self, mock_verify, mock_lock):
+    def test_valid_token_and_lock_connects(self, mock_verify, mock_lock):
         """Valid token + rate limit available -> successful connection."""
-        with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}) as ws:
+        with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}) as ws:
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-123")
         mock_verify.assert_called_once_with("valid_token")
@@ -72,10 +113,12 @@ class TestWebSocketAuthDependency(unittest.TestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock', return_value=False)
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-456')
-    def test_ws_new_rate_limited_sends_close_1008(self, mock_verify, mock_lock):
+    def test_rate_limited_sends_close_1008(self, mock_verify, mock_lock):
         """Valid token but rate limited -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}):
+            with self.client.websocket_connect(
+                "/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}
+            ):
                 self.fail("Expected WebSocket to be closed due to rate limit")
         self.assertEqual(ctx.exception.code, 1008)
         mock_verify.assert_called_once_with("valid_token")
@@ -83,45 +126,30 @@ class TestWebSocketAuthDependency(unittest.TestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock', side_effect=ConnectionError('redis down'))
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-789')
-    def test_ws_new_redis_failure_fails_open(self, mock_verify, mock_lock):
+    def test_redis_failure_fails_open(self, mock_verify, mock_lock):
         """Redis failure in rate limiter -> fail-open, connection proceeds."""
-        with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}) as ws:
+        with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}) as ws:
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-789")
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
-    def test_ws_new_no_auth_does_not_call_rate_limiter(self, mock_lock):
+    def test_no_auth_does_not_call_rate_limiter(self, mock_lock):
         """Missing auth header should short-circuit before rate limiter is called."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new"):
+            with self.client.websocket_connect("/ws-ratelimited"):
                 pass
         self.assertEqual(ctx.exception.code, 1008)
         mock_lock.assert_not_called()
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('expired'))
-    def test_ws_new_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
+    def test_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
         """Invalid token should short-circuit before rate limiter is called."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer bad"}):
+            with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer bad"}):
                 pass
         self.assertEqual(ctx.exception.code, 1008)
         mock_lock.assert_not_called()
-
-    def test_ws_new_empty_bearer_token_sends_close_1008(self):
-        """Authorization: 'Bearer ' (empty token) -> close with 1008."""
-        with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer "}):
-                pass
-        self.assertEqual(ctx.exception.code, 1008)
-
-    @patch('utils.other.endpoints.verify_token', side_effect=RuntimeError('unexpected error'))
-    def test_ws_new_unexpected_verify_error_sends_close_1008(self, mock_verify):
-        """Unexpected error from verify_token -> close with 1008, not handshake crash."""
-        with self.assertRaises(WebSocketDisconnect) as ctx:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer token"}):
-                self.fail("Expected connection to fail")
-        self.assertEqual(ctx.exception.code, 1008)
 
 
 class TestWebSocketCloseFrameBehavior(unittest.TestCase):
@@ -232,7 +260,7 @@ class TestWebSocketCloseFrameBehavior(unittest.TestCase):
 
 
 class TestListenEndpointNotAffectWebListen(unittest.TestCase):
-    """Verify /v4/listen uses WS auth and /v4/web/listen is unchanged (source-level check)."""
+    """Verify /v4/listen uses WS auth (no rate limiter) and /v4/web/listen is unchanged (source-level check)."""
 
     def _read_transcribe_source(self):
         import os
@@ -241,8 +269,8 @@ class TestListenEndpointNotAffectWebListen(unittest.TestCase):
         with open(path) as f:
             return f.read()
 
-    def test_listen_handler_uses_http_auth_dependency(self):
-        """listen_handler should use get_current_user_uid (HTTP variant) — mobile app sends Authorization header."""
+    def test_listen_handler_uses_ws_listen_auth(self):
+        """listen_handler should use get_current_user_uid_ws_listen (WS auth, no rate limiter)."""
         source = self._read_transcribe_source()
         import re
 
@@ -253,9 +281,8 @@ class TestListenEndpointNotAffectWebListen(unittest.TestCase):
         )
         self.assertIsNotNone(listen_match, "Could not find /v4/listen handler")
         handler_sig = listen_match.group()
-        self.assertIn('get_current_user_uid)', handler_sig, "/v4/listen must use get_current_user_uid")
-        self.assertNotIn(
-            'get_current_user_uid_ws', handler_sig, "/v4/listen must NOT use get_current_user_uid_ws"
+        self.assertIn(
+            'get_current_user_uid_ws_listen', handler_sig, "/v4/listen must use get_current_user_uid_ws_listen"
         )
 
     def test_web_listen_has_no_uid_dependency(self):
