@@ -131,6 +131,29 @@ See `.claude/settings.json` for connection details.
 - To actually test, ALWAYS use `./run.sh` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
+### Verifying UI Changes (agent-swift)
+
+After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.
+
+**One-time setup:** `brew install beastoin/tap/agent-swift` + grant Accessibility permission to Terminal.app.
+
+```bash
+# After ./run.sh launches the app:
+agent-swift doctor                                # verify Accessibility permission
+agent-swift connect --bundle com.omi.desktop-dev  # connect to running app
+agent-swift snapshot -i                           # see interactive elements
+agent-swift press @e3                             # click a button
+agent-swift fill @e5 "search text"                # type into a field
+agent-swift screenshot /tmp/evidence.png          # capture for PR evidence
+```
+
+**Key rules:**
+- Always use `snapshot -i` (interactive only) — full snapshot of a complex SwiftUI app is extremely verbose.
+- Refs go stale after `press`/`fill` — re-snapshot before the next interaction.
+- `agent-swift doctor --bundle com.omi.desktop-dev` verifies both permission and that the app is running.
+- No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (never automate prod).
+
 ### Changelog Entries
 
 After completing a desktop task with user-visible impact, append a one-liner to `unreleased` in `desktop/CHANGELOG.json`:
