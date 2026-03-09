@@ -70,6 +70,26 @@ Keep this map up to date. When adding, removing, or changing inter-service calls
 - When adding new l10n keys, translate all 33 non-English locales — never leave English text in non-English ARB files. Use `omi-add-missing-language-keys-l10n` skill for translations. Ensure `{parameter}` placeholders match the English ARB exactly.
 - After modifying ARB files in `app/lib/l10n/`, regenerate localizations: `cd app && flutter gen-l10n`
 
+#### Verifying UI Changes (agent-flutter)
+
+After any Flutter UI edit, verify programmatically with [agent-flutter](https://github.com/beastoin/agent-flutter). Marionette is already integrated in debug builds. Install once: `npm install -g agent-flutter-cli`.
+
+Edit → Verify → Evidence loop:
+1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
+2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
+3. Verify: `agent-flutter snapshot -i` (see widgets on screen)
+4. Interact: `agent-flutter press @e3` / `find type button press` / `fill @e5 "text"`
+5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
+
+Key rules:
+- Must reconnect after every hot restart (kills VM Service session).
+- Refs stale after `press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
+- Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
+- When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
+- E2E reference flows: `app/e2e/` (navigation, settings, tabs, language change).
+- Full command reference: `agent-flutter schema` or `agent-flutter --help`.
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
