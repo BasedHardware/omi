@@ -144,4 +144,37 @@ See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 - For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
 
 ## Testing
+
+### Unit Tests
 Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
+
+### E2E Tests (agent-flutter)
+
+The app supports widget-level E2E testing via [agent-flutter](https://github.com/beastoin/agent-flutter) + Marionette (already integrated in debug builds).
+
+**Prerequisites:** Android emulator running, Node.js 18+, `npm install -g agent-flutter-cli`.
+
+**Quick start:**
+```bash
+# Run all 4 E2E flows (auto-starts flutter run if needed)
+app/e2e/run-all.sh
+
+# Or with an existing flutter run session
+AGENT_FLUTTER_LOG=/tmp/flutter-run.log app/e2e/run-all.sh
+```
+
+**Manual usage:**
+```bash
+agent-flutter doctor              # verify setup
+agent-flutter connect             # connect to running app
+agent-flutter snapshot -i         # list interactive widgets
+agent-flutter press @e3           # tap by ref
+agent-flutter find type button press  # find and tap
+agent-flutter screenshot out.png  # capture screen
+```
+
+**Key rules for writing E2E scripts:**
+- Always re-snapshot after UI mutations (`press`, `scroll`, `fill`) — refs go stale.
+- Use `AGENT_FLUTTER_LOG` pointing to flutter run's stdout log (not logcat) for reliable auto-detect.
+- Prefer `find type X` over hardcoded `@ref` numbers for stability.
+- See `app/e2e/README.md` for env vars, flow coverage, and helper API.
