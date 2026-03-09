@@ -130,5 +130,12 @@ See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and c
 ## Logs
 See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 
+## Documentation Maintenance
+
+- If a PR changes setup steps, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
+- Keep `AGENTS.md` synced with this file. Update both in the same commit.
+- Keep rules concise (one-line statements). No code examples or verbose prose in this file.
+- For significant changes to architecture, core flows, or APIs — update the Mintlify docs (`docs/`) in the same PR. Key files: `docs/doc/developer/backend/backend_deepdive.mdx` (architecture), `docs/doc/developer/backend/chat_system.mdx` (chat), `docs/doc/developer/backend/transcription.mdx` (STT pipeline).
+
 ## Testing
 Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.

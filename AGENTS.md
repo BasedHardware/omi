@@ -79,6 +79,11 @@ Always format code after making changes. The pre-commit hook handles this automa
 - **Python (backend/)**: `black --line-length 120 --skip-string-normalization <files>`
 - **C/C++ (firmware: omi/, omiGlass/)**: `clang-format -i <files>`
 
+## Documentation Maintenance
+
+- Update this file and `CLAUDE.md` in the same commit when rules change.
+- For architecture or core flow changes, update Mintlify docs (`docs/doc/developer/`) in the same PR.
+
 ## Testing
 
 - Always run tests before committing:
