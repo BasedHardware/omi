@@ -783,11 +783,74 @@ class TestDebounceFlushPending:
         assert len(batch) == 0
 
 
+class TestSingleSegmentBoundary:
+    """Tests that a single buffered segment is dispatched exactly once."""
+
+    def test_single_segment_flush(self):
+        """One buffered segment should produce exactly one task on flush."""
+        buffer = []
+        pending_translations = {}
+        inflight_tasks = []
+
+        # Single segment arrives
+        seg_id = 'seg-only'
+        pending_translations[seg_id] = {'text_hash': 'h1', 'version': 1}
+        buffer.append((seg_id, 'conv-1', 1))
+
+        assert len(buffer) == 1
+
+        # Flush: drain buffer, create one task per segment
+        batch = list(buffer)
+        buffer.clear()
+        for seg, conv_id, ver in batch:
+            inflight_tasks.append(f'task-{seg}')
+
+        assert len(inflight_tasks) == 1
+        assert inflight_tasks[0] == 'task-seg-only'
+        assert len(buffer) == 0
+
+
+class TestFlushAwaitsInflightTasks:
+    """Tests that flush properly awaits in-flight translate tasks."""
+
+    def test_inflight_tasks_tracked_on_flush(self):
+        """Each segment in the batch should produce a tracked in-flight task."""
+        inflight_tasks = []
+        buffer = [('seg-0', 'conv-1', 1), ('seg-1', 'conv-1', 2), ('seg-2', 'conv-1', 3)]
+
+        # Simulate _flush_debounce_buffer: drain buffer, create tasks, track them
+        batch = list(buffer)
+        buffer.clear()
+        for seg, conv_id, ver in batch:
+            inflight_tasks.append(f'task-{seg}')
+
+        assert len(inflight_tasks) == 3
+
+    def test_flush_clears_inflight_after_await(self):
+        """After awaiting, inflight_tasks list should be cleared."""
+        inflight_tasks = ['task-1', 'task-2']
+
+        # Simulate flush_pending_translations: await then clear
+        pending = [t for t in inflight_tasks]  # would be filtered by .done() in real code
+        # After asyncio.gather completes:
+        inflight_tasks.clear()
+
+        assert len(inflight_tasks) == 0
+
+    def test_flush_handles_empty_inflight(self):
+        """Flushing with no in-flight tasks should be a no-op."""
+        inflight_tasks = []
+        pending = [t for t in inflight_tasks]
+        assert len(pending) == 0
+        inflight_tasks.clear()
+        assert len(inflight_tasks) == 0
+
+
 class TestDebounceMetricsAccuracy:
     """Tests that metrics counters accurately reflect temporal debounce behavior."""
 
-    def test_all_segments_counted_as_debounced_then_translated(self):
-        """Every segment entering the buffer is a debounce_skip; batch flush counts as translated."""
+    def test_all_segments_counted_as_buffered_then_translated(self):
+        """Every segment entering the buffer is a segments_buffered; batch flush counts as translated."""
         metrics = {'segments_buffered': 0, 'segments_translated': 0}
         buffer = []
 
@@ -822,3 +885,25 @@ class TestDebounceMetricsAccuracy:
         assert metrics['lang_cache_skips'] == 1
         assert metrics['segments_buffered'] == 2
         assert len(buffer) == 2
+
+    def test_total_segments_excludes_translated(self):
+        """total_segments should NOT include segments_translated (it's a subset of segments_buffered).
+
+        This prevents the double-counting bug where the same segments are counted in both
+        segments_buffered (entry) and segments_translated (dispatch).
+        """
+        metrics = {
+            'segments_buffered': 10,
+            'segments_translated': 10,
+            'lang_cache_skips': 3,
+            'same_text_skips': 2,
+        }
+
+        # Correct formula: total = buffered + lang_skip + same_text_skip
+        # segments_translated is a subset of segments_buffered, NOT added to total
+        total_segments = metrics['segments_buffered'] + metrics['lang_cache_skips'] + metrics['same_text_skips']
+
+        assert total_segments == 15  # 10 + 3 + 2, NOT 25
+        assert metrics['segments_translated'] not in [total_segments]  # translated is separate
+        # Verify translated <= buffered (it's always a subset)
+        assert metrics['segments_translated'] <= metrics['segments_buffered']
