@@ -143,13 +143,18 @@ agent-swift doctor                                   # verify Accessibility perm
 agent-swift connect --bundle-id com.omi.desktop-dev  # connect to running app
 agent-swift snapshot -i                              # see interactive elements
 agent-swift press @e3                                # click a button
-screencapture /tmp/evidence.png                      # capture for PR evidence
+agent-swift fill @e5 "search text"                   # type into a text field
+agent-swift find role button press                   # find + chained action
+agent-swift is exists @e3                            # assert element exists (exit 0/1)
+agent-swift wait text "Settings"                     # wait for text to appear
+agent-swift screenshot /tmp/evidence.png             # capture app window
 ```
 
 **Key rules:**
 - Always use `snapshot -i` (interactive only) — full snapshot of a complex SwiftUI app is extremely verbose.
-- Refs go stale after `press` — re-snapshot before the next interaction.
-- Available commands: `doctor`, `connect`, `snapshot`, `press`, `status`, `disconnect`.
+- Refs go stale after `press`/`fill`/`scroll` — re-snapshot before the next interaction.
+- Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
+- 14 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (never automate prod).
 
