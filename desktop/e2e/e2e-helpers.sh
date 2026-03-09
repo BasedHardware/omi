@@ -157,8 +157,22 @@ as_screenshot() {
 
 # --- Navigation helpers ---
 
+as_click_wait() {
+  as click "@$1" 2>&1
+  as_wait
+}
+
 as_press_wait() {
   as press "@$1" 2>&1
+  as_wait
+}
+
+as_click_label() {
+  local label="$1"
+  local ref
+  ref=$(as_find_label "$label") || { echo "  Could not find element with label: $label"; return 1; }
+  echo "  Found '$label' at $ref"
+  as click "@$ref" 2>&1
   as_wait
 }
 
