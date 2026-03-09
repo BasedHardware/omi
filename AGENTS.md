@@ -90,6 +90,29 @@ Key rules:
 - E2E reference flows: `app/e2e/` (navigation, settings, tabs, language change).
 - Full command reference: `agent-flutter schema` or `agent-flutter --help`.
 
+### Desktop (macOS)
+
+#### Verifying UI Changes (agent-swift)
+
+After any Swift UI edit, verify programmatically with [agent-swift](https://github.com/beastoin/agent-swift). No app-side instrumentation needed — uses macOS Accessibility API. Install once: `brew install beastoin/tap/agent-swift`.
+
+Requires: Accessibility permission for Terminal.app (System Settings → Privacy & Security → Accessibility).
+
+Edit → Verify → Evidence loop:
+1. Edit code, rebuild: `cd desktop && ./run.sh`
+2. Connect: `agent-swift connect --bundle com.omi.desktop-dev`
+3. Verify: `agent-swift snapshot -i` (interactive elements only)
+4. Interact: `agent-swift press @e3` / `agent-swift fill @e5 "text"`
+5. Evidence: `agent-swift screenshot /tmp/evidence.png`
+
+Key rules:
+- `agent-swift doctor` verifies Accessibility permission and target app.
+- Refs stale after `press`/`fill` — re-snapshot before next interaction.
+- Always use `snapshot -i` — full snapshots of complex apps are very verbose.
+- Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- Full command reference: `agent-swift --help`.
+
 ## Formatting
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
