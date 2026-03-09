@@ -140,7 +140,7 @@ Install agent-swift once: `brew install beastoin/tap/agent-swift`. Requires Acce
 cd desktop && ./run.sh
 
 # 2. Connect to the running app
-agent-swift connect --bundle com.omi.desktop-dev
+agent-swift connect --bundle-id com.omi.desktop-dev
 
 # 3. See what's on screen
 agent-swift snapshot -i              # interactive elements only (recommended)
@@ -148,16 +148,16 @@ agent-swift snapshot -i --json       # structured data for parsing
 
 # 4. Interact
 agent-swift press @e3                # click by ref
-agent-swift fill @e5 "hello"         # type into textfield
 
 # 5. Screenshot evidence for PRs
-agent-swift screenshot /tmp/after-change.png
+screencapture /tmp/after-change.png  # macOS native screenshot
 ```
 
 **Key rules:**
 - `agent-swift doctor` verifies Accessibility permission and can check the target app.
-- Refs go stale after mutations (`press`, `fill`) — re-snapshot before the next interaction.
+- Refs go stale after `press` — re-snapshot before the next interaction.
 - Always use `snapshot -i` (interactive only) — full snapshots of complex apps are very verbose.
+- Available commands: `doctor`, `connect`, `snapshot`, `press`, `status`, `disconnect`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
 
