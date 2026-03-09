@@ -86,9 +86,30 @@ Always format code after making changes. The pre-commit hook handles this automa
 
 ## Testing
 
+### Unit Tests
 - Always run tests before committing:
   - Backend changes: run `backend/test.sh`
   - App changes: run `app/test.sh`
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars are ready.
 - Backend unit tests need: `python3`, `pytest`, packages from `requirements.txt`, `ENCRYPTION_SECRET` (set by test.sh).
 - Integration tests optionally need: `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ADMIN_KEY`, Redis connectivity, `GOOGLE_APPLICATION_CREDENTIALS`.
+
+### E2E Tests (agent-flutter)
+
+Widget-level E2E testing via [agent-flutter](https://github.com/beastoin/agent-flutter) + Marionette (integrated in debug builds).
+
+Prerequisites: Android emulator running, Node.js 18+, `npm install -g agent-flutter-cli`.
+
+```bash
+# Run all 4 E2E flows
+app/e2e/run-all.sh
+
+# Manual usage
+agent-flutter connect && agent-flutter snapshot -i && agent-flutter press @e3
+```
+
+Key rules:
+- Re-snapshot after UI mutations (`press`, `scroll`, `fill`) — refs go stale.
+- Use `AGENT_FLUTTER_LOG` pointing to flutter run's stdout (not logcat) for auto-detect.
+- Prefer `find type X` over hardcoded `@ref` for stability.
+- See `app/e2e/README.md` for env vars and flow details.
