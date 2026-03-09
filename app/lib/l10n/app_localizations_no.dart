@@ -8271,4 +8271,194 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Forfalt';
+
+  @override
+  String get phoneCallsWithOmi => 'Samtaler med Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Ring med sanntids transkripsjon';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifiser telefonnummeret ditt';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Vi ringer deg for a bekrefte';
+
+  @override
+  String get phoneSetupStep2Title => 'Skriv inn en verifiseringskode';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'En kort kode du taster inn under samtalen';
+
+  @override
+  String get phoneSetupStep3Title => 'Begynn a ringe kontaktene dine';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Med innebygd live transkripsjon';
+
+  @override
+  String get phoneGetStarted => 'Kom i gang';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Samtaleopptak kan kreve samtykke i din jurisdiksjon';
+
+  @override
+  String get enterYourNumber => 'Skriv inn nummeret ditt';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Etter verifisering blir dette din anrops-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kunne ikke starte verifisering';
+
+  @override
+  String get phoneContinue => 'Fortsett';
+
+  @override
+  String get verifyYourNumber => 'Verifiser nummeret ditt';
+
+  @override
+  String get answerTheCallFrom => 'Svar pa anropet fra';
+
+  @override
+  String get onTheCallEnterThisCode => 'Under samtalen, tast inn denne koden';
+
+  @override
+  String get followTheVoiceInstructions => 'Folg taleinstruksjonene';
+
+  @override
+  String get statusCalling => 'Ringer...';
+
+  @override
+  String get statusCallInProgress => 'Samtale pagar';
+
+  @override
+  String get statusVerifiedLabel => 'Verifisert';
+
+  @override
+  String get statusCallMissed => 'Ubesvart anrop';
+
+  @override
+  String get statusTimedOut => 'Tidsavbrudd';
+
+  @override
+  String get phoneTryAgain => 'Prov igjen';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakter';
+
+  @override
+  String get phoneKeypadTab => 'Tastatur';
+
+  @override
+  String get grantContactsAccess => 'Gi tilgang til kontaktene dine';
+
+  @override
+  String get phoneAllow => 'Tillat';
+
+  @override
+  String get phoneSearchHint => 'Sok';
+
+  @override
+  String get phoneNoContactsFound => 'Ingen kontakter funnet';
+
+  @override
+  String get phoneEnterNumber => 'Skriv inn nummer';
+
+  @override
+  String get failedToStartCall => 'Kunne ikke starte samtalen';
+
+  @override
+  String get callStateConnecting => 'Kobler til...';
+
+  @override
+  String get callStateRinging => 'Ringer...';
+
+  @override
+  String get callStateEnded => 'Samtale avsluttet';
+
+  @override
+  String get callStateFailed => 'Samtale mislyktes';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsjon vises her...';
+
+  @override
+  String get phoneUnmute => 'Sla pa lyd';
+
+  @override
+  String get phoneMute => 'Demp';
+
+  @override
+  String get phoneSpeaker => 'Hoyttaler';
+
+  @override
+  String get phoneEndCall => 'Avslutt';
+
+  @override
+  String get phoneCallSettingsTitle => 'Samtaleinnstillinger';
+
+  @override
+  String get yourVerifiedNumbers => 'Dine verifiserte numre';
+
+  @override
+  String get verifiedNumbersDescription => 'Nar du ringer noen, vil de se dette nummeret';
+
+  @override
+  String get noVerifiedNumbers => 'Ingen verifiserte numre';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Slette $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Du ma verifisere pa nytt for a ringe';
+
+  @override
+  String get phoneDeleteButton => 'Slett';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verifisert for ${minutes}min siden';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verifisert for ${hours}t siden';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verifisert for ${days}d siden';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verifisert $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verifisert';
+
+  @override
+  String get callAlreadyInProgress => 'En samtale pagar allerede';
+
+  @override
+  String get failedToGetCallToken => 'Kunne ikke hente token. Verifiser nummeret ditt forst.';
+
+  @override
+  String get failedToInitializeCallService => 'Kunne ikke initialisere ringetjenesten';
+
+  @override
+  String get speakerLabelYou => 'Deg';
+
+  @override
+  String get speakerLabelUnknown => 'Ukjent';
 }

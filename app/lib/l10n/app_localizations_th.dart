@@ -8233,4 +8233,194 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'เกินกำหนด';
+
+  @override
+  String get phoneCallsWithOmi => 'โทรกับ Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'โทรพร้อมถอดความแบบเรียลไทม์';
+
+  @override
+  String get phoneSetupStep1Title => 'ยืนยันหมายเลขโทรศัพท์ของคุณ';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'เราจะโทรหาคุณเพื่อยืนยัน';
+
+  @override
+  String get phoneSetupStep2Title => 'ป้อนรหัสยืนยัน';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'รหัสสั้นที่คุณจะพิมพ์ขณะโทร';
+
+  @override
+  String get phoneSetupStep3Title => 'เริ่มโทรหารายชื่อของคุณ';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'พร้อมการถอดความสดในตัว';
+
+  @override
+  String get phoneGetStarted => 'เริ่มต้น';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'การบันทึกสายอาจต้องได้รับความยินยอมในเขตอำนาจศาลของคุณ';
+
+  @override
+  String get enterYourNumber => 'ป้อนหมายเลขของคุณ';
+
+  @override
+  String get phoneNumberCallerIdHint => 'หลังยืนยัน หมายเลขนี้จะเป็น ID ผู้โทรของคุณ';
+
+  @override
+  String get phoneNumberHint => 'หมายเลขโทรศัพท์';
+
+  @override
+  String get failedToStartVerification => 'ไม่สามารถเริ่มการยืนยัน';
+
+  @override
+  String get phoneContinue => 'ดำเนินการต่อ';
+
+  @override
+  String get verifyYourNumber => 'ยืนยันหมายเลขของคุณ';
+
+  @override
+  String get answerTheCallFrom => 'รับสายจาก';
+
+  @override
+  String get onTheCallEnterThisCode => 'ขณะโทร ป้อนรหัสนี้';
+
+  @override
+  String get followTheVoiceInstructions => 'ทำตามคำแนะนำเสียง';
+
+  @override
+  String get statusCalling => 'กำลังโทร...';
+
+  @override
+  String get statusCallInProgress => 'สายกำลังดำเนินอยู่';
+
+  @override
+  String get statusVerifiedLabel => 'ยืนยันแล้ว';
+
+  @override
+  String get statusCallMissed => 'สายที่ไม่ได้รับ';
+
+  @override
+  String get statusTimedOut => 'หมดเวลา';
+
+  @override
+  String get phoneTryAgain => 'ลองอีกครั้ง';
+
+  @override
+  String get phonePageTitle => 'โทรศัพท์';
+
+  @override
+  String get phoneContactsTab => 'รายชื่อ';
+
+  @override
+  String get phoneKeypadTab => 'แป้นกด';
+
+  @override
+  String get grantContactsAccess => 'ให้สิทธิ์เข้าถึงรายชื่อ';
+
+  @override
+  String get phoneAllow => 'อนุญาต';
+
+  @override
+  String get phoneSearchHint => 'ค้นหา';
+
+  @override
+  String get phoneNoContactsFound => 'ไม่พบรายชื่อ';
+
+  @override
+  String get phoneEnterNumber => 'ป้อนหมายเลข';
+
+  @override
+  String get failedToStartCall => 'ไม่สามารถเริ่มสาย';
+
+  @override
+  String get callStateConnecting => 'กำลังเชื่อมต่อ...';
+
+  @override
+  String get callStateRinging => 'กำลังดัง...';
+
+  @override
+  String get callStateEnded => 'สายสิ้นสุด';
+
+  @override
+  String get callStateFailed => 'สายล้มเหลว';
+
+  @override
+  String get transcriptPlaceholder => 'การถอดความจะปรากฏที่นี่...';
+
+  @override
+  String get phoneUnmute => 'เปิดเสียง';
+
+  @override
+  String get phoneMute => 'ปิดเสียง';
+
+  @override
+  String get phoneSpeaker => 'ลำโพง';
+
+  @override
+  String get phoneEndCall => 'วางสาย';
+
+  @override
+  String get phoneCallSettingsTitle => 'ตั้งค่าการโทร';
+
+  @override
+  String get yourVerifiedNumbers => 'หมายเลขที่ยืนยันแล้วของคุณ';
+
+  @override
+  String get verifiedNumbersDescription => 'เมื่อคุณโทรหาใครสักคน พวกเขาจะเห็นหมายเลขนี้';
+
+  @override
+  String get noVerifiedNumbers => 'ไม่มีหมายเลขที่ยืนยันแล้ว';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'ลบ $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'คุณต้องยืนยันใหม่เพื่อโทรออก';
+
+  @override
+  String get phoneDeleteButton => 'ลบ';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'ยืนยัน $minutesนาทีที่แล้ว';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'ยืนยัน $hoursชม.ที่แล้ว';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'ยืนยัน $daysวันที่แล้ว';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'ยืนยันเมื่อ $date';
+  }
+
+  @override
+  String get verifiedFallback => 'ยืนยันแล้ว';
+
+  @override
+  String get callAlreadyInProgress => 'มีสายโทรศัพท์อยู่แล้ว';
+
+  @override
+  String get failedToGetCallToken => 'ไม่สามารถรับโทเค็น กรุณายืนยันหมายเลขก่อน';
+
+  @override
+  String get failedToInitializeCallService => 'ไม่สามารถเริ่มบริการโทรศัพท์';
+
+  @override
+  String get speakerLabelYou => 'คุณ';
+
+  @override
+  String get speakerLabelUnknown => 'ไม่ทราบ';
 }
