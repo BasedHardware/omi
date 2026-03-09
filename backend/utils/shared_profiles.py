@@ -23,7 +23,7 @@ def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
         profile = profiles.get(owner_uid)
         if not profile:
             continue
-        name = get_user_name(owner_uid, use_default=False) or owner_uid[:8]
+        name = profile.get('name') or get_user_name(owner_uid, use_default=False) or owner_uid[:8]
         people.append(
             Person(
                 id=f"shared:{owner_uid}",

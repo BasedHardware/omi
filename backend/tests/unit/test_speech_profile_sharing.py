@@ -775,24 +775,22 @@ def test_spoofed_shared_pid_rejected_by_ownership_check():
 
 
 def test_all_valid_shared_pids_resolved():
-    """All legitimate shared profiles are resolved with correct names."""
+    """All legitimate shared profiles are resolved with correct names from batch profile."""
     from utils.shared_profiles import resolve_shared_people
-
-    def mock_name_fn(uid, use_default=True):
-        return {'alice_uid': 'Alice Smith', 'charlie_uid': 'Charlie Brown'}.get(uid)
 
     with patch('utils.shared_profiles.users_db') as mock_users, patch(
         'utils.shared_profiles.get_user_name'
     ) as mock_name:
         mock_users.get_profiles_shared_with_user.return_value = ['alice_uid', 'charlie_uid']
         mock_users.get_user_profiles_batch.return_value = {
-            'alice_uid': {'speaker_embedding': [0.1]},
-            'charlie_uid': {'speaker_embedding': [0.1]},
+            'alice_uid': {'speaker_embedding': [0.1], 'name': 'Alice Smith'},
+            'charlie_uid': {'speaker_embedding': [0.1], 'name': 'Charlie Brown'},
         }
-        mock_name.side_effect = mock_name_fn
 
         people = resolve_shared_people(['shared:alice_uid', 'shared:charlie_uid'], 'bob_uid')
 
+    # Name comes from batch-loaded profile, not get_user_name
+    mock_name.assert_not_called()
     assert len(people) == 2
     names = {p.name for p in people}
     assert names == {'Alice Smith', 'Charlie Brown'}

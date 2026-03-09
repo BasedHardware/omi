@@ -61,7 +61,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     final success = await revokeSpeechProfile(info.uid);
     if (!mounted) return;
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.profileSharedFail)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.revokeShareFail)));
       return;
     }
     setState(() => _loading = true);
@@ -84,7 +84,7 @@ class _SpeechProfileSharingPageState extends State<SpeechProfileSharingPage> {
     final success = await removeSharedProfile(info.uid);
     if (!mounted) return;
     if (!success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.profileSharedFail)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.removeShareFail)));
       return;
     }
     setState(() => _loading = true);
