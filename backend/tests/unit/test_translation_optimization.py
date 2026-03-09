@@ -788,15 +788,15 @@ class TestDebounceMetricsAccuracy:
 
     def test_all_segments_counted_as_debounced_then_translated(self):
         """Every segment entering the buffer is a debounce_skip; batch flush counts as translated."""
-        metrics = {'debounce_skips': 0, 'segments_translated': 0}
+        metrics = {'segments_buffered': 0, 'segments_translated': 0}
         buffer = []
 
         # 5 segments arrive — all buffered
         for i in range(5):
-            metrics['debounce_skips'] += 1
+            metrics['segments_buffered'] += 1
             buffer.append((f'seg-{i}', 'conv-1', i + 1))
 
-        assert metrics['debounce_skips'] == 5
+        assert metrics['segments_buffered'] == 5
 
         # Timer fires — batch translates all
         batch = list(buffer)
@@ -807,7 +807,7 @@ class TestDebounceMetricsAccuracy:
 
     def test_lang_cache_skip_not_buffered(self):
         """Segments skipped by language cache should not enter the buffer."""
-        metrics = {'debounce_skips': 0, 'lang_cache_skips': 0}
+        metrics = {'segments_buffered': 0, 'lang_cache_skips': 0}
         buffer = []
 
         # 3 segments: 2 need translation, 1 already in target language
@@ -816,9 +816,9 @@ class TestDebounceMetricsAccuracy:
             if is_target:
                 metrics['lang_cache_skips'] += 1
                 continue
-            metrics['debounce_skips'] += 1
+            metrics['segments_buffered'] += 1
             buffer.append((seg_id, 'conv-1', 1))
 
         assert metrics['lang_cache_skips'] == 1
-        assert metrics['debounce_skips'] == 2
+        assert metrics['segments_buffered'] == 2
         assert len(buffer) == 2
