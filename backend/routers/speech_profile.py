@@ -12,6 +12,7 @@ from database.auth import get_user_name
 from database.users import (
     get_person,
     get_user_profile,
+    get_user_profiles_batch,
     is_exists_user,
     set_user_speaker_embedding,
     share_speech_profile,
@@ -135,6 +136,11 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
     """Share the current user's speech profile with another user"""
     if data.target_uid == uid:
         raise HTTPException(status_code=400, detail="Cannot share with yourself.")
+    if not is_exists_user(data.target_uid):
+        raise HTTPException(status_code=404, detail="Target user not found.")
+    existing = get_users_shared_with(uid)
+    if data.target_uid in existing:
+        raise HTTPException(status_code=400, detail="Already shared with this user.")
     profile = get_user_profile(uid)
     if not profile:
         raise HTTPException(status_code=400, detail="No speech profile recorded.")
@@ -151,11 +157,6 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
-    if not is_exists_user(data.target_uid):
-        raise HTTPException(status_code=404, detail="Target user not found.")
-    existing = get_users_shared_with(uid)
-    if data.target_uid in existing:
-        raise HTTPException(status_code=400, detail="Already shared with this user.")
     share_speech_profile(uid, data.target_uid)
     return {"status": "ok"}
 
@@ -184,11 +185,23 @@ def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depend
 def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
     """List users who have shared their speech profile with the current user"""
     owner_uids = get_profiles_shared_with_user(uid)
-    return {"shared_with_me": [{'uid': u, 'name': get_user_name(u, use_default=False) or ''} for u in owner_uids]}
+    profiles = get_user_profiles_batch(owner_uids) if owner_uids else {}
+    return {
+        "shared_with_me": [
+            {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
+            for u in owner_uids
+        ]
+    }
 
 
 @router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
 def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
     """List users with whom the current user has shared their speech profile"""
     target_uids = get_users_shared_with(uid)
-    return {"i_have_shared_with": [{'uid': u, 'name': get_user_name(u, use_default=False) or ''} for u in target_uids]}
+    profiles = get_user_profiles_batch(target_uids) if target_uids else {}
+    return {
+        "i_have_shared_with": [
+            {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
+            for u in target_uids
+        ]
+    }

@@ -10080,12 +10080,21 @@
         "description": "Snackbar message after saving API environment preference"
     },
     "shareSpeechProfile": "Share Speech Profile",
+    "@shareSpeechProfile": {
+        "description": "Button label to open the speech profile sharing dialog"
+    },
     "enterUserIdToShare": "Enter the user ID to share your speech profile with",
+    "@enterUserIdToShare": {
+        "description": "Instruction text in the share speech profile dialog"
+    },
     "profileSharedSuccess": "Speech profile shared successfully",
+    "@profileSharedSuccess": {
+        "description": "Snackbar message after successfully sharing a speech profile"
+    },
     "profileSharedFail": "Failed to share speech profile",
-    "speechProfileSharingStatus": "Speech Profile Sharing Status",
-    "youHaveSharedWith": "You have shared with:",
-    "sharedWithYou": "Shared with you:",
+    "@profileSharedFail": {
+        "description": "Snackbar message when sharing a speech profile fails"
+    },
     "sharedWithSection": "You shared with",
     "@sharedWithSection": {
         "description": "Section header for profiles shared with others"
