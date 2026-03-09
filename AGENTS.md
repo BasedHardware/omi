@@ -9,6 +9,7 @@ These rules apply to Codex when working in this repository.
 ## Setup
 
 - Install pre-commit hook: `ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit`
+- Mobile app setup: `cd app && bash setup.sh ios` (or `android`)
 
 ## Safety Rules
 
