@@ -582,82 +582,94 @@ class TestTranslationCacheTTLOverride:
 
 
 # ---------------------------------------------------------------------------
-# Debounce integration tests
+# Temporal debounce integration tests
 # ---------------------------------------------------------------------------
-# The debounce logic lives inside transcribe.py closures. These tests replicate
-# the state machine pattern to verify first-appearance, debounced update,
-# final-segment bypass, stale version rejection, and flush behavior.
+# The debounce logic in transcribe.py accumulates segments into a buffer and
+# translates them as a batch after TRANSLATION_DEBOUNCE_SECONDS of quiet.
+# These tests replicate the buffer/timer pattern, stale version rejection,
+# same-text skip, and flush behavior.
 
 
-def _is_segment_final(segment_text: str) -> bool:
-    """Mirror of the _is_segment_final function inside _stream_handler."""
-    return bool(segment_text) and segment_text[-1] in '.?!'
+class TestTemporalDebounceBuffer:
+    """Tests the temporal debounce buffer accumulation logic."""
 
+    def test_segments_buffered_not_immediate(self):
+        """All segments should be buffered, not translated immediately."""
+        buffer = []
+        pending_translations = {}
+        version_counter = 0
 
-class TestIsSegmentFinal:
-    def test_period_is_final(self):
-        assert _is_segment_final("Hello world.") is True
+        # Simulate 3 segments arriving (unique IDs, as Deepgram produces)
+        for i in range(3):
+            seg_id = f'seg-{i}'
+            version_counter += 1
+            pending_translations[seg_id] = {'text_hash': f'h{i}', 'version': version_counter}
+            buffer.append((seg_id, 'conv-1', version_counter))
 
-    def test_question_mark_is_final(self):
-        assert _is_segment_final("How are you?") is True
+        assert len(buffer) == 3
+        assert len(pending_translations) == 3
 
-    def test_exclamation_is_final(self):
-        assert _is_segment_final("Wow!") is True
+    def test_buffer_cleared_on_flush(self):
+        """Flushing should clear the buffer and return all segments."""
+        buffer = [('seg-0', 'conv-1', 1), ('seg-1', 'conv-1', 2)]
 
-    def test_no_punctuation_not_final(self):
-        assert _is_segment_final("Hello how are you") is False
+        batch = list(buffer)
+        buffer.clear()
 
-    def test_comma_not_final(self):
-        assert _is_segment_final("Hello, how are you,") is False
+        assert len(batch) == 2
+        assert len(buffer) == 0
 
-    def test_empty_string_not_final(self):
-        assert _is_segment_final("") is False
+    def test_unique_segment_ids_all_buffered(self):
+        """With unique segment IDs (real Deepgram behavior), all segments get buffered."""
+        buffer = []
+        pending_translations = {}
+        version_counter = 0
 
-    def test_whitespace_only_not_final(self):
-        assert _is_segment_final("   ") is False
+        # Each segment has a unique ID — this is the actual DG behavior
+        segment_ids = ['abc-001', 'abc-002', 'abc-003', 'abc-004', 'abc-005']
+        for seg_id in segment_ids:
+            version_counter += 1
+            text_hash = hashlib.md5(f'text-{seg_id}'.encode()).hexdigest()
+            pending = pending_translations.get(seg_id)
+            # No pending (unique ID) — always enters buffer
+            assert pending is None
+            pending_translations[seg_id] = {'text_hash': text_hash, 'version': version_counter}
+            buffer.append((seg_id, 'conv-1', version_counter))
 
-    def test_colon_not_final(self):
-        assert _is_segment_final("Note:") is False
+        # All 5 segments should be buffered (not 0 like the old segment-ID debounce)
+        assert len(buffer) == 5
 
+    def test_timer_reset_on_new_segment(self):
+        """Adding a segment should cancel and restart the debounce timer."""
+        import asyncio
 
-class TestDebounceStateMachine:
-    """Tests the debounce decision logic as implemented in transcribe.py translate()."""
+        timer_cancelled = False
+        timer_started = 0
 
-    def _make_decision(self, pending, segment_text):
-        """Replicate the debounce decision: returns 'immediate' or 'debounce'."""
-        segment_is_final = _is_segment_final(segment_text)
-        if not pending or segment_is_final:
-            return 'immediate'
-        else:
-            return 'debounce'
+        class FakeTask:
+            def __init__(self):
+                self._done = False
 
-    def test_first_appearance_immediate(self):
-        """First time a segment appears -> translate immediately."""
-        assert self._make_decision(pending=None, segment_text="Hello") == 'immediate'
+            def done(self):
+                return self._done
 
-    def test_first_appearance_final_immediate(self):
-        """First time + final segment -> still immediate."""
-        assert self._make_decision(pending=None, segment_text="Hello.") == 'immediate'
+            def cancel(self):
+                nonlocal timer_cancelled
+                timer_cancelled = True
+                self._done = True
 
-    def test_update_non_final_debounced(self):
-        """Updated segment without final punctuation -> debounce."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="Hello how are") == 'debounce'
+        # First segment starts timer
+        debounce_task = FakeTask()
+        timer_started += 1
 
-    def test_update_final_immediate(self):
-        """Updated segment with final punctuation -> immediate (bypass debounce)."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="Hello how are you.") == 'immediate'
+        # Second segment arrives — should cancel and restart
+        if debounce_task and not debounce_task.done():
+            debounce_task.cancel()
+        debounce_task = FakeTask()
+        timer_started += 1
 
-    def test_update_question_final_immediate(self):
-        """Updated segment ending with question mark -> immediate."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="How are you?") == 'immediate'
-
-    def test_update_exclamation_final_immediate(self):
-        """Updated segment ending with exclamation -> immediate."""
-        pending = {'text_hash': 'old', 'version': 1}
-        assert self._make_decision(pending=pending, segment_text="That is great!") == 'immediate'
+        assert timer_cancelled is True
+        assert timer_started == 2
 
 
 class TestDebounceVersionSafety:
@@ -734,14 +746,21 @@ class TestDebounceFlushPending:
     """Tests flush_pending_translations behavior."""
 
     def test_flush_clears_all_entries(self):
-        """After flush, pending_translations should be empty."""
+        """After flush, pending_translations and buffer should be empty."""
         pending_translations = {
-            'seg-1': {'text_hash': 'h1', 'version': 1, 'task': None},
-            'seg-2': {'text_hash': 'h2', 'version': 2, 'task': None},
+            'seg-1': {'text_hash': 'h1', 'version': 1},
+            'seg-2': {'text_hash': 'h2', 'version': 2},
         }
-        # Simulate flush
+        buffer = [('seg-1', 'conv-1', 1), ('seg-2', 'conv-1', 2)]
+
+        # Simulate flush: drain buffer then clear pending
+        batch = list(buffer)
+        buffer.clear()
         pending_translations.clear()
+
         assert len(pending_translations) == 0
+        assert len(buffer) == 0
+        assert len(batch) == 2  # Batch was captured before clear
 
     def test_exception_in_translate_cleans_up(self):
         """If _translate_segment raises, pending entry should still be cleaned up."""
@@ -752,8 +771,54 @@ class TestDebounceFlushPending:
         try:
             raise Exception("Translation API error")
         except Exception:
-            # The real code logs the error and the entry stays until pruned
-            # But flush will clear it
             pass
         pending_translations.pop(segment_id, None)
         assert segment_id not in pending_translations
+
+    def test_flush_handles_empty_buffer(self):
+        """Flushing an empty buffer should be a no-op."""
+        buffer = []
+        batch = list(buffer)
+        buffer.clear()
+        assert len(batch) == 0
+
+
+class TestDebounceMetricsAccuracy:
+    """Tests that metrics counters accurately reflect temporal debounce behavior."""
+
+    def test_all_segments_counted_as_debounced_then_translated(self):
+        """Every segment entering the buffer is a debounce_skip; batch flush counts as translated."""
+        metrics = {'debounce_skips': 0, 'segments_translated': 0}
+        buffer = []
+
+        # 5 segments arrive — all buffered
+        for i in range(5):
+            metrics['debounce_skips'] += 1
+            buffer.append((f'seg-{i}', 'conv-1', i + 1))
+
+        assert metrics['debounce_skips'] == 5
+
+        # Timer fires — batch translates all
+        batch = list(buffer)
+        buffer.clear()
+        metrics['segments_translated'] += len(batch)
+
+        assert metrics['segments_translated'] == 5
+
+    def test_lang_cache_skip_not_buffered(self):
+        """Segments skipped by language cache should not enter the buffer."""
+        metrics = {'debounce_skips': 0, 'lang_cache_skips': 0}
+        buffer = []
+
+        # 3 segments: 2 need translation, 1 already in target language
+        segments = [('seg-0', False), ('seg-1', True), ('seg-2', False)]  # (id, is_target_lang)
+        for seg_id, is_target in segments:
+            if is_target:
+                metrics['lang_cache_skips'] += 1
+                continue
+            metrics['debounce_skips'] += 1
+            buffer.append((seg_id, 'conv-1', 1))
+
+        assert metrics['lang_cache_skips'] == 1
+        assert metrics['debounce_skips'] == 2
+        assert len(buffer) == 2
