@@ -147,9 +147,10 @@ agent-swift snapshot -i              # interactive elements only (recommended)
 agent-swift snapshot -i --json       # structured data for parsing
 
 # 4. Interact
-agent-swift press @e3                # click by ref
+agent-swift click @e3                # CGEvent click (works with SwiftUI)
+agent-swift press @e3                # AXPress action (AppKit buttons)
 agent-swift fill @e5 "search text"   # type into a text field
-agent-swift find role button press   # find + chained action
+agent-swift find role button click   # find + chained action
 agent-swift scroll down              # scroll the view
 
 # 5. Assert & wait
@@ -162,11 +163,12 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 
 **Key rules:**
 - `agent-swift doctor` verifies Accessibility permission and can check the target app.
-- Refs go stale after `press`/`fill`/`scroll` — re-snapshot before the next interaction.
+- Prefer `click` over `press` for SwiftUI apps — `click` sends CGEvent mouse clicks that trigger NavigationLink/gesture handlers, while `press` sends AXPress which only works for AppKit buttons.
+- Refs go stale after `click`/`press`/`fill`/`scroll` — re-snapshot before the next interaction.
 - Always use `snapshot -i` (interactive only) — full snapshots of complex apps are very verbose.
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - JSON output: `--json` flag, `AGENT_SWIFT_JSON=1` env var, or pipe to auto-detect.
-- 14 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
+- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
 
