@@ -72,6 +72,18 @@ cd app && rm -rf .dart_tool/build lib/env/prod_env.g.dart lib/env/dev_env.g.dart
 dart run build_runner build --delete-conflicting-outputs
 ```
 
+#### Verifying UI Changes (agent-flutter)
+
+After the app is running, connect agent-flutter to see and interact with the app:
+```bash
+AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect
+agent-flutter snapshot -i         # see interactive widgets
+agent-flutter press @e3           # tap a widget
+agent-flutter screenshot /tmp/evidence.png  # capture screen
+```
+
+Reconnect after every hot restart. See `app/e2e/` for reference flow scripts.
+
 #### Simulator Notes
 
 - iOS Keychain persists across app uninstalls in the simulator, so Firebase Auth sessions survive reinstalls

@@ -543,6 +543,9 @@ workflows:
           - Internal
           - Discord Folks
         submit_to_app_store: false
+
+  macos-prod-appstore:
+    name: Release macOS to App Store
     instance_type: mac_mini_m2
     max_build_duration: 120
     integrations:
@@ -2133,6 +2136,7 @@ workflows:
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier   $BUNDLE_ID"    "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleName         $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName  $APP_NAME"     "$APP_BUNDLE/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 omi-computer" "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 14.0"        "$APP_BUNDLE/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
             "$APP_BUNDLE/Contents/Info.plist" 2>/dev/null || \
@@ -2151,6 +2155,9 @@ workflows:
 
           # Write runtime .env from OMI_DESKTOP_APP_ENV secret (base64-encoded .env.app contents)
           echo "$OMI_DESKTOP_APP_ENV" | base64 --decode > "$APP_BUNDLE/Contents/Resources/.env"
+          # Never ship shared Anthropic API keys inside production app bundles.
+          # Anthropic access must come from backend or user OAuth mode.
+          sed -i '' '/^ANTHROPIC_API_KEY=/d' "$APP_BUNDLE/Contents/Resources/.env"
           echo "App bundle created: $APP_BUNDLE"
 
       - name: Sign app
@@ -2296,11 +2303,10 @@ workflows:
             --window-pos 200 120 \
             --window-size 610 365 \
             --icon-size 80 \
-            --icon "$APP_NAME.app" 155 175 \
+            --icon "$APP_NAME.app" 455 175 \
             --hide-extension "$APP_NAME.app" \
-            --app-drop-link 455 175 \
+            --app-drop-link 155 175 \
             --no-internet-enable \
-            --skip-jenkins \
             $BG_ARGS \
             "$DMG_PATH" \
             "$STAGING_DIR/$APP_NAME.app"

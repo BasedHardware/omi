@@ -8280,4 +8280,203 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bağlantıya sahip olan herkes görüntüleyebilir';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bugünün görevleri temizlensin mi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Bu işlem yalnızca son tarihleri kaldırır';
+
+  @override
+  String get tasksOverdue => 'Gecikmiş';
+
+  @override
+  String get phoneCallsWithOmi => 'Omi ile aramalar';
+
+  @override
+  String get phoneCallsSubtitle => 'Gercek zamanli transkripsiyon ile arayin';
+
+  @override
+  String get phoneSetupStep1Title => 'Telefon numaranizi dogrulayin';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Onaylamak icin sizi arayacagiz';
+
+  @override
+  String get phoneSetupStep2Title => 'Dogrulama kodu girin';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Arama sirasinda gireceksiniz kisa bir kod';
+
+  @override
+  String get phoneSetupStep3Title => 'Kisilerinizi aramaya baslayin';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Yerlesik canli transkripsiyon ile';
+
+  @override
+  String get phoneGetStarted => 'Basla';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Arama kaydi, yargi bolgenizde onay gerektirebilir';
+
+  @override
+  String get enterYourNumber => 'Numaranizi girin';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dogrulamadan sonra bu arayan kimliginiz olur';
+
+  @override
+  String get phoneNumberHint => 'Telefon numarasi';
+
+  @override
+  String get failedToStartVerification => 'Dogrulama baslatılamadi';
+
+  @override
+  String get phoneContinue => 'Devam';
+
+  @override
+  String get verifyYourNumber => 'Numaranizi dogrulayin';
+
+  @override
+  String get answerTheCallFrom => 'Su numaradan gelen aramayi cevaplayin';
+
+  @override
+  String get onTheCallEnterThisCode => 'Arama sirasinda bu kodu girin';
+
+  @override
+  String get followTheVoiceInstructions => 'Sesli talimatlari izleyin';
+
+  @override
+  String get statusCalling => 'Araniyor...';
+
+  @override
+  String get statusCallInProgress => 'Arama devam ediyor';
+
+  @override
+  String get statusVerifiedLabel => 'Dogrulandi';
+
+  @override
+  String get statusCallMissed => 'Cevapsiz arama';
+
+  @override
+  String get statusTimedOut => 'Sure doldu';
+
+  @override
+  String get phoneTryAgain => 'Tekrar dene';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kisiler';
+
+  @override
+  String get phoneKeypadTab => 'Tus takimi';
+
+  @override
+  String get grantContactsAccess => 'Kisilerinize erisim izni verin';
+
+  @override
+  String get phoneAllow => 'Izin ver';
+
+  @override
+  String get phoneSearchHint => 'Ara';
+
+  @override
+  String get phoneNoContactsFound => 'Kisi bulunamadi';
+
+  @override
+  String get phoneEnterNumber => 'Numara girin';
+
+  @override
+  String get failedToStartCall => 'Arama baslatılamadi';
+
+  @override
+  String get callStateConnecting => 'Baglaniyor...';
+
+  @override
+  String get callStateRinging => 'Caliyor...';
+
+  @override
+  String get callStateEnded => 'Arama sona erdi';
+
+  @override
+  String get callStateFailed => 'Arama basarisiz';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsiyon burada gorunecek...';
+
+  @override
+  String get phoneUnmute => 'Sesi ac';
+
+  @override
+  String get phoneMute => 'Sessiz';
+
+  @override
+  String get phoneSpeaker => 'Hoparlor';
+
+  @override
+  String get phoneEndCall => 'Bitir';
+
+  @override
+  String get phoneCallSettingsTitle => 'Arama ayarlari';
+
+  @override
+  String get yourVerifiedNumbers => 'Dogrulanmis numaralariniz';
+
+  @override
+  String get verifiedNumbersDescription => 'Birini aradiginizda bu numarayi gorecekler';
+
+  @override
+  String get noVerifiedNumbers => 'Dogrulanmis numara yok';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber silinsin mi?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Arama yapmak icin tekrar dogrulamaniz gerekecek';
+
+  @override
+  String get phoneDeleteButton => 'Sil';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '${minutes}dk once dogrulandi';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '${hours}sa once dogrulandi';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '${days}g once dogrulandi';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$date tarihinde dogrulandi';
+  }
+
+  @override
+  String get verifiedFallback => 'Dogrulandi';
+
+  @override
+  String get callAlreadyInProgress => 'Bir arama zaten devam ediyor';
+
+  @override
+  String get failedToGetCallToken => 'Token alinamadi. Once numaranizi dogrulayin.';
+
+  @override
+  String get failedToInitializeCallService => 'Arama hizmeti baslatılamadi';
+
+  @override
+  String get speakerLabelYou => 'Siz';
+
+  @override
+  String get speakerLabelUnknown => 'Bilinmiyor';
 }

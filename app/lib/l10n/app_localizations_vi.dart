@@ -8271,4 +8271,203 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Bất kỳ ai có liên kết đều có thể xem';
+
+  @override
+  String get tasksCleanTodayTitle => 'Dọn các nhiệm vụ hôm nay?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
+
+  @override
+  String get tasksOverdue => 'Quá hạn';
+
+  @override
+  String get phoneCallsWithOmi => 'Cuộc gọi với Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Gọi điện với phiên âm thời gian thực';
+
+  @override
+  String get phoneSetupStep1Title => 'Xác minh số điện thoại của bạn';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Chúng tôi sẽ gọi cho bạn để xác nhận';
+
+  @override
+  String get phoneSetupStep2Title => 'Nhập mã xác minh';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Một mã ngắn bạn sẽ nhập trong cuộc gọi';
+
+  @override
+  String get phoneSetupStep3Title => 'Bắt đầu gọi danh bạ của bạn';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Với phiên âm trực tiếp tích hợp';
+
+  @override
+  String get phoneGetStarted => 'Bắt đầu';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Ghi âm cuộc gọi có thể yêu cầu sự đồng ý trong khu vực pháp lý của bạn';
+
+  @override
+  String get enterYourNumber => 'Nhập số của bạn';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Sau khi xác minh, đây sẽ là ID người gọi của bạn';
+
+  @override
+  String get phoneNumberHint => 'Số điện thoại';
+
+  @override
+  String get failedToStartVerification => 'Không thể bắt đầu xác minh';
+
+  @override
+  String get phoneContinue => 'Tiếp tục';
+
+  @override
+  String get verifyYourNumber => 'Xác minh số của bạn';
+
+  @override
+  String get answerTheCallFrom => 'Trả lời cuộc gọi từ';
+
+  @override
+  String get onTheCallEnterThisCode => 'Trong cuộc gọi, nhập mã này';
+
+  @override
+  String get followTheVoiceInstructions => 'Làm theo hướng dẫn bằng giọng nói';
+
+  @override
+  String get statusCalling => 'Đang gọi...';
+
+  @override
+  String get statusCallInProgress => 'Cuộc gọi đang diễn ra';
+
+  @override
+  String get statusVerifiedLabel => 'Đã xác minh';
+
+  @override
+  String get statusCallMissed => 'Cuộc gọi nhỡ';
+
+  @override
+  String get statusTimedOut => 'Hết thời gian';
+
+  @override
+  String get phoneTryAgain => 'Thử lại';
+
+  @override
+  String get phonePageTitle => 'Điện thoại';
+
+  @override
+  String get phoneContactsTab => 'Danh bạ';
+
+  @override
+  String get phoneKeypadTab => 'Bàn phím';
+
+  @override
+  String get grantContactsAccess => 'Cấp quyền truy cập danh bạ';
+
+  @override
+  String get phoneAllow => 'Cho phép';
+
+  @override
+  String get phoneSearchHint => 'Tìm kiếm';
+
+  @override
+  String get phoneNoContactsFound => 'Không tìm thấy danh bạ';
+
+  @override
+  String get phoneEnterNumber => 'Nhập số';
+
+  @override
+  String get failedToStartCall => 'Không thể bắt đầu cuộc gọi';
+
+  @override
+  String get callStateConnecting => 'Đang kết nối...';
+
+  @override
+  String get callStateRinging => 'Đang đổ chuông...';
+
+  @override
+  String get callStateEnded => 'Cuộc gọi kết thúc';
+
+  @override
+  String get callStateFailed => 'Cuộc gọi thất bại';
+
+  @override
+  String get transcriptPlaceholder => 'Phiên âm sẽ xuất hiện ở đây...';
+
+  @override
+  String get phoneUnmute => 'Bật tiếng';
+
+  @override
+  String get phoneMute => 'Tắt tiếng';
+
+  @override
+  String get phoneSpeaker => 'Loa';
+
+  @override
+  String get phoneEndCall => 'Kết thúc';
+
+  @override
+  String get phoneCallSettingsTitle => 'Cài đặt cuộc gọi';
+
+  @override
+  String get yourVerifiedNumbers => 'Số đã xác minh của bạn';
+
+  @override
+  String get verifiedNumbersDescription => 'Khi bạn gọi cho ai đó, họ sẽ thấy số này';
+
+  @override
+  String get noVerifiedNumbers => 'Không có số đã xác minh';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Xóa $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Bạn cần xác minh lại để gọi điện';
+
+  @override
+  String get phoneDeleteButton => 'Xóa';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Đã xác minh ${minutes}phút trước';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Đã xác minh ${hours}giờ trước';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Đã xác minh ${days}ngày trước';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Đã xác minh vào $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Đã xác minh';
+
+  @override
+  String get callAlreadyInProgress => 'Một cuộc gọi đang diễn ra';
+
+  @override
+  String get failedToGetCallToken => 'Không thể lấy token. Xác minh số của bạn trước.';
+
+  @override
+  String get failedToInitializeCallService => 'Không thể khởi tạo dịch vụ cuộc gọi';
+
+  @override
+  String get speakerLabelYou => 'Bạn';
+
+  @override
+  String get speakerLabelUnknown => 'Không xác định';
 }

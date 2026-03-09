@@ -391,9 +391,11 @@ class AppState: ObservableObject {
     }
 
     private func loadEnvironment() {
+        let bundledEnvPath = Bundle.main.path(forResource: ".env", ofType: nil)
+
         // Try to load from .env file in various locations
         let envPaths = [
-            Bundle.main.path(forResource: ".env", ofType: nil),
+            bundledEnvPath,
             FileManager.default.currentDirectoryPath + "/.env",
             NSHomeDirectory() + "/.hartford.env",
             NSHomeDirectory() + "/.omi.env",
@@ -411,6 +413,10 @@ class AppState: ObservableObject {
                         let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
                         // Skip comments
                         guard !key.hasPrefix("#") else { continue }
+                        if shouldSkipBundledAnthropicKey(key: key, sourcePath: path, bundledEnvPath: bundledEnvPath) {
+                            log("  Skipped ANTHROPIC_API_KEY from bundled .env (prod safety)")
+                            continue
+                        }
                         let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
                         setenv(key, value, 1)
@@ -430,6 +436,14 @@ class AppState: ObservableObject {
         } else {
             log("WARNING: DEEPGRAM_API_KEY is NOT set")
         }
+    }
+
+    private func shouldSkipBundledAnthropicKey(key: String, sourcePath: String, bundledEnvPath: String?) -> Bool {
+        guard key == "ANTHROPIC_API_KEY" else { return false }
+        guard let bundledEnvPath, sourcePath == bundledEnvPath else { return false }
+        let bundleId = Bundle.main.bundleIdentifier ?? ""
+        let isProductionBundle = bundleId == "com.omi.computer-macos"
+        return isProductionBundle
     }
 
     func openScreenRecordingPreferences() {
@@ -2477,6 +2491,17 @@ class AppState: ObservableObject {
         // Clear onboarding chat persistence and messages
         OnboardingChatPersistence.clear()
         log("Cleared onboarding chat persistence")
+
+        // Clear persisted backend chat messages so onboarding does not resume old history.
+        // Onboarding currently uses the default chat message stream.
+        Task {
+            do {
+                _ = try await APIClient.shared.deleteMessages()
+                log("Cleared backend chat messages")
+            } catch {
+                logError("Failed to clear backend chat messages during onboarding reset", error: error)
+            }
+        }
 
         // Clear all local user data: database, screenshots, videos, knowledge graph, etc.
         let dataKeys = [

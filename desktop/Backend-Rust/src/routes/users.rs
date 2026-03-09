@@ -4,10 +4,11 @@
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    routing::get,
+    routing::{delete, get},
     Json, Router,
 };
 use serde::Deserialize;
+use std::collections::HashSet;
 
 use crate::auth::AuthUser;
 use crate::models::{
@@ -17,6 +18,7 @@ use crate::models::{
     UpdateTranscriptionPreferencesRequest, UpdateUserProfileRequest, UserLanguage, UserProfile,
     UserSettingsStatusResponse, AssistantSettingsData,
 };
+use crate::services::firestore::{LLM_USAGE_SUBCOLLECTION, SCREEN_ACTIVITY_SUBCOLLECTION};
 use crate::AppState;
 
 // ============================================================================
@@ -554,6 +556,302 @@ async fn update_assistant_settings(
 }
 
 // ============================================================================
+// Account Deletion
+// ============================================================================
+
+/// DELETE /v1/users/delete-account
+/// Deletes all server-side data for the authenticated user and then deletes Firebase Auth account.
+async fn delete_account(
+    State(state): State<AppState>,
+    user: AuthUser,
+) -> Result<Json<UserSettingsStatusResponse>, StatusCode> {
+    tracing::info!("Deleting account and all data for user {}", user.uid);
+
+    // Conversations
+    let conversations = state
+        .firestore
+        .get_conversations(&user.uid, 5000, 0, true, &[], None, None, None, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list conversations during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for conversation in conversations {
+        state
+            .firestore
+            .delete_conversation(&user.uid, &conversation.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete conversation {}: {}", conversation.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Action items
+    let action_items = state
+        .firestore
+        .get_action_items(
+            &user.uid, 5000, 0, None, None, None, None, None, None, None, Some(true),
+        )
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list action items during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for item in action_items {
+        state
+            .firestore
+            .delete_action_item(&user.uid, &item.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete action item {}: {}", item.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Staged tasks
+    let staged_tasks = state
+        .firestore
+        .get_staged_tasks(&user.uid, 5000, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list staged tasks during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for task in staged_tasks {
+        state
+            .firestore
+            .delete_staged_task(&user.uid, &task.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete staged task {}: {}", task.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Memories
+    state
+        .firestore
+        .delete_all_memories(&user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete all memories during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Focus sessions
+    let focus_sessions = state
+        .firestore
+        .get_focus_sessions(&user.uid, 5000, 0, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list focus sessions during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for session in focus_sessions {
+        state
+            .firestore
+            .delete_focus_session(&user.uid, &session.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete focus session {}: {}", session.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Advice
+    let advice_items = state
+        .firestore
+        .get_advice(&user.uid, 5000, 0, None, true)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list advice during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for advice in advice_items {
+        state
+            .firestore
+            .delete_advice(&user.uid, &advice.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete advice {}: {}", advice.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Messages
+    state
+        .firestore
+        .delete_messages(&user.uid, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete messages during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Chat sessions
+    let chat_sessions = state
+        .firestore
+        .get_chat_sessions(&user.uid, None, 5000, 0, None)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list chat sessions during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for session in chat_sessions {
+        state
+            .firestore
+            .delete_chat_session(&user.uid, &session.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete chat session {}: {}", session.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Folders
+    let folders = state.firestore.get_folders(&user.uid).await.map_err(|e| {
+        tracing::error!("Failed to list folders during delete-account: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    for folder in folders {
+        state
+            .firestore
+            .delete_folder(&user.uid, &folder.id, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete folder {}: {}", folder.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Goals (active + completed)
+    let mut goal_ids = HashSet::new();
+    let active_goals = state.firestore.get_user_goals(&user.uid, 5000).await.map_err(|e| {
+        tracing::error!("Failed to list active goals during delete-account: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let completed_goals = state
+        .firestore
+        .get_completed_goals(&user.uid, 5000)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to list completed goals during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    for goal in active_goals {
+        goal_ids.insert(goal.id);
+    }
+    for goal in completed_goals {
+        goal_ids.insert(goal.id);
+    }
+    for goal_id in goal_ids {
+        state
+            .firestore
+            .delete_goal(&user.uid, &goal_id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete goal {}: {}", goal_id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // People
+    let people = state.firestore.get_people(&user.uid).await.map_err(|e| {
+        tracing::error!("Failed to list people during delete-account: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    for person in people {
+        state
+            .firestore
+            .delete_person(&user.uid, &person.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete person {}: {}", person.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Persona
+    if let Some(persona) = state
+        .firestore
+        .get_user_persona(&user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to get user persona during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+    {
+        state
+            .firestore
+            .delete_persona(&persona.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to delete persona {}: {}", persona.id, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Knowledge graph
+    state
+        .firestore
+        .delete_kg_data(&user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete knowledge graph during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Subcollections not otherwise covered
+    state
+        .firestore
+        .delete_all_documents_in_subcollection(&user.uid, SCREEN_ACTIVITY_SUBCOLLECTION)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete screen activity during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    state
+        .firestore
+        .delete_all_documents_in_subcollection(&user.uid, LLM_USAGE_SUBCOLLECTION)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete llm usage during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Delete root users/{uid} document after subcollections are purged
+    state
+        .firestore
+        .delete_user_root_document(&user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete root user document during delete-account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Delete Firebase Auth account via admin API (service account OAuth).
+    let project_id = state
+        .config
+        .firebase_project_id
+        .clone()
+        .unwrap_or_else(|| "based-hardware".to_string());
+    state
+        .firestore
+        .delete_firebase_auth_user(&project_id, &user.uid)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete Firebase Auth account for {}: {}", user.uid, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    tracing::info!("Account deletion completed for user {}", user.uid);
+    Ok(Json(UserSettingsStatusResponse {
+        status: "ok".to_string(),
+    }))
+}
+
+// ============================================================================
 // Router
 // ============================================================================
 
@@ -601,4 +899,6 @@ pub fn users_routes() -> Router<AppState> {
             "/v1/users/assistant-settings",
             get(get_assistant_settings).patch(update_assistant_settings),
         )
+        // Account deletion
+        .route("/v1/users/delete-account", delete(delete_account))
 }

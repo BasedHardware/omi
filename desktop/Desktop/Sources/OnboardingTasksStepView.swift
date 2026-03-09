@@ -8,9 +8,9 @@ struct OnboardingTasksStepView: View {
     @State private var showTasks = false
 
     private let mockTasks: [(String, String, Bool)] = [
-        ("Follow up with Sarah about the design review", "From today's meeting", false),
-        ("Update project timeline in Notion", "Mentioned in Slack", false),
-        ("Run omi for two days to start receiving helpful advice", "Getting started", true),
+        ("Task 1", "From today's meeting", false),
+        ("Task 2", "Mentioned in Slack", false),
+        ("Task 3", "Getting started", true),
     ]
 
     var body: some View {

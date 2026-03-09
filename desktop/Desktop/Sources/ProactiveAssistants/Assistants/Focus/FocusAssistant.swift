@@ -528,7 +528,7 @@ actor FocusAssistant: ProactiveAssistant {
                                 title: "Focus",
                                 message: fullMessage,
                                 assistantId: identifier,
-                                sound: .focusLost
+                                sound: .none
                             )
                         }
                     }
@@ -570,7 +570,7 @@ actor FocusAssistant: ProactiveAssistant {
                                     title: "Focus",
                                     message: message,
                                     assistantId: identifier,
-                                    sound: .focusRegained
+                                    sound: .none
                                 )
                             }
                         }

@@ -8318,4 +8318,204 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Chiunque abbia il link può visualizzare';
+
+  @override
+  String get tasksCleanTodayTitle => 'Pulire le attività di oggi?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Questo rimuoverà solo le scadenze';
+
+  @override
+  String get tasksOverdue => 'Scadute';
+
+  @override
+  String get phoneCallsWithOmi => 'Chiamate con Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Chiama con trascrizione in tempo reale';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifica il tuo numero di telefono';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Ti chiameremo per confermare';
+
+  @override
+  String get phoneSetupStep2Title => 'Inserisci un codice di verifica';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un codice breve che digiterai durante la chiamata';
+
+  @override
+  String get phoneSetupStep3Title => 'Inizia a chiamare i tuoi contatti';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Con trascrizione dal vivo integrata';
+
+  @override
+  String get phoneGetStarted => 'Inizia';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'La registrazione delle chiamate potrebbe richiedere il consenso nella tua giurisdizione';
+
+  @override
+  String get enterYourNumber => 'Inserisci il tuo numero';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dopo la verifica, questo diventa il tuo ID chiamante';
+
+  @override
+  String get phoneNumberHint => 'Numero di telefono';
+
+  @override
+  String get failedToStartVerification => 'Impossibile avviare la verifica';
+
+  @override
+  String get phoneContinue => 'Continua';
+
+  @override
+  String get verifyYourNumber => 'Verifica il tuo numero';
+
+  @override
+  String get answerTheCallFrom => 'Rispondi alla chiamata da';
+
+  @override
+  String get onTheCallEnterThisCode => 'Durante la chiamata, inserisci questo codice';
+
+  @override
+  String get followTheVoiceInstructions => 'Segui le istruzioni vocali';
+
+  @override
+  String get statusCalling => 'Chiamata...';
+
+  @override
+  String get statusCallInProgress => 'Chiamata in corso';
+
+  @override
+  String get statusVerifiedLabel => 'Verificato';
+
+  @override
+  String get statusCallMissed => 'Chiamata persa';
+
+  @override
+  String get statusTimedOut => 'Tempo scaduto';
+
+  @override
+  String get phoneTryAgain => 'Riprova';
+
+  @override
+  String get phonePageTitle => 'Telefono';
+
+  @override
+  String get phoneContactsTab => 'Contatti';
+
+  @override
+  String get phoneKeypadTab => 'Tastierino';
+
+  @override
+  String get grantContactsAccess => 'Concedi accesso ai tuoi contatti';
+
+  @override
+  String get phoneAllow => 'Consenti';
+
+  @override
+  String get phoneSearchHint => 'Cerca';
+
+  @override
+  String get phoneNoContactsFound => 'Nessun contatto trovato';
+
+  @override
+  String get phoneEnterNumber => 'Inserisci numero';
+
+  @override
+  String get failedToStartCall => 'Impossibile avviare la chiamata';
+
+  @override
+  String get callStateConnecting => 'Connessione...';
+
+  @override
+  String get callStateRinging => 'Squilla...';
+
+  @override
+  String get callStateEnded => 'Chiamata terminata';
+
+  @override
+  String get callStateFailed => 'Chiamata fallita';
+
+  @override
+  String get transcriptPlaceholder => 'La trascrizione apparira qui...';
+
+  @override
+  String get phoneUnmute => 'Riattiva audio';
+
+  @override
+  String get phoneMute => 'Muto';
+
+  @override
+  String get phoneSpeaker => 'Altoparlante';
+
+  @override
+  String get phoneEndCall => 'Fine';
+
+  @override
+  String get phoneCallSettingsTitle => 'Impostazioni chiamate';
+
+  @override
+  String get yourVerifiedNumbers => 'I tuoi numeri verificati';
+
+  @override
+  String get verifiedNumbersDescription => 'Quando chiami qualcuno, vedra questo numero';
+
+  @override
+  String get noVerifiedNumbers => 'Nessun numero verificato';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Eliminare $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Dovrai verificare di nuovo per effettuare chiamate';
+
+  @override
+  String get phoneDeleteButton => 'Elimina';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificato ${minutes}min fa';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificato ${hours}h fa';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificato ${days}g fa';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificato il $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificato';
+
+  @override
+  String get callAlreadyInProgress => 'Una chiamata e gia in corso';
+
+  @override
+  String get failedToGetCallToken => 'Impossibile ottenere il token. Verifica prima il tuo numero.';
+
+  @override
+  String get failedToInitializeCallService => 'Impossibile inizializzare il servizio chiamate';
+
+  @override
+  String get speakerLabelYou => 'Tu';
+
+  @override
+  String get speakerLabelUnknown => 'Sconosciuto';
 }

@@ -245,7 +245,7 @@ Use after finding the task with execute_sql. Pass the backendId from the action_
   },
   {
     name: "scan_files",
-    description: `Scan the user's files. BLOCKING — waits for the scan to complete before returning. Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications. Returns file type breakdown, project indicators, recent files, installed apps. Also reports which folders were DENIED access by macOS. If folders were denied, call again after the user grants access.`,
+    description: `Scan the user's files. BLOCKING — waits for the scan to complete before returning. Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications, and Apple Notes storage folders when available. Returns file type breakdown, project indicators, recent files, installed apps, and existing task candidates when available. Also reports which folders were DENIED access by macOS. If folders were denied, call again after the user grants access.`,
     inputSchema: {
       type: "object" as const,
       properties: {},

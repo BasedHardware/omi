@@ -94,20 +94,34 @@ def can_tester_access_app(uid: str, app_id: str) -> bool:
     return can_tester_access_app_db(app_id, uid)
 
 
+def _invalidate_tester_cache(uid: str):
+    """Invalidate tester-related caches after mutation."""
+    cache = get_memory_cache()
+    cache.delete(f"is_tester:{uid}")
+    # Delete both tester=0 and tester=1 variants
+    cache.delete(f"user_apps_slice:{uid}:0")
+    cache.delete(f"user_apps_slice:{uid}:1")
+
+
 def add_tester(data: dict):
     add_tester_db(data)
+    if uid := data.get('uid'):
+        _invalidate_tester_cache(uid)
 
 
 def remove_tester(uid: str):
     remove_tester_db(uid)
+    _invalidate_tester_cache(uid)
 
 
 def add_app_access_for_tester(app_id: str, uid: str):
     add_app_access_for_tester_db(app_id, uid)
+    _invalidate_tester_cache(uid)
 
 
 def remove_app_access_for_tester(app_id: str, uid: str):
     remove_app_access_for_tester_db(app_id, uid)
+    _invalidate_tester_cache(uid)
 
 
 # ********************************
@@ -203,7 +217,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     cache_key = 'get_public_approved_apps_data'
     memory_cache = get_memory_cache()
 
-    tester = is_tester(uid)
+    # Cache tester flag per user (30s TTL) to avoid Firestore lookup every 1s (#5439 sub-task 3)
+    tester = memory_cache.get_or_fetch(f"is_tester:{uid}", lambda: is_tester(uid), ttl=30)
 
     def fetch_public_approved():
         """Fetch from Redis or DB (called only once with singleflight)."""
@@ -220,9 +235,19 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     # Singleflight: only ONE request fetches, others wait
     public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
 
-    private_data = get_private_apps(uid)
-    public_unapproved_data = get_public_unapproved_apps(uid)
-    tester_apps = get_apps_for_tester_db(uid) if tester else []
+    # Cache per-user app slice (private + unapproved + tester apps) with 30s TTL (#5439 sub-task 3)
+    def fetch_user_apps_slice():
+        return {
+            'private_data': get_private_apps(uid),
+            'public_unapproved_data': get_public_unapproved_apps(uid),
+            'tester_apps': get_apps_for_tester_db(uid) if tester else [],
+        }
+
+    user_slice = memory_cache.get_or_fetch(f"user_apps_slice:{uid}:{int(tester)}", fetch_user_apps_slice, ttl=30) or {}
+    private_data = user_slice.get('private_data', [])
+    public_unapproved_data = user_slice.get('public_unapproved_data', [])
+    tester_apps = user_slice.get('tester_apps', [])
+
     user_enabled = set(get_enabled_apps(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
@@ -232,7 +257,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
-        app_dict = app
+        # Copy dict to avoid mutating cached objects
+        app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
         app_dict['installs'] = apps_install.get(app['id'], 0)

@@ -8295,4 +8295,203 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get anyoneWithLinkCanView => 'Любой, у кого есть ссылка, может просматривать';
+
+  @override
+  String get tasksCleanTodayTitle => 'Очистить задачи на сегодня?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Это удалит только сроки';
+
+  @override
+  String get tasksOverdue => 'Просроченные';
+
+  @override
+  String get phoneCallsWithOmi => 'Звонки с Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Звоните с транскрипцией в реальном времени';
+
+  @override
+  String get phoneSetupStep1Title => 'Подтвердите свой номер телефона';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Мы позвоним вам для подтверждения';
+
+  @override
+  String get phoneSetupStep2Title => 'Введите код верификации';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Короткий код, который вы введете во время звонка';
+
+  @override
+  String get phoneSetupStep3Title => 'Начните звонить своим контактам';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Со встроенной живой транскрипцией';
+
+  @override
+  String get phoneGetStarted => 'Начать';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Запись звонков может требовать согласия в вашей юрисдикции';
+
+  @override
+  String get enterYourNumber => 'Введите ваш номер';
+
+  @override
+  String get phoneNumberCallerIdHint => 'После верификации это станет вашим ID звонящего';
+
+  @override
+  String get phoneNumberHint => 'Номер телефона';
+
+  @override
+  String get failedToStartVerification => 'Не удалось начать верификацию';
+
+  @override
+  String get phoneContinue => 'Продолжить';
+
+  @override
+  String get verifyYourNumber => 'Подтвердите свой номер';
+
+  @override
+  String get answerTheCallFrom => 'Ответьте на звонок от';
+
+  @override
+  String get onTheCallEnterThisCode => 'Во время звонка введите этот код';
+
+  @override
+  String get followTheVoiceInstructions => 'Следуйте голосовым инструкциям';
+
+  @override
+  String get statusCalling => 'Звоним...';
+
+  @override
+  String get statusCallInProgress => 'Звонок идет';
+
+  @override
+  String get statusVerifiedLabel => 'Подтверждено';
+
+  @override
+  String get statusCallMissed => 'Пропущенный звонок';
+
+  @override
+  String get statusTimedOut => 'Время истекло';
+
+  @override
+  String get phoneTryAgain => 'Попробовать снова';
+
+  @override
+  String get phonePageTitle => 'Телефон';
+
+  @override
+  String get phoneContactsTab => 'Контакты';
+
+  @override
+  String get phoneKeypadTab => 'Клавиатура';
+
+  @override
+  String get grantContactsAccess => 'Предоставьте доступ к контактам';
+
+  @override
+  String get phoneAllow => 'Разрешить';
+
+  @override
+  String get phoneSearchHint => 'Поиск';
+
+  @override
+  String get phoneNoContactsFound => 'Контакты не найдены';
+
+  @override
+  String get phoneEnterNumber => 'Введите номер';
+
+  @override
+  String get failedToStartCall => 'Не удалось начать звонок';
+
+  @override
+  String get callStateConnecting => 'Подключение...';
+
+  @override
+  String get callStateRinging => 'Звонит...';
+
+  @override
+  String get callStateEnded => 'Звонок завершен';
+
+  @override
+  String get callStateFailed => 'Звонок не удался';
+
+  @override
+  String get transcriptPlaceholder => 'Транскрипция появится здесь...';
+
+  @override
+  String get phoneUnmute => 'Включить звук';
+
+  @override
+  String get phoneMute => 'Выключить звук';
+
+  @override
+  String get phoneSpeaker => 'Динамик';
+
+  @override
+  String get phoneEndCall => 'Завершить';
+
+  @override
+  String get phoneCallSettingsTitle => 'Настройки звонков';
+
+  @override
+  String get yourVerifiedNumbers => 'Ваши подтвержденные номера';
+
+  @override
+  String get verifiedNumbersDescription => 'Когда вы звоните, абонент увидит этот номер';
+
+  @override
+  String get noVerifiedNumbers => 'Нет подтвержденных номеров';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Удалить $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Для звонков потребуется повторная верификация';
+
+  @override
+  String get phoneDeleteButton => 'Удалить';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Подтверждено $minutesмин назад';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Подтверждено $hoursч назад';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Подтверждено $daysд назад';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Подтверждено $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Подтверждено';
+
+  @override
+  String get callAlreadyInProgress => 'Звонок уже идет';
+
+  @override
+  String get failedToGetCallToken => 'Не удалось получить токен. Сначала подтвердите номер.';
+
+  @override
+  String get failedToInitializeCallService => 'Не удалось инициализировать службу звонков';
+
+  @override
+  String get speakerLabelYou => 'Вы';
+
+  @override
+  String get speakerLabelUnknown => 'Неизвестный';
 }

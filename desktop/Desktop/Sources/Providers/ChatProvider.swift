@@ -1962,11 +1962,15 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                                 log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
                                 self?.needsBrowserExtensionSetup = true
                                 self?.stopAgent()
-                                // Bring the app to the foreground so the setup sheet is visible
-                                // (the failed browser attempt may have opened Chrome, stealing focus)
-                                NSApp.activate(ignoringOtherApps: true)
-                                for window in NSApp.windows where window.title.hasPrefix("Omi") {
-                                    window.makeKeyAndOrderFront(nil)
+                                // Keep floating-bar sessions non-intrusive: do not foreground
+                                // the main window when the query originated from the floating bar.
+                                if sessionKey != "floating" {
+                                    // Bring the app to the foreground so the setup sheet is visible
+                                    // (the failed browser attempt may have opened Chrome, stealing focus)
+                                    NSApp.activate(ignoringOtherApps: true)
+                                    for window in NSApp.windows where window.title.hasPrefix("Omi") {
+                                        window.makeKeyAndOrderFront(nil)
+                                    }
                                 }
                             }
                             // Show the floating bar so the user has an always-on-top UI
@@ -2246,8 +2250,30 @@ A screenshot may be attached — use it silently only if relevant. Never mention
     /// Update message text (replaces entire text)
     private func updateMessage(id: String, text: String) {
         if let index = messages.firstIndex(where: { $0.id == id }) {
-            messages[index].text = text
+            if messages[index].sender == .ai {
+                messages[index].text = normalizeAssistantSentenceSpacing(text)
+            } else {
+                messages[index].text = text
+            }
         }
+    }
+
+    /// Normalize missing spaces after sentence punctuation in assistant messages.
+    /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
+    private func normalizeAssistantSentenceSpacing(_ text: String) -> String {
+        var normalized = text
+
+        if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
+            let range = NSRange(normalized.startIndex..., in: normalized)
+            normalized = punctuationUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
+        }
+
+        if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
+            let range = NSRange(normalized.startIndex..., in: normalized)
+            normalized = punctuationQuotedUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
+        }
+
+        return normalized
     }
 
     /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
@@ -2283,12 +2309,18 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             streamingTextBuffer = ""
 
             messages[index].text += buffered
+            if messages[index].sender == .ai {
+                messages[index].text = normalizeAssistantSentenceSpacing(messages[index].text)
+            }
 
             if let lastBlockIndex = messages[index].contentBlocks.indices.last,
                case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
+                let merged = existing + buffered
+                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(merged) : merged
+                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: blockText)
             } else {
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
+                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(buffered) : buffered
+                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: blockText))
             }
         }
 

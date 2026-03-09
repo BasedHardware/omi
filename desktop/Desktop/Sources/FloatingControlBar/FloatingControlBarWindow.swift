@@ -859,6 +859,16 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Toggle AI input: if conversation is open, collapse it; otherwise open it.
+    func toggleAIInput() {
+        guard let window = window else { return }
+        if window.isVisible && window.state.showingAIConversation {
+            window.closeAIConversation()
+        } else {
+            openAIInput()
+        }
+    }
+
     /// Open the AI input panel.
     func openAIInput() {
         guard let window = window else { return }
@@ -980,14 +990,20 @@ class FloatingControlBarManager {
     // MARK: - AI Query
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
-        // Hide the bar, capture a clean screenshot, then restore — same path for both typed and PTT
-        barWindow.orderOut(nil)
+        // Hide the bar visually (without ordering it out) so we keep key-window ownership
+        // and avoid promoting the main Omi window while capturing a clean screenshot.
+        let previousAlpha = barWindow.alphaValue
+        let previousIgnoresMouseEvents = barWindow.ignoresMouseEvents
+        barWindow.alphaValue = 0
+        barWindow.ignoresMouseEvents = true
         try? await Task.sleep(nanoseconds: 150_000_000) // 150ms for window to disappear
         let screenshotData = await Task.detached { () -> Data? in
             guard let url = ScreenCaptureManager.captureScreen() else { return nil }
             return try? Data(contentsOf: url)
         }.value
-        barWindow.makeKeyAndOrderFront(nil)
+        barWindow.alphaValue = previousAlpha
+        barWindow.ignoresMouseEvents = previousIgnoresMouseEvents
+        barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
 

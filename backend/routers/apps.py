@@ -57,6 +57,7 @@ from database.redis_db import (
     decrease_app_installs_count,
     enable_app,
     disable_app,
+    is_app_enabled,
     delete_app_cache_by_id,
     is_username_taken,
     save_username,
@@ -1638,8 +1639,7 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(
-        f"""
+    return HTMLResponse(f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1656,8 +1656,7 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """
-    )
+    """)
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
@@ -1752,17 +1751,18 @@ def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_ui
 
 @router.post('/v1/apps/disable')
 def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
-    if not app:
-        raise HTTPException(status_code=404, detail='App not found')
-    if app.private is None:
-        if app.private and app.uid != uid and not is_tester(uid):
-            raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    disable_app(uid, app_id)
-    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
-        decrease_app_installs_count(app_id)
-    return {'status': 'ok'}
+    # Allow users to always disable apps they have installed, even if the app
+    # was made private after installation (see issue #4886).
+    if is_app_enabled(uid, app_id):
+        disable_app(uid, app_id)
+        app = get_available_app_by_id(app_id, uid)
+        if app:
+            app = App(**app)
+            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
+                decrease_app_installs_count(app_id)
+        return {'status': 'ok'}
+
+    raise HTTPException(status_code=404, detail='App not found')
 
 
 # ******************************************************

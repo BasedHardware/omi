@@ -25,8 +25,8 @@ class CreatePerson(BaseModel):
 class Person(BaseModel):
     id: str
     name: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3

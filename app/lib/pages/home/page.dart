@@ -29,6 +29,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
@@ -661,6 +662,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
+                              // Phone calls button - bottom left
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  left: 20,
+                                  bottom: 100,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      HapticFeedback.mediumImpact();
+                                      MixpanelManager().bottomNavigationTabClicked('Phone Calls');
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => const PhoneCallsPage(),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Color(0xFF1F1F25),
+                                      ),
+                                      child: const Icon(
+                                        FontAwesomeIcons.phone,
+                                        size: 22,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              // Ask Omi button - bottom right
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   right: 20,
