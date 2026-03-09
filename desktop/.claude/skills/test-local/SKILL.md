@@ -90,9 +90,10 @@ agent-swift connect --bundle-id com.omi.desktop-dev
 agent-swift snapshot -i
 
 # Interact (re-snapshot after each mutation — refs go stale)
-agent-swift press @e3                # click a button
+agent-swift click @e3                # CGEvent click (SwiftUI — triggers NavigationLink)
+agent-swift press @e3                # AXPress (AppKit buttons only)
 agent-swift fill @e5 "search text"   # type into a text field
-agent-swift find role button press   # find + chained action
+agent-swift find role button click   # find + chained action
 agent-swift scroll down              # scroll the view
 agent-swift snapshot -i              # refresh refs after interaction
 
