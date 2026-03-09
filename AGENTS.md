@@ -1,3 +1,5 @@
+<!-- Synced from CLAUDE.md. When updating agent rules, edit CLAUDE.md first then sync here. -->
+
 # Codex Agent Rules
 
 These rules apply to Codex when working in this repository.
