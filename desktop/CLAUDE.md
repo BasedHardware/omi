@@ -139,18 +139,17 @@ After editing Swift UI code, verify the change programmatically using [agent-swi
 
 ```bash
 # After ./run.sh launches the app:
-agent-swift doctor                                # verify Accessibility permission
-agent-swift connect --bundle com.omi.desktop-dev  # connect to running app
-agent-swift snapshot -i                           # see interactive elements
-agent-swift press @e3                             # click a button
-agent-swift fill @e5 "search text"                # type into a field
-agent-swift screenshot /tmp/evidence.png          # capture for PR evidence
+agent-swift doctor                                   # verify Accessibility permission
+agent-swift connect --bundle-id com.omi.desktop-dev  # connect to running app
+agent-swift snapshot -i                              # see interactive elements
+agent-swift press @e3                                # click a button
+screencapture /tmp/evidence.png                      # capture for PR evidence
 ```
 
 **Key rules:**
 - Always use `snapshot -i` (interactive only) — full snapshot of a complex SwiftUI app is extremely verbose.
-- Refs go stale after `press`/`fill` — re-snapshot before the next interaction.
-- `agent-swift doctor --bundle com.omi.desktop-dev` verifies both permission and that the app is running.
+- Refs go stale after `press` — re-snapshot before the next interaction.
+- Available commands: `doctor`, `connect`, `snapshot`, `press`, `status`, `disconnect`.
 - No app-side instrumentation needed — works via macOS Accessibility API on any Cocoa/SwiftUI app.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (never automate prod).
 
