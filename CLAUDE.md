@@ -1,4 +1,8 @@
 # Coding Guidelines
+<!-- Official guidance for writing these files:
+     CLAUDE.md: https://docs.anthropic.com/en/docs/claude-code/memory
+     AGENTS.md: https://developers.openai.com/codex/guides/agents-md
+     Format spec: https://agents.md -->
 
 ## Behavior
 
