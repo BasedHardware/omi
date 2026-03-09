@@ -10,7 +10,7 @@ import asyncio
 import unittest
 from unittest.mock import patch, MagicMock
 
-from fastapi import FastAPI, WebSocket, Depends
+from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
 from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
@@ -131,6 +131,24 @@ class TestWebSocketAuthWithRateLimit(unittest.TestCase):
         with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}) as ws:
             data = ws.receive_json()
             self.assertEqual(data["uid"], "test-uid-789")
+
+    def test_malformed_auth_header_sends_close_1008(self):
+        """Malformed auth header -> WebSocketDisconnect with code 1008 (via shared _verify_ws_auth)."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "malformed"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.try_acquire_listen_lock', side_effect=WebSocketException(code=1008, reason='lock ws exc'))
+    @patch('utils.other.endpoints.verify_token', return_value='test-uid-reraise')
+    def test_ws_exception_from_lock_is_reraised(self, mock_verify, mock_lock):
+        """WebSocketException from rate limiter is re-raised, not swallowed by fail-open handler."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect(
+                "/ws-ratelimited", headers={"Authorization": "Bearer valid_token"}
+            ):
+                self.fail("Expected WebSocket to be closed")
+        self.assertEqual(ctx.exception.code, 1008)
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
     def test_no_auth_does_not_call_rate_limiter(self, mock_lock):
