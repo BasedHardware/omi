@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 import pathlib
 import firebase_admin.auth
 from database.redis_db import set_auth_session, get_auth_session, set_auth_code, get_auth_code, delete_auth_code
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
@@ -424,27 +424,23 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
                     f"Firebase REST API sign-in failed (status={response.status_code}), falling back to Admin SDK"
                 )
 
-        # Fallback: decode id_token JWT and look up/create user via Admin SDK
+        # Fallback: verify id_token via Admin SDK and look up/create user
         if not firebase_uid:
-            parts = id_token.split('.')
-            if len(parts) < 2:
-                raise Exception("Invalid id_token format")
-            payload_b64 = parts[1] + '=' * (4 - len(parts[1]) % 4)
-            token_payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-            email = token_payload.get('email')
+            verified_token = firebase_admin.auth.verify_id_token(id_token)
+            email = verified_token.get('email')
             if not email:
-                raise Exception("No email in id_token")
+                raise Exception("No email in verified id_token")
 
             # Look up existing Firebase user by email
             try:
                 user = firebase_admin.auth.get_user_by_email(email)
                 firebase_uid = user.uid
-                logger.info(f"Found existing Firebase user for {email}, UID: {firebase_uid}")
+                logger.info(f"Found existing Firebase user for {sanitize_pii(email)}, UID: {firebase_uid}")
             except firebase_admin.auth.UserNotFoundError:
                 # Create new Firebase user
                 user = firebase_admin.auth.create_user(email=email, email_verified=True)
                 firebase_uid = user.uid
-                logger.info(f"Created new Firebase user for {email}, UID: {firebase_uid}")
+                logger.info(f"Created new Firebase user for {sanitize_pii(email)}, UID: {firebase_uid}")
 
         if not firebase_uid:
             raise Exception("No Firebase UID obtained")
