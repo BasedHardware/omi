@@ -2462,7 +2462,7 @@ async def _listen(
 @router.websocket("/v4/listen")
 async def listen_handler(
     websocket: WebSocket,
-    uid: str = Depends(auth.get_current_user_uid_ws),
+    uid: str = Depends(auth.get_current_user_uid),
     language: str = 'en',
     sample_rate: int = 8000,
     codec: str = 'pcm8',
