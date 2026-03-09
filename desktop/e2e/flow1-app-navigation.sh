@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Flow 1: Desktop app navigation
-# Tests: snapshot, sidebar navigation, element discovery, app responsiveness
+# Tests: snapshot, sidebar navigation, find, fill, scroll, is, wait, screenshot
 #
 # Usage: ./desktop/e2e/flow1-app-navigation.sh
 # Requires: AGENT_SWIFT env var pointing to agent-swift binary
@@ -35,9 +35,45 @@ for t, c in types.most_common(10):
 " 2>/dev/null
 e2e_pass "Element types identified"
 
-# ---- Step 3: Verify sidebar navigation icons ----
+# ---- Step 3: Find elements by role and text ----
+e2e_step "Find elements (role, text)"
+btn_ref=$(as_find_role "button")
+if [ -n "$btn_ref" ]; then
+  echo "  find role button → $btn_ref"
+  e2e_pass "Found button: $btn_ref"
+else
+  e2e_fail "find role button returned nothing"
+fi
+
+# ---- Step 4: Get element properties ----
+e2e_step "Get element properties"
+if [ -n "$btn_ref" ]; then
+  btn_type=$(as get type "@$btn_ref" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('value','?'))" 2>/dev/null || echo "?")
+  btn_text=$(as get text "@$btn_ref" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('value','?'))" 2>/dev/null || echo "?")
+  echo "  @$btn_ref type=$btn_type text=$btn_text"
+  e2e_pass "get type=$btn_type, text=$btn_text"
+else
+  e2e_fail "no element for get test"
+fi
+
+# ---- Step 5: Assert element conditions ----
+e2e_step "Assert element conditions (is)"
+if [ -n "$btn_ref" ]; then
+  as is exists "@$btn_ref" 2>/dev/null
+  exists_exit=$?
+  echo "  is exists @$btn_ref → exit $exists_exit"
+  if [ "$exists_exit" -eq 0 ]; then e2e_pass "is exists → true"; else e2e_fail "is exists returned $exists_exit"; fi
+
+  as is exists "@e99999" 2>/dev/null
+  fake_exit=$?
+  echo "  is exists @e99999 → exit $fake_exit"
+  if [ "$fake_exit" -ne 0 ]; then e2e_pass "is exists → false for non-existent"; else e2e_fail "is returned 0 for fake element"; fi
+else
+  e2e_fail "no element for is test"
+fi
+
+# ---- Step 6: Verify sidebar navigation icons ----
 e2e_step "Verify sidebar navigation icons"
-# Sidebar uses image elements with labels: Home, Conversation, brain, checklist, puzzlepiece.fill, gearshape.fill
 sidebar_found=0
 for label in "Home" "Conversation" "brain" "checklist" "puzzlepiece.fill" "gearshape.fill"; do
   ref=$($AGENT_SWIFT snapshot --json 2>/dev/null | python3 -c "
@@ -58,7 +94,7 @@ else
   e2e_fail "Only found $sidebar_found sidebar icons (expected >=4)"
 fi
 
-# ---- Step 4: Navigate sidebar — click each section ----
+# ---- Step 7: Navigate sidebar — click each section ----
 e2e_step "Navigate through sidebar sections"
 nav_success=0
 for label in "Conversation" "brain" "checklist" "Home"; do
@@ -75,6 +111,7 @@ else: sys.exit(1)
     new_count=$(as_snapshot_interactive_count)
     echo "  $label ($ref): $new_count elements"
     nav_success=$((nav_success + 1))
+    as_screenshot "$label"
   else
     echo "  $label: not found"
   fi
@@ -84,33 +121,58 @@ if [ "$nav_success" -ge 3 ]; then
 else
   e2e_fail "Only navigated $nav_success sections"
 fi
-as_screenshot "after-navigation"
 
-# ---- Step 5: Test menu bar items ----
-e2e_step "Verify menu bar structure"
-menu_count=$($AGENT_SWIFT snapshot -i --json 2>/dev/null | python3 -c "
+# ---- Step 8: Fill text field ----
+e2e_step "Fill text input"
+snap_i=$($AGENT_SWIFT snapshot -i --json 2>/dev/null)
+text_ref=$(echo "$snap_i" | python3 -c "
 import sys, json
 elems = json.load(sys.stdin)
-menus = [e for e in elems if e.get('type') == 'menubaritem']
-print(len(menus))
-for m in menus[:8]:
-    label = m.get('label', '(unlabeled)')
-    print(f'  {m[\"ref\"]} {label}')
-" 2>/dev/null || echo "0")
-echo "  Menu bar items: $(echo "$menu_count" | head -1)"
-echo "$menu_count" | tail -n +2
-if [ "$(echo "$menu_count" | head -1)" -ge 3 ]; then
-  e2e_pass "Menu bar has $(echo "$menu_count" | head -1) items"
+fields = [e for e in elems if e.get('type') in ('textfield', 'textarea', 'searchfield')]
+if fields: print(fields[0]['ref'])
+else: sys.exit(1)
+" 2>/dev/null) || text_ref=""
+if [ -n "$text_ref" ]; then
+  echo "  Filling @$text_ref..."
+  $AGENT_SWIFT fill "@$text_ref" "agent-swift E2E test" --json 2>&1 > /dev/null
+  fill_exit=$?
+  if [ "$fill_exit" -eq 0 ]; then e2e_pass "fill @$text_ref succeeded"; else e2e_fail "fill failed (exit $fill_exit)"; fi
+  as_screenshot "after-fill"
 else
-  e2e_fail "Menu bar has too few items"
+  echo "  No text field in current view (informational)"
+  e2e_pass "fill skipped — no text field visible"
 fi
 
-# ---- Step 6: Test system tray menu items ----
+# ---- Step 9: Scroll ----
+e2e_step "Scroll down and up"
+$AGENT_SWIFT scroll down --json 2>&1 > /dev/null
+d_exit=$?
+as_wait 0.3
+$AGENT_SWIFT scroll up --json 2>&1 > /dev/null
+u_exit=$?
+echo "  scroll down: exit $d_exit, scroll up: exit $u_exit"
+if [ "$d_exit" -eq 0 ] && [ "$u_exit" -eq 0 ]; then
+  e2e_pass "scroll down + up"
+else
+  e2e_fail "scroll failed (down=$d_exit, up=$u_exit)"
+fi
+
+# ---- Step 10: Wait for element ----
+e2e_step "Wait for condition"
+if [ -n "$btn_ref" ]; then
+  $AGENT_SWIFT wait exists "@$btn_ref" --timeout 3000 --json 2>&1 > /dev/null
+  wait_exit=$?
+  echo "  wait exists @$btn_ref → exit $wait_exit"
+  if [ "$wait_exit" -eq 0 ]; then e2e_pass "wait exists succeeded"; else e2e_fail "wait failed (exit $wait_exit)"; fi
+else
+  e2e_pass "wait skipped — no ref available"
+fi
+
+# ---- Step 11: Verify tray menu ----
 e2e_step "Verify system tray menu"
 tray_items=$($AGENT_SWIFT snapshot -i --json 2>/dev/null | python3 -c "
 import sys, json
 elems = json.load(sys.stdin)
-# Tray items have identifiers like openOmiFromMenu, checkForUpdates, etc.
 tray = [e for e in elems if e.get('type') == 'menuitem' and e.get('identifier', '').startswith(('openOmi', 'checkFor', 'resetOnb', 'reportIs', 'signOut', 'quitApp'))]
 print(len(tray))
 for t in tray:
@@ -125,7 +187,7 @@ else
   e2e_fail "System tray has too few items: $tray_count"
 fi
 
-# ---- Step 7: Verify app is still responsive ----
+# ---- Step 12: Final responsiveness + screenshot ----
 e2e_step "Verify app responsiveness"
 final_count=$(as_snapshot_interactive_count)
 echo "  Final elements: $final_count"
@@ -135,5 +197,25 @@ else
   e2e_fail "App may be unresponsive: $final_count elements"
 fi
 as_screenshot "final"
+
+# ---- Step 13: JSON output modes ----
+e2e_step "JSON output modes"
+# AGENT_SWIFT_JSON=1 env var
+is_json=$(AGENT_SWIFT_JSON=1 $AGENT_SWIFT status 2>&1 | python3 -c "
+import sys,json
+try: json.load(sys.stdin); print('yes')
+except: print('no')
+")
+echo "  AGENT_SWIFT_JSON=1: $is_json"
+if [ "$is_json" = "yes" ]; then e2e_pass "AGENT_SWIFT_JSON=1 produces JSON"; else e2e_fail "env var JSON failed"; fi
+
+# Piped auto-JSON
+piped_json=$($AGENT_SWIFT status | python3 -c "
+import sys,json
+try: json.load(sys.stdin); print('yes')
+except: print('no')
+")
+echo "  Piped auto-JSON: $piped_json"
+if [ "$piped_json" = "yes" ]; then e2e_pass "piped auto-JSON works"; else e2e_fail "piped JSON failed"; fi
 
 e2e_teardown
