@@ -17,6 +17,11 @@ Run once to enable auto-formatting on commit:
 ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
+### Mobile App Setup
+```bash
+cd app && bash setup.sh ios    # or: bash setup.sh android
+```
+
 ## Backend
 
 ### No In-Function Imports
