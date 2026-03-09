@@ -106,7 +106,7 @@ if matches: print(matches[0]['ref'])
 else: sys.exit(1)
 " 2>/dev/null) || ref=""
   if [ -n "$ref" ]; then
-    $AGENT_SWIFT press "@$ref" 2>&1
+    $AGENT_SWIFT click "@$ref" 2>&1
     as_wait 0.5
     new_count=$(as_snapshot_interactive_count)
     echo "  $label ($ref): $new_count elements"
