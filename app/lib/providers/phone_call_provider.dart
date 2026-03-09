@@ -82,9 +82,15 @@ class PhoneCallProvider extends ChangeNotifier {
   // ************************************************
 
   Future<void> loadVerifiedNumbers() async {
-    _verifiedNumbers = await api.getVerifiedPhoneNumbers();
-    _numbersLoaded = true;
-    notifyListeners();
+    try {
+      _verifiedNumbers = await api.getVerifiedPhoneNumbers();
+    } catch (e) {
+      print('PhoneCallProvider: failed to load verified numbers: $e');
+      _verifiedNumbers = [];
+    } finally {
+      _numbersLoaded = true;
+      notifyListeners();
+    }
   }
 
   String? _validationCode;
