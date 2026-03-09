@@ -213,6 +213,92 @@ void main() {
     });
   });
 
+  group('Race conditions and boundary cases', () {
+    test('concurrent getIdToken failure + signOut: cache ends up cleared', () async {
+      final cache = MockTokenCache()..authToken = 'token-to-clear';
+
+      // Simulate both happening — order shouldn't matter, cache should be empty after both
+      await Future.wait([
+        getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => null, cache: cache),
+        signOutFixed(cache),
+      ]);
+
+      expect(cache.authToken, isEmpty, reason: 'cache must be cleared regardless of execution order');
+      expect(cache.tokenExpirationTime, equals(0));
+    });
+
+    test('rapid successive getIdToken failures all return null', () async {
+      final cache = MockTokenCache()..authToken = 'stale-token';
+
+      final results = await Future.wait([
+        getIdTokenFixed(hasCurrentUser: false, refreshToken: () async => null, cache: cache),
+        getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err1'), cache: cache),
+        getIdTokenFixed(hasCurrentUser: true, refreshToken: () async => throw Exception('err2'), cache: cache),
+      ]);
+
+      expect(results, everyElement(isNull), reason: 'all failed refreshes must return null');
+      expect(cache.authToken, isEmpty, reason: 'cache must be empty after all failures');
+    });
+
+    test('successful refresh after failure restores cache correctly', () async {
+      final cache = MockTokenCache()..authToken = 'old-expired';
+
+      // First call fails — clears cache
+      final r1 = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => throw Exception('network'),
+        cache: cache,
+      );
+      expect(r1, isNull);
+      expect(cache.authToken, isEmpty);
+
+      // Second call succeeds — restores cache with fresh token
+      final r2 = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => 'fresh-token',
+        cache: cache,
+      );
+      expect(r2, equals('fresh-token'));
+      expect(cache.authToken, equals('fresh-token'));
+      expect(cache.tokenExpirationTime, greaterThan(0));
+    });
+
+    test('signOut is idempotent — double signOut does not throw', () async {
+      final cache = MockTokenCache()
+        ..authToken = 'token'
+        ..tokenExpirationTime = 99999;
+
+      await signOutFixed(cache);
+      expect(cache.authToken, isEmpty);
+
+      // Second signOut — should not throw or corrupt state
+      await signOutFixed(cache);
+      expect(cache.authToken, isEmpty);
+      expect(cache.tokenExpirationTime, equals(0));
+    });
+
+    test('keepAlive gate: multiple rapid checks with auth loss mid-sequence', () {
+      // User is signed in for first check
+      expect(shouldReconnectFixed(isSignedIn: true, socketDisconnected: true), isTrue);
+
+      // Auth is lost between checks (simulates signOut clearing state)
+      expect(shouldReconnectFixed(isSignedIn: false, socketDisconnected: true), isFalse);
+
+      // Even after socket reconnects, no reconnect without auth
+      expect(shouldReconnectFixed(isSignedIn: false, socketDisconnected: true), isFalse);
+    });
+
+    test('getIdToken with null refresh result (not exception) returns null', () async {
+      final cache = MockTokenCache()..authToken = 'stale';
+      final result = await getIdTokenFixed(
+        hasCurrentUser: true,
+        refreshToken: () async => null,
+        cache: cache,
+      );
+      expect(result, isNull, reason: 'null from refresh should propagate as null, not cached token');
+    });
+  });
+
   group('Full loop: token expiry no longer causes infinite retry', () {
     test('fixed: expired token -> getIdToken null -> signOut clears cache -> isSignedIn false -> no reconnect',
         () async {
