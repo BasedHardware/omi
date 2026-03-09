@@ -15,7 +15,7 @@ class UploadProfile(BaseModel):
 
 
 class ShareSpeechProfileRequest(BaseModel):
-    target_uid: str
+    target_uid: str = Field(min_length=1)
 
 
 class CreatePerson(BaseModel):

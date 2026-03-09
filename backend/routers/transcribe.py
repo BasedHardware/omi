@@ -1707,7 +1707,11 @@ async def _stream_handler(
                     }
 
             # Shared profiles, batch-load each sharer's own user-level embedding
-            shared_owners = user_db.get_profiles_shared_with_user(uid)
+            try:
+                shared_owners = user_db.get_profiles_shared_with_user(uid)
+            except Exception as e:
+                logger.error(f"Failed to load shared profile owners: {e} {uid} {session_id}")
+                shared_owners = []
             owner_uids = [o for o in shared_owners if o != uid]
             try:
                 profiles = user_db.get_user_profiles_batch(owner_uids)

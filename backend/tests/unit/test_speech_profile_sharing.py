@@ -818,3 +818,15 @@ def test_non_shared_person_ids_ignored():
 
     assert len(people) == 0
     mock_users.get_profiles_shared_with_user.assert_not_called()
+
+
+def test_empty_target_uid_rejected_by_pydantic():
+    """Empty target_uid is rejected with a 422 validation error."""
+    from pydantic import ValidationError
+    from models.other import ShareSpeechProfileRequest
+
+    try:
+        ShareSpeechProfileRequest(target_uid='')
+        assert False, "Should have raised ValidationError"
+    except ValidationError as e:
+        assert 'target_uid' in str(e)
