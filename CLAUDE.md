@@ -123,15 +123,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 cd app && flutter gen-l10n
 ```
 
-### Running the iOS Simulator
-
-```bash
-xcrun simctl list devices | grep Booted  # get device ID
-cd app && flutter run -d <device-id> --flavor dev   # dev backend (api.omiapi.com)
-cd app && flutter run -d <device-id> --flavor prod   # prod backend (api.omi.me)
-```
-
-See `/local-dev mobile` skill for full setup details, env file configuration, and troubleshooting.
+See [docs/runbooks/simulator.md](docs/runbooks/simulator.md) for iOS simulator setup.
 
 ### Firebase Prod Config
 
@@ -142,16 +134,6 @@ Prod credential files (already correct, do not regenerate):
 - `app/lib/firebase_options_prod.dart`
 - `app/android/app/src/prod/google-services.json`
 - `app/ios/Flutter/prod{Debug,Release,Profile}.xcconfig`
-
-### Simulator Hot Restart
-
-When the iOS Simulator is running, trigger a hot restart after finishing edits — do not wait for the user to do it manually:
-
-```bash
-kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)
-```
-
-Use `SIGUSR1` for hot reload (widget/UI-only changes) or `SIGUSR2` for hot restart (logic, state, provider changes). When in doubt, use `SIGUSR2`.
 
 ## Formatting
 
@@ -221,61 +203,11 @@ Same as RELEASE, plus deploy the backend to production after merging:
   gh workflow run gcp_backend.yml -f environment=prod -f branch=main
   ```
 
-## CI/CD Auto-Deploy (push to main)
-
-### Python Backend (dev)
-- **Trigger**: push to `main` with `backend/**` changes
-- **Workflow**: GitHub Actions `gcp_backend_auto_dev.yml`
-- **Deploys to**: Cloud Run + GKE (dev environment)
-- **Check**: `gh run list --workflow=gcp_backend_auto_dev.yml --limit=3`
-
-### Python Backend (prod) — manual only
-- **Never auto-deploys.** Must trigger manually:
-  ```bash
-  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
-  ```
-
-### Mobile App (iOS TestFlight + Android) — Codemagic
-- **Trigger**: push to `main` with `app/**` changes
-- **Workflow**: `ios-internal-auto` / `android-internal-auto` in `codemagic.yaml`
-- **IMPORTANT**: Codemagic **skips** if the build number in `app/pubspec.yaml` is already on TestFlight. After merging `app/**` changes, you **must bump the build number** or no new build will be uploaded:
-  ```bash
-  # In app/pubspec.yaml, increment the +N build number:
-  # version: 1.0.525+760  →  version: 1.0.525+761
-  ```
-- **Check**: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb&limit=5"`
-
-### Desktop App (macOS) — GitHub Actions + Codemagic
-- **Trigger**: push to `main` with `desktop/**` changes
-- **Step 1**: GitHub Actions `desktop_auto_release.yml` auto-increments version, pushes `v*-macos` tag
-- **Step 2**: Codemagic `omi-desktop-swift-release` builds, signs, notarizes, publishes
+## CI/CD
+See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and checks.
 
 ## Logs
-
-### Flutter (iOS Simulator)
-App logs go to `/tmp/flutter-run.log`. Use `print()` (not `Logger.debug`) for logs that must appear there. Grep with `[TagName]` prefixes:
-```bash
-grep -E "\[AgentChat\]|\[HomePage\]" /tmp/flutter-run.log | tail -20
-```
-
-### Backend (Cloud Run)
-```bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="backend-listen"' --project=based-hardware --limit=30 --freshness=5m --format=json
-```
-
-### Agent-proxy (GKE, namespace `prod-omi-backend`)
-```bash
-kubectl logs -n prod-omi-backend -l app=agent-proxy --timestamps --since=10m | grep "<uid>"
-```
-
-### Agent VM
-```bash
-gcloud compute ssh omi-agent-<id> --zone=us-central1-a --project=based-hardware \
-  --command="journalctl -u omi-agent --no-pager --since '10 minutes ago' | grep -E 'Client|Query|Prewarm|session|disconnect|error|Persistent'"
-```
-
-### Agent Chat Debugging
-For end-to-end debugging of the mobile agent chat pipeline (phone → agent-proxy → VM), see the `ai-chat-debug` skill.
+See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 
 ## Testing
 
