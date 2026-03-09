@@ -1520,13 +1520,14 @@ async def _stream_handler(
         _debounce_buffer.clear()
         translation_flushing = False
         # Log session translation metrics summary
+        # total_segments = segments that entered translate() (buffered + lang_skip + same_text_skip)
+        # segments_translated = subset of buffered that were dispatched to _translate_segment
         m = translate_metrics
-        total_handled = m['segments_translated'] + m['segments_buffered'] + m['lang_cache_skips'] + m['same_text_skips']
+        total_segments = m['segments_buffered'] + m['lang_cache_skips'] + m['same_text_skips']
         logger.info(
             f"translate_summary {uid} session={session_id} "
-            f"translated={m['segments_translated']} buffered={m['segments_buffered']} "
-            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']} "
-            f"total_events={total_handled}"
+            f"total={total_segments} buffered={m['segments_buffered']} translated={m['segments_translated']} "
+            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']}"
         )
 
     async def conversation_lifecycle_manager():
