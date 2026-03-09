@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Removed client-side Deepgram API key — transcription now routes securely through the Omi backend"
+  ],
   "releases": [
     {
       "version": "0.11.89",
