@@ -87,6 +87,42 @@ See service descriptions in AGENTS.md. Update both files when service boundaries
 cd app && flutter gen-l10n
 ```
 
+### Verifying UI Changes (agent-flutter)
+
+After editing Flutter UI code, **verify the change programmatically** — do not just hot restart and hope.
+
+Marionette is already integrated in debug builds (`marionette_flutter: ^0.3.0`). Install agent-flutter once: `npm install -g agent-flutter-cli`.
+
+**Edit → Verify → Evidence loop:**
+```bash
+# 1. Edit Dart code, then hot restart
+kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)
+
+# 2. Connect (must reconnect after every hot restart)
+AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect
+
+# 3. See what's on screen
+agent-flutter snapshot -i              # list interactive widgets
+agent-flutter snapshot -i --json       # structured data for parsing
+
+# 4. Interact
+agent-flutter press @e3                # tap by ref
+agent-flutter find type button press   # find and tap (more stable than @ref)
+agent-flutter fill @e5 "hello"         # type into textfield
+agent-flutter scroll down              # scroll current view
+
+# 5. Screenshot evidence for PRs
+agent-flutter screenshot /tmp/after-change.png
+```
+
+**Key rules:**
+- Refs go stale after any mutation (`press`, `fill`, `scroll`) — always re-snapshot before the next interaction.
+- `AGENT_FLUTTER_LOG` must point to the flutter run stdout log file (not logcat). This is how agent-flutter finds the correct VM Service URI.
+- `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
+- When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
+- Android: auto-detects via ADB. iOS: requires `AGENT_FLUTTER_LOG` or explicit URI.
+- E2E flow examples: `app/e2e/` (4 flows covering navigation, settings, tabs, language change).
+
 ### Firebase Prod Config
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
 
