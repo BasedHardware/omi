@@ -3773,7 +3773,7 @@ struct SettingsContentView: View {
                     appState.resetOnboardingAndRestart()
                 }
             } message: {
-                Text("This will reset all permissions and restart the app. You'll need to grant permissions again during setup.")
+                Text("This will reset all permissions, clear chat history, and restart the app. You'll need to grant permissions again during setup.")
             }
         }
     }

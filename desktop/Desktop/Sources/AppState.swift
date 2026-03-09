@@ -2492,6 +2492,17 @@ class AppState: ObservableObject {
         OnboardingChatPersistence.clear()
         log("Cleared onboarding chat persistence")
 
+        // Clear persisted backend chat messages so onboarding does not resume old history.
+        // Onboarding currently uses the default chat message stream.
+        Task {
+            do {
+                _ = try await APIClient.shared.deleteMessages()
+                log("Cleared backend chat messages")
+            } catch {
+                logError("Failed to clear backend chat messages during onboarding reset", error: error)
+            }
+        }
+
         // Clear all local user data: database, screenshots, videos, knowledge graph, etc.
         let dataKeys = [
             "omi.focus.sessions",
