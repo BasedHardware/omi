@@ -5,7 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Tuple, Optional, Dict, Any
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -192,11 +192,27 @@ def get_conversations(
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
-    if len(statuses) > 0:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
+    # Firestore allows only one 'in' filter per query. Use '==' for single-element lists,
+    # and if both statuses and categories need 'in', filter categories client-side.
+    uses_in_filter = False
+    if len(statuses) > 0:
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+            uses_in_filter = True
+
+    filter_categories_client_side = False
     if categories:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+        if len(categories) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', '==', categories[0]))
+        elif not uses_in_filter:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+            uses_in_filter = True
+        else:
+            # Both need 'in' — filter categories client-side after query
+            filter_categories_client_side = True
 
     if folder_id:
         conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
@@ -213,10 +229,41 @@ def get_conversations(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    # When filtering categories client-side, fetch more to account for filtering
+    fetch_limit = limit * 3 if filter_categories_client_side else limit
+    conversations_ref = conversations_ref.limit(fetch_limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    try:
+        conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    except FailedPrecondition as e:
+        logger.warning(f"Firestore query failed (missing composite index?): {e}")
+        # Fallback: simpler query with client-side filtering
+        fallback_ref = db.collection('users').document(uid).collection(conversations_collection)
+        fallback_ref = fallback_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        fallback_ref = fallback_ref.limit(limit * 5)
+        conversations = [doc.to_dict() for doc in fallback_ref.stream()]
+        # Apply all filters client-side
+        if not include_discarded:
+            conversations = [c for c in conversations if not c.get('discarded', False)]
+        if statuses:
+            conversations = [c for c in conversations if c.get('status') in statuses]
+        if categories:
+            conversations = [c for c in conversations if c.get('structured', {}).get('category') in categories]
+        if folder_id:
+            conversations = [c for c in conversations if c.get('folder_id') == folder_id]
+        if starred is not None:
+            conversations = [c for c in conversations if c.get('starred') == starred]
+        if start_date:
+            conversations = [c for c in conversations if c.get('created_at') and c['created_at'] >= start_date]
+        if end_date:
+            conversations = [c for c in conversations if c.get('created_at') and c['created_at'] <= end_date]
+        conversations = conversations[offset : offset + limit] if offset else conversations[:limit]
+        return conversations
+
+    if filter_categories_client_side:
+        conversations = [c for c in conversations if c.get('structured', {}).get('category') in categories]
+        conversations = conversations[:limit]
+
     return conversations
 
 
@@ -240,11 +287,26 @@ def get_conversations_without_photos(
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
-    if len(statuses) > 0:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
+    # Firestore allows only one 'in' filter per query. Use '==' for single-element lists,
+    # and if both statuses and categories need 'in', filter categories client-side.
+    uses_in_filter = False
+    if len(statuses) > 0:
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+            uses_in_filter = True
+
+    filter_categories_client_side = False
     if categories:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+        if len(categories) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', '==', categories[0]))
+        elif not uses_in_filter:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+            uses_in_filter = True
+        else:
+            filter_categories_client_side = True
 
     if folder_id:
         conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
@@ -261,10 +323,38 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Limits
-    conversations_ref = conversations_ref.limit(limit).offset(offset)
+    fetch_limit = limit * 3 if filter_categories_client_side else limit
+    conversations_ref = conversations_ref.limit(fetch_limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    try:
+        conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    except FailedPrecondition as e:
+        logger.warning(f"Firestore query failed (missing composite index?): {e}")
+        fallback_ref = db.collection('users').document(uid).collection(conversations_collection)
+        fallback_ref = fallback_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+        fallback_ref = fallback_ref.limit(limit * 5)
+        conversations = [doc.to_dict() for doc in fallback_ref.stream()]
+        if not include_discarded:
+            conversations = [c for c in conversations if not c.get('discarded', False)]
+        if statuses:
+            conversations = [c for c in conversations if c.get('status') in statuses]
+        if categories:
+            conversations = [c for c in conversations if c.get('structured', {}).get('category') in categories]
+        if folder_id:
+            conversations = [c for c in conversations if c.get('folder_id') == folder_id]
+        if starred is not None:
+            conversations = [c for c in conversations if c.get('starred') == starred]
+        if start_date:
+            conversations = [c for c in conversations if c.get('created_at') and c['created_at'] >= start_date]
+        if end_date:
+            conversations = [c for c in conversations if c.get('created_at') and c['created_at'] <= end_date]
+        conversations = conversations[offset : offset + limit] if offset else conversations[:limit]
+        return conversations
+
+    if filter_categories_client_side:
+        conversations = [c for c in conversations if c.get('structured', {}).get('category') in categories]
+        conversations = conversations[:limit]
+
     return conversations
 
 
