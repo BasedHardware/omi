@@ -18,19 +18,6 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ### No In-Function Imports
 All imports must be at the module top level. Never import inside functions.
 
-```python
-# Bad
-def my_function():
-    from database.redis_db import r  # Don't do this
-    r.get('key')
-
-# Good
-from database.redis_db import r
-
-def my_function():
-    r.get('key')
-```
-
 ### Import from Lower-Level Modules
 Follow the module hierarchy when importing. Higher-level modules import from lower-level modules, never the reverse.
 
@@ -40,42 +27,18 @@ Follow the module hierarchy when importing. Higher-level modules import from low
 3. `routers/` - API endpoints
 4. `main.py` - Application entry point
 
-```python
-# Bad - utils importing from routers or main
-# utils/apps.py
-from main import memory_cache  # Don't import from higher level
-from routers.apps import some_function  # Don't import from higher level
-
-# Good - utils importing from database
-# utils/apps.py
-from database.cache import get_memory_cache
-from database.redis_db import r
-```
-
 ### Memory Management
-
 Free large objects immediately after use. E.g., `del` for byte arrays after processing, `.clear()` for dicts/lists holding data.
 
 ### Logging Security
-
 Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
 
-```python
-from utils.log_sanitizer import sanitize, sanitize_pii
-
-# sanitize() — for response bodies, error text, API responses
-logger.error(f"Token exchange failed: {sanitize(response.text)}")
-
-# sanitize_pii() — for known personal data (names, emails, user text)
-logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
-```
-
 Rules:
-- `sanitize()` for `response.text`, API responses, error bodies (masks token-like 8+ char strings with digits)
-- `sanitize_pii()` for names, emails, user text (always masks regardless of content)
-- Keep log levels as-is (don't downgrade to hide data)
-- Keep UIDs, IPs, status codes, and structural info visible — they're needed for debugging
-- Never put raw `response.text` in exception messages (exceptions may be logged upstream)
+- `sanitize()` for `response.text`, API responses, and error bodies.
+- `sanitize_pii()` for names, emails, and user text.
+- Keep log levels as-is (don't downgrade to hide data).
+- Keep UIDs, IPs, status codes, and structural info visible for debugging.
+- Never put raw `response.text` in exception messages.
 
 ### Backend Service Map
 
@@ -100,40 +63,21 @@ notifications-job (modal/job.py)  [cron]
 
 Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram for STT (`utils/stt/streaming.py`).
-- **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
-- **agent-proxy** (`agent-proxy/main.py`) — GKE. WebSocket proxy at `wss://agent.omi.me/v1/agent/ws`. Validates Firebase ID token, looks up `agentVm` in Firestore, proxies bidirectionally to VM's `ws://<ip>:8080/ws`. VM credentials never leave the server.
-- **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
-- **vad** (`modal/main.py`) — GPU. `/v1/vad` (voice activity detection) and `/v1/speaker-identification` (speaker matching). Called by backend only (`HOSTED_VAD_API_URL`, `HOSTED_SPEECH_PROFILE_API_URL`).
-- **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED` (`utils/stt/streaming.py`). Pre-recorded always uses Deepgram cloud (`utils/stt/pre_recorded.py`). Called by backend and pusher.
-- **notifications-job** (`modal/job.py`) — Cron job that reads Firestore/Redis and sends push notifications.
-
-**Keep this map up to date.** When adding, removing, or changing inter-service calls (HTTP, WebSocket, new env vars), update this section and the matching section in `AGENTS.md`.
+See service descriptions in AGENTS.md. Update both files when service boundaries change.
 
 ## App (Flutter)
 
 ### Localization Required
 
 - All user-facing strings must use l10n. Use `context.l10n.keyName` instead of hardcoded strings. Add new keys to ARB files using `jq` (never read full ARB files - they're large and will burn tokens). See skill `add-a-new-localization-key-l10n-arb` for details.
-
 - **Translate all locales**: When adding new l10n keys, provide real translations for all 33 non-English locales — do not leave English text in non-English ARB files. Use the `omi-add-missing-language-keys-l10n` skill to generate proper translations. Ensure `{parameter}` placeholders match the English ARB exactly.
-
 - After modifying ARB files in `app/lib/l10n/`, regenerate the localization files:
 ```bash
 cd app && flutter gen-l10n
 ```
 
-See [docs/runbooks/simulator.md](docs/runbooks/simulator.md) for iOS simulator setup.
-
 ### Firebase Prod Config
-
-Never run `flutterfire configure` — it will overwrite prod credentials with the wrong project.
-
-Prod credential files (already correct, do not regenerate):
-- `app/ios/Config/Prod/GoogleService-Info.plist`
-- `app/lib/firebase_options_prod.dart`
-- `app/android/app/src/prod/google-services.json`
-- `app/ios/Flutter/prod{Debug,Release,Profile}.xcconfig`
+Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
 
 ## Formatting
 
@@ -157,51 +101,19 @@ clang-format -i <files>
 
 ## Git
 
-### After Completing Work
-If instructed by user to push, you should **create a PR and push your changes** before ending the conversation:
-
-1. Stage only the files you modified:
-   ```bash
-   git add <file1> <file2> ...
-   ```
-2. Commit with a clear message (verb-first, max 72 chars):
-   ```bash
-   git commit -m "Fix race condition in VAD gate service"
-   ```
-3. Push to the current branch and create a PR:
-   ```bash
-   git push
-     gh pr create --title "Fix race condition in VAD
-   gate service" --body "Summary of changes"
-   ```
-4. If user says to merge, merge the PR (no
-  squash):
-   ```bash
-  gh pr merge --merge
-  ```
-
 ### Rules
-- **Always commit to the current branch** — never switch branches
-- **Never squash merge PRs** — use regular merge
-- Make individual commits per file, not bulk commits
-- The pre-commit hook auto-formats staged code — no need to format manually before committing
-- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
-- Never push or create PRs unless explicitly asked
-— Commit locally by default
+- Always commit to the current branch — never switch branches.
+- Never squash merge PRs — use regular merge.
+- Make individual commits per file, not bulk commits.
+- The pre-commit hook auto-formats staged code — no need to format manually before committing.
+- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`.
+- Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE command
-When the user says "RELEASE", perform the full release flow:
-  1. Create a new branch from main
-  2. Make individual commits per changed file
-  3. Push and create a PR
-  4. Merge the PR (no squash — regular merge)
-  5. Switch back to main and pull
+When the user says "RELEASE", create a branch from `main`, make individual commits per changed file, push/create a PR, merge without squash, then switch back to `main` and pull.
 
 ### RELEASEWITHBACKEND command
-Same as RELEASE, plus deploy the backend to production after merging:
-  ```bash
-  gh workflow run gcp_backend.yml -f environment=prod -f branch=main
-  ```
+Run the full RELEASE flow, then deploy backend to production with `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## CI/CD
 See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and checks.
@@ -210,30 +122,4 @@ See [docs/runbooks/deploy.md](docs/runbooks/deploy.md) for deploy triggers and c
 See [docs/runbooks/logging.md](docs/runbooks/logging.md) for log commands.
 
 ## Testing
-
-### Always Run Tests Before Committing
-After making changes, always run the appropriate test script to verify your changes.
-
-- **Backend changes**: Run `backend/test.sh`
-- **App changes**: Run `app/test.sh`
-
-### Backend Test Prerequisites
-Run `backend/test-preflight.sh` to verify your environment before running tests.
-
-**Required** (unit tests will fail without these):
-- `python3` with `pytest` installed
-- Python packages from `backend/requirements.txt` (at minimum: `pydantic`, `fastapi`, `firebase_admin`, `redis`)
-- `ENCRYPTION_SECRET` — set automatically by `test.sh`
-
-**Optional** (integration tests, skipped if missing):
-- `OPENAI_API_KEY` — LLM-dependent tests
-- `DEEPGRAM_API_KEY` — STT tests
-- `ADMIN_KEY` — admin endpoint tests
-- `REDIS_DB_HOST`, `REDIS_DB_PASSWORD` — Redis-backed tests (default: localhost:6379)
-- `GOOGLE_APPLICATION_CREDENTIALS` — Firestore integration tests
-
-### App Test Prerequisites
-- Flutter SDK installed and on PATH
-- Generated files present (auto-created by `app/test.sh` if missing):
-  - `lib/firebase_options_dev.dart`, `lib/firebase_options_prod.dart`
-  - `lib/env/dev_env.g.dart`, `lib/env/prod_env.g.dart`
+Run `backend/test-preflight.sh` to verify environment. Run `backend/test.sh` (backend) or `app/test.sh` (app) before committing.
