@@ -45,22 +45,11 @@ class LiveNotesMonitor: ObservableObject {
     /// Existing notes for context (to avoid repetition)
     private var existingNotesContext: [String] = []
 
-    /// GeminiClient for AI generation (lazily initialized)
-    private var geminiClient: GeminiClient?
+    /// Backend service for AI generation (injected via configure())
+    private var backendService: BackendProactiveService?
 
     /// Cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
-
-    /// AI prompt for note generation (from m13v/meeting)
-    private let noteGenerationPrompt = """
-        generate a single, concise note about what happened in this segment.
-        be factual and specific.
-        focus on the key point or action item.
-        keep it a few word sentence.
-        do not use quotes.
-        do not use wrapping words like "discussion on", jump straight into note.
-        avoid repeating information from existing notes.
-        """
 
     private init() {
         // Subscribe to transcript changes
@@ -70,6 +59,12 @@ class LiveNotesMonitor: ObservableObject {
                 self?.handleSegmentsUpdate(segments)
             }
             .store(in: &cancellables)
+    }
+
+    /// Configure with backend service (call before startSession)
+    func configure(backendService: BackendProactiveService) {
+        self.backendService = backendService
+        log("LiveNotesMonitor: Configured with BackendProactiveService")
     }
 
     // MARK: - Session Lifecycle
@@ -85,15 +80,8 @@ class LiveNotesMonitor: ObservableObject {
         lastProcessedSegmentEnd = nil
         existingNotesContext = []
 
-        // Initialize Gemini client if not already done
-        if geminiClient == nil {
-            do {
-                // Use Gemini 3 Pro for better note generation quality
-                geminiClient = try GeminiClient(model: "gemini-pro-latest")
-                log("LiveNotesMonitor: GeminiClient initialized with gemini-pro-latest")
-            } catch {
-                logError("LiveNotesMonitor: Failed to initialize GeminiClient", error: error)
-            }
+        if backendService == nil {
+            log("LiveNotesMonitor: WARNING — backendService not configured, AI notes disabled")
         }
 
         // Load any existing notes from DB (for crash recovery)
@@ -252,10 +240,10 @@ class LiveNotesMonitor: ObservableObject {
         }
     }
 
-    /// Generate an AI note from recent transcript
+    /// Generate an AI note from recent transcript via backend
     private func generateNote(from segments: [SpeakerSegment]) {
         guard let sessionId = currentSessionId,
-              let client = geminiClient,
+              let service = backendService,
               !isGenerating else { return }
 
         isGenerating = true
@@ -265,34 +253,21 @@ class LiveNotesMonitor: ObservableObject {
         let segmentStartOrder = max(0, currentSegmentOrder - 3)
         let segmentEndOrder = currentSegmentOrder
 
-        // Build context from existing notes
-        let existingNotesText = existingNotesContext.isEmpty
-            ? "No existing notes yet."
+        // Build session context from existing notes
+        let sessionContext = existingNotesContext.isEmpty
+            ? ""
             : "Existing notes:\n" + existingNotesContext.map { "- \($0)" }.joined(separator: "\n")
-
-        let prompt = """
-            Transcript segment:
-            \(recentText)
-
-            \(existingNotesText)
-
-            \(noteGenerationPrompt)
-            """
 
         Task {
             do {
-                let response = try await client.sendTextRequest(
-                    prompt: prompt,
-                    systemPrompt: "You are a concise note-taker. Generate a single short note (3-10 words) about the key point in the transcript. Do not use quotes. Be direct and specific."
-                )
+                let noteText = try await service.generateLiveNote(text: recentText, sessionContext: sessionContext)
 
-                // Clean up the response
-                let noteText = response
+                let cleaned = noteText
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "\"", with: "")
                     .replacingOccurrences(of: "'", with: "")
 
-                guard !noteText.isEmpty else {
+                guard !cleaned.isEmpty else {
                     await MainActor.run { self.isGenerating = false }
                     return
                 }
@@ -300,7 +275,7 @@ class LiveNotesMonitor: ObservableObject {
                 // Save to DB
                 let record = try await NoteStorage.shared.createNote(
                     sessionId: sessionId,
-                    text: noteText,
+                    text: cleaned,
                     isAiGenerated: true,
                     segmentStartOrder: segmentStartOrder,
                     segmentEndOrder: segmentEndOrder
@@ -309,8 +284,7 @@ class LiveNotesMonitor: ObservableObject {
                 if let note = record.toLiveNote() {
                     await MainActor.run {
                         self.notes.append(note)
-                        self.existingNotesContext.append(noteText)
-                        // Trim context to prevent unbounded growth (keep most recent notes)
+                        self.existingNotesContext.append(cleaned)
                         if self.existingNotesContext.count > self.maxExistingNotesContext {
                             self.existingNotesContext.removeFirst(self.existingNotesContext.count - self.maxExistingNotesContext)
                         }
@@ -321,7 +295,6 @@ class LiveNotesMonitor: ObservableObject {
                     await MainActor.run { self.isGenerating = false }
                 }
             } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
-                // Session was deleted during async AI generation — not an error
                 log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
                 await MainActor.run { self.isGenerating = false }
             } catch {
