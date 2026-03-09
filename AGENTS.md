@@ -1,4 +1,6 @@
 <!-- Synced from CLAUDE.md. When updating agent rules, edit CLAUDE.md first then sync here. -->
+<!-- Official guidance: https://developers.openai.com/codex/guides/agents-md | Format spec: https://agents.md
+     CLAUDE.md source: https://docs.anthropic.com/en/docs/claude-code/memory -->
 
 # Codex Agent Rules
 
