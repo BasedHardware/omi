@@ -100,15 +100,16 @@ Requires: Accessibility permission for Terminal.app (System Settings → Privacy
 
 Edit → Verify → Evidence loop:
 1. Edit code, rebuild: `cd desktop && ./run.sh`
-2. Connect: `agent-swift connect --bundle com.omi.desktop-dev`
+2. Connect: `agent-swift connect --bundle-id com.omi.desktop-dev`
 3. Verify: `agent-swift snapshot -i` (interactive elements only)
-4. Interact: `agent-swift press @e3` / `agent-swift fill @e5 "text"`
-5. Evidence: `agent-swift screenshot /tmp/evidence.png`
+4. Interact: `agent-swift press @e3` (click by ref)
+5. Evidence: `screencapture /tmp/evidence.png` (macOS native)
 
 Key rules:
 - `agent-swift doctor` verifies Accessibility permission and target app.
-- Refs stale after `press`/`fill` — re-snapshot before next interaction.
+- Refs stale after `press` — re-snapshot before next interaction.
 - Always use `snapshot -i` — full snapshots of complex apps are very verbose.
+- Available commands: `doctor`, `connect`, `snapshot`, `press`, `status`, `disconnect`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
 - Full command reference: `agent-swift --help`.
