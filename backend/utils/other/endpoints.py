@@ -79,6 +79,9 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
     except InvalidIdTokenError as e:
         logger.error(f"WebSocket auth failed: {e}")
         raise WebSocketException(code=1008, reason="Invalid or expired token")
+    except Exception as e:
+        logger.error(f"WebSocket auth error: {e}")
+        raise WebSocketException(code=1008, reason="Auth error")
 
     # Per-UID connection rate limiting (7s window) to prevent retry storms
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
