@@ -91,10 +91,17 @@ agent-swift snapshot -i
 
 # Interact (re-snapshot after each mutation — refs go stale)
 agent-swift press @e3                # click a button
+agent-swift fill @e5 "search text"   # type into a text field
+agent-swift find role button press   # find + chained action
+agent-swift scroll down              # scroll the view
 agent-swift snapshot -i              # refresh refs after interaction
 
+# Assert & wait
+agent-swift is exists @e3            # exit 0 = true, exit 1 = false
+agent-swift wait text "Settings"     # wait for text to appear
+
 # Capture screenshot evidence
-screencapture /tmp/test-result.png   # macOS native screenshot
+agent-swift screenshot /tmp/test-result.png  # capture app window
 ```
 
 Install once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app.
