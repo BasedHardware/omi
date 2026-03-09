@@ -135,13 +135,16 @@ class AppState: ObservableObject {
 
     // Transcription services
     private var audioCaptureService: AudioCaptureService?
-    private var transcriptionService: TranscriptionService?
+    private var transcriptionService: BackendTranscriptionService?
     private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
     private var audioMixer: AudioMixer?
     private var vadGateService: VADGateService?
 
-    // Batch transcription mode
+    // Batch transcription mode (disabled — backend handles everything via /v4/listen)
     private var useBatchTranscription: Bool = false
+    // When true, backend owns conversation creation via /v4/listen lifecycle manager.
+    // Desktop skips createConversationFromSegments() to avoid duplicates.
+    private var backendOwnsConversation: Bool = false
     private var recordingStartCATime: Double = 0  // CACurrentMediaTime at recording start
 
     // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
@@ -430,12 +433,7 @@ class AppState: ObservableObject {
             }
         }
 
-        // Log final state of important keys
-        if getenv("DEEPGRAM_API_KEY") != nil {
-            log("DEEPGRAM_API_KEY is set")
-        } else {
-            log("WARNING: DEEPGRAM_API_KEY is NOT set")
-        }
+        // DEEPGRAM_API_KEY no longer needed — STT routed through backend /v4/listen
     }
 
     private func shouldSkipBundledAnthropicKey(key: String, sourcePath: String, bundledEnvPath: String?) -> Bool {
@@ -1152,165 +1150,143 @@ class AppState: ObservableObject {
             }
         }
 
-        do {
-            // Get effective language from settings (handles auto-detect vs single language)
-            let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
-            let vocabulary = AssistantSettings.shared.effectiveVocabulary
-            log("Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))")
-            log("Transcription: Custom vocabulary: \(vocabulary.joined(separator: ", "))")
+        // Get effective language from settings (handles auto-detect vs single language)
+        let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let vocabulary = AssistantSettings.shared.effectiveVocabulary
+        log("Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))")
+        log("Transcription: Custom vocabulary: \(vocabulary.joined(separator: ", "))")
 
-            // Determine transcription mode
-            useBatchTranscription = AssistantSettings.shared.batchTranscriptionEnabled && effectiveSource == .microphone
+        // Always use streaming mode through the backend — batch mode not needed
+        // (backend handles STT, diarization, and memory creation server-side)
+        useBatchTranscription = false
+        // Backend owns conversation creation via /v4/listen lifecycle manager
+        backendOwnsConversation = true
 
-            if !useBatchTranscription {
-                // Streaming mode: initialize WebSocket transcription service
-                transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
+        // Set conversation source based on audio source
+        let sourceValue: String
+        if effectiveSource == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
+            currentConversationSource = ConversationSource.from(deviceType: device.type)
+            recordingInputDeviceName = device.displayName
+            sourceValue = currentConversationSource.rawValue
+        } else {
+            currentConversationSource = .desktop
+            recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName()
+            sourceValue = "desktop"
+        }
+
+        transcriptionService = BackendTranscriptionService(language: effectiveLanguage, source: sourceValue)
+
+        // Initialize audio services based on source
+        if effectiveSource == .microphone {
+            // Initialize audio capture service
+            audioCaptureService = AudioCaptureService()
+
+            // Initialize audio mixer for combining mic and system audio
+            audioMixer = AudioMixer()
+
+            // VAD gate is optional for streaming mode (silence gating)
+            if AssistantSettings.shared.vadGateEnabled {
+                let gate = VADGateService()
+                vadGateService = gate
+                log("Transcription: VAD gate enabled")
             } else {
-                log("Transcription: Batch mode enabled — skipping WebSocket")
+                vadGateService = nil
             }
 
-            // Set conversation source based on audio source
-            if effectiveSource == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
-                currentConversationSource = ConversationSource.from(deviceType: device.type)
-                recordingInputDeviceName = device.displayName
+            // Initialize system audio capture if supported (macOS 14.4+)
+            // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
+            //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
+            let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+            if systemAudioDisabled {
+                log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+            } else if #available(macOS 14.4, *) {
+                systemAudioCaptureService = SystemAudioCaptureService()
+                log("Transcription: System audio capture initialized (macOS 14.4+)")
             } else {
-                currentConversationSource = .desktop
-                recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName()
+                log("Transcription: System audio capture not available (requires macOS 14.4+)")
             }
+        }
+        // For BLE device, BleAudioService will be used in startAudioCapture
 
-            // Initialize audio services based on source
-            if effectiveSource == .microphone {
-                // Initialize audio capture service
-                audioCaptureService = AudioCaptureService()
-
-                // Initialize audio mixer for combining mic and system audio
-                audioMixer = AudioMixer()
-
-                // VAD gate is always needed for batch mode (chunk boundaries),
-                // and optional for streaming mode (silence gating)
-                if useBatchTranscription || AssistantSettings.shared.vadGateEnabled {
-                    let gate = VADGateService()
-                    if useBatchTranscription && !gate.modelAvailable {
-                        // Batch mode requires working VAD — fall back to streaming
-                        log("Transcription: VAD models unavailable, falling back from batch to streaming mode")
-                        useBatchTranscription = false
-                        vadGateService = nil
-                        transcriptionService = try TranscriptionService(language: effectiveLanguage, vocabulary: vocabulary)
-                    } else {
-                        vadGateService = gate
-                        log("Transcription: VAD gate enabled\(useBatchTranscription ? " (batch mode)" : "")")
-                    }
-                } else {
-                    vadGateService = nil
+        // Start backend transcription service, then audio on connect
+        transcriptionService?.start(
+            onTranscript: { [weak self] segment in
+                Task { @MainActor in
+                    self?.handleTranscriptSegment(segment)
                 }
-
-                // Initialize system audio capture if supported (macOS 14.4+)
-                // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
-                //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
-                let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
-                if systemAudioDisabled {
-                    log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
-                } else if #available(macOS 14.4, *) {
-                    systemAudioCaptureService = SystemAudioCaptureService()
-                    log("Transcription: System audio capture initialized (macOS 14.4+)")
-                } else {
-                    log("Transcription: System audio capture not available (requires macOS 14.4+)")
+            },
+            onError: { [weak self] error in
+                Task { @MainActor in
+                    logError("Transcription error", error: error)
+                    AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+                    self?.stopTranscription()
                 }
-            }
-            // For BLE device, BleAudioService will be used in startAudioCapture
-
-            if useBatchTranscription {
-                // Batch mode: start audio capture directly (no WebSocket to wait for)
-                recordingStartCATime = CACurrentMediaTime()
-                Task { @MainActor [weak self] in
+            },
+            onConnected: { [weak self] in
+                Task { @MainActor in
+                    log("Transcription: Connected to backend")
+                    // Start audio capture once connected
                     await self?.startAudioCapture(source: effectiveSource)
                 }
-            } else {
-                // Streaming mode: start transcription service first, then audio on connect
-                transcriptionService?.start(
-                    onTranscript: { [weak self] segment in
-                        Task { @MainActor in
-                            self?.handleTranscriptSegment(segment)
-                        }
-                    },
-                    onError: { [weak self] error in
-                        Task { @MainActor in
-                            logError("Transcription error", error: error)
-                            AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-                            self?.stopTranscription()
-                        }
-                    },
-                    onConnected: { [weak self] in
-                        Task { @MainActor in
-                            log("Transcription: Connected to DeepGram")
-                            // Start audio capture once connected
-                            await self?.startAudioCapture(source: effectiveSource)
-                        }
-                    },
-                    onDisconnected: {
-                        log("Transcription: Disconnected from DeepGram")
-                    }
+            },
+            onDisconnected: {
+                log("Transcription: Disconnected from backend")
+            }
+        )
+
+        isTranscribing = true
+        AssistantSettings.shared.transcriptionEnabled = true
+        audioSource = effectiveSource
+        currentTranscript = ""
+        speakerSegments = []
+        totalSegmentCount = 0
+        totalWordCount = 0
+        liveSpeakerPersonMap = [:]
+        LiveTranscriptMonitor.shared.clear()
+        recordingStartTime = Date()
+        AudioLevelMonitor.shared.reset()
+        RecordingTimer.shared.start()
+
+        log("Transcription: Using source: \(effectiveSource.rawValue), device: \(recordingInputDeviceName ?? "Unknown")")
+
+        // Create crash-safe DB session for persistence
+        Task {
+            do {
+                let sessionId = try await TranscriptionStorage.shared.startSession(
+                    source: currentConversationSource.rawValue,
+                    language: effectiveLanguage,
+                    timezone: TimeZone.current.identifier,
+                    inputDeviceName: recordingInputDeviceName
                 )
-            }
-
-            isTranscribing = true
-            AssistantSettings.shared.transcriptionEnabled = true
-            audioSource = effectiveSource
-            currentTranscript = ""
-            speakerSegments = []
-            totalSegmentCount = 0
-            totalWordCount = 0
-            liveSpeakerPersonMap = [:]
-            LiveTranscriptMonitor.shared.clear()
-            recordingStartTime = Date()
-            AudioLevelMonitor.shared.reset()
-            RecordingTimer.shared.start()
-
-            log("Transcription: Using source: \(effectiveSource.rawValue), device: \(recordingInputDeviceName ?? "Unknown")")
-
-            // Create crash-safe DB session for persistence
-            Task {
-                do {
-                    let sessionId = try await TranscriptionStorage.shared.startSession(
-                        source: currentConversationSource.rawValue,
-                        language: effectiveLanguage,
-                        timezone: TimeZone.current.identifier,
-                        inputDeviceName: recordingInputDeviceName
-                    )
-                    await MainActor.run {
-                        self.currentSessionId = sessionId
-                        // Start live notes session
-                        LiveNotesMonitor.shared.startSession(sessionId: sessionId)
-                    }
-                    log("Transcription: Created DB session \(sessionId)")
-                } catch {
-                    logError("Transcription: Failed to create DB session", error: error)
-                    // Non-fatal - continue recording even if DB fails
+                await MainActor.run {
+                    self.currentSessionId = sessionId
+                    // Start live notes session
+                    LiveNotesMonitor.shared.startSession(sessionId: sessionId)
                 }
+                log("Transcription: Created DB session \(sessionId)")
+            } catch {
+                logError("Transcription: Failed to create DB session", error: error)
+                // Non-fatal - continue recording even if DB fails
             }
-
-            // Start 4-hour max recording timer
-            maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
-                Task { @MainActor in
-                    guard let self = self, self.isTranscribing else { return }
-                    log("Transcription: 4-hour limit reached - finalizing conversation")
-                    _ = await self.finalizeConversation()
-                    // Start a new recording session automatically
-                    self.stopAudioCapture()
-                    self.clearTranscriptionState()
-                    self.startTranscription()
-                }
-            }
-
-            // Track transcription started
-            AnalyticsManager.shared.transcriptionStarted()
-
-            log("Transcription: Starting...")
-
-        } catch {
-            AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-            showAlert(title: "Transcription Error", message: error.localizedDescription)
         }
+
+        // Start 4-hour max recording timer
+        maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self, self.isTranscribing else { return }
+                log("Transcription: 4-hour limit reached - finalizing conversation")
+                _ = await self.finalizeConversation()
+                // Start a new recording session automatically
+                self.stopAudioCapture()
+                self.clearTranscriptionState()
+                self.startTranscription()
+            }
+        }
+
+        // Track transcription started
+        AnalyticsManager.shared.transcriptionStarted()
+
+        log("Transcription: Starting...")
     }
 
     /// Start audio capture and pipe to transcription service
@@ -1330,23 +1306,12 @@ class AppState: ObservableObject {
         guard let audioCaptureService = audioCaptureService,
               let audioMixer = audioMixer else { return }
 
-        // Start the audio mixer - it will send stereo audio to transcription service
-        // Branch on batch vs streaming mode
-        audioMixer.start { [weak self] stereoData in
+        // Start the audio mixer in mono mode — backend handles diarization server-side
+        audioMixer.start(outputMode: .mono) { [weak self] monoData in
             guard let self = self else { return }
-            if self.useBatchTranscription {
-                // Batch mode: accumulate audio in VAD gate, transcribe on silence
-                guard let gate = self.vadGateService else { return }
-                let output = gate.processAudioBatch(stereoData)
-                if output.isComplete, let audioBuffer = output.audioBuffer {
-                    let wallStartTime = output.speechStartWallTime
-                    Task { @MainActor [weak self] in
-                        await self?.batchTranscribeChunk(audioBuffer: audioBuffer, wallStartTime: wallStartTime)
-                    }
-                }
-            } else if let gate = self.vadGateService {
+            if let gate = self.vadGateService {
                 // Streaming mode with VAD gate
-                let output = gate.processAudio(stereoData)
+                let output = gate.processAudio(monoData)
                 if !output.audioToSend.isEmpty {
                     self.transcriptionService?.sendAudio(output.audioToSend)
                 } else if gate.needsKeepalive() {
@@ -1357,7 +1322,7 @@ class AppState: ObservableObject {
                 }
             } else {
                 // Streaming mode without VAD gate
-                self.transcriptionService?.sendAudio(stereoData)
+                self.transcriptionService?.sendAudio(monoData)
             }
         }
 
@@ -1411,10 +1376,12 @@ class AppState: ObservableObject {
             return
         }
 
-        // Start BLE audio processing and pipe directly to transcription
+        // Start BLE audio processing and pipe mono PCM directly to backend transcription
         await BleAudioService.shared.startProcessing(
             from: connection,
-            transcriptionService: transcriptionService,
+            audioSink: { [weak transcriptionService] pcmData in
+                transcriptionService?.sendAudio(pcmData)
+            },
             audioDataHandler: { _ in
                 // Audio level is updated by BleAudioService
                 Task { @MainActor in
@@ -2094,6 +2061,19 @@ class AppState: ObservableObject {
         }
 
         log("Transcription: Finalizing conversation with \(segmentsToUpload.count) segments")
+
+        // When backend owns conversation creation (via /v4/listen lifecycle manager),
+        // skip client-side createConversationFromSegments() to avoid duplicates.
+        // The backend already has all segments from the live stream and will process
+        // the conversation on timeout or next connection.
+        if backendOwnsConversation {
+            log("Transcription: Backend owns conversation — skipping client-side upload (\(segmentsToUpload.count) segments streamed)")
+            if let sessionId = sessionId {
+                // Mark session as completed — no retry needed since backend has the data
+                try? await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: "backend-owned")
+            }
+            return .saved
+        }
 
         // Convert SpeakerSegment to API request format (include person_id from live naming)
         let speakerPersonMap = liveSpeakerPersonMap
