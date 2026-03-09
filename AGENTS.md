@@ -83,7 +83,8 @@ Edit → Verify → Evidence loop:
 
 Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
-- Refs stale after `press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
+- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
 - Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
 - Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
 - When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
@@ -102,17 +103,18 @@ Edit → Verify → Evidence loop:
 1. Edit code, rebuild: `cd desktop && ./run.sh`
 2. Connect: `agent-swift connect --bundle-id com.omi.desktop-dev`
 3. Verify: `agent-swift snapshot -i` (interactive elements only)
-4. Interact: `agent-swift press @e3` / `fill @e5 "text"` / `find role button press`
+4. Interact: `agent-swift click @e3` / `fill @e5 "text"` / `find role button click`
 5. Assert: `agent-swift is exists @e3` / `wait text "Settings"`
 6. Evidence: `agent-swift screenshot /tmp/evidence.png`
 
 Key rules:
 - `agent-swift doctor` verifies Accessibility permission and target app.
-- Refs stale after `press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
+- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
 - Always use `snapshot -i` — full snapshots of complex apps are very verbose.
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - JSON output: `--json` flag, `AGENT_SWIFT_JSON=1` env var, or pipe to auto-detect.
-- 14 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
+- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
 - Full command reference: `agent-swift --help` or `agent-swift schema`.
