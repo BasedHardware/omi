@@ -23,6 +23,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 ```
 
 ## Backend
+<!-- Maintainers: @beastoin (service map, logging security), @Thinh (imports, memory mgmt) -->
 
 ### No In-Function Imports
 All imports must be at the module top level. Never import inside functions.
@@ -75,6 +76,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 See service descriptions in AGENTS.md. Update both files when service boundaries change.
 
 ## App (Flutter)
+<!-- Maintainers: @Thinh (l10n, formatting) -->
 
 ### Localization Required
 
@@ -89,6 +91,7 @@ cd app && flutter gen-l10n
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
 
 ## Formatting
+<!-- Maintainers: @Thinh (Jan 19) -->
 
 Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
 
@@ -109,6 +112,7 @@ clang-format -i <files>
 ```
 
 ## Git
+<!-- Maintainers: @AaravGarg (original, Feb 2), @NikShevchenko (push rules, Mar 3) -->
 
 ### Rules
 - Always commit to the current branch — never switch branches.
@@ -119,9 +123,11 @@ clang-format -i <files>
 - Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE command
+<!-- Added by @AaravGarg (Feb 4) -->
 When the user says "RELEASE", create a branch from `main`, make individual commits per changed file, push/create a PR, merge without squash, then switch back to `main` and pull.
 
 ### RELEASEWITHBACKEND command
+<!-- Added by @AaravGarg (Feb 4) -->
 Run the full RELEASE flow, then deploy backend to production with `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## CI/CD
