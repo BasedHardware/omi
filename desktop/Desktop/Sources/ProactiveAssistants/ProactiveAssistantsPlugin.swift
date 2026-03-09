@@ -362,6 +362,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         Task { await TaskDeduplicationService.shared.configure(backendService: proactiveService) }
         Task { await TaskPrioritizationService.shared.configure(backendService: proactiveService) }
         Task { await AIUserProfileService.shared.configure(backendService: proactiveService) }
+        Task { await LiveNotesMonitor.shared.configure(backendService: proactiveService) }
 
         Task { await TaskDeduplicationService.shared.start() }
         Task { await TaskPrioritizationService.shared.start() }
