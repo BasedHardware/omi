@@ -126,6 +126,41 @@ agent-flutter screenshot /tmp/after-change.png
 ### Firebase Prod Config
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
 
+## Desktop (macOS)
+
+### Verifying UI Changes (agent-swift)
+
+After editing Swift UI code, **verify the change programmatically** via the macOS Accessibility API — no app-side instrumentation needed.
+
+Install agent-swift once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app (System Settings → Privacy & Security → Accessibility).
+
+**Edit → Verify → Evidence loop:**
+```bash
+# 1. Edit Swift code, rebuild and run
+cd desktop && ./run.sh
+
+# 2. Connect to the running app
+agent-swift connect --bundle com.omi.desktop-dev
+
+# 3. See what's on screen
+agent-swift snapshot -i              # interactive elements only (recommended)
+agent-swift snapshot -i --json       # structured data for parsing
+
+# 4. Interact
+agent-swift press @e3                # click by ref
+agent-swift fill @e5 "hello"         # type into textfield
+
+# 5. Screenshot evidence for PRs
+agent-swift screenshot /tmp/after-change.png
+```
+
+**Key rules:**
+- `agent-swift doctor` verifies Accessibility permission and can check the target app.
+- Refs go stale after mutations (`press`, `fill`) — re-snapshot before the next interaction.
+- Always use `snapshot -i` (interactive only) — full snapshots of complex apps are very verbose.
+- Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
+- Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+
 ## Formatting
 <!-- Maintainers: @Thinh (Jan 19) -->
 
