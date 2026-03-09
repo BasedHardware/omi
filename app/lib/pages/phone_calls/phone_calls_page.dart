@@ -124,6 +124,23 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    return Consumer<PhoneCallProvider>(
+      builder: (context, provider, _) {
+        if (!provider.numbersLoaded) {
+          return const Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(child: CircularProgressIndicator(color: Colors.white)),
+          );
+        }
+        if (provider.verifiedNumbers.isEmpty) {
+          return const PhoneSetupIntroPage();
+        }
+        return _buildMainPage(context);
+      },
+    );
+  }
+
+  Widget _buildMainPage(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
