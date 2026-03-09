@@ -81,9 +81,15 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
         raise WebSocketException(code=1008, reason="Invalid or expired token")
 
     # Per-UID connection rate limiting (7s window) to prevent retry storms
-    if not try_acquire_listen_lock(uid):
-        logger.warning(f"WebSocket rate limited uid={uid}")
-        raise WebSocketException(code=1008, reason="Rate limited, retry later")
+    # Fail-open on Redis errors to avoid reintroducing handshake crashes
+    try:
+        if not try_acquire_listen_lock(uid):
+            logger.warning(f"WebSocket rate limited uid={uid}")
+            raise WebSocketException(code=1008, reason="Rate limited, retry later")
+    except WebSocketException:
+        raise
+    except Exception as e:
+        logger.error(f"Rate limit check failed (allowing connection): {e}")
 
     return uid
 
