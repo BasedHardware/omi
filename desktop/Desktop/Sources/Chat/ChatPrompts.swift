@@ -688,26 +688,32 @@ struct ChatPrompts {
 
     STEP 3 — MONTHLY GOAL (BEFORE SCAN)
     Ask for ONE top monthly goal first.
-    Then call `ask_followup` with 2-4 concrete options and one typed option.
-    Example: ask_followup(question: "What's your top one goal this month?", options: ["Ship [specific project]", "Improve [specific skill/workflow]", "I'll type my own"])
+    Then call `ask_followup` with 2-4 SMART options and one typed option.
+    Every suggested option MUST be concrete, measurable, and time-bound with a clear numeric target by month-end.
+    Avoid vague options like "work on a project" or "get organized".
+    Example: ask_followup(question: "What's your top one goal this month?", options: ["Ship macOS v1 with 0 P0 bugs", "Publish 60 Instagram videos this month", "Reach 200k users by month-end", "I'll type my own"])
     WAIT for user reply (button or typed).
     After reply, call `save_knowledge_graph` with the chosen goal as a concept node connected to the user.
 
     STEP 4 — FILE SCAN (AFTER GOAL)
-    Tell the user you'll scan files (including Apple Notes), then call `scan_files`. A folder access guide image is shown automatically in the UI.
+    Tell the user you'll scan files, then call `scan_files`. A folder access guide image is shown automatically in the UI.
     This tool BLOCKS until the scan is complete. macOS may show folder access dialogs — the guide image helps the user click Allow.
     If any folders were denied access, tell the user and call `scan_files` again after they allow.
     After scan, call `save_knowledge_graph` with tools, languages, frameworks, and notable notes/projects found (5-20 nodes).
 
     STEP 5 — FILE DISCOVERIES + TASK CANDIDATES
+    This step is MANDATORY before Step 6.
+    You MUST ask ONE task-selection follow-up in this step and WAIT for the reply before requesting permissions.
     Share 1-2 specific observations connecting web research + goal + file findings.
     Then identify up to 2-3 candidate tasks that could help the user's monthly goal.
     RULES:
     - Prefer existing tasks found in scan results if clearly relevant.
     - Suggest NEW tasks only when confidence is high.
+    - Every suggested task must be concrete, immediately actionable today, and include a measurable completion criteria.
+    - Avoid generic tasks like "work on X" or "stay on track".
     - If confidence is low or no good task candidates exist, do NOT invent tasks.
     If you found confident task candidates, present them with `ask_followup` (2-4 options, include at least one typed option) and WAIT for the user's reply.
-    If confidence is low or no good task candidates exist, ask manually: "What is your goal for today?" with `ask_followup` (2-4 options, include at least one typed option), then WAIT for the user's reply.
+    If confidence is low or no good task candidates exist, ask manually: "What is your goal for today?" with `ask_followup` (2-4 concrete options, include at least one typed option), then WAIT for the user's reply.
     After the reply, call `save_knowledge_graph` with today's goal/task context as concept nodes connected to the user.
 
     STEP 6 — PRIVACY NOTE + PERMISSIONS
@@ -780,7 +786,7 @@ struct ChatPrompts {
 
     **scan_files**: Scan the user's files and return results. BLOCKING — waits for the scan to finish.
     - No parameters.
-    - Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, /Applications, and Apple Notes storage folders.
+    - Scans ~/Downloads, ~/Documents, ~/Desktop, ~/Developer, ~/Projects, and /Applications.
     - Returns file type breakdown, projects, recent files, installed apps.
     - Returns existing task candidates when available, so you can connect tasks to the user's goals.
     - Also reports which folders were DENIED access (user didn't click Allow on the macOS dialog).

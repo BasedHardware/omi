@@ -92,8 +92,12 @@ struct OnboardingChatView: View {
     @State private var hasStarted: Bool = false
     @State private var onboardingCompleted: Bool = false
     @State private var quickReplyOptions: [String] = []
+    @State private var quickReplyQuestion: String = ""
+    @State private var isTaskSelectionFollowup: Bool = false
     @State private var awaitingGoalInput: Bool = false
+    @State private var awaitingDailyTaskInput: Bool = false
     @State private var createdGoalTitles: Set<String> = []
+    @State private var createdTaskTitles: Set<String> = []
     @State private var isGrantingPermission: Bool = false
     @State private var pendingPermissionType: String? = nil  // e.g. "microphone" — waiting for user to grant
     @FocusState private var isInputFocused: Bool
@@ -182,6 +186,14 @@ struct OnboardingChatView: View {
 
                         // Quick reply buttons
                         if !quickReplyOptions.isEmpty && !chatProvider.isSending {
+                            if !quickReplyQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text(quickReplyQuestion)
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(OmiColors.textPrimary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.leading, 44)
+                            }
+
                             // Show permission GIF when quick replies include a "Grant" button
                             if let grantOption = quickReplyOptions.first(where: { isGrantButton($0) }),
                                let permType = permissionType(from: grantOption) {
@@ -463,12 +475,20 @@ struct OnboardingChatView: View {
         }
         ChatToolExecutor.onQuickReplyOptions = { options in
             quickReplyOptions = options
-            if options.contains(where: { isTypeYourOwnOption($0) }) {
-                awaitingGoalInput = true
+            if options.isEmpty {
+                quickReplyQuestion = ""
+                isTaskSelectionFollowup = false
             }
+            let hasTypedOption = options.contains(where: { isTypeYourOwnOption($0) })
+            awaitingGoalInput = hasTypedOption && isGoalPriorityQuestion(quickReplyQuestion)
+            isTaskSelectionFollowup = shouldTreatAsTaskSelection(question: quickReplyQuestion, options: options)
+            awaitingDailyTaskInput = hasTypedOption && isTaskSelectionFollowup
         }
         ChatToolExecutor.onQuickReplyQuestion = { question in
+            quickReplyQuestion = question
             awaitingGoalInput = isGoalPriorityQuestion(question)
+            isTaskSelectionFollowup = shouldTreatAsTaskSelection(question: question, options: quickReplyOptions)
+            awaitingDailyTaskInput = isTaskSelectionFollowup && quickReplyOptions.contains(where: { isTypeYourOwnOption($0) })
         }
         ChatToolExecutor.onKnowledgeGraphUpdated = { [weak graphViewModel] in
             guard let vm = graphViewModel else { return }
@@ -563,11 +583,17 @@ struct OnboardingChatView: View {
 
         // Clear quick replies and unblock any pending ask_followup
         quickReplyOptions = []
+        quickReplyQuestion = ""
+        isTaskSelectionFollowup = false
         ChatToolExecutor.resumeFollowup(with: text)
 
         Task {
             if awaitingGoalInput {
                 await maybeCreateGoal(from: text, source: "typed")
+            }
+            if awaitingDailyTaskInput {
+                await maybeCreateTask(from: text, source: "typed")
+                awaitingDailyTaskInput = false
             }
             await chatProvider.sendMessage(text)
         }
@@ -595,7 +621,10 @@ struct OnboardingChatView: View {
 
     /// Handle quick reply button tap — triggers permission if applicable, then sends as user message
     private func handleQuickReply(_ option: String) {
+        let wasTaskSelectionFollowup = isTaskSelectionFollowup
         quickReplyOptions = []
+        quickReplyQuestion = ""
+        isTaskSelectionFollowup = false
 
         if let permType = permissionType(from: option) {
             // Grant button — trigger the permission directly
@@ -623,10 +652,19 @@ struct OnboardingChatView: View {
             } else if isTypeYourOwnOption(option) {
                 awaitingGoalInput = true
             }
+            let shouldCreateTaskFromSelection = wasTaskSelectionFollowup && !isTypeYourOwnOption(option)
+            if shouldCreateTaskFromSelection {
+                awaitingDailyTaskInput = false
+            } else if isTypeYourOwnOption(option) && wasTaskSelectionFollowup {
+                awaitingDailyTaskInput = true
+            }
             ChatToolExecutor.resumeFollowup(with: option)
             Task {
                 if shouldCreateFromSelection {
                     await maybeCreateGoal(from: option, source: "selected")
+                }
+                if shouldCreateTaskFromSelection {
+                    await maybeCreateTask(from: option, source: "selected")
                 }
                 await chatProvider.sendMessage(option)
             }
@@ -634,7 +672,7 @@ struct OnboardingChatView: View {
     }
 
     private var shouldHideExplorationCard: Bool {
-        !quickReplyOptions.isEmpty || pendingPermissionType != nil || awaitingGoalInput
+        !quickReplyOptions.isEmpty || pendingPermissionType != nil || awaitingGoalInput || awaitingDailyTaskInput
     }
 
     private func whiteTemplateLogoImage() -> NSImage? {
@@ -659,6 +697,52 @@ struct OnboardingChatView: View {
             || lower.contains("what's your #1 goal")
             || lower.contains("top priority")
             || lower.contains("priority right now")
+    }
+
+    private func isDailyTaskQuestion(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("goal for today")
+            || lower.contains("tasks for today")
+            || lower.contains("task for today")
+            || lower.contains("daily goal")
+            || lower.contains("today's top task")
+            || lower.contains("today top task")
+            || lower.contains("daily reminder task")
+            || lower.contains("tasks that could help")
+            || lower.contains("could help today")
+            || lower.contains("what do you want to get done")
+            || lower.contains("today's priority")
+            || lower.contains("today priority")
+            || (lower.contains("set that as") && lower.contains("task"))
+    }
+
+    private func isLikelyTaskOption(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        if isTypeYourOwnOption(text) || lower == "skip" || lower == "why?" || isGrantButton(text) {
+            return false
+        }
+        let taskVerbs = [
+            "record", "publish", "ship", "launch", "write", "fix", "review", "design", "test", "send", "post", "call", "build", "finish",
+        ]
+        if taskVerbs.contains(where: { lower.hasPrefix($0 + " ") || lower.contains(" " + $0 + " ") }) {
+            return true
+        }
+        return lower.contains("today")
+            || lower.contains("task")
+            || lower.contains("goal")
+            || lower.contains("per day")
+            || lower.contains("daily")
+    }
+
+    private func shouldTreatAsTaskSelection(question: String, options: [String]) -> Bool {
+        if isDailyTaskQuestion(question) {
+            return true
+        }
+        guard !options.isEmpty else { return false }
+        let nonPermission = options.filter { !isGrantButton($0) }
+        let likelyTaskOptions = nonPermission.filter { isLikelyTaskOption($0) }
+        // Require at least one actionable option and a typed option to avoid false positives
+        return !likelyTaskOptions.isEmpty && options.contains(where: { isTypeYourOwnOption($0) })
     }
 
     private func isTypeYourOwnOption(_ text: String) -> Bool {
@@ -734,6 +818,87 @@ struct OnboardingChatView: View {
             return true
         }
         return false
+    }
+
+    private func normalizedTaskTitle(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+    }
+
+    private func cleanedTaskTitle(_ text: String) -> String {
+        var cleaned = normalizedTaskTitle(text)
+        let lower = cleaned.lowercased()
+        let removablePrefixes = [
+            "my task is ",
+            "task: ",
+            "i will ",
+            "i'll ",
+            "i need to ",
+            "today i need to ",
+        ]
+        for prefix in removablePrefixes where lower.hasPrefix(prefix) {
+            cleaned = String(cleaned.dropFirst(prefix.count))
+            break
+        }
+
+        cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.hasSuffix(".") {
+            cleaned.removeLast()
+        }
+        return cleaned
+    }
+
+    private func shouldSkipTaskCreation(_ title: String) -> Bool {
+        if title.isEmpty {
+            return true
+        }
+        let lower = title.lowercased()
+        if lower == "skip" || lower == "done" || lower.contains("i'll type") || lower.contains("i’ll type") {
+            return true
+        }
+        return false
+    }
+
+    private func isDailyTask(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("daily")
+            || lower.contains("per day")
+            || lower.contains("every day")
+            || lower.contains("2-videos-per-day")
+            || lower.contains("videos per day")
+    }
+
+    private func maybeCreateTask(from rawText: String, source: String) async {
+        let title = cleanedTaskTitle(rawText)
+        guard !shouldSkipTaskCreation(title) else { return }
+
+        let dedupeKey = title.lowercased()
+        guard !createdTaskTitles.contains(dedupeKey) else { return }
+
+        let createdTask: TaskActionItem?
+        if isDailyTask(rawText) {
+            createdTask = await TasksStore.shared.createDailyRecurringTask(
+                description: title,
+                priority: "medium",
+                tags: ["onboarding"]
+            )
+        } else {
+            let dueToday = Calendar.current.startOfDay(for: Date())
+            createdTask = await TasksStore.shared.createTask(
+                description: title,
+                dueAt: dueToday,
+                priority: "medium",
+                tags: ["onboarding"]
+            )
+        }
+
+        if createdTask != nil {
+            createdTaskTitles.insert(dedupeKey)
+            log("OnboardingChat: Created task from onboarding input (\(source)): \(title)")
+        } else {
+            log("OnboardingChat: Failed to create task from onboarding input (\(source)): \(title)")
+        }
     }
 
     private func maybeCreateGoal(from rawText: String, source: String) async {
