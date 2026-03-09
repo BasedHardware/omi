@@ -78,9 +78,29 @@ for i in $(seq 1 40); do
 done
 ```
 
-### Step 5: Test with `macos-use`
+### Step 5: Test with agent-swift (preferred) or macos-use
 
-Once the app is running, use the `macos-use` MCP tools to interact with it:
+Once the app is running, use **agent-swift** to interact with and verify the UI:
+
+```bash
+# Connect to the running app
+agent-swift connect --bundle com.omi.desktop-dev
+
+# See interactive elements on screen
+agent-swift snapshot -i
+
+# Interact (re-snapshot after each mutation — refs go stale)
+agent-swift press @e3                # click a button
+agent-swift fill @e5 "test text"     # type into a field
+agent-swift snapshot -i              # refresh refs after interaction
+
+# Capture screenshot evidence
+agent-swift screenshot /tmp/test-result.png
+```
+
+Install once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app.
+
+**Alternative: macos-use MCP tools** (if agent-swift is not available):
 
 1. **Open and traverse**: Use `macos-use_open_application_and_traverse` with identifier `"Omi Dev"` to get the accessibility tree
 2. **Read the traversal file**: Use `Grep` or `Read` on the returned file to find specific UI elements
