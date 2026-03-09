@@ -61,12 +61,11 @@ def get_current_user_uid(authorization: str = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
 
-def get_current_user_uid_ws(authorization: str = Header(None)):
-    """FastAPI dependency for WebSocket endpoints with Authorization header.
+def _verify_ws_auth(authorization: str) -> str:
+    """Common WebSocket auth — verifies token, returns uid.
 
-    Unlike get_current_user_uid, raises WebSocketException(code=1008) instead of
-    HTTPException(401). This ensures the ASGI server sends a proper WebSocket close
-    frame instead of exiting without a handshake (which causes LB 5xx).
+    Raises WebSocketException(code=1008) instead of HTTPException(401) so the
+    ASGI server sends a proper WebSocket close frame (not a handshake crash).
     """
     if not authorization:
         raise WebSocketException(code=1008, reason="Authorization header not found")
@@ -75,7 +74,7 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
 
     try:
         token = authorization.split(' ')[1]
-        uid = verify_token(token)
+        return verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(f"WebSocket auth failed: {e}")
         raise WebSocketException(code=1008, reason="Invalid or expired token")
@@ -83,7 +82,23 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
 
-    # Per-UID connection rate limiting (7s window) to prevent retry storms
+
+def get_current_user_uid_ws_listen(authorization: str = Header(None)):
+    """WebSocket auth for /v4/listen — NO rate limiting.
+
+    Mobile apps reconnect legitimately on network switch / backgrounding,
+    so the per-UID rate limiter must not block them.
+    """
+    return _verify_ws_auth(authorization)
+
+
+def get_current_user_uid_ws(authorization: str = Header(None)):
+    """WebSocket auth WITH per-UID rate limiting (7s window).
+
+    Use for WebSocket endpoints that need retry-storm protection.
+    """
+    uid = _verify_ws_auth(authorization)
+
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
         if not try_acquire_listen_lock(uid):
