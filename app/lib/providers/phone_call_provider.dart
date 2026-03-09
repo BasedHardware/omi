@@ -61,6 +61,9 @@ class PhoneCallProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _numbersLoaded = false;
+  bool get numbersLoaded => _numbersLoaded;
+
   String? _error;
   String? get error => _error;
 
@@ -80,6 +83,7 @@ class PhoneCallProvider extends ChangeNotifier {
 
   Future<void> loadVerifiedNumbers() async {
     _verifiedNumbers = await api.getVerifiedPhoneNumbers();
+    _numbersLoaded = true;
     notifyListeners();
   }
 
