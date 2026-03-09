@@ -351,7 +351,7 @@ extension PhoneCallsPlugin: CXProviderDelegate {
             try audioSession.setCategory(
                 .playAndRecord,
                 mode: .voiceChat,
-                options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker]
+                options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
             )
             try audioSession.setPreferredSampleRate(48000)
             try audioSession.setPreferredIOBufferDuration(0.020)
