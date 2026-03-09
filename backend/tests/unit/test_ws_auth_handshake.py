@@ -12,6 +12,8 @@ from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.testclient import TestClient
+from firebase_admin.auth import InvalidIdTokenError
+from starlette.websockets import WebSocketDisconnect
 
 from utils.other.endpoints import get_current_user_uid_ws, get_current_user_uid
 
@@ -36,32 +38,27 @@ class TestWebSocketAuthDependency(unittest.TestCase):
 
         self.client = TestClient(self.app)
 
-    def test_ws_new_no_auth_header_sends_close_frame(self):
-        """WebSocketException sends a close frame (not a bare disconnect)."""
-        # No Authorization header -> should get WebSocket close, not ASGI crash
-        try:
-            with self.client.websocket_connect("/ws-new") as ws:
-                # Should not reach here — server should close
+    def test_ws_new_no_auth_header_sends_close_1008(self):
+        """No auth header -> WebSocketDisconnect with code 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new"):
                 self.fail("Expected WebSocket to be closed by server")
-        except Exception:
-            # WebSocketException causes a proper close, client sees disconnect
-            pass
+        self.assertEqual(ctx.exception.code, 1008)
 
-    def test_ws_new_invalid_token_sends_close_frame(self):
-        """Invalid token raises WebSocketException with code 1008."""
-        try:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer invalid_token"}) as ws:
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    def test_ws_new_invalid_token_sends_close_1008(self, mock_verify):
+        """Invalid token -> WebSocketDisconnect with code 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer invalid_token"}):
                 self.fail("Expected WebSocket to be closed by server")
-        except Exception:
-            pass
+        self.assertEqual(ctx.exception.code, 1008)
 
-    def test_ws_new_malformed_auth_header_sends_close_frame(self):
-        """Malformed auth header (no space) raises WebSocketException."""
-        try:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "malformed"}) as ws:
+    def test_ws_new_malformed_auth_header_sends_close_1008(self):
+        """Malformed auth header -> WebSocketDisconnect with code 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "malformed"}):
                 self.fail("Expected WebSocket to be closed by server")
-        except Exception:
-            pass
+        self.assertEqual(ctx.exception.code, 1008)
 
     @patch('utils.other.endpoints.try_acquire_listen_lock', return_value=True)
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-123')
@@ -75,15 +72,22 @@ class TestWebSocketAuthDependency(unittest.TestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock', return_value=False)
     @patch('utils.other.endpoints.verify_token', return_value='test-uid-456')
-    def test_ws_new_rate_limited_sends_close_frame(self, mock_verify, mock_lock):
-        """Valid token but rate limited -> WebSocketException close frame."""
-        try:
-            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}) as ws:
+    def test_ws_new_rate_limited_sends_close_1008(self, mock_verify, mock_lock):
+        """Valid token but rate limited -> WebSocketDisconnect with code 1008."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}):
                 self.fail("Expected WebSocket to be closed due to rate limit")
-        except Exception:
-            pass
+        self.assertEqual(ctx.exception.code, 1008)
         mock_verify.assert_called_once_with("valid_token")
         mock_lock.assert_called_once_with("test-uid-456")
+
+    @patch('utils.other.endpoints.try_acquire_listen_lock', side_effect=ConnectionError('redis down'))
+    @patch('utils.other.endpoints.verify_token', return_value='test-uid-789')
+    def test_ws_new_redis_failure_fails_open(self, mock_verify, mock_lock):
+        """Redis failure in rate limiter -> fail-open, connection proceeds."""
+        with self.client.websocket_connect("/ws-new", headers={"Authorization": "Bearer valid_token"}) as ws:
+            data = ws.receive_json()
+            self.assertEqual(data["uid"], "test-uid-789")
 
 
 class TestWebSocketCloseFrameBehavior(unittest.TestCase):
