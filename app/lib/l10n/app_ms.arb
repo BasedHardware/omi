@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
     "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
     "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
+    "tasksOverdue": "Tertunggak",
     "answerTheCallFrom": "Jawab panggilan dari",
     "callAlreadyInProgress": "Panggilan sudah berlangsung",
     "callRecordingConsentDisclaimer": "Rakaman panggilan mungkin memerlukan persetujuan di bidang kuasa anda",

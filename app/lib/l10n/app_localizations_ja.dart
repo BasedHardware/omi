@@ -8135,6 +8135,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksCleanTodayMessage => '期限のみ削除されます';
 
   @override
+  String get tasksOverdue => '期限切れ';
+
+  @override
   String get phoneCallsWithOmi => 'Omiで通話';
 
   @override

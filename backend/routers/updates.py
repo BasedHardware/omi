@@ -358,6 +358,17 @@ async def download_latest_desktop_release(
     raise HTTPException(status_code=404, detail=f"No DMG installer found for channel: {channel}")
 
 
+@router.get("/v2/desktop/download/beta")
+async def download_beta_desktop_release(
+    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
+):
+    """
+    Redirect to the latest beta desktop release DMG installer.
+    Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
+    """
+    return await download_latest_desktop_release(platform=platform, channel="beta")
+
+
 @router.post("/v2/desktop/clear-cache")
 async def clear_desktop_cache(secret_key: str = Header(...)):
     """

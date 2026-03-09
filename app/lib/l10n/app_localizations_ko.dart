@@ -8137,6 +8137,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksCleanTodayMessage => '마감일만 제거됩니다';
 
   @override
+  String get tasksOverdue => '기한 초과';
+
+  @override
   String get phoneCallsWithOmi => 'Omi로 통화';
 
   @override

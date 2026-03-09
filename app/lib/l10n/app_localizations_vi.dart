@@ -8279,6 +8279,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Thao tác này chỉ xóa thời hạn';
 
   @override
+  String get tasksOverdue => 'Quá hạn';
+
+  @override
   String get phoneCallsWithOmi => 'Cuộc gọi với Omi';
 
   @override

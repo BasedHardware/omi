@@ -8279,6 +8279,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Detta tar bara bort deadlines';
 
   @override
+  String get tasksOverdue => 'Försenade';
+
+  @override
   String get phoneCallsWithOmi => 'Samtal med Omi';
 
   @override

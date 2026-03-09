@@ -8270,6 +8270,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Dette vil kun fjerne frister';
 
   @override
+  String get tasksOverdue => 'Forfalt';
+
+  @override
   String get phoneCallsWithOmi => 'Samtaler med Omi';
 
   @override

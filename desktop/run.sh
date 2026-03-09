@@ -309,8 +309,27 @@ if [ -n "$SIGN_IDENTITY" ]; then
         substep "Signing bundled node binary"
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
     fi
+
+    # If local signing identity doesn't match embedded profile team, macOS rejects
+    # restricted entitlements (notably com.apple.developer.applesignin) and launch
+    # fails with RBS/launchd spawn errors. Fallback to a local dev entitlements set.
+    EFFECTIVE_ENTITLEMENTS="Desktop/Omi.entitlements"
+    PROFILE_PATH="$APP_BUNDLE/Contents/embedded.provisionprofile"
+    IDENTITY_TEAM_ID=$(echo "$SIGN_IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\)).*/\1/p')
+    PROFILE_TEAM_ID=""
+    if [ -f "$PROFILE_PATH" ]; then
+        PROFILE_TEAM_ID=$(security cms -D -i "$PROFILE_PATH" > /tmp/omi-dev-profile.plist 2>/dev/null && \
+            /usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/omi-dev-profile.plist 2>/dev/null || true)
+    fi
+    if [ -n "$PROFILE_TEAM_ID" ] && [ "$PROFILE_TEAM_ID" != "$IDENTITY_TEAM_ID" ]; then
+        substep "Profile team ($PROFILE_TEAM_ID) != identity team ($IDENTITY_TEAM_ID); using local entitlements fallback"
+        cp Desktop/Omi.entitlements /tmp/omi-local-dev.entitlements
+        /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" /tmp/omi-local-dev.entitlements 2>/dev/null || true
+        rm -f "$PROFILE_PATH"
+        EFFECTIVE_ENTITLEMENTS="/tmp/omi-local-dev.entitlements"
+    fi
     substep "Signing app bundle"
-    codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+    codesign --force --options runtime --entitlements "$EFFECTIVE_ENTITLEMENTS" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else
     substep "Warning: No signing identity found. Using ad-hoc (permissions will reset each build)."
     codesign --force --deep --sign - "$APP_BUNDLE"

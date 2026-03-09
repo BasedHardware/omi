@@ -8232,6 +8232,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get tasksCleanTodayMessage => 'การดำเนินการนี้จะลบเฉพาะกำหนดส่ง';
 
   @override
+  String get tasksOverdue => 'เกินกำหนด';
+
+  @override
   String get phoneCallsWithOmi => 'โทรกับ Omi';
 
   @override

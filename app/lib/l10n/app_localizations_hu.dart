@@ -8313,6 +8313,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Ez csak a határidőket távolítja el';
 
   @override
+  String get tasksOverdue => 'Lejárt';
+
+  @override
   String get phoneCallsWithOmi => 'Hivasok az Omival';
 
   @override

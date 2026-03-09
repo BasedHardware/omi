@@ -8272,6 +8272,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tasksCleanTodayMessage => 'This will only remove deadlines';
 
   @override
+  String get tasksOverdue => 'Overdue';
+
+  @override
   String get phoneCallsWithOmi => 'Phone Calls with Omi';
 
   @override

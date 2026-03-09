@@ -8288,6 +8288,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Bu işlem yalnızca son tarihleri kaldırır';
 
   @override
+  String get tasksOverdue => 'Gecikmiş';
+
+  @override
   String get phoneCallsWithOmi => 'Omi ile aramalar';
 
   @override

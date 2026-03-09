@@ -2695,6 +2695,7 @@
     "anyoneWithLinkCanView": "Każdy, kto ma link, może wyświetlić",
     "tasksCleanTodayTitle": "Wyczyścić dzisiejsze zadania?",
     "tasksCleanTodayMessage": "To usunie tylko terminy",
+    "tasksOverdue": "Zaległe",
     "answerTheCallFrom": "Odbierz polaczenie od",
     "callAlreadyInProgress": "Polaczenie jest juz w toku",
     "callRecordingConsentDisclaimer": "Nagrywanie rozmow moze wymagac zgody w Twojej jurysdykcji",

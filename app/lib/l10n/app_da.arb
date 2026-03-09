@@ -2669,6 +2669,7 @@
     "anyoneWithLinkCanView": "Alle med linket kan se",
     "tasksCleanTodayTitle": "Ryd dagens opgaver?",
     "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
+    "tasksOverdue": "Forfaldne",
     "answerTheCallFrom": "Besvar opkaldet fra",
     "callAlreadyInProgress": "Et opkald er allerede i gang",
     "callRecordingConsentDisclaimer": "Optagelse af opkald kan kraeve samtykke i din jurisdiktion",

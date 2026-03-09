@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
     "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
     "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
+    "tasksOverdue": "Nokavētas",
     "answerTheCallFrom": "Atbildiet uz zvanu no",
     "callAlreadyInProgress": "Zvans jau notiek",
     "callRecordingConsentDisclaimer": "Zvanu ierakstisanai var but nepieciesama piekrišana jusu jurisdikcija",

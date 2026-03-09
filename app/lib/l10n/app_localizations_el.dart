@@ -8339,6 +8339,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Αυτό θα αφαιρέσει μόνο τις προθεσμίες';
 
   @override
+  String get tasksOverdue => 'Εκπρόθεσμα';
+
+  @override
   String get phoneCallsWithOmi => 'Κλήσεις με Omi';
 
   @override

@@ -8265,6 +8265,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Týmto sa odstránia iba termíny';
 
   @override
+  String get tasksOverdue => 'Po termíne';
+
+  @override
   String get phoneCallsWithOmi => 'Hovory s Omi';
 
   @override

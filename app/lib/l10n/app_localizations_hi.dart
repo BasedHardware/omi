@@ -8256,6 +8256,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get tasksCleanTodayMessage => 'यह केवल समय-सीमाएँ हटाएगा';
 
   @override
+  String get tasksOverdue => 'अतिदेय';
+
+  @override
   String get phoneCallsWithOmi => 'Omi के साथ कॉल';
 
   @override

@@ -15453,6 +15453,12 @@ abstract class AppLocalizations {
   /// **'This will only remove deadlines'**
   String get tasksCleanTodayMessage;
 
+  /// No description provided for @tasksOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get tasksOverdue;
+
   /// No description provided for @phoneCallsWithOmi.
   ///
   /// In en, this message translates to:

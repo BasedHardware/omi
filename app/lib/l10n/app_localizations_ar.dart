@@ -8217,6 +8217,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get tasksCleanTodayMessage => 'سيؤدي هذا فقط إلى إزالة المواعيد النهائية';
 
   @override
+  String get tasksOverdue => 'متأخرة';
+
+  @override
   String get phoneCallsWithOmi => 'المكالمات الهاتفية مع Omi';
 
   @override

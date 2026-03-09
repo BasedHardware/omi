@@ -8326,6 +8326,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Això només eliminarà els terminis';
 
   @override
+  String get tasksOverdue => 'Endarrerits';
+
+  @override
   String get phoneCallsWithOmi => 'Trucades amb Omi';
 
   @override

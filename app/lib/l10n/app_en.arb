@@ -10086,6 +10086,7 @@
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
     },
+    "tasksOverdue": "Overdue",
     "phoneCallsWithOmi": "Phone Calls with Omi",
     "phoneCallsSubtitle": "Make calls with real-time transcription",
     "phoneSetupStep1Title": "Verify your phone number",

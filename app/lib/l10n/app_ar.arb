@@ -2627,6 +2627,7 @@
     "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
     "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
     "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
+    "tasksOverdue": "متأخرة",
     "phoneCallsWithOmi": "المكالمات الهاتفية مع Omi",
     "phoneCallsSubtitle": "إجراء مكالمات مع النسخ الفوري",
     "phoneSetupStep1Title": "تحقق من رقم هاتفك",

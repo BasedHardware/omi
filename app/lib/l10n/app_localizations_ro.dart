@@ -8317,6 +8317,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Aceasta va elimina doar termenele limită';
 
   @override
+  String get tasksOverdue => 'Întârziate';
+
+  @override
   String get phoneCallsWithOmi => 'Apeluri cu Omi';
 
   @override

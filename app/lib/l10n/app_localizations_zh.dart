@@ -8125,6 +8125,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksCleanTodayMessage => '这只会移除截止日期';
 
   @override
+  String get tasksOverdue => '逾期';
+
+  @override
   String get phoneCallsWithOmi => '使用 Omi 通话';
 
   @override

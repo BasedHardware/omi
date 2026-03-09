@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Alla med länken kan visa",
     "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
     "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
+    "tasksOverdue": "Försenade",
     "answerTheCallFrom": "Svara pa samtalet fran",
     "callAlreadyInProgress": "Ett samtal pagar redan",
     "callRecordingConsentDisclaimer": "Samtalsinspelning kan krava samtycke i din jurisdiktion",

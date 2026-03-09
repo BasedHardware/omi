@@ -8271,6 +8271,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Tímto se odstraní pouze termíny';
 
   @override
+  String get tasksOverdue => 'Po termínu';
+
+  @override
   String get phoneCallsWithOmi => 'Hovory s Omi';
 
   @override

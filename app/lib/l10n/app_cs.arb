@@ -2629,6 +2629,7 @@
     "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
     "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
     "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
+    "tasksOverdue": "Po termínu",
     "answerTheCallFrom": "Prijmete hovor od",
     "callAlreadyInProgress": "Hovor jiz probiha",
     "callRecordingConsentDisclaimer": "Nahravani hovoru muze vyzadovat souhlas ve vasi jurisdikci",

@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
     "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
     "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
+    "tasksOverdue": "Vėluojančios",
     "answerTheCallFrom": "Atsiliepkite i skambutai is",
     "callAlreadyInProgress": "Skambutis jau vyksta",
     "callRecordingConsentDisclaimer": "Skambuciu irasymas gali reikalauti sutikimo jusu jurisdikcijoje",

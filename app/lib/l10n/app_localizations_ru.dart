@@ -8303,6 +8303,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Это удалит только сроки';
 
   @override
+  String get tasksOverdue => 'Просроченные';
+
+  @override
   String get phoneCallsWithOmi => 'Звонки с Omi';
 
   @override

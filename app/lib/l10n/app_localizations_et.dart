@@ -8273,6 +8273,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get tasksCleanTodayMessage => 'See eemaldab ainult tähtajad';
 
   @override
+  String get tasksOverdue => 'Tähtaja ületanud';
+
+  @override
   String get phoneCallsWithOmi => 'Koned Omiga';
 
   @override

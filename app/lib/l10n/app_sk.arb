@@ -2665,6 +2665,7 @@
     "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
     "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
     "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
+    "tasksOverdue": "Po termíne",
     "answerTheCallFrom": "Odpovedzte na hovor od",
     "callAlreadyInProgress": "Hovor uz prebieha",
     "callRecordingConsentDisclaimer": "Nahravanie hovorov moze vyzadovat suhlas vo vasej jurisdikcii",

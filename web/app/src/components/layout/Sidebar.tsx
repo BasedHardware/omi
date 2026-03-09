@@ -463,7 +463,7 @@ export function Sidebar({
             {showText && <span className="text-sm">Feedback</span>}
           </a>
           <a
-            href="https://discord.gg/omidotme"
+            href="http://discord.omi.me"
             target="_blank"
             rel="noopener noreferrer"
             title={!showText ? 'Discord' : undefined}

@@ -8310,6 +8310,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Това само ще премахне крайните срокове';
 
   @override
+  String get tasksOverdue => 'Просрочени';
+
+  @override
   String get phoneCallsWithOmi => 'Телефонни обаждания с Omi';
 
   @override

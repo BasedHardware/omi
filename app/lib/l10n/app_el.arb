@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
     "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
     "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
+    "tasksOverdue": "Εκπρόθεσμα",
     "answerTheCallFrom": "Απαντήστε στην κλήση από",
     "callAlreadyInProgress": "Μια κλήση είναι ήδη σε εξέλιξη",
     "callRecordingConsentDisclaimer": "Η εγγραφή κλήσεων μπορεί να απαιτεί συγκατάθεση στη δικαιοδοσία σας",

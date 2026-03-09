@@ -2660,6 +2660,7 @@
     "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
     "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
     "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
+    "tasksOverdue": "Achterstallig",
     "answerTheCallFrom": "Beantwoord het gesprek van",
     "callAlreadyInProgress": "Er is al een gesprek gaande",
     "callRecordingConsentDisclaimer": "Gespreksopname kan toestemming vereisen in uw rechtsgebied",

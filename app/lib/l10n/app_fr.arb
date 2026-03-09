@@ -2695,6 +2695,7 @@
     "anyoneWithLinkCanView": "Toute personne disposant du lien peut voir",
     "tasksCleanTodayTitle": "Nettoyer les tâches d’aujourd’hui ?",
     "tasksCleanTodayMessage": "Cela supprimera uniquement les échéances",
+    "tasksOverdue": "En retard",
     "answerTheCallFrom": "Repondez a l'appel de",
     "callAlreadyInProgress": "Un appel est deja en cours",
     "callRecordingConsentDisclaimer": "L'enregistrement d'appels peut necessiter un consentement dans votre juridiction",

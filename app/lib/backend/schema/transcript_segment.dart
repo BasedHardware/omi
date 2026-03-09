@@ -55,7 +55,8 @@ class TranscriptSegment {
     this.speechProfileProcessed = true,
     this.sttProvider,
   }) {
-    speakerId = speaker != null ? int.parse(speaker!.split('_')[1]) : 0;
+    final parts = speaker?.split('_') ?? [];
+    speakerId = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
   }
 
   @override

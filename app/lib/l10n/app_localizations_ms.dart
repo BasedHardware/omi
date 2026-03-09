@@ -8300,6 +8300,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Ini hanya akan mengalih keluar tarikh akhir';
 
   @override
+  String get tasksOverdue => 'Tertunggak';
+
+  @override
   String get phoneCallsWithOmi => 'Panggilan dengan Omi';
 
   @override

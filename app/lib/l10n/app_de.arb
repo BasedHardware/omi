@@ -2628,6 +2628,7 @@
     "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen",
     "tasksCleanTodayTitle": "Heutige Aufgaben bereinigen?",
     "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt",
+    "tasksOverdue": "Überfällig",
     "answerTheCallFrom": "Nehmen Sie den Anruf an von",
     "callAlreadyInProgress": "Ein Anruf ist bereits aktiv",
     "callRecordingConsentDisclaimer": "Anrufaufzeichnung kann in Ihrer Gerichtsbarkeit eine Einwilligung erfordern",

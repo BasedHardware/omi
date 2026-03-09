@@ -2629,6 +2629,7 @@
     "anyoneWithLinkCanView": "Всеки с връзката може да преглежда",
     "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
     "tasksCleanTodayMessage": "Това само ще премахне крайните срокове",
+    "tasksOverdue": "Просрочени",
     "phoneCallsWithOmi": "Телефонни обаждания с Omi",
     "phoneCallsSubtitle": "Обаждайте се с транскрипция в реално време",
     "phoneSetupStep1Title": "Потвърдете телефонния си номер",

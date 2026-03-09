@@ -8292,6 +8292,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Esto solo eliminará los plazos';
 
   @override
+  String get tasksOverdue => 'Vencidas';
+
+  @override
   String get phoneCallsWithOmi => 'Llamadas con Omi';
 
   @override

@@ -8283,6 +8283,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Bus pašalinti tik terminai';
 
   @override
+  String get tasksOverdue => 'Vėluojančios';
+
+  @override
   String get phoneCallsWithOmi => 'Skambuciai su Omi';
 
   @override

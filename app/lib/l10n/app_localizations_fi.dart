@@ -8274,6 +8274,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Tämä poistaa vain määräajat';
 
   @override
+  String get tasksOverdue => 'Myöhässä';
+
+  @override
   String get phoneCallsWithOmi => 'Puhelut Omin kanssa';
 
   @override

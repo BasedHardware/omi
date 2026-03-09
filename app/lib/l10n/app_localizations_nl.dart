@@ -8303,6 +8303,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
 
   @override
+  String get tasksOverdue => 'Achterstallig';
+
+  @override
   String get phoneCallsWithOmi => 'Bellen met Omi';
 
   @override

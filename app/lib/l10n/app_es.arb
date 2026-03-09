@@ -2661,6 +2661,7 @@
     "anyoneWithLinkCanView": "Cualquier persona con el enlace puede ver",
     "tasksCleanTodayTitle": "¿Limpiar las tareas de hoy?",
     "tasksCleanTodayMessage": "Esto solo eliminará los plazos",
+    "tasksOverdue": "Vencidas",
     "answerTheCallFrom": "Contesta la llamada de",
     "callAlreadyInProgress": "Ya hay una llamada en curso",
     "callRecordingConsentDisclaimer": "La grabacion de llamadas puede requerir consentimiento en tu jurisdiccion",
