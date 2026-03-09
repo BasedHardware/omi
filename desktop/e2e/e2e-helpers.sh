@@ -107,15 +107,14 @@ as_snapshot_interactive_count() {
   as snapshot -i --json 2>/dev/null | python3 -c "import sys,json; print(len(json.load(sys.stdin)))"
 }
 
-as_find_type() {
-  local widget_type="$1"
-  local index="${2:-0}"
-  as snapshot -i --json 2>/dev/null | python3 -c "
-import sys, json
-matches = [e for e in json.load(sys.stdin) if e.get('type') == '$widget_type']
-if len(matches) > $index: print(matches[$index]['ref'])
-else: sys.exit(1)
-"
+as_find_role() {
+  local role="$1"
+  as find role "$role" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('ref',''))"
+}
+
+as_find_text() {
+  local text="$1"
+  as find text "$text" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('ref',''))"
 }
 
 as_find_label() {
@@ -129,12 +128,30 @@ else: sys.exit(1)
 "
 }
 
-# Screenshot via macOS screencapture (agent-swift screenshot not yet implemented)
+# Assert helpers
+as_is() {
+  local condition="$1" ref="$2"
+  as is "$condition" "@$ref" 2>/dev/null
+}
+
+as_wait_text() {
+  local text="$1"
+  local timeout="${2:-5000}"
+  as wait text "$text" --timeout "$timeout" 2>/dev/null
+}
+
+as_wait_exists() {
+  local ref="$1"
+  local timeout="${2:-5000}"
+  as wait exists "@$ref" --timeout "$timeout" 2>/dev/null
+}
+
+# Screenshot via agent-swift (captures app window only)
 as_screenshot() {
   if [ "${E2E_FAST:-}" = "1" ]; then return 0; fi
   local name="$1"
   local path="$SCREENSHOT_DIR/${FLOW_NAME}-${STEP_NUM}-${name}.png"
-  screencapture -x "$path" 2>&1 || true
+  as screenshot "$path" 2>&1 || true
   echo "  Screenshot: $path"
 }
 
