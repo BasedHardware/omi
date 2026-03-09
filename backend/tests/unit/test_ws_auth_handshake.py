@@ -241,10 +241,9 @@ class TestListenEndpointNotAffectWebListen(unittest.TestCase):
         with open(path) as f:
             return f.read()
 
-    def test_listen_handler_uses_ws_dependency(self):
-        """listen_handler should use get_current_user_uid_ws (not get_current_user_uid)."""
+    def test_listen_handler_uses_http_auth_dependency(self):
+        """listen_handler should use get_current_user_uid (HTTP variant) — mobile app sends Authorization header."""
         source = self._read_transcribe_source()
-        # Find the /v4/listen handler definition
         import re
 
         listen_match = re.search(
@@ -254,9 +253,9 @@ class TestListenEndpointNotAffectWebListen(unittest.TestCase):
         )
         self.assertIsNotNone(listen_match, "Could not find /v4/listen handler")
         handler_sig = listen_match.group()
-        self.assertIn('get_current_user_uid_ws', handler_sig, "/v4/listen must use get_current_user_uid_ws")
+        self.assertIn('get_current_user_uid)', handler_sig, "/v4/listen must use get_current_user_uid")
         self.assertNotIn(
-            'get_current_user_uid)', handler_sig, "/v4/listen must NOT use get_current_user_uid (HTTP variant)"
+            'get_current_user_uid_ws', handler_sig, "/v4/listen must NOT use get_current_user_uid_ws"
         )
 
     def test_web_listen_has_no_uid_dependency(self):
