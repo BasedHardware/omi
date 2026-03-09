@@ -2,11 +2,13 @@ import json
 import os
 import time
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, WebSocketException
 from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 import logging
+
+from database.redis_db import try_acquire_listen_lock
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,33 @@ def get_current_user_uid(authorization: str = Header(None)):
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+
+def get_current_user_uid_ws(authorization: str = Header(None)):
+    """FastAPI dependency for WebSocket endpoints with Authorization header.
+
+    Unlike get_current_user_uid, raises WebSocketException(code=1008) instead of
+    HTTPException(401). This ensures the ASGI server sends a proper WebSocket close
+    frame instead of exiting without a handshake (which causes LB 5xx).
+    """
+    if not authorization:
+        raise WebSocketException(code=1008, reason="Authorization header not found")
+    elif len(str(authorization).split(' ')) != 2:
+        raise WebSocketException(code=1008, reason="Invalid authorization token")
+
+    try:
+        token = authorization.split(' ')[1]
+        uid = verify_token(token)
+    except InvalidIdTokenError as e:
+        logger.error(f"WebSocket auth failed: {e}")
+        raise WebSocketException(code=1008, reason="Invalid or expired token")
+
+    # Per-UID connection rate limiting (7s window) to prevent retry storms
+    if not try_acquire_listen_lock(uid):
+        logger.warning(f"WebSocket rate limited uid={uid}")
+        raise WebSocketException(code=1008, reason="Rate limited, retry later")
+
+    return uid
 
 
 def get_current_user_uid_from_ws_message(message: dict) -> str:
