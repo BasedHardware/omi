@@ -266,9 +266,7 @@ class TranscriptionRetryService {
                 startedAt: session.startedAt,
                 finishedAt: session.finishedAt ?? Date(),
                 source: source,
-                language: session.language,
-                timezone: session.timezone,
-                inputDeviceName: session.inputDeviceName
+                language: session.language
             )
 
             log("TranscriptionRetryService: Session \(sessionId) uploaded successfully (backendId: \(response.id))")

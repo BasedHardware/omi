@@ -43,8 +43,17 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Production: Cloud Run backend
-    private let apiBaseURL: String = "https://omi-desktop-auth-208440318997.us-central1.run.app/"
+    // Auth uses the same backend as the rest of the app (OMI_API_URL)
+    private var apiBaseURL: String {
+        // Match APIClient.baseURL resolution: getenv() first, then ProcessInfo fallback
+        if let cString = getenv("OMI_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+            return url.hasSuffix("/") ? url : url + "/"
+        }
+        if let envURL = ProcessInfo.processInfo.environment["OMI_API_URL"], !envURL.isEmpty {
+            return envURL.hasSuffix("/") ? envURL : envURL + "/"
+        }
+        fatalError("OMI_API_URL not set. Ensure .env file is present in app bundle.")
+    }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"
     }
@@ -350,7 +359,8 @@ class AuthService {
             return
         }
 
-        NSLog("OMI AUTH: Starting Sign in with %@ (Web OAuth)", provider)
+        let authHost = URL(string: apiBaseURL)?.host ?? "unknown"
+        NSLog("OMI AUTH: Starting Sign in with %@ (Web OAuth) via %@", provider, authHost)
         isLoading = true
         error = nil
 
