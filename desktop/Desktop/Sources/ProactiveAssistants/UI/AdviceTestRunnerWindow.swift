@@ -441,17 +441,9 @@ struct AdviceTestRunnerView: View {
                 adviceAssistant = existing
                 log("AdviceTestRunner: Using existing AdviceAssistant from coordinator")
             } else {
-                do {
-                    adviceAssistant = try AdviceAssistant()
-                    log("AdviceTestRunner: Created fresh AdviceAssistant instance")
-                } catch {
-                    log("AdviceTestRunner: ERROR - Failed to create AdviceAssistant: \(error)")
-                    await MainActor.run {
-                        statusMessage = "Failed to create Advice Assistant: \(error.localizedDescription)"
-                        isRunning = false
-                    }
-                    return
-                }
+                let service = BackendProactiveService(); service.connect()
+                adviceAssistant = AdviceAssistant(backendService: service)
+                log("AdviceTestRunner: Created fresh AdviceAssistant instance")
             }
 
             // Get excluded apps
@@ -647,12 +639,8 @@ enum AdviceTestRunner {
         if let existing = coordAssistant as? AdviceAssistant {
             adviceAssistant = existing
         } else {
-            do {
-                adviceAssistant = try AdviceAssistant()
-            } catch {
-                log("AdviceTestCLI: ERROR — Failed to create AdviceAssistant: \(error)")
-                return
-            }
+            let service = BackendProactiveService(); service.connect()
+            adviceAssistant = AdviceAssistant(backendService: service)
         }
 
         // Get excluded apps

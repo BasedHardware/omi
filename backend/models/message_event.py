@@ -181,3 +181,102 @@ class SegmentsDeletedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+# Desktop proactive AI events (Phase 2 — #5396)
+
+
+class FocusResultEvent(MessageEvent):
+    event_type: str = "focus_result"
+    frame_id: str
+    status: str
+    app_or_site: str
+    description: str
+    message: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class TasksExtractedEvent(MessageEvent):
+    event_type: str = "tasks_extracted"
+    frame_id: str
+    tasks: List = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class MemoriesExtractedEvent(MessageEvent):
+    event_type: str = "memories_extracted"
+    frame_id: str
+    memories: List = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class AdviceExtractedEvent(MessageEvent):
+    event_type: str = "advice_extracted"
+    frame_id: str
+    advice: Optional[Any] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class LiveNoteEvent(MessageEvent):
+    event_type: str = "live_note"
+    text: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class ProfileUpdatedEvent(MessageEvent):
+    event_type: str = "profile_updated"
+    profile_text: str
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class RerankCompleteEvent(MessageEvent):
+    event_type: str = "rerank_complete"
+    updated_tasks: List = []
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class DedupCompleteEvent(MessageEvent):
+    event_type: str = "dedup_complete"
+    deleted_ids: List = []
+    reason: str = ""
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
