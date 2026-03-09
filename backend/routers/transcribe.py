@@ -1329,13 +1329,14 @@ async def _stream_handler(
     translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
     _debounce_buffer = []  # [(segment, conversation_id, version), ...]
     _debounce_task = None  # asyncio.Task for the pending batch timer
+    _inflight_translate_tasks = []  # tracked tasks from _flush_debounce_buffer
 
     # Translation metrics counters
     translate_metrics = {
         'api_calls': 0,
         'cache_hits_memory': 0,
         'cache_hits_redis': 0,
-        'debounce_skips': 0,
+        'segments_buffered': 0,
         'lang_cache_skips': 0,
         'same_text_skips': 0,
         'segments_translated': 0,
@@ -1436,7 +1437,8 @@ async def _stream_handler(
         logger.info(f"translate [batch] segments={len(batch)} {uid}")
 
         for seg, conv_id, ver in batch:
-            asyncio.ensure_future(_translate_segment(seg, conv_id, ver))
+            task = asyncio.ensure_future(_translate_segment(seg, conv_id, ver))
+            _inflight_translate_tasks.append(task)
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
         nonlocal _debounce_task
@@ -1478,7 +1480,7 @@ async def _stream_handler(
             }
 
             # Add to temporal debounce buffer
-            translate_metrics['debounce_skips'] += 1
+            translate_metrics['segments_buffered'] += 1
             _debounce_buffer.append((segment, conversation_id, new_version))
             logger.info(f"translate [buffered] seg={segment.id[:8]} v={new_version} buf={len(_debounce_buffer)} {uid}")
 
@@ -1504,19 +1506,25 @@ async def _stream_handler(
             _debounce_task = None
         await _flush_debounce_buffer()
 
-        # Wait for any in-flight _translate_segment tasks to complete
-        # (tasks are fire-and-forget via ensure_future, give them time to finish)
-        await asyncio.sleep(0.1)
+        # Await all in-flight _translate_segment tasks with bounded timeout
+        if _inflight_translate_tasks:
+            pending = [t for t in _inflight_translate_tasks if not t.done()]
+            if pending:
+                try:
+                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning(f"translate flush timeout: {len(pending)} tasks still pending {uid} {session_id}")
+            _inflight_translate_tasks.clear()
 
         pending_translations.clear()
         _debounce_buffer.clear()
         translation_flushing = False
         # Log session translation metrics summary
         m = translate_metrics
-        total_handled = m['segments_translated'] + m['debounce_skips'] + m['lang_cache_skips'] + m['same_text_skips']
+        total_handled = m['segments_translated'] + m['segments_buffered'] + m['lang_cache_skips'] + m['same_text_skips']
         logger.info(
             f"translate_summary {uid} session={session_id} "
-            f"translated={m['segments_translated']} debounced={m['debounce_skips']} "
+            f"translated={m['segments_translated']} buffered={m['segments_buffered']} "
             f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']} "
             f"total_events={total_handled}"
         )
