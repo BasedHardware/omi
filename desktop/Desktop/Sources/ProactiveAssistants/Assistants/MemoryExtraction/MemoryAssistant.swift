@@ -17,7 +17,7 @@ actor MemoryAssistant: ProactiveAssistant {
 
     // MARK: - Properties
 
-    private let geminiClient: GeminiClient
+    private let backendService: BackendProactiveService
     private var isRunning = false
     private var lastAnalysisTime: Date = .distantPast
     private var previousMemories: [ExtractedMemory] = [] // Last 20 extracted memories for deduplication
@@ -27,15 +27,6 @@ actor MemoryAssistant: ProactiveAssistant {
     private var processingTask: Task<Void, Never>?
     private let frameSignal: AsyncStream<Void>
     private let frameSignalContinuation: AsyncStream<Void>.Continuation
-
-    /// Get the current system prompt from settings (accessed on MainActor for thread safety)
-    private var systemPrompt: String {
-        get async {
-            await MainActor.run {
-                MemoryAssistantSettings.shared.analysisPrompt
-            }
-        }
-    }
 
     /// Get the extraction interval from settings
     private var extractionInterval: TimeInterval {
@@ -57,9 +48,8 @@ actor MemoryAssistant: ProactiveAssistant {
 
     // MARK: - Initialization
 
-    init(apiKey: String? = nil) throws {
-        // Use Gemini 3 Pro for better memory extraction quality
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: "gemini-pro-latest")
+    init(backendService: BackendProactiveService) {
+        self.backendService = backendService
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         self.frameSignal = stream
@@ -340,61 +330,40 @@ actor MemoryAssistant: ProactiveAssistant {
     }
 
     private func extractMemories(from jpegData: Data, appName: String) async throws -> MemoryExtractionResult? {
-        // Build context with previous memories for deduplication
-        var prompt = "Analyze this screenshot from \(appName).\n\n"
-
-        if !previousMemories.isEmpty {
-            prompt += "RECENTLY EXTRACTED MEMORIES (do not re-extract these or semantically similar ones):\n"
-            for (index, memory) in previousMemories.enumerated() {
-                prompt += "\(index + 1). [\(memory.category.rawValue)] \(memory.content)\n"
-            }
-            prompt += "\nLook for NEW memories that are NOT already in the list above."
-        } else {
-            prompt += "Look for memories to extract (system facts about the user, or interesting wisdom from others)."
-        }
-
-        // Get current system prompt from settings
-        let currentSystemPrompt = await systemPrompt
-
-        // Build response schema for memory extraction
-        let memoryProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
-            "content": .init(type: "string", description: "The memory content (max 15 words)"),
-            "category": .init(type: "string", enum: ["system", "interesting"], description: "Memory category"),
-            "source_app": .init(type: "string", description: "App where memory was found"),
-            "confidence": .init(type: "number", description: "Confidence score 0.0-1.0")
-        ]
-
-        let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
-            type: "object",
-            properties: [
-                "has_new_memory": .init(type: "boolean", description: "True if new memories were found"),
-                "memories": .init(
-                    type: "array",
-                    description: "Array of extracted memories (0-3 max)",
-                    items: .init(
-                        type: "object",
-                        properties: memoryProperties,
-                        required: ["content", "category", "source_app", "confidence"]
-                    )
-                ),
-                "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),
-                "current_activity": .init(type: "string", description: "High-level description of user's activity")
-            ],
-            required: ["has_new_memory", "memories", "context_summary", "current_activity"]
+        let base64 = autoreleasepool { jpegData.base64EncodedString() }
+        let backendResult = try await backendService.extractMemories(
+            imageBase64: base64,
+            appName: appName,
+            windowTitle: ""
         )
 
-        do {
-            let responseText = try await geminiClient.sendRequest(
-                prompt: prompt,
-                imageData: jpegData,
-                systemPrompt: currentSystemPrompt,
-                responseSchema: responseSchema
+        // Parse backend response into MemoryExtractionResult
+        let memories: [ExtractedMemory] = backendResult.memories.compactMap { dict in
+            guard let content = dict["content"] as? String, !content.isEmpty else { return nil }
+            let categoryStr = dict["category"] as? String ?? "system"
+            let category: ExtractedMemoryCategory = categoryStr == "interesting" ? .interesting : .system
+            let sourceApp = dict["source_app"] as? String ?? appName
+            let confidence: Double
+            if let confValue = dict["confidence"] as? Double {
+                confidence = confValue
+            } else if let confInt = dict["confidence"] as? Int {
+                confidence = Double(confInt)
+            } else {
+                confidence = 0.5
+            }
+            return ExtractedMemory(
+                content: content,
+                category: category,
+                sourceApp: sourceApp,
+                confidence: confidence
             )
-
-            return try JSONDecoder().decode(MemoryExtractionResult.self, from: Data(responseText.utf8))
-        } catch {
-            logError("Memory analysis error", error: error)
-            return nil
         }
+
+        return MemoryExtractionResult(
+            hasNewMemory: !memories.isEmpty,
+            memories: memories,
+            contextSummary: "Analyzed \(appName)",
+            currentActivity: ""
+        )
     }
 }

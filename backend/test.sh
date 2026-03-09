@@ -52,3 +52,10 @@ pytest tests/unit/test_advice.py -v
 pytest tests/unit/test_staged_tasks.py -v
 pytest tests/unit/test_chat_generate_title.py -v
 pytest tests/unit/test_conversations_count.py -v
+pytest tests/unit/test_desktop_focus.py -v
+pytest tests/unit/test_desktop_tasks.py -v
+pytest tests/unit/test_desktop_memories.py -v
+pytest tests/unit/test_desktop_advice.py -v
+pytest tests/unit/test_desktop_live_notes.py -v
+pytest tests/unit/test_desktop_profile.py -v
+pytest tests/unit/test_desktop_task_ops.py -v
