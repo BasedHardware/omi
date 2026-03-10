@@ -468,10 +468,69 @@ def delete_chat_session(uid, chat_session_id):
     session_ref.delete()
 
 
-def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
+def get_chat_sessions(
+    uid: str, app_id: Optional[str] = None, limit: int = 50, offset: int = 0, starred: Optional[bool] = None
+):
+    """List chat sessions with optional filters.
+
+    Note: Client-side sort + slice because Firestore composite indexes would be
+    needed for every filter combination. Acceptable for desktop users (low session
+    counts). Revisit with server-side ordering if session counts grow large.
+    """
+    sessions_ref = db.collection('users').document(uid).collection('chat_sessions')
+    if app_id is not None:
+        sessions_ref = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+    if starred is not None:
+        sessions_ref = sessions_ref.where(filter=FieldFilter('starred', '==', starred))
+    sessions = [doc.to_dict() for doc in sessions_ref.stream()]
+    sessions.sort(key=lambda s: s.get('updated_at', s.get('created_at', datetime.min)), reverse=True)
+    return sessions[offset : offset + limit]
+
+
+def update_chat_session(uid: str, chat_session_id: str, update_data: dict):
+    """Partial update of a chat session."""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+    session_ref.update(update_data)
+
+
+@set_data_protection_level(data_arg_name='message_data')
+@prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
+def save_message(uid: str, message_data: dict):
+    """Save a message directly by document ID (for desktop CRUD)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.collection('messages').document(message_data['id']).set(message_data)
+    return message_data
+
+
+def delete_chat_session_messages(uid: str, chat_session_id: str):
+    """Delete all messages belonging to a chat session."""
+    user_ref = db.collection('users').document(uid)
+    messages_ref = user_ref.collection('messages').where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
+    batch = db.batch()
+    count = 0
+    for doc in messages_ref.stream():
+        batch.delete(doc.reference)
+        count += 1
+        if count % 400 == 0:
+            batch.commit()
+            batch = db.batch()
+    if count % 400 != 0:
+        batch.commit()
+    logger.info(f"Deleted {count} messages for session {chat_session_id}")
+
+
+def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str, preview: str = None):
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    update_data = {
+        "message_ids": firestore.ArrayUnion([message_id]),
+        "updated_at": datetime.now(timezone.utc),
+        "message_count": firestore.Increment(1),
+    }
+    if preview:
+        update_data["preview"] = preview[:200]
+    session_ref.update(update_data)
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]):

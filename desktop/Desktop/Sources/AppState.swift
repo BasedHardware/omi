@@ -2119,8 +2119,7 @@ class AppState: ObservableObject {
                 segments: apiSegments,
                 startedAt: startTime,
                 finishedAt: endTime,
-                source: currentConversationSource,
-                inputDeviceName: recordingInputDeviceName
+                source: currentConversationSource
             )
             log("Transcription: Conversation saved - id=\(response.id), status=\(response.status), discarded=\(response.discarded), source=\(currentConversationSource.rawValue), device=\(recordingInputDeviceName ?? "Unknown")")
 
