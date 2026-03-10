@@ -353,6 +353,9 @@ QUALITY OVER QUANTITY:
 {memories_str}
 ```
 
+LANGUAGE INSTRUCTION:
+{language_instruction}
+
 **Conversation transcript**:
 ```
 {conversation}
@@ -453,6 +456,9 @@ extract_memories_text_content_prompt = ChatPromptTemplate.from_messages(
     2. **Do not** include any additional commentary or explanation. Only list the extracted items.
 
     If no new facts or learnings are found, output empty lists accordingly.
+
+    LANGUAGE INSTRUCTION:
+    {language_instruction}
 
     {format_instructions}
     '''.replace(
@@ -570,6 +576,9 @@ Each learning or fact you provide should fall under one of the following categor
 - Identify up to 5 valuable learnings or facts (maximum 5).
 - Do not include any explanations or additional text; only list the learnings.
 - Format each learning as a separate item in a list.
+
+LANGUAGE INSTRUCTION:
+{language_instruction}
 
 **Learnings that {user_name} already has stored (DO NOT REPEAT ANY)**:
 ```

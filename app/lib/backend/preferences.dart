@@ -176,6 +176,26 @@ class SharedPreferencesUtil {
 
   bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
 
+  // Daily score widget on homepage - default is true
+  set showDailyScoreEnabled(bool value) => saveBool('showDailyScoreEnabled', value);
+
+  bool get showDailyScoreEnabled => getBool('showDailyScoreEnabled', defaultValue: true);
+
+  // Tasks widget on homepage - default is true
+  set showTasksEnabled(bool value) => saveBool('showTasksEnabled', value);
+
+  bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
+
+  // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
+  set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
+
+  bool get vadGateEnabled => getBool('vadGateEnabled');
+
+  // Claude Agent — route chat through desktop agent VM (experimental)
+  set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
+
+  bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
+
   // Daily reflection notification at 9 PM - default is true (enabled)
   set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
 
@@ -591,6 +611,16 @@ class SharedPreferencesUtil {
   set locationPermissionRequested(bool value) => saveBool('locationPermissionRequested', value);
 
   bool get locationPermissionRequested => getBool('locationPermissionRequested');
+
+  //------------------------ TestFlight API Environment ----------------------//
+
+  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
+  /// Default is 'staging' (preserves current auto-switch behavior).
+  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'staging');
+
+  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
+
+  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
 
   //--------------------------- Announcements ---------------------------------//
 

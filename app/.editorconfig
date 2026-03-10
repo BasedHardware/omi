@@ -1,0 +1,10 @@
+# EditorConfig for app/ — ensures consistent formatting across editors
+# https://editorconfig.org
+
+root = true
+
+[*.{arb,json}]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+charset = utf-8

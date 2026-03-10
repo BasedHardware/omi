@@ -1001,7 +1001,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => '接続';
 
   @override
   String get comingSoon => '近日公開';
@@ -2225,7 +2225,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get folderName => 'フォルダ名';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => '説明（任意）';
 
   @override
   String get failedToDeleteFolder => 'フォルダの削除に失敗しました';
@@ -7865,27 +7865,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addTask => 'タスクを追加';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCPサーバーを追加';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => '外部AIツールを接続';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count個のツールが正常に接続されました';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'MCPサーバーへの接続に失敗しました';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => '認証中...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'どこで知りましたか？';
 
   @override
   String get tiktok => 'TikTok';
@@ -7903,19 +7903,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => '友人';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'その他';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => '詳しく教えてください';
 
   @override
-  String get event => 'Event';
+  String get event => 'イベント';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => '同僚';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8080,4 +8080,280 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'あなたについて知っていること';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'このマップはOmiがあなたの会話から学ぶにつれて更新されます。';
+
+  @override
+  String get apiEnvironment => 'API環境';
+
+  @override
+  String get apiEnvironmentDescription => '接続するサーバーを選択';
+
+  @override
+  String get production => '本番';
+
+  @override
+  String get staging => 'ステージング';
+
+  @override
+  String get switchRequiresRestart => '切替にはアプリの再起動が必要です';
+
+  @override
+  String get switchApiConfirmTitle => 'API環境の切替';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return '$environmentに切り替えますか？変更を適用するにはアプリを閉じて再度開く必要があります。';
+  }
+
+  @override
+  String get switchAndRestart => '切替';
+
+  @override
+  String get stagingDisclaimer => 'ステージング環境は不安定で、パフォーマンスが一定でなく、データが失われる可能性があります。テスト専用です。';
+
+  @override
+  String get apiEnvSavedRestartRequired => '保存しました。変更を適用するにはアプリを閉じて再度開いてください。';
+
+  @override
+  String get shared => '共有済み';
+
+  @override
+  String get onlyYouCanSeeConversation => 'この会話を見ることができるのはあなただけです';
+
+  @override
+  String get anyoneWithLinkCanView => 'リンクを知っている人は誰でも閲覧できます';
+
+  @override
+  String get tasksCleanTodayTitle => '今日のタスクを整理しますか？';
+
+  @override
+  String get tasksCleanTodayMessage => '期限のみ削除されます';
+
+  @override
+  String get tasksOverdue => '期限切れ';
+
+  @override
+  String get phoneCallsWithOmi => 'Omiで通話';
+
+  @override
+  String get phoneCallsSubtitle => 'リアルタイム文字起こし付きで通話';
+
+  @override
+  String get phoneSetupStep1Title => '電話番号を認証';
+
+  @override
+  String get phoneSetupStep1Subtitle => '確認のためお電話します';
+
+  @override
+  String get phoneSetupStep2Title => '認証コードを入力';
+
+  @override
+  String get phoneSetupStep2Subtitle => '通話中に入力する短いコード';
+
+  @override
+  String get phoneSetupStep3Title => '連絡先に電話を開始';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'ライブ文字起こし内蔵';
+
+  @override
+  String get phoneGetStarted => '始める';
+
+  @override
+  String get callRecordingConsentDisclaimer => '通話録音にはお住まいの地域で同意が必要な場合があります';
+
+  @override
+  String get enterYourNumber => '番号を入力';
+
+  @override
+  String get phoneNumberCallerIdHint => '認証後、これが発信者IDになります';
+
+  @override
+  String get phoneNumberHint => '電話番号';
+
+  @override
+  String get failedToStartVerification => '認証の開始に失敗しました';
+
+  @override
+  String get phoneContinue => '続ける';
+
+  @override
+  String get verifyYourNumber => '番号を認証';
+
+  @override
+  String get answerTheCallFrom => 'この番号からの着信に応答';
+
+  @override
+  String get onTheCallEnterThisCode => '通話中にこのコードを入力';
+
+  @override
+  String get followTheVoiceInstructions => '音声案内に従ってください';
+
+  @override
+  String get statusCalling => '発信中...';
+
+  @override
+  String get statusCallInProgress => '通話中';
+
+  @override
+  String get statusVerifiedLabel => '認証済み';
+
+  @override
+  String get statusCallMissed => '不在着信';
+
+  @override
+  String get statusTimedOut => 'タイムアウト';
+
+  @override
+  String get phoneTryAgain => '再試行';
+
+  @override
+  String get phonePageTitle => '電話';
+
+  @override
+  String get phoneContactsTab => '連絡先';
+
+  @override
+  String get phoneKeypadTab => 'キーパッド';
+
+  @override
+  String get grantContactsAccess => '連絡先へのアクセスを許可';
+
+  @override
+  String get phoneAllow => '許可';
+
+  @override
+  String get phoneSearchHint => '検索';
+
+  @override
+  String get phoneNoContactsFound => '連絡先が見つかりません';
+
+  @override
+  String get phoneEnterNumber => '番号を入力';
+
+  @override
+  String get failedToStartCall => '通話の開始に失敗しました';
+
+  @override
+  String get callStateConnecting => '接続中...';
+
+  @override
+  String get callStateRinging => '呼び出し中...';
+
+  @override
+  String get callStateEnded => '通話終了';
+
+  @override
+  String get callStateFailed => '通話失敗';
+
+  @override
+  String get transcriptPlaceholder => '文字起こしがここに表示されます...';
+
+  @override
+  String get phoneUnmute => 'ミュート解除';
+
+  @override
+  String get phoneMute => 'ミュート';
+
+  @override
+  String get phoneSpeaker => 'スピーカー';
+
+  @override
+  String get phoneEndCall => '終了';
+
+  @override
+  String get phoneCallSettingsTitle => '通話設定';
+
+  @override
+  String get yourVerifiedNumbers => '認証済みの番号';
+
+  @override
+  String get verifiedNumbersDescription => '電話をかけると、相手にこの番号が表示されます';
+
+  @override
+  String get noVerifiedNumbers => '認証済みの番号はありません';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumberを削除しますか？';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '通話するには再度認証が必要です';
+
+  @override
+  String get phoneDeleteButton => '削除';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes分前に認証';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours時間前に認証';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days日前に認証';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$dateに認証';
+  }
+
+  @override
+  String get verifiedFallback => '認証済み';
+
+  @override
+  String get callAlreadyInProgress => '通話中です';
+
+  @override
+  String get failedToGetCallToken => 'トークンの取得に失敗しました。先に番号を認証してください。';
+
+  @override
+  String get failedToInitializeCallService => '通話サービスの初期化に失敗しました';
+
+  @override
+  String get speakerLabelYou => 'あなた';
+
+  @override
+  String get speakerLabelUnknown => '不明';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimitedにアップグレード';
+
+  @override
+  String get phoneCallsMaybeLater => 'また後で';
 }

@@ -5,6 +5,9 @@ import pycountry
 import stripe
 
 from database import redis_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 stripe.api_key = os.getenv('STRIPE_API_KEY')
 endpoint_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
@@ -71,7 +74,7 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
     except Exception as e:
-        print(f"Error creating checkout session: {e}")
+        logger.error(f"Error creating checkout session: {e}")
         return None
 
 
@@ -83,7 +86,7 @@ def cancel_subscription(subscription_id: str):
             cancel_at_period_end=True,
         )
     except Exception as e:
-        print(f"Error canceling subscription: {e}")
+        logger.error(f"Error canceling subscription: {e}")
         return None
 
 
@@ -101,7 +104,7 @@ def find_app_subscription_by_customer_id(customer_id: str, app_id: str, uid: str
 
         return latest_subscription
     except Exception as e:
-        print(f"Error finding app subscription by customer ID {customer_id}: {e}")
+        logger.error(f"Error finding app subscription by customer ID {customer_id}: {e}")
         return None
 
 
@@ -119,7 +122,7 @@ def find_app_subscription_by_metadata(app_id: str, uid: str, status_filter: str 
 
         return latest_subscription
     except Exception as e:
-        print(f"Error finding app subscription by metadata: {e}")
+        logger.error(f"Error finding app subscription by metadata: {e}")
         return None
 
 
@@ -128,7 +131,7 @@ def modify_subscription(subscription_id: str, **kwargs):
     try:
         return stripe.Subscription.modify(subscription_id, **kwargs)
     except Exception as e:
-        print(f"Error modifying subscription {subscription_id}: {e}")
+        logger.error(f"Error modifying subscription {subscription_id}: {e}")
         return None
 
 

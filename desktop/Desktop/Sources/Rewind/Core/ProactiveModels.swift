@@ -225,6 +225,18 @@ struct ExtractionWithScreenshot {
     }
 }
 
+// MARK: - TableDocumented
+
+extension ProactiveExtractionRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["proactive_extractions"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["proactive_extractions"] ?? [:] }
+}
+
+extension FocusSessionRecord: TableDocumented {
+    static var tableDescription: String { ChatPrompts.tableAnnotations["focus_sessions"]! }
+    static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["focus_sessions"] ?? [:] }
+}
+
 // MARK: - Focus Session with Screenshot
 
 /// Combined focus session and screenshot data for UI display

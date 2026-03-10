@@ -27,6 +27,9 @@ from utils.other.storage import (
     storage_client,
     private_cloud_sync_bucket,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def validate_merge_compatibility(
@@ -113,7 +116,7 @@ def perform_merge_async(
                 conversations.append(conv)
 
         if len(conversations) < 2:
-            print(f"Merge failed: Not enough conversations found for uid={uid}")
+            logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
             _handle_merge_failure(uid, conversation_ids)
             return
 
@@ -201,7 +204,7 @@ def perform_merge_async(
                     is_reprocess=False,  # Not a reprocess - this is a new conversation
                 )
             except Exception as e:
-                print(f"Error processing merged conversation: {e}")
+                logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
                 # Mark conversation as completed
                 conversations_db.update_conversation_status(uid, new_conversation_id, ConversationStatus.completed)
@@ -216,10 +219,12 @@ def perform_merge_async(
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)
 
-        print(f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations")
+        logger.info(
+            f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations"
+        )
 
     except Exception as e:
-        print(f"Merge failed with exception: {e}")
+        logger.error(f"Merge failed with exception: {e}")
         import traceback
 
         traceback.print_exc()
@@ -310,7 +315,7 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
                     all_photos.append(photo)
                     seen_ids.add(photo_id)
         except Exception as e:
-            print(f"Error fetching photos for {conv['id']}: {e}")
+            logger.error(f"Error fetching photos for {conv['id']}: {e}")
 
     # Sort by creation time
     all_photos.sort(key=lambda p: p.get('created_at', datetime.min))
@@ -366,14 +371,14 @@ def _copy_audio_chunks_for_merge(
                 bucket.copy_blob(source_blob, bucket, new_path)
 
         except Exception as e:
-            print(f"Error copying chunks for {conv_id}: {e}")
+            logger.error(f"Error copying chunks for {conv_id}: {e}")
 
     # Create AudioFile records from copied chunks
     if has_chunks:
         try:
             return conversations_db.create_audio_files_from_chunks(uid, new_conversation_id)
         except Exception as e:
-            print(f"Error creating audio files: {e}")
+            logger.error(f"Error creating audio files: {e}")
 
     return []
 
@@ -419,37 +424,37 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
         # Delete memories
         memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting memories for {conversation_id}: {e}")
+        logger.error(f"Error deleting memories for {conversation_id}: {e}")
 
     try:
         # Delete action items from standalone collection
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting action items for {conversation_id}: {e}")
+        logger.error(f"Error deleting action items for {conversation_id}: {e}")
 
     try:
         # Delete photos subcollection
         conversations_db.delete_conversation_photos(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting photos for {conversation_id}: {e}")
+        logger.error(f"Error deleting photos for {conversation_id}: {e}")
 
     try:
         # Delete audio chunks from GCS
         delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting audio files for {conversation_id}: {e}")
+        logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
     try:
         # Delete vector embedding
         delete_vector(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting vector for {conversation_id}: {e}")
+        logger.error(f"Error deleting vector for {conversation_id}: {e}")
 
     try:
         # Delete conversation document
         conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting conversation {conversation_id}: {e}")
+        logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 
 def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
@@ -459,9 +464,9 @@ def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
     Since source conversations were set to 'merging' status, we need to
     reset them back to 'completed' so the user can try again or continue using them.
     """
-    print(f"Merge failed for conversations: {conversation_ids}")
+    logger.error(f"Merge failed for conversations: {conversation_ids}")
     for conv_id in conversation_ids:
         try:
             conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.completed)
         except Exception as e:
-            print(f"Error resetting status for {conv_id}: {e}")
+            logger.error(f"Error resetting status for {conv_id}: {e}")

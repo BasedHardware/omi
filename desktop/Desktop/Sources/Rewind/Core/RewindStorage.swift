@@ -242,10 +242,23 @@ actor RewindStorage {
         }
 
         // Load the extracted frame
-        guard let imageData = try? Data(contentsOf: outputPath),
-              let image = NSImage(data: imageData)
-        else {
-            throw RewindError.storageError("Failed to load extracted frame")
+        let fileExists = FileManager.default.fileExists(atPath: outputPath.path)
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: outputPath.path)[.size] as? Int) ?? 0
+        let imageData = try? Data(contentsOf: outputPath)
+        let image = imageData.flatMap { NSImage(data: $0) }
+
+        guard let imageData, let image else {
+            // ffmpeg exited 0 but produced no output — seek was beyond video duration.
+            // Treat as missing frame (not a real error) so the backfill silently skips it.
+            if !fileExists || fileSize == 0 {
+                throw RewindError.screenshotNotFound
+            }
+            // File exists but couldn't be loaded/decoded — genuine error worth logging.
+            let memoryMB = ProcessInfo.processInfo.physicalMemory > 0
+                ? Int(Double(ProcessInfo.processInfo.physicalMemory) / 1_048_576)
+                : -1
+            let detail = "fileExists=\(fileExists), fileSize=\(fileSize), dataLoaded=\(imageData != nil), imageDecoded=\(image != nil), systemMemoryMB=\(memoryMB), videoPath=\(videoPath), frameOffset=\(frameOffset), timeOffset=\(timeOffset)"
+            throw RewindError.storageError("Failed to load extracted frame, \(detail)")
         }
 
         // Log extracted frame dimensions to Sentry for debugging quality issues
@@ -293,7 +306,7 @@ actor RewindStorage {
            let offset = screenshot.frameOffset
         {
             return try await loadVideoFrame(videoPath: videoPath, frameOffset: offset)
-        } else if let imagePath = screenshot.imagePath {
+        } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
             return try await loadScreenshotImage(relativePath: imagePath)
         } else {
             throw RewindError.screenshotNotFound
@@ -315,7 +328,7 @@ actor RewindStorage {
                 throw RewindError.invalidImage
             }
             return jpegData
-        } else if let imagePath = screenshot.imagePath {
+        } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
             return try await loadScreenshot(relativePath: imagePath)
         } else {
             throw RewindError.screenshotNotFound

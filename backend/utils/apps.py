@@ -72,6 +72,9 @@ from models.other import Person
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.social import get_twitter_timeline, TwitterProfile, get_twitter_profile
+import logging
+
+logger = logging.getLogger(__name__)
 
 MarketplaceAppReviewUIDs = (
     os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
@@ -91,20 +94,34 @@ def can_tester_access_app(uid: str, app_id: str) -> bool:
     return can_tester_access_app_db(app_id, uid)
 
 
+def _invalidate_tester_cache(uid: str):
+    """Invalidate tester-related caches after mutation."""
+    cache = get_memory_cache()
+    cache.delete(f"is_tester:{uid}")
+    # Delete both tester=0 and tester=1 variants
+    cache.delete(f"user_apps_slice:{uid}:0")
+    cache.delete(f"user_apps_slice:{uid}:1")
+
+
 def add_tester(data: dict):
     add_tester_db(data)
+    if uid := data.get('uid'):
+        _invalidate_tester_cache(uid)
 
 
 def remove_tester(uid: str):
     remove_tester_db(uid)
+    _invalidate_tester_cache(uid)
 
 
 def add_app_access_for_tester(app_id: str, uid: str):
     add_app_access_for_tester_db(app_id, uid)
+    _invalidate_tester_cache(uid)
 
 
 def remove_app_access_for_tester(app_id: str, uid: str):
     remove_app_access_for_tester_db(app_id, uid)
+    _invalidate_tester_cache(uid)
 
 
 # ********************************
@@ -163,11 +180,11 @@ def get_popular_apps() -> List[App]:
         """Fetch from Redis/DB and process apps (called only once with singleflight)."""
         # Check Redis cache
         if cached_apps := get_generic_cache(cache_key):
-            print('get_popular_apps from Redis cache')
+            logger.info('get_popular_apps from Redis cache')
             popular_apps = cached_apps
         else:
             # Database query
-            print('get_popular_apps from db')
+            logger.info('get_popular_apps from db')
             popular_apps = get_popular_apps_db()
             # Reduce cache size by excluding large fields
             reduced_apps = [App.reduce_dict(app) for app in popular_apps]
@@ -200,14 +217,15 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     cache_key = 'get_public_approved_apps_data'
     memory_cache = get_memory_cache()
 
-    tester = is_tester(uid)
+    # Cache tester flag per user (30s TTL) to avoid Firestore lookup every 1s (#5439 sub-task 3)
+    tester = memory_cache.get_or_fetch(f"is_tester:{uid}", lambda: is_tester(uid), ttl=30)
 
     def fetch_public_approved():
         """Fetch from Redis or DB (called only once with singleflight)."""
         if data := get_generic_cache(cache_key):
-            print('get_public_approved_apps_data from Redis cache')
+            logger.info('get_public_approved_apps_data from Redis cache')
             return data
-        print('get_public_approved_apps_data from db')
+        logger.info('get_public_approved_apps_data from db')
         data = get_public_approved_apps_db()
         # Reduce cache size by excluding large fields
         reduced_data = [App.reduce_dict(app) for app in data]
@@ -217,9 +235,19 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     # Singleflight: only ONE request fetches, others wait
     public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
 
-    private_data = get_private_apps(uid)
-    public_unapproved_data = get_public_unapproved_apps(uid)
-    tester_apps = get_apps_for_tester_db(uid) if tester else []
+    # Cache per-user app slice (private + unapproved + tester apps) with 30s TTL (#5439 sub-task 3)
+    def fetch_user_apps_slice():
+        return {
+            'private_data': get_private_apps(uid),
+            'public_unapproved_data': get_public_unapproved_apps(uid),
+            'tester_apps': get_apps_for_tester_db(uid) if tester else [],
+        }
+
+    user_slice = memory_cache.get_or_fetch(f"user_apps_slice:{uid}:{int(tester)}", fetch_user_apps_slice, ttl=30) or {}
+    private_data = user_slice.get('private_data', [])
+    public_unapproved_data = user_slice.get('public_unapproved_data', [])
+    tester_apps = user_slice.get('tester_apps', [])
+
     user_enabled = set(get_enabled_apps(uid))
     all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
     apps = []
@@ -229,7 +257,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
-        app_dict = app
+        # Copy dict to avoid mutating cached objects
+        app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
         app_dict['rejected'] = app['approved'] is False
         app_dict['installs'] = apps_install.get(app['id'], 0)
@@ -250,7 +279,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
 def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
-        print('get_app_cache_by_id from cache')
+        logger.info('get_app_cache_by_id from cache')
         if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
@@ -336,11 +365,11 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         """Fetch from Redis/DB and process apps (called only once with singleflight)."""
         # Check Redis cache
         if cached_apps := get_generic_cache(redis_cache_key):
-            print('get_public_approved_apps_data from Redis cache')
+            logger.info('get_public_approved_apps_data from Redis cache')
             all_apps = cached_apps
         else:
             # Database query
-            print('get_public_approved_apps_data from db')
+            logger.info('get_public_approved_apps_data from db')
             all_apps = get_public_approved_apps_db()
             # Reduce cache size by excluding large fields
             reduced_apps = [App.reduce_dict(app) for app in all_apps]
@@ -457,26 +486,26 @@ def upsert_app_payment_link(
     app_id: str, is_paid_app: bool, price: float, payment_plan: str, uid: str, previous_price: float | None = None
 ):
     if not is_paid_app:
-        print(f"App is not a paid app, app_id: {app_id}")
+        logger.info(f"App is not a paid app, app_id: {app_id}")
         return None
 
     if payment_plan not in ['monthly_recurring']:
-        print(f"App payment plan is invalid, app_id: {app_id}")
+        logger.error(f"App payment plan is invalid, app_id: {app_id}")
         return None
 
     app_data = get_app_by_id_db(app_id)
     if not app_data:
-        print(f"App is not found, app_id: {app_id}")
+        logger.warning(f"App is not found, app_id: {app_id}")
         return None
 
     app = App(**app_data)
 
     if previous_price and previous_price == price:
-        print(f"App price is existing, app_id: {app_id}")
+        logger.info(f"App price is existing, app_id: {app_id}")
         return app
 
     if price == 0:
-        print(f"App price is not invalid, app_id: {app_id}")
+        logger.error(f"App price is not invalid, app_id: {app_id}")
         return app
 
     # create recurring payment link
@@ -558,7 +587,7 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
 
         return latest_subscription
     except Exception as e:
-        print(f"Error finding app subscription: {e}")
+        logger.error(f"Error finding app subscription: {e}")
         return None
 
 
@@ -602,7 +631,7 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
-        print("twitter is in connected accounts")
+        logger.info("twitter is in connected accounts")
         # Get latest tweets
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
@@ -679,10 +708,10 @@ def generate_persona_desc(uid: str, persona_name: str):
 
 def update_personas_async(uid: str):
     if not can_update_persona(uid):
-        print(f"[PERSONAS] Rate limited - uid={uid} already updated today")
+        logger.info(f"[PERSONAS] Rate limited - uid={uid} already updated today")
         return
 
-    print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
+    logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
         set_persona_update_timestamp(uid)
@@ -693,9 +722,9 @@ def update_personas_async(uid: str):
 
         [t.start() for t in threads]
         [t.join() for t in threads]
-        print(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
+        logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
     else:
-        print(f"[PERSONAS] No personas found for uid={uid}")
+        logger.info(f"[PERSONAS] No personas found for uid={uid}")
 
 
 def sync_update_persona_prompt(persona: dict):
@@ -707,7 +736,7 @@ def sync_update_persona_prompt(persona: dict):
     try:
         return loop.run_until_complete(update_persona_prompt(persona))
     except Exception as e:
-        print(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
+        logger.error(f"Error in update_persona_prompt for persona {persona.get('id', 'unknown')}: {str(e)}")
         return None
     finally:
         loop.close()
@@ -1268,16 +1297,21 @@ def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]]
 # ********************************
 
 
-def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> Dict[str, Any] | None:
+def fetch_app_chat_tools_from_manifest(
+    manifest_url: str, timeout: int = 10, force_refresh: bool = False
+) -> Dict[str, Any] | None:
     """
     Fetch chat tools definitions from an app's manifest endpoint.
 
     The manifest endpoint should return a JSON object with a 'tools' array containing
     tool definitions with: name, description, endpoint, method, parameters, auth_required, status_message.
 
+    Implements caching with 2-hour TTL to reduce external requests.
+
     Args:
         manifest_url: Full URL to the manifest endpoint (e.g., https://my-app.com/.well-known/omi-tools.json)
         timeout: Request timeout in seconds
+        force_refresh: If True, bypass cache and fetch fresh data
 
     Returns:
         Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
@@ -1311,28 +1345,36 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
     if not manifest_url:
         return None
 
+    # Check cache first (unless force refresh)
+    cache_key = f'manifest:{manifest_url}'
+    if not force_refresh:
+        cached_result = get_generic_cache(cache_key)
+        if cached_result:
+            logger.info(f"✅ Using cached manifest for: {manifest_url}")
+            return cached_result
+
     try:
-        print(f"📥 Fetching chat tools manifest from: {manifest_url}")
+        logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
         response = requests.get(
             manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
         )
 
         if response.status_code != 200:
-            print(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
+            logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
             return None
 
         data = response.json()
 
         # Validate response structure
         if not isinstance(data, dict):
-            print(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
+            logger.error(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
             return None
 
         tools = data.get('tools', [])
 
         if not isinstance(tools, list):
-            print(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
+            logger.error(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
             return None
 
         # Validate and normalize each tool
@@ -1342,7 +1384,7 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
             if validated_tool:
                 validated_tools.append(validated_tool)
             else:
-                print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
+                logger.error(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
 
         # Parse chat_messages configuration
         chat_messages = data.get('chat_messages', {})
@@ -1354,23 +1396,31 @@ def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> 
                 'notify': chat_messages.get('notify', True),  # send push notification, default True
             }
 
-        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})")
-        return {
+        logger.info(
+            f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})"
+        )
+        result = {
             'tools': validated_tools if validated_tools else None,
             'chat_messages': chat_messages_config if chat_messages_config else None,
         }
 
+        # Cache for 2 hours (7200 seconds)
+        if validated_tools:
+            set_generic_cache(cache_key, result, 60 * 60 * 2)
+
+        return result
+
     except requests.Timeout:
-        print(f"⚠️ Manifest fetch timed out: {manifest_url}")
+        logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
         return None
     except requests.RequestException as e:
-        print(f"⚠️ Manifest fetch request error: {e}")
+        logger.error(f"⚠️ Manifest fetch request error: {e}")
         return None
     except ValueError as e:
-        print(f"⚠️ Invalid JSON in manifest response: {e}")
+        logger.error(f"⚠️ Invalid JSON in manifest response: {e}")
         return None
     except Exception as e:
-        print(f"⚠️ Unexpected error fetching manifest: {e}")
+        logger.error(f"⚠️ Unexpected error fetching manifest: {e}")
         return None
 
 
@@ -1392,15 +1442,15 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
     endpoint = tool.get('endpoint')
 
     if not name or not isinstance(name, str):
-        print(f"⚠️ Tool missing required 'name' field")
+        logger.warning(f"⚠️ Tool missing required 'name' field")
         return None
 
     if not description or not isinstance(description, str):
-        print(f"⚠️ Tool '{name}' missing required 'description' field")
+        logger.warning(f"⚠️ Tool '{name}' missing required 'description' field")
         return None
 
     if not endpoint or not isinstance(endpoint, str):
-        print(f"⚠️ Tool '{name}' missing required 'endpoint' field")
+        logger.warning(f"⚠️ Tool '{name}' missing required 'endpoint' field")
         return None
 
     # Build normalized tool definition

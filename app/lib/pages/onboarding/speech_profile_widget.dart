@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -20,7 +18,11 @@ class SpeechProfileWidget extends StatefulWidget {
   final VoidCallback goNext;
   final VoidCallback onSkip;
 
-  const SpeechProfileWidget({super.key, required this.goNext, required this.onSkip});
+  const SpeechProfileWidget({
+    super.key,
+    required this.goNext,
+    required this.onSkip,
+  });
 
   @override
   State<SpeechProfileWidget> createState() => _SpeechProfileWidgetState();
@@ -189,6 +191,22 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   ),
                   barrierDismissible: false,
                 );
+              } else if (error == 'UPLOAD_FAILED') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    context.l10n.connectionError,
+                    context.l10n.connectionErrorDesc,
+                    okButtonText: context.l10n.ok,
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
               } else if (error == 'INVALID_RECORDING') {
                 showDialog(
                   context: context,
@@ -266,7 +284,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                         // Title
                         Text(
-                          context.l10n.speechProfile,
+                          provider.startedRecording && !provider.profileCompleted
+                              ? 'Answer with your voice:'
+                              : 'Please find a quiet place',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 28,
@@ -283,7 +303,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         if (!provider.startedRecording) ...[
                           // Intro text
                           Text(
-                            context.l10n.speechProfileIntro,
+                            'Omi needs to learn your goals and your voice. Answer questions with your voice. You\'ll be able to modify it later.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.6),
@@ -354,9 +374,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
                           // Skip for now
                           TextButton(
-                            onPressed: () {
-                              widget.onSkip();
-                            },
+                            onPressed: () => widget.onSkip(),
                             child: Text(
                               context.l10n.skipForNow,
                               style: const TextStyle(
@@ -372,9 +390,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                widget.goNext();
-                              },
+                              onPressed: () => widget.goNext(),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: Colors.black,
@@ -467,10 +483,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               provider.currentQuestion,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 18,
+                                fontSize: 24,
                                 height: 1.3,
                                 fontFamily: 'Manrope',
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                               ),
                               textAlign: TextAlign.center,
                             ),

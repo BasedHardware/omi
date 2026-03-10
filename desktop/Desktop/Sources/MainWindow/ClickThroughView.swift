@@ -8,8 +8,17 @@ class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     private var localMonitor: Any?
     private var isProcessingSyntheticClick: Bool = false  // Guard against re-entry
 
+    /// When false, the view is transparent to AppKit hit testing (returns nil from hitTest).
+    /// This prevents the NSView from intercepting clicks meant for overlapping SwiftUI views.
+    var isClickThroughEnabled: Bool = true
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        return true
+        return isClickThroughEnabled
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard isClickThroughEnabled else { return nil }
+        return super.hitTest(point)
     }
 
     override func viewDidMoveToWindow() {
@@ -44,6 +53,9 @@ class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
                 log("CLICKTHROUGH: Ignoring click from different window (event.window=\(String(describing: event.window?.className)), our window=\(window.className))")
                 return event
             }
+
+            // Skip capture when click-through is disabled (e.g., sidebar hidden behind settings)
+            guard self.isClickThroughEnabled else { return event }
 
             // If clicking in our view while window is not key, save the location
             if !window.isKeyWindow {
@@ -93,56 +105,42 @@ class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
             let locationInView = self.convert(location, from: nil)
             guard self.bounds.contains(locationInView) else { return }
 
-            // Convert window coordinates to screen coordinates
-            let screenLocation = window.convertPoint(toScreen: location)
-
-            // Flip Y coordinate for CGEvent (CGEvent uses top-left origin, AppKit uses bottom-left)
-            guard let screen = window.screen ?? NSScreen.main else {
-                log("CLICKTHROUGH: No screen available, skipping synthetic click")
-                return
-            }
-            let flippedY = screen.frame.maxY - screenLocation.y
-            let cgPoint = CGPoint(x: screenLocation.x, y: flippedY)
-
             // Set guard before posting synthetic events
             self.isProcessingSyntheticClick = true
 
-            // Safety timeout: reset the guard after 200ms no matter what
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                if self?.isProcessingSyntheticClick == true {
-                    self?.isProcessingSyntheticClick = false
-                }
-            }
-
-            // Create and post a synthetic mouse event at the SAVED click location
-            log("CLICKTHROUGH: Posting synthetic click at screen position \(cgPoint)")
-            if let cgEvent = CGEvent(
-                mouseEventSource: nil,
-                mouseType: .leftMouseDown,
-                mouseCursorPosition: cgPoint,
-                mouseButton: .left
+            // Use NSEvent + window.sendEvent() instead of CGEvent.post()
+            // CGEvent.post(mouseCursorPosition:) physically moves the cursor, causing the jump bug
+            log("CLICKTHROUGH: Sending synthetic click at window position \(location)")
+            if let syntheticEvent = NSEvent.mouseEvent(
+                with: .leftMouseDown,
+                location: location,
+                modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber,
+                context: nil,
+                eventNumber: 0,
+                clickCount: 1,
+                pressure: 1.0
             ) {
-                cgEvent.post(tap: .cghidEventTap)
+                window.sendEvent(syntheticEvent)
 
-                // Also post mouse up
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in
-                    if let upEvent = CGEvent(
-                        mouseEventSource: nil,
-                        mouseType: .leftMouseUp,
-                        mouseCursorPosition: cgPoint,
-                        mouseButton: .left
-                    ) {
-                        upEvent.post(tap: .cghidEventTap)
-                    }
-
-                    // Clear guard after mouse up completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                        self?.isProcessingSyntheticClick = false
-                    }
+                // Also send mouse up
+                if let upEvent = NSEvent.mouseEvent(
+                    with: .leftMouseUp,
+                    location: location,
+                    modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber,
+                    context: nil,
+                    eventNumber: 0,
+                    clickCount: 1,
+                    pressure: 0.0
+                ) {
+                    window.sendEvent(upEvent)
                 }
-            } else {
-                self.isProcessingSyntheticClick = false
             }
+
+            self.isProcessingSyntheticClick = false
         }
     }
 
@@ -159,14 +157,17 @@ class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
 struct ClickThroughView<Content: View>: NSViewRepresentable {
     let content: Content
     let width: CGFloat?
+    let enabled: Bool
 
-    init(width: CGFloat? = nil, @ViewBuilder content: () -> Content) {
+    init(width: CGFloat? = nil, enabled: Bool = true, @ViewBuilder content: () -> Content) {
         self.width = width
+        self.enabled = enabled
         self.content = content()
     }
 
     func makeNSView(context: Context) -> ClickThroughHostingView<Content> {
         let hostingView = ClickThroughHostingView(rootView: content)
+        hostingView.isClickThroughEnabled = enabled
         // Don't constrain the hosting view size - let it use intrinsic size
         hostingView.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         hostingView.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -175,6 +176,7 @@ struct ClickThroughView<Content: View>: NSViewRepresentable {
 
     func updateNSView(_ nsView: ClickThroughHostingView<Content>, context: Context) {
         nsView.rootView = content
+        nsView.isClickThroughEnabled = enabled
     }
 }
 
@@ -182,8 +184,8 @@ struct ClickThroughView<Content: View>: NSViewRepresentable {
 extension View {
     /// Wraps this view to enable click-through behavior.
     /// The view will maintain its intrinsic size.
-    func clickThrough() -> some View {
-        ClickThroughView { self }
+    func clickThrough(enabled: Bool = true) -> some View {
+        ClickThroughView(enabled: enabled) { self }
             .fixedSize(horizontal: true, vertical: false)
     }
 }

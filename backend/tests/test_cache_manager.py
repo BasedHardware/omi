@@ -117,11 +117,7 @@ class TestInMemoryCacheManager(unittest.TestCase):
 
     def test_cache_with_list_data(self):
         """Test caching with list data."""
-        test_list = [
-            {'id': 1, 'name': 'App 1'},
-            {'id': 2, 'name': 'App 2'},
-            {'id': 3, 'name': 'App 3'}
-        ]
+        test_list = [{'id': 1, 'name': 'App 1'}, {'id': 2, 'name': 'App 2'}, {'id': 3, 'name': 'App 3'}]
         self.cache.set('apps_list', test_list, ttl=30)
 
         result = self.cache.get('apps_list')

@@ -81,6 +81,7 @@ struct ScoreWidget: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(20)
         }
+        .frame(minHeight: 200)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))

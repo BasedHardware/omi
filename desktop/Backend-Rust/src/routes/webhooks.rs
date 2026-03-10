@@ -238,6 +238,8 @@ async fn handle_sentry_webhook(
             Some("bug"),                   // category
             Some(top_10_score),            // relevance_score
             None,                          // from_staged
+            None,                          // recurrence_rule
+            None,                          // recurrence_parent_id
         )
         .await
     {
@@ -591,6 +593,8 @@ async fn poll_sentry_feedback(
                 Some("bug"),
                 Some(top_10_score),
                 None, // from_staged
+                None, // recurrence_rule
+                None, // recurrence_parent_id
             )
             .await
         {

@@ -1013,7 +1013,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Připojit';
 
   @override
   String get comingSoon => 'Již brzy';
@@ -2268,7 +2268,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get folderName => 'Název složky';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Popis (volitelný)';
 
   @override
   String get failedToDeleteFolder => 'Odstranění složky selhalo';
@@ -5933,7 +5933,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processAudio => 'Zpracovat zvuk';
 
   @override
-  String get start => 'Start';
+  String get start => 'Spustit';
 
   @override
   String get noRecordings => 'Žádné nahrávky';
@@ -7994,27 +7994,27 @@ class AppLocalizationsCs extends AppLocalizations {
   String get addTask => 'Přidat úkol';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Přidat MCP server';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Připojit externí AI nástroje';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return 'Úspěšně připojeno $count nástrojů';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Nepodařilo se připojit k MCP serveru';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autorizace...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Jak jste nás našli?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8032,19 +8032,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Přítel';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Jiné';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Upřesněte prosím';
 
   @override
-  String get event => 'Event';
+  String get event => 'Událost';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Kolega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8215,4 +8215,282 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Toto o vás vím';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription => 'Tato mapa se aktualizuje, jak se Omi učí z vašich konverzací.';
+
+  @override
+  String get apiEnvironment => 'Prostředí API';
+
+  @override
+  String get apiEnvironmentDescription => 'Vyberte, ke kterému serveru se připojit';
+
+  @override
+  String get production => 'Produkce';
+
+  @override
+  String get staging => 'Testovací prostředí';
+
+  @override
+  String get switchRequiresRestart => 'Přepnutí vyžaduje restart aplikace';
+
+  @override
+  String get switchApiConfirmTitle => 'Přepnout prostředí API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Přepnout na $environment? Budete muset zavřít a znovu otevřít aplikaci, aby se změny projevily.';
+  }
+
+  @override
+  String get switchAndRestart => 'Přepnout';
+
+  @override
+  String get stagingDisclaimer =>
+      'Testovací prostředí může být nestabilní, mít nekonzistentní výkon a data mohou být ztracena. Pouze pro testování.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Uloženo. Zavřete a znovu otevřete aplikaci pro použití změn.';
+
+  @override
+  String get shared => 'Sdíleno';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Tuto konverzaci můžete vidět pouze vy';
+
+  @override
+  String get anyoneWithLinkCanView => 'Kdokoli s odkazem může zobrazit';
+
+  @override
+  String get tasksCleanTodayTitle => 'Vyčistit dnešní úkoly?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Tímto se odstraní pouze termíny';
+
+  @override
+  String get tasksOverdue => 'Po termínu';
+
+  @override
+  String get phoneCallsWithOmi => 'Hovory s Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Volejte s prepisem v realnem case';
+
+  @override
+  String get phoneSetupStep1Title => 'Overte sve telefonni cislo';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Zavolame vam pro potvrzeni';
+
+  @override
+  String get phoneSetupStep2Title => 'Zadejte overovaci kod';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kratky kod, ktery zadate pri hovoru';
+
+  @override
+  String get phoneSetupStep3Title => 'Zacnete volat svym kontaktum';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'S vestavenym zivym prepisem';
+
+  @override
+  String get phoneGetStarted => 'Zacit';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Nahravani hovoru muze vyzadovat souhlas ve vasi jurisdikci';
+
+  @override
+  String get enterYourNumber => 'Zadejte sve cislo';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Po overeni se toto stane vasim ID volajiciho';
+
+  @override
+  String get phoneNumberHint => 'Telefonni cislo';
+
+  @override
+  String get failedToStartVerification => 'Nepodarilo se zahajit overeni';
+
+  @override
+  String get phoneContinue => 'Pokracovat';
+
+  @override
+  String get verifyYourNumber => 'Overte sve cislo';
+
+  @override
+  String get answerTheCallFrom => 'Prijmete hovor od';
+
+  @override
+  String get onTheCallEnterThisCode => 'Behem hovoru zadejte tento kod';
+
+  @override
+  String get followTheVoiceInstructions => 'Postupujte podle hlasovych pokunu';
+
+  @override
+  String get statusCalling => 'Volani...';
+
+  @override
+  String get statusCallInProgress => 'Hovor probiha';
+
+  @override
+  String get statusVerifiedLabel => 'Overeno';
+
+  @override
+  String get statusCallMissed => 'Zmeskany hovor';
+
+  @override
+  String get statusTimedOut => 'Cas vyprsel';
+
+  @override
+  String get phoneTryAgain => 'Zkusit znovu';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kontakty';
+
+  @override
+  String get phoneKeypadTab => 'Klavesnice';
+
+  @override
+  String get grantContactsAccess => 'Povolte pristup ke kontaktum';
+
+  @override
+  String get phoneAllow => 'Povolit';
+
+  @override
+  String get phoneSearchHint => 'Hledat';
+
+  @override
+  String get phoneNoContactsFound => 'Zadne kontakty nenalezeny';
+
+  @override
+  String get phoneEnterNumber => 'Zadejte cislo';
+
+  @override
+  String get failedToStartCall => 'Nepodarilo se zahajit hovor';
+
+  @override
+  String get callStateConnecting => 'Pripojovani...';
+
+  @override
+  String get callStateRinging => 'Zvoneni...';
+
+  @override
+  String get callStateEnded => 'Hovor ukoncen';
+
+  @override
+  String get callStateFailed => 'Hovor selhal';
+
+  @override
+  String get transcriptPlaceholder => 'Prepis se zobrazi zde...';
+
+  @override
+  String get phoneUnmute => 'Zrusit ztlumeni';
+
+  @override
+  String get phoneMute => 'Ztlumit';
+
+  @override
+  String get phoneSpeaker => 'Reproduktor';
+
+  @override
+  String get phoneEndCall => 'Ukoncit';
+
+  @override
+  String get phoneCallSettingsTitle => 'Nastaveni hovoru';
+
+  @override
+  String get yourVerifiedNumbers => 'Vase overena cisla';
+
+  @override
+  String get verifiedNumbersDescription => 'Kdyz nekomu zavolate, uvidi toto cislo na svem telefonu';
+
+  @override
+  String get noVerifiedNumbers => 'Zadna overena cisla';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Smazat $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Pro volani budete muset znovu overit';
+
+  @override
+  String get phoneDeleteButton => 'Smazat';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Overeno pred ${minutes}m';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Overeno pred ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Overeno pred ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Overeno $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Overeno';
+
+  @override
+  String get callAlreadyInProgress => 'Hovor jiz probiha';
+
+  @override
+  String get failedToGetCallToken => 'Nepodarilo se ziskat token. Nejprve overte sve cislo.';
+
+  @override
+  String get failedToInitializeCallService => 'Nepodarilo se inicializovat sluzbu hovoru';
+
+  @override
+  String get speakerLabelYou => 'Vy';
+
+  @override
+  String get speakerLabelUnknown => 'Neznamy';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobrazit denní skóre na domovské stránce';
+
+  @override
+  String get showTasksOnHomepage => 'Zobrazit úkoly na domovské stránce';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonní hovory přes Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Volejte přes Omi a získejte přepis v reálném čase, automatické shrnutí a další.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Přepis každého hovoru v reálném čase';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatické shrnutí hovorů a úkoly';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Příjemci vidí vaše skutečné číslo, ne náhodné';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zůstávají soukromé a bezpečné';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgradovat na Neomezený';
+
+  @override
+  String get phoneCallsMaybeLater => 'Možná později';
 }

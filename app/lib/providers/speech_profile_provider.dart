@@ -263,6 +263,7 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('WAV file created, uploading profile...');
 
       bool uploadSuccess = false;
+      bool uploadFailedDueToShortAudio = false;
       try {
         uploadSuccess = await uploadProfile(data.item1).timeout(
           const Duration(seconds: 30),
@@ -274,13 +275,15 @@ class SpeechProfileProvider extends ChangeNotifier
         Logger.debug('Profile upload completed: $uploadSuccess');
       } catch (e) {
         Logger.debug('Error uploading profile: $e');
+        final error = e.toString().toLowerCase();
+        uploadFailedDueToShortAudio = error.contains('audio duration is invalid') || error.contains('audio is empty');
         uploadSuccess = false;
       }
 
       if (!uploadSuccess) {
         // Upload failed - notify user but still process conversation
         uploadingProfile = false;
-        notifyError('TOO_SHORT');
+        notifyError(uploadFailedDueToShortAudio ? 'TOO_SHORT' : 'UPLOAD_FAILED');
 
         // Still trigger conversation processing
         if (_processConversationCallback != null) {

@@ -5,9 +5,14 @@ import SwiftUI
 class TaskAgentSettings: ObservableObject {
     static let shared = TaskAgentSettings()
 
-    /// Whether the task agent feature is enabled
+    /// Whether the terminal task agent feature is enabled (Run Agent / terminal icon)
     @Published var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "taskAgentEnabled") }
+    }
+
+    /// Whether the chat task agent is enabled (Investigate button + sidebar chat)
+    @Published var isChatEnabled: Bool {
+        didSet { UserDefaults.standard.set(isChatEnabled, forKey: "taskChatAgentEnabled") }
     }
 
     /// Whether to automatically launch agents for code-related tasks
@@ -47,6 +52,7 @@ class TaskAgentSettings: ObservableObject {
 
     private init() {
         self.isEnabled = UserDefaults.standard.bool(forKey: "taskAgentEnabled")
+        self.isChatEnabled = UserDefaults.standard.bool(forKey: "taskChatAgentEnabled")
         self.autoLaunch = UserDefaults.standard.bool(forKey: "taskAgentAutoLaunch")
         self.workingDirectory = UserDefaults.standard.string(forKey: "taskAgentWorkingDirectory") ?? ""
         self.customPromptPrefix = UserDefaults.standard.string(forKey: "taskAgentPromptPrefix") ?? ""
@@ -57,6 +63,7 @@ class TaskAgentSettings: ObservableObject {
     /// Reset to default settings
     func resetToDefaults() {
         isEnabled = false
+        isChatEnabled = false
         autoLaunch = false
         workingDirectory = ""
         customPromptPrefix = ""
@@ -151,40 +158,22 @@ struct TaskAgentSettingsView: View {
     @ObservedObject var settings = TaskAgentSettings.shared
     @State private var validation: TaskAgentSettings.EnvironmentValidation?
     @State private var isValidating = false
-    @State private var showingDirectoryPicker = false
 
     var body: some View {
         Form {
             Section {
-                Toggle("Enable Task Agent", isOn: $settings.isEnabled)
-                    .help("Launch Claude Code agents for code-related tasks")
+                Toggle("Enable Terminal Task Agent", isOn: $settings.isEnabled)
+                    .help("Launch Claude Code agents in a terminal for code-related tasks")
 
                 if settings.isEnabled {
                     Toggle("Auto-launch for code tasks", isOn: $settings.autoLaunch)
                         .help("Automatically launch agents when code/feature/bug tasks are extracted")
                 }
             } header: {
-                Label("Task Agent", systemImage: "terminal")
+                Label("Terminal Task Agent", systemImage: "terminal")
             }
 
             if settings.isEnabled {
-                Section {
-                    HStack {
-                        TextField("Working Directory", text: $settings.workingDirectory)
-                            .textFieldStyle(.roundedBorder)
-
-                        Button("Browse...") {
-                            browseForDirectory()
-                        }
-                    }
-
-                    Text("Claude agents will run from this directory")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } header: {
-                    Label("Working Directory", systemImage: "folder")
-                }
-
                 Section {
                     TextEditor(text: $settings.customPromptPrefix)
                         .frame(minHeight: 80)
@@ -281,18 +270,6 @@ struct TaskAgentSettingsView: View {
         }
     }
 
-    private func browseForDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: settings.workingDirectory)
-
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.workingDirectory = url.path
-        }
-    }
 }
 
 struct ValidationRow: View {

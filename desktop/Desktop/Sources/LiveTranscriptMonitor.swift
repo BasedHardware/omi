@@ -9,6 +9,9 @@ class LiveTranscriptMonitor: ObservableObject {
     /// Live speaker segments for real-time transcript display
     @Published private(set) var segments: [SpeakerSegment] = []
 
+    /// Snapshot of segments saved before clear, so the transcript survives recording stop
+    @Published private(set) var savedSegments: [SpeakerSegment] = []
+
     private init() {}
 
     /// Update segments - called from transcription service
@@ -16,9 +19,17 @@ class LiveTranscriptMonitor: ObservableObject {
         segments = newSegments
     }
 
-    /// Clear all segments
+    /// Clear live segments, automatically snapshotting them to savedSegments
     func clear() {
+        if !segments.isEmpty {
+            savedSegments = segments
+        }
         segments = []
+    }
+
+    /// Clear the saved snapshot (e.g. when user collapses the transcript panel)
+    func clearSaved() {
+        savedSegments = []
     }
 
     /// Check if there are any segments

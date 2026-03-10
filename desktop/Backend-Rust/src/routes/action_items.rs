@@ -78,6 +78,8 @@ async fn create_action_item(
             request.category.as_deref(),
             request.relevance_score,
             None, // from_staged
+            request.recurrence_rule.as_deref(),
+            request.recurrence_parent_id.as_deref(),
         )
         .await
     {
@@ -178,12 +180,14 @@ async fn update_action_item(
             request.completed,
             request.description.as_deref(),
             request.due_at,
+            request.clear_due_at.unwrap_or(false),
             request.priority.as_deref(),
             request.category.as_deref(),
             request.goal_id.as_deref(),
             request.relevance_score,
             request.sort_order,
             request.indent_level,
+            request.recurrence_rule.as_deref(),
         )
         .await
     {
@@ -222,6 +226,8 @@ async fn batch_create_action_items(
                 item_request.category.as_deref(),
                 item_request.relevance_score,
                 None, // from_staged
+                item_request.recurrence_rule.as_deref(),
+                item_request.recurrence_parent_id.as_deref(),
             )
             .await
         {
@@ -494,6 +500,8 @@ async fn accept_tasks(
                         item.category.as_deref(),
                         item.relevance_score,
                         None, // from_staged
+                        None, // recurrence_rule
+                        None, // recurrence_parent_id
                     )
                     .await
                 {

@@ -33,6 +33,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
+import 'share.dart';
 import 'test_prompts.dart';
 import 'widgets/audio_download_progress_sheet.dart';
 import 'widgets/edit_segment_sheet.dart';
@@ -749,27 +750,19 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       });
                                       return;
                                     }
-                                    String content = 'https://h.omi.me/memories/${provider.conversation.id}';
+                                    provider.updateVisibilityLocally(ConversationVisibility.shared);
                                     // Track share event
                                     MixpanelManager().conversationShared(
                                       conversation: provider.conversation,
                                       shareMethod: 'url_share',
                                     );
-                                    // Start sharing and get the position for iOS
                                     final RenderBox? box =
                                         _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-                                    if (box != null) {
-                                      final Offset position = box.localToGlobal(Offset.zero);
-                                      final Size size = box.size;
-                                      Share.share(
-                                        content,
-                                        subject: provider.conversation.structured.title,
-                                        sharePositionOrigin:
-                                            Rect.fromLTWH(position.dx, position.dy, size.width, size.height),
-                                      );
-                                    } else {
-                                      Share.share(content, subject: provider.conversation.structured.title);
-                                    }
+                                    final shareOrigin = box != null
+                                        ? Rect.fromLTWH(box.localToGlobal(Offset.zero).dx,
+                                            box.localToGlobal(Offset.zero).dy, box.size.width, box.size.height)
+                                        : null;
+                                    shareConversationLink(provider.conversation, sharePositionOrigin: shareOrigin);
                                     // Small delay to let share sheet appear, then clear loading
                                     await Future.delayed(const Duration(milliseconds: 150));
                                     setState(() {

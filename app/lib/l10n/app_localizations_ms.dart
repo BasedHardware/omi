@@ -893,7 +893,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get useMcpApiKey => 'Gunakan kunci API MCP anda';
 
   @override
-  String get webhooks => 'Webhooks';
+  String get webhooks => 'Webhook';
 
   @override
   String get conversationEvents => 'Acara Perbualan';
@@ -1015,7 +1015,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Sambung';
 
   @override
   String get comingSoon => 'Akan Datang';
@@ -2275,7 +2275,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get folderName => 'Nama folder';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Penerangan (pilihan)';
 
   @override
   String get failedToDeleteFolder => 'Gagal memadam folder';
@@ -8022,27 +8022,27 @@ class AppLocalizationsMs extends AppLocalizations {
   String get addTask => 'Tambah tugas';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'Tambah pelayan MCP';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Sambungkan alat AI luaran';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count alat berjaya disambungkan';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Gagal menyambung ke pelayan MCP';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Memberi kebenaran...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Bagaimana anda tahu tentang kami?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8060,19 +8060,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Rakan';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Lain-lain';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Sila nyatakan';
 
   @override
-  String get event => 'Event';
+  String get event => 'Acara';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Rakan sekerja';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8243,4 +8243,283 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Inilah yang saya tahu tentang anda';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Peta ini dikemas kini apabila Omi belajar daripada perbualan anda.';
+
+  @override
+  String get apiEnvironment => 'Persekitaran API';
+
+  @override
+  String get apiEnvironmentDescription => 'Pilih pelayan yang hendak disambungkan';
+
+  @override
+  String get production => 'Pengeluaran';
+
+  @override
+  String get staging => 'Ujian';
+
+  @override
+  String get switchRequiresRestart => 'Penukaran memerlukan permulaan semula aplikasi';
+
+  @override
+  String get switchApiConfirmTitle => 'Tukar Persekitaran API';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Tukar ke $environment? Anda perlu menutup dan membuka semula aplikasi untuk perubahan berkuat kuasa.';
+  }
+
+  @override
+  String get switchAndRestart => 'Tukar';
+
+  @override
+  String get stagingDisclaimer =>
+      'Persekitaran ujian mungkin tidak stabil, mempunyai prestasi tidak konsisten dan data mungkin hilang. Untuk ujian sahaja.';
+
+  @override
+  String get apiEnvSavedRestartRequired => 'Disimpan. Tutup dan buka semula aplikasi untuk menggunakan perubahan.';
+
+  @override
+  String get shared => 'Dikongsi';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Hanya anda boleh melihat perbualan ini';
+
+  @override
+  String get anyoneWithLinkCanView => 'Sesiapa yang mempunyai pautan boleh melihat';
+
+  @override
+  String get tasksCleanTodayTitle => 'Bersihkan tugasan hari ini?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Ini hanya akan mengalih keluar tarikh akhir';
+
+  @override
+  String get tasksOverdue => 'Tertunggak';
+
+  @override
+  String get phoneCallsWithOmi => 'Panggilan dengan Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Buat panggilan dengan transkripsi masa nyata';
+
+  @override
+  String get phoneSetupStep1Title => 'Sahkan nombor telefon anda';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Kami akan menghubungi anda untuk mengesahkan';
+
+  @override
+  String get phoneSetupStep2Title => 'Masukkan kod pengesahan';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kod pendek yang anda taipkan semasa panggilan';
+
+  @override
+  String get phoneSetupStep3Title => 'Mula menghubungi kenalan anda';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Dengan transkripsi langsung terbina dalam';
+
+  @override
+  String get phoneGetStarted => 'Mulakan';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Rakaman panggilan mungkin memerlukan persetujuan di bidang kuasa anda';
+
+  @override
+  String get enterYourNumber => 'Masukkan nombor anda';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Selepas disahkan, ini menjadi ID pemanggil anda';
+
+  @override
+  String get phoneNumberHint => 'Nombor telefon';
+
+  @override
+  String get failedToStartVerification => 'Gagal memulakan pengesahan';
+
+  @override
+  String get phoneContinue => 'Teruskan';
+
+  @override
+  String get verifyYourNumber => 'Sahkan nombor anda';
+
+  @override
+  String get answerTheCallFrom => 'Jawab panggilan dari';
+
+  @override
+  String get onTheCallEnterThisCode => 'Semasa panggilan, masukkan kod ini';
+
+  @override
+  String get followTheVoiceInstructions => 'Ikut arahan suara';
+
+  @override
+  String get statusCalling => 'Memanggil...';
+
+  @override
+  String get statusCallInProgress => 'Panggilan berlangsung';
+
+  @override
+  String get statusVerifiedLabel => 'Disahkan';
+
+  @override
+  String get statusCallMissed => 'Panggilan terlepas';
+
+  @override
+  String get statusTimedOut => 'Masa tamat';
+
+  @override
+  String get phoneTryAgain => 'Cuba lagi';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Kenalan';
+
+  @override
+  String get phoneKeypadTab => 'Pad kekunci';
+
+  @override
+  String get grantContactsAccess => 'Beri akses kepada kenalan anda';
+
+  @override
+  String get phoneAllow => 'Benarkan';
+
+  @override
+  String get phoneSearchHint => 'Cari';
+
+  @override
+  String get phoneNoContactsFound => 'Tiada kenalan ditemui';
+
+  @override
+  String get phoneEnterNumber => 'Masukkan nombor';
+
+  @override
+  String get failedToStartCall => 'Gagal memulakan panggilan';
+
+  @override
+  String get callStateConnecting => 'Menyambung...';
+
+  @override
+  String get callStateRinging => 'Berdering...';
+
+  @override
+  String get callStateEnded => 'Panggilan tamat';
+
+  @override
+  String get callStateFailed => 'Panggilan gagal';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsi akan muncul di sini...';
+
+  @override
+  String get phoneUnmute => 'Nyahsenyap';
+
+  @override
+  String get phoneMute => 'Senyap';
+
+  @override
+  String get phoneSpeaker => 'Pembesar suara';
+
+  @override
+  String get phoneEndCall => 'Tamat';
+
+  @override
+  String get phoneCallSettingsTitle => 'Tetapan panggilan';
+
+  @override
+  String get yourVerifiedNumbers => 'Nombor anda yang disahkan';
+
+  @override
+  String get verifiedNumbersDescription => 'Apabila anda menghubungi seseorang, mereka akan melihat nombor ini';
+
+  @override
+  String get noVerifiedNumbers => 'Tiada nombor yang disahkan';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Padam $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Anda perlu mengesahkan semula untuk membuat panggilan';
+
+  @override
+  String get phoneDeleteButton => 'Padam';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Disahkan ${minutes}m lalu';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Disahkan ${hours}j lalu';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Disahkan ${days}h lalu';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Disahkan pada $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Disahkan';
+
+  @override
+  String get callAlreadyInProgress => 'Panggilan sudah berlangsung';
+
+  @override
+  String get failedToGetCallToken => 'Gagal mendapatkan token. Sahkan nombor anda dahulu.';
+
+  @override
+  String get failedToInitializeCallService => 'Gagal memulakan perkhidmatan panggilan';
+
+  @override
+  String get speakerLabelYou => 'Anda';
+
+  @override
+  String get speakerLabelUnknown => 'Tidak diketahui';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Tunjukkan Skor Harian di laman utama';
+
+  @override
+  String get showTasksOnHomepage => 'Tunjukkan Tugasan di laman utama';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Panggilan Telefon melalui Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkripsi masa nyata setiap panggilan';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Ringkasan panggilan automatik dan item tindakan';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Penerima melihat nombor sebenar anda, bukan rawak';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan anda kekal peribadi dan selamat';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Naik taraf ke Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Mungkin nanti';
 }

@@ -6,12 +6,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/found_omi/found_omi_widget.dart';
+import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
@@ -46,10 +48,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kWelcomePage = 6;
   static const int kFindDevicesPage = 7;
   static const int kSpeechProfilePage = 8; // Speech profile with questions (requires device)
-  static const int kCompletePage = 9; // "You're all set" completion screen
+  static const int kKnowledgeGraphPage = 9; // Memory graph preview
+  static const int kCompletePage = 10; // "You're all set" completion screen
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -57,34 +60,34 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   SpeechProfileProvider? _speechProfileProvider;
+  Future<void>? _knowledgeGraphPrebuildFuture;
 
   @override
   void initState() {
     _speechProfileProvider = SpeechProfileProvider();
     _controller = TabController(
-        length: 10, vsync: this); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, Complete
+      length: 11,
+      vsync: this,
+    ); // Auth, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
+      if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
+        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+      }
     });
 
     // Initialize animation controllers
-    _backgroundAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
+    _backgroundAnimationController = AnimationController(duration: const Duration(milliseconds: 500), vsync: this);
 
     // Initialize animations
     _backgroundFadeAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _backgroundAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
 
     // Start initial animations
     _backgroundAnimationController.forward();
@@ -124,6 +127,24 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
+  Future<void> _prebuildKnowledgeGraph() async {
+    try {
+      final current = await KnowledgeGraphApi.getKnowledgeGraph();
+      final nodes = current['nodes'] as List<dynamic>? ?? const [];
+      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
+      if (hasGraph) return;
+    } catch (_) {
+      // Continue to rebuild below.
+    }
+
+    await KnowledgeGraphApi.rebuildKnowledgeGraph();
+    await KnowledgeGraphApi.waitForGraphStability(
+      timeout: const Duration(seconds: 25),
+      interval: const Duration(seconds: 2),
+      stabilityChecks: 1,
+    );
+  }
+
   void _updateBackgroundImage(int pageIndex) {
     String newImage = _currentBackgroundImage;
 
@@ -148,6 +169,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         break;
       case kSpeechProfilePage:
         newImage = Assets.images.onboardingBg3.path;
+        break;
+      case kKnowledgeGraphPage:
+        newImage = Assets.images.onboardingBg6.path;
         break;
       case kCompletePage:
         newImage = Assets.images.onboardingBg6.path;
@@ -198,6 +222,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return Assets.images.onboardingBg6.path;
       case kSpeechProfilePage:
         return Assets.images.onboardingBg3.path;
+      case kKnowledgeGraphPage:
+        return Assets.images.onboardingBg6.path;
       case kCompletePage:
         return Assets.images.onboardingBg6.path;
       default:
@@ -222,23 +248,29 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           }
         },
       ),
-      NameWidget(goNext: () {
-        _goNext(); // Go to Primary Language page
-        IntercomManager.instance.updateUser(
-          FirebaseAuth.instance.currentUser!.email,
-          FirebaseAuth.instance.currentUser!.displayName,
-          FirebaseAuth.instance.currentUser!.uid,
-        );
-        MixpanelManager().onboardingStepCompleted('Name');
-      }),
-      PrimaryLanguageWidget(goNext: () {
-        _goNext(); // Go to Found Omi page
-        MixpanelManager().onboardingStepCompleted('Primary Language');
-      }),
-      FoundOmiWidget(goNext: () {
-        _goNext(); // Go to Permissions page
-        MixpanelManager().onboardingStepCompleted('Acquisition Source');
-      }),
+      NameWidget(
+        goNext: () {
+          _goNext(); // Go to Primary Language page
+          IntercomManager.instance.updateUser(
+            FirebaseAuth.instance.currentUser!.email,
+            FirebaseAuth.instance.currentUser!.displayName,
+            FirebaseAuth.instance.currentUser!.uid,
+          );
+          MixpanelManager().onboardingStepCompleted('Name');
+        },
+      ),
+      PrimaryLanguageWidget(
+        goNext: () {
+          _goNext(); // Go to Found Omi page
+          MixpanelManager().onboardingStepCompleted('Primary Language');
+        },
+      ),
+      FoundOmiWidget(
+        goNext: () {
+          _goNext(); // Go to Permissions page
+          MixpanelManager().onboardingStepCompleted('Acquisition Source');
+        },
+      ),
       PermissionsWidget(
         goNext: () {
           _goNext(); // Go to User Review page
@@ -260,13 +292,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         child: SpeechProfileWidget(
           goNext: () {
             MixpanelManager().onboardingStepCompleted('Speech Profile');
-            _controller!.animateTo(kCompletePage);
+            _controller!.animateTo(kKnowledgeGraphPage);
           },
           onSkip: () {
             MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
-            _controller!.animateTo(kCompletePage);
+            _controller!.animateTo(kKnowledgeGraphPage);
           },
         ),
+      ),
+      OnboardingKnowledgeGraphStep(
+        onContinue: () {
+          MixpanelManager().onboardingStepCompleted('Knowledge Graph');
+          _controller!.animateTo(kCompletePage);
+        },
       ),
       OnboardingCompleteScreen(
         onComplete: () {
@@ -316,6 +354,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                     _controller!.index == kUserReviewPage ||
                     _controller!.index == kWelcomePage ||
                     _controller!.index == kSpeechProfilePage ||
+                    _controller!.index == kKnowledgeGraphPage ||
                     _controller!.index == kCompletePage
                 ? Stack(
                     children: [
@@ -347,23 +386,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                           padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(
-                              8,
-                              (index) {
-                                int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                  width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                  height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                  decoration: BoxDecoration(
-                                    color: pageIndex <= _controller!.index
-                                        ? Theme.of(context).colorScheme.secondary
-                                        : Colors.grey.shade400,
-                                    shape: BoxShape.circle,
-                                  ),
-                                );
-                              },
-                            ),
+                            children: List.generate(9, (index) {
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., KnowledgeGraph=9
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                decoration: BoxDecoration(
+                                  color: pageIndex <= _controller!.index
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Colors.grey.shade400,
+                                  shape: BoxShape.circle,
+                                ),
+                              );
+                            }),
                           ),
                         ),
                       // Back button (hidden on complete page)
@@ -376,10 +412,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               width: 36,
                               height: 36,
                               margin: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.3),
-                                shape: BoxShape.circle,
-                              ),
+                              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
@@ -429,10 +462,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               SizedBox(
                                 height:
                                     (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                                        ? max(MediaQuery.of(context).size.height - 500 - 10,
-                                            maxHeightWithTextScale(context, _controller!.index))
-                                        : max(MediaQuery.of(context).size.height - 500 - 30,
-                                            maxHeightWithTextScale(context, _controller!.index)),
+                                        ? max(
+                                            MediaQuery.of(context).size.height - 500 - 10,
+                                            maxHeightWithTextScale(context, _controller!.index),
+                                          )
+                                        : max(
+                                            MediaQuery.of(context).size.height - 500 - 30,
+                                            maxHeightWithTextScale(context, _controller!.index),
+                                          ),
                                 child: Padding(
                                   padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
                                   child: TabBarView(
@@ -454,10 +491,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 width: 36,
                                 height: 36,
                                 margin: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withOpacity(0.3),
-                                  shape: BoxShape.circle,
-                                ),
+                                decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {
@@ -478,23 +512,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(
-                                7,
-                                (index) {
-                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
-                                  return Container(
-                                    margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                    width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                    height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                    decoration: BoxDecoration(
-                                      color: pageIndex <= _controller!.index
-                                          ? Theme.of(context).colorScheme.secondary
-                                          : Colors.grey.shade400,
-                                      shape: BoxShape.circle,
-                                    ),
-                                  );
-                                },
-                              ),
+                              children: List.generate(7, (index) {
+                                int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                                  width: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  height: pageIndex == _controller!.index ? 12.0 : 8.0,
+                                  decoration: BoxDecoration(
+                                    color: pageIndex <= _controller!.index
+                                        ? Theme.of(context).colorScheme.secondary
+                                        : Colors.grey.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
+                                );
+                              }),
                             ),
                           ),
                       ],

@@ -104,7 +104,11 @@ else
     touch "$APP_BUNDLE/Contents/Resources/.env"
 fi
 # Set API URL to tunnel for development (overrides production default)
-echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+if grep -q "^OMI_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_API_URL=.*|OMI_API_URL=$TUNNEL_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "OMI_API_URL=$TUNNEL_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
 echo "Using backend: $TUNNEL_URL"
 
 # Copy app icon
@@ -126,8 +130,14 @@ if [ -n "$SIGN_IDENTITY" ]; then
     echo "Signing with: $SIGN_IDENTITY"
     codesign --force --options runtime --entitlements Desktop/Omi.entitlements --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
 else
-    echo "Warning: No signing identity found. Using ad-hoc (permissions will reset each build)."
-    codesign --force --deep --sign - "$APP_BUNDLE"
+    echo ""
+    echo "ERROR: No signing identity found. Ad-hoc signing causes macOS to reset"
+    echo "       Screen Recording permissions for ALL Omi apps (including prod/beta)."
+    echo ""
+    echo "  Fix: Install an Apple Development certificate in Keychain Access,"
+    echo "       or set OMI_SIGN_IDENTITY to a valid identity."
+    echo ""
+    exit 1
 fi
 
 echo "Dev build complete: $APP_BUNDLE"

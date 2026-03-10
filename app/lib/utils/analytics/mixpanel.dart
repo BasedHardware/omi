@@ -219,6 +219,31 @@ class MixpanelManager {
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
 
+  // Phone Calls (VoIP)
+  void phoneCallPageOpened() => track('Phone Call Page Opened');
+
+  void phoneCallVerificationStarted() => track('Phone Call Verification Started');
+
+  void phoneCallVerificationCompleted() => track('Phone Call Verification Completed');
+
+  void phoneCallStarted({String? contactName}) =>
+      track('Phone Call Started', properties: {'has_contact_name': contactName != null});
+
+  void phoneCallConnected() => track('Phone Call Connected');
+
+  void phoneCallEnded({required int durationSeconds}) =>
+      track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
+
+  void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
+
+  // Phone Calls Upsell
+  void phoneCallUpsellShown({required String source}) =>
+      track('Phone Call Upsell Shown', properties: {'source': source});
+
+  void phoneCallUpsellUpgradeTapped() => track('Phone Call Upsell Upgrade Tapped');
+
+  void phoneCallUpsellDismissed() => track('Phone Call Upsell Dismissed');
+
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
@@ -1515,6 +1540,18 @@ class MixpanelManager {
       if (toFolderId != null) 'to_folder_id': toFolderId,
       'source': source,
       'was_in_folder': fromFolderId != null,
+    });
+  }
+
+  void conversationVisibilityChanged({
+    required String conversationId,
+    required String fromVisibility,
+    required String toVisibility,
+  }) {
+    track('Conversation Visibility Changed', properties: {
+      'conversation_id': conversationId,
+      'from_visibility': fromVisibility,
+      'to_visibility': toVisibility,
     });
   }
 

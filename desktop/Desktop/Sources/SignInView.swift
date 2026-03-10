@@ -23,7 +23,7 @@ struct SignInView: View {
                             .frame(width: 64, height: 64)
                     }
 
-                    Text("Omi")
+                    Text("omi")
                         .scaledFont(size: 48, weight: .bold)
                         .foregroundColor(OmiColors.textPrimary)
 
@@ -76,16 +76,8 @@ struct SignInView: View {
                         }
                     }) {
                         HStack(spacing: 8) {
-                            // Google "G" logo using SF Symbol or text
-                            Text("G")
-                                .scaledFont(size: 20, weight: .bold)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .green, .yellow, .red],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                            GoogleLogo()
+                                .frame(width: 18, height: 18)
                             Text("Sign in with Google")
                                 .scaledFont(size: 17, weight: .medium)
                         }
@@ -123,6 +115,20 @@ struct SignInView: View {
                     .frame(height: 60)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+// MARK: - Google Logo
+
+/// Standard multicolor Google "G" logo
+struct GoogleLogo: View {
+    var body: some View {
+        if let url = Bundle.resourceBundle.url(forResource: "google_logo", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
         }
     }
 }

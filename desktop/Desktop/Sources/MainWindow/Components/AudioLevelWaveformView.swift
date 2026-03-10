@@ -13,6 +13,14 @@ struct AudioLevelWaveformView: View {
         self.isActive = isActive
     }
 
+    /// Fixed width computed from bar count and spacing so sizeThatFits() can
+    /// short-circuit without traversing child bars.
+    private var fixedWidth: CGFloat {
+        let barWidth: CGFloat = 3
+        let spacing: CGFloat = 3
+        return CGFloat(barCount) * barWidth + CGFloat(barCount - 1) * spacing
+    }
+
     var body: some View {
         HStack(spacing: 3) {
             ForEach(0..<barCount, id: \.self) { index in
@@ -24,7 +32,7 @@ struct AudioLevelWaveformView: View {
                 )
             }
         }
-        .frame(height: 32)  // Fixed height container
+        .frame(width: fixedWidth, height: 32)  // Fixed size — prevents sizeThatFits() tree traversal
     }
 }
 
@@ -53,10 +61,12 @@ private struct BarView: View {
         // Scale with audio level
         let scaledLevel = clampedLevel * variation
 
-        // Add some randomness for organic feel
-        let randomVariation = CGFloat.random(in: 0.85...1.15)
+        // Deterministic per-bar variation for organic feel (avoid CGFloat.random which
+        // produces different values on every body evaluation, causing unnecessary layout)
+        let hash = sin(CGFloat(index) * 1.618 + 0.5)
+        let deterministicVariation = 0.85 + 0.3 * (hash * 0.5 + 0.5)
 
-        let height = minHeight + (maxHeight - minHeight) * scaledLevel * randomVariation
+        let height = minHeight + (maxHeight - minHeight) * scaledLevel * deterministicVariation
         return max(minHeight, min(maxHeight, height))
     }
 
@@ -79,7 +89,9 @@ private struct BarView: View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            .animation(.easeOut(duration: 0.08), value: level)
+            // No .animation() — each animation generates ~5 intermediate layout frames at 60fps,
+            // and every frame triggers a full view-tree sizeThatFits() traversal.
+            // At 5 Hz update rate, the visual steps are small enough to look smooth.
     }
 }
 

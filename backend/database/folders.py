@@ -8,7 +8,6 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from models.folder import Folder
 
-
 # System folders that are created for new users
 SYSTEM_FOLDERS = [
     {

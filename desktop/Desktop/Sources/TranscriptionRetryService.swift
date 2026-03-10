@@ -114,6 +114,8 @@ class TranscriptionRetryService {
 
     /// Process the retry queue (called periodically by timer)
     private func processRetryQueue() async {
+        // Skip if user is signed out (tokens are cleared)
+        guard await AuthState.shared.isSignedIn else { return }
         guard !isProcessing else {
             log("TranscriptionRetryService: Already processing, skipping")
             return
@@ -289,6 +291,11 @@ class TranscriptionRetryService {
             do {
                 try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
                 try await TranscriptionStorage.shared.markSessionFailed(id: sessionId, error: error.localizedDescription)
+
+                // Only fire error event after all retries are exhausted
+                if session.retryCount + 1 >= maxRetries {
+                    await AnalyticsManager.shared.recordingError(error: "Failed to save after \(maxRetries) retries: \(error.localizedDescription)")
+                }
             } catch {
                 logError("TranscriptionRetryService: Failed to update session status", error: error)
             }

@@ -243,4 +243,7 @@ pub struct AssistantSettingsData {
     pub task: Option<TaskSettingsData>,
     pub advice: Option<AdviceSettingsData>,
     pub memory: Option<MemorySettingsData>,
+    /// Remote override for the Sparkle update channel (top-level field on user doc, not in assistant_settings sub-map)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_channel: Option<String>,
 }

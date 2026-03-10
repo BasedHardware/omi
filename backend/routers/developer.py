@@ -44,6 +44,9 @@ from utils.notifications import send_action_item_data_message
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -818,7 +821,7 @@ def create_conversation(
         try:
             geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
         except Exception as e:
-            print(f"Error enriching geolocation: {e}")
+            logger.error(f"Error enriching geolocation: {e}")
             # Continue with original geolocation if enrichment fails
 
     # Language defaults
@@ -981,7 +984,7 @@ def create_conversation_from_segments(
         try:
             geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
         except Exception as e:
-            print(f"Error enriching geolocation: {e}")
+            logger.error(f"Error enriching geolocation: {e}")
             # Continue with original geolocation if enrichment fails
 
     # Language defaults

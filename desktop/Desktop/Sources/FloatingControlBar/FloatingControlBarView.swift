@@ -8,7 +8,7 @@ struct FloatingControlBarView: View {
     var onPlayPause: () -> Void
     var onAskAI: () -> Void
     var onHide: () -> Void
-    var onSendQuery: (String, URL?) -> Void
+    var onSendQuery: (String) -> Void
     var onCloseAI: () -> Void
 
     @State private var isHovering = false
@@ -36,6 +36,22 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            if state.showingAIConversation {
+                Button {
+                    onCloseAI()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if isHovering && !state.isVoiceListening {
                 Button {
@@ -51,6 +67,19 @@ struct FloatingControlBarView: View {
                 .buttonStyle(.plain)
                 .padding(6)
                 .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
             }
         }
         .clipped()
@@ -206,13 +235,12 @@ struct FloatingControlBarView: View {
             ),
             onSend: { message in
                 state.displayedQuery = message
-                let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
-                onSendQuery(message, screenshot)
+                onSendQuery(message)
             },
             onCancel: onCloseAI,
             onHeightChange: { [weak state] height in
@@ -234,10 +262,7 @@ struct FloatingControlBarView: View {
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            responseText: Binding(
-                get: { state.aiResponseText },
-                set: { state.aiResponseText = $0 }
-            ),
+            currentMessage: state.currentAIMessage,
             userInput: state.displayedQuery,
             chatHistory: state.chatHistory,
             isVoiceFollowUp: Binding(
@@ -252,18 +277,16 @@ struct FloatingControlBarView: View {
             onSendFollowUp: { message in
                 // Archive current exchange to chat history
                 let currentQuery = state.displayedQuery
-                let currentResponse = state.aiResponseText
-                if !currentQuery.isEmpty && !currentResponse.isEmpty {
-                    state.chatHistory.append(ChatExchange(question: currentQuery, response: currentResponse))
+                if let currentMessage = state.currentAIMessage, !currentQuery.isEmpty, !currentMessage.text.isEmpty {
+                    state.chatHistory.append(FloatingChatExchange(question: currentQuery, aiMessage: currentMessage))
                 }
 
                 state.displayedQuery = message
-                let screenshot = state.screenshotURL
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     state.isAILoading = true
-                    state.aiResponseText = ""
+                    state.currentAIMessage = nil
                 }
-                onSendQuery(message, screenshot)
+                onSendQuery(message)
             }
         )
         .transition(

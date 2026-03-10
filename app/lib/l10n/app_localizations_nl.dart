@@ -1016,7 +1016,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get vocabularyHint => 'Omi, Callie, OpenAI';
 
   @override
-  String get connect => 'Connect';
+  String get connect => 'Verbinden';
 
   @override
   String get comingSoon => 'Binnenkort beschikbaar';
@@ -2274,7 +2274,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get folderName => 'Mapnaam';
 
   @override
-  String get descriptionOptional => 'Description (optional)';
+  String get descriptionOptional => 'Beschrijving (optioneel)';
 
   @override
   String get failedToDeleteFolder => 'Kan map niet verwijderen';
@@ -8024,27 +8024,27 @@ class AppLocalizationsNl extends AppLocalizations {
   String get addTask => 'Taak toevoegen';
 
   @override
-  String get addMcpServer => 'Add MCP Server';
+  String get addMcpServer => 'MCP-server toevoegen';
 
   @override
-  String get connectExternalAiTools => 'Connect external AI tools';
+  String get connectExternalAiTools => 'Externe AI-tools verbinden';
 
   @override
   String get mcpServerUrl => 'MCP Server URL';
 
   @override
   String mcpServerConnected(int count) {
-    return '$count tools connected successfully';
+    return '$count tools succesvol verbonden';
   }
 
   @override
-  String get mcpConnectionFailed => 'Failed to connect to MCP server';
+  String get mcpConnectionFailed => 'Kan geen verbinding maken met MCP-server';
 
   @override
-  String get authorizingMcpServer => 'Authorizing...';
+  String get authorizingMcpServer => 'Autoriseren...';
 
   @override
-  String get whereDidYouHearAboutOmi => 'How did you find us?';
+  String get whereDidYouHearAboutOmi => 'Hoe heb je ons gevonden?';
 
   @override
   String get tiktok => 'TikTok';
@@ -8062,19 +8062,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reddit => 'Reddit';
 
   @override
-  String get friendWordOfMouth => 'Friend';
+  String get friendWordOfMouth => 'Vriend';
 
   @override
-  String get otherSource => 'Other';
+  String get otherSource => 'Anders';
 
   @override
-  String get pleaseSpecify => 'Please specify';
+  String get pleaseSpecify => 'Geef aan';
 
   @override
-  String get event => 'Event';
+  String get event => 'Evenement';
 
   @override
-  String get coworker => 'Coworker';
+  String get coworker => 'Collega';
 
   @override
   String get linkedIn => 'LinkedIn';
@@ -8245,4 +8245,284 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get appIconLabel => 'App Icon';
+
+  @override
+  String get onboardingWhatIKnowAboutYouTitle => 'Dit weet ik over jou';
+
+  @override
+  String get onboardingWhatIKnowAboutYouDescription =>
+      'Deze kaart wordt bijgewerkt naarmate Omi leert van je gesprekken.';
+
+  @override
+  String get apiEnvironment => 'API-omgeving';
+
+  @override
+  String get apiEnvironmentDescription => 'Kies met welke server verbinding wordt gemaakt';
+
+  @override
+  String get production => 'Productie';
+
+  @override
+  String get staging => 'Testomgeving';
+
+  @override
+  String get switchRequiresRestart => 'Wisselen vereist herstart van de app';
+
+  @override
+  String get switchApiConfirmTitle => 'API-omgeving wisselen';
+
+  @override
+  String switchApiConfirmBody(String environment) {
+    return 'Overschakelen naar $environment? Je moet de app sluiten en opnieuw openen om de wijzigingen door te voeren.';
+  }
+
+  @override
+  String get switchAndRestart => 'Wisselen';
+
+  @override
+  String get stagingDisclaimer =>
+      'De testomgeving kan onstabiel zijn, inconsistente prestaties hebben en gegevens kunnen verloren gaan. Alleen voor testen.';
+
+  @override
+  String get apiEnvSavedRestartRequired =>
+      'Opgeslagen. Sluit de app en open deze opnieuw om de wijzigingen toe te passen.';
+
+  @override
+  String get shared => 'Gedeeld';
+
+  @override
+  String get onlyYouCanSeeConversation => 'Alleen jij kunt dit gesprek zien';
+
+  @override
+  String get anyoneWithLinkCanView => 'Iedereen met de link kan bekijken';
+
+  @override
+  String get tasksCleanTodayTitle => 'Taken van vandaag opschonen?';
+
+  @override
+  String get tasksCleanTodayMessage => 'Hiermee worden alleen deadlines verwijderd';
+
+  @override
+  String get tasksOverdue => 'Achterstallig';
+
+  @override
+  String get phoneCallsWithOmi => 'Bellen met Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Bel met realtime transcriptie';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifieer uw telefoonnummer';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'We bellen u ter bevestiging';
+
+  @override
+  String get phoneSetupStep2Title => 'Voer een verificatiecode in';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Een korte code die u invoert tijdens het gesprek';
+
+  @override
+  String get phoneSetupStep3Title => 'Begin uw contacten te bellen';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Met ingebouwde live transcriptie';
+
+  @override
+  String get phoneGetStarted => 'Aan de slag';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Gespreksopname kan toestemming vereisen in uw rechtsgebied';
+
+  @override
+  String get enterYourNumber => 'Voer uw nummer in';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Na verificatie wordt dit uw beller-ID';
+
+  @override
+  String get phoneNumberHint => 'Telefoonnummer';
+
+  @override
+  String get failedToStartVerification => 'Kan verificatie niet starten';
+
+  @override
+  String get phoneContinue => 'Doorgaan';
+
+  @override
+  String get verifyYourNumber => 'Verifieer uw nummer';
+
+  @override
+  String get answerTheCallFrom => 'Beantwoord het gesprek van';
+
+  @override
+  String get onTheCallEnterThisCode => 'Voer tijdens het gesprek deze code in';
+
+  @override
+  String get followTheVoiceInstructions => 'Volg de spraakinstructies';
+
+  @override
+  String get statusCalling => 'Bellen...';
+
+  @override
+  String get statusCallInProgress => 'Gesprek gaande';
+
+  @override
+  String get statusVerifiedLabel => 'Geverifieerd';
+
+  @override
+  String get statusCallMissed => 'Gemist gesprek';
+
+  @override
+  String get statusTimedOut => 'Tijd verstreken';
+
+  @override
+  String get phoneTryAgain => 'Opnieuw proberen';
+
+  @override
+  String get phonePageTitle => 'Telefoon';
+
+  @override
+  String get phoneContactsTab => 'Contacten';
+
+  @override
+  String get phoneKeypadTab => 'Toetsenbord';
+
+  @override
+  String get grantContactsAccess => 'Geef toegang tot uw contacten';
+
+  @override
+  String get phoneAllow => 'Toestaan';
+
+  @override
+  String get phoneSearchHint => 'Zoeken';
+
+  @override
+  String get phoneNoContactsFound => 'Geen contacten gevonden';
+
+  @override
+  String get phoneEnterNumber => 'Voer nummer in';
+
+  @override
+  String get failedToStartCall => 'Kan gesprek niet starten';
+
+  @override
+  String get callStateConnecting => 'Verbinden...';
+
+  @override
+  String get callStateRinging => 'Gaat over...';
+
+  @override
+  String get callStateEnded => 'Gesprek beeindigd';
+
+  @override
+  String get callStateFailed => 'Gesprek mislukt';
+
+  @override
+  String get transcriptPlaceholder => 'Transcriptie verschijnt hier...';
+
+  @override
+  String get phoneUnmute => 'Demping opheffen';
+
+  @override
+  String get phoneMute => 'Dempen';
+
+  @override
+  String get phoneSpeaker => 'Luidspreker';
+
+  @override
+  String get phoneEndCall => 'Einde';
+
+  @override
+  String get phoneCallSettingsTitle => 'Gespreksinstellingen';
+
+  @override
+  String get yourVerifiedNumbers => 'Uw geverifieerde nummers';
+
+  @override
+  String get verifiedNumbersDescription => 'Wanneer u iemand belt, zien zij dit nummer';
+
+  @override
+  String get noVerifiedNumbers => 'Geen geverifieerde nummers';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber verwijderen?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'U moet opnieuw verifieren om te bellen';
+
+  @override
+  String get phoneDeleteButton => 'Verwijderen';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '${minutes}min geleden geverifieerd';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '${hours}u geleden geverifieerd';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '${days}d geleden geverifieerd';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Geverifieerd op $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Geverifieerd';
+
+  @override
+  String get callAlreadyInProgress => 'Er is al een gesprek gaande';
+
+  @override
+  String get failedToGetCallToken => 'Kan token niet ophalen. Verifieer eerst uw nummer.';
+
+  @override
+  String get failedToInitializeCallService => 'Kan belservice niet initialiseren';
+
+  @override
+  String get speakerLabelYou => 'U';
+
+  @override
+  String get speakerLabelUnknown => 'Onbekend';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefoongesprekken via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Realtime transcriptie van elk gesprek';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische gesprekssamenvattingen en actiepunten';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Ontvangers zien je echte nummer, niet een willekeurig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Je gesprekken blijven privé en veilig';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgraden naar Onbeperkt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Misschien later';
 }

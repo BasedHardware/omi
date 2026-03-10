@@ -26,9 +26,94 @@ class AppleRemindersService {
             getReminders(call: call, result: result)
         case "completeReminder":
             completeReminder(call: call, result: result)
+        case "syncFromFCM":
+            syncFromFCM(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    static let syncedItemsKey = "omi_synced_action_items"
+    static let iso8601DateFormatter = ISO8601DateFormatter()
+
+    /// Core batch sync logic shared by both the foreground MethodChannel path
+    /// and the background silent-push path (called from AppDelegate).
+    /// Returns the list of action item IDs that were successfully created as reminders.
+    func syncBatchFromJSON(_ itemsJson: String) -> [String] {
+        guard let data = itemsJson.data(using: .utf8),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              !items.isEmpty else {
+            return []
+        }
+
+        guard hasRemindersAccess() else { return [] }
+        guard let calendar = eventStore.defaultCalendarForNewReminders() else { return [] }
+
+        var syncedIds = Set(UserDefaults.standard.stringArray(forKey: AppleRemindersService.syncedItemsKey) ?? [])
+        var exportedIds: [String] = []
+
+        for item in items {
+            guard let actionItemId = item["id"] as? String,
+                  let reminderTitle = item["description"] as? String else {
+                continue
+            }
+
+            if syncedIds.contains(actionItemId) { continue }
+
+            let dueDate: Date? = {
+                if let dueDateStr = item["due_at"] as? String, !dueDateStr.isEmpty {
+                    return AppleRemindersService.iso8601DateFormatter.date(from: dueDateStr)
+                }
+                return nil
+            }()
+
+            let reminder = EKReminder(eventStore: eventStore)
+            reminder.title = reminderTitle
+            reminder.notes = "From Omi"
+            reminder.calendar = calendar
+
+            if let due = dueDate {
+                reminder.dueDateComponents = Calendar.current.dateComponents(
+                    [.year, .month, .day, .hour, .minute], from: due
+                )
+            }
+
+            do {
+                try eventStore.save(reminder, commit: false)
+                syncedIds.insert(actionItemId)
+                exportedIds.append(actionItemId)
+            } catch {
+                continue
+            }
+        }
+
+        // Single commit for all reminders
+        if !exportedIds.isEmpty {
+            do {
+                try eventStore.commit()
+            } catch {
+                return []
+            }
+        }
+
+        // Persist dedup set
+        var syncedArray = Array(syncedIds)
+        if syncedArray.count > 100 {
+            syncedArray = Array(syncedArray.suffix(100))
+        }
+        UserDefaults.standard.set(syncedArray, forKey: AppleRemindersService.syncedItemsKey)
+
+        return exportedIds
+    }
+
+    /// Handle sync triggered from Flutter foreground FCM handler via MethodChannel.
+    private func syncFromFCM(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let itemsJson = args["items"] as? String else {
+            result(FlutterError(code: "INVALID_ARGUMENTS", message: "Missing or invalid items payload", details: nil))
+            return
+        }
+        result(syncBatchFromJSON(itemsJson))
     }
 
     private func hasRemindersPermission(result: @escaping FlutterResult) {

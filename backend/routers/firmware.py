@@ -8,6 +8,10 @@ from enum import Enum
 import ast
 
 from database.redis_db import get_generic_cache, set_generic_cache
+from utils.log_sanitizer import sanitize
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceModel(int, Enum):
@@ -19,6 +23,13 @@ class DeviceModel(int, Enum):
 
 
 router = APIRouter()
+
+# Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.
+FIRMWARE_TAG_PATTERN = re.compile(
+    r'^(?:Omi_CV1|Omi_DK2|OmiGlass|OpenGlass|Friend)_v[0-9]+(?:\.[0-9]+){1,2}$',
+    re.IGNORECASE,
+)
+MAX_PAGES = 20  # Safety cap to prevent runaway pagination
 
 
 # Device Model Number
@@ -47,30 +58,64 @@ def _get_device_by_model_number(device_model: str):
     return None
 
 
-async def get_omi_github_releases(cache_key: str) -> Optional[List[Dict]]:
-    """Fetch releases from GitHub API with caching"""
+async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Pattern] = None) -> Optional[List[Dict]]:
+    """Fetch releases from GitHub API with caching.
 
-    # Check cache first
+    When tag_filter is provided, paginates through all pages and returns only
+    releases whose tag_name matches the filter. Without tag_filter, returns
+    the first page of releases unfiltered (sufficient for desktop releases
+    which are always recent).
+    """
+
+    # Check cache first (use `is not None` so cached empty list is a hit)
     cached_releases = get_generic_cache(cache_key)
-    if cached_releases:
+    if cached_releases is not None:
         return cached_releases
 
-    # Make GitHub API request if not cached
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
+    }
+
+    collected = []
+    page = 1
+
     async with httpx.AsyncClient() as client:
-        url = "https://api.github.com/repos/BasedHardware/omi/releases?per_page=100"
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
-        }
-        response = await client.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"Error fetching GitHub releases: {response.status_code} {response.text}")
-            raise HTTPException(status_code=500, detail="Failed to fetch release information")
-        releases = response.json()
-        # Cache successful response for 5 minutes
-        set_generic_cache(cache_key, releases, ttl=300)
-        return releases
+        while page <= MAX_PAGES:
+            url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(
+                    "Error fetching GitHub releases page %d: %d %s", page, response.status_code, sanitize(response.text)
+                )
+                raise HTTPException(status_code=500, detail="Failed to fetch release information")
+
+            page_releases = response.json()
+            if not page_releases:
+                break
+
+            if tag_filter:
+                for release in page_releases:
+                    tag_name = release.get("tag_name", "")
+                    if tag_filter.match(tag_name):
+                        collected.append(release)
+            else:
+                collected.extend(page_releases)
+
+            # Without filter, single page is enough (desktop releases are recent)
+            if not tag_filter:
+                break
+
+            # Stop if this was the last page
+            if len(page_releases) < 100:
+                break
+
+            page += 1
+
+    # Cache for 5 minutes (even if empty, to avoid hammering GitHub)
+    set_generic_cache(cache_key, collected, ttl=300)
+    return collected
 
 
 def _parse_firmware_version(version_str: Optional[str]) -> Tuple[int, ...]:
@@ -110,7 +155,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="Device not found")
 
     cache_key = "github_releases_omi"
-    releases = await get_omi_github_releases(cache_key)
+    releases = await get_omi_github_releases(cache_key, tag_filter=FIRMWARE_TAG_PATTERN)
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
