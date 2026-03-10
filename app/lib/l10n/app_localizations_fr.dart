@@ -8545,4 +8545,10 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Inconnu';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afficher le score quotidien sur la page d\'accueil';
+
+  @override
+  String get showTasksOnHomepage => 'Afficher les tâches sur la page d\'accueil';
 }

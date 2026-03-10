@@ -8326,4 +8326,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '不明';
+
+  @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
 }

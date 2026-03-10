@@ -2629,7 +2629,7 @@
     "anyoneWithLinkCanView": "Qualsevol persona amb l'enllaç pot veure",
     "tasksCleanTodayTitle": "Netejar les tasques d'avui?",
     "tasksCleanTodayMessage": "Això només eliminarà els terminis",
-    "tasksOverdue": "Endarrerits",
+"tasksOverdue": "Endarrerits",
     "answerTheCallFrom": "Respon la trucada de",
     "callAlreadyInProgress": "Ja hi ha una trucada en curs",
     "callRecordingConsentDisclaimer": "La gravacio de trucades pot requerir consentiment a la teva jurisdiccio",
@@ -2689,5 +2689,7 @@
     "verifiedNumbersDescription": "Quan truquis a algu, veuran aquest numero al seu telefon",
     "verifiedOnDate": "Verificat el {date}",
     "verifyYourNumber": "Verifica el teu numero",
-    "yourVerifiedNumbers": "Els teus numeros verificats"
+    "yourVerifiedNumbers": "Els teus numeros verificats",
+    "showDailyScoreOnHomepage": "Mostra la puntuació diària a la pàgina principal",
+    "showTasksOnHomepage": "Mostra les tasques a la pàgina principal"
 }

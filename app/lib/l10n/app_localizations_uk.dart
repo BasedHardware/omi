@@ -8479,4 +8479,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Невідомий';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показати щоденний рахунок на головній сторінці';
+
+  @override
+  String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
 }

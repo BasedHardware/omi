@@ -2665,7 +2665,7 @@
     "anyoneWithLinkCanView": "Bất kỳ ai có liên kết đều có thể xem",
     "tasksCleanTodayTitle": "Dọn các nhiệm vụ hôm nay?",
     "tasksCleanTodayMessage": "Thao tác này chỉ xóa thời hạn",
-    "tasksOverdue": "Quá hạn",
+"tasksOverdue": "Quá hạn",
     "answerTheCallFrom": "Trả lời cuộc gọi từ",
     "callAlreadyInProgress": "Một cuộc gọi đang diễn ra",
     "callRecordingConsentDisclaimer": "Ghi âm cuộc gọi có thể yêu cầu sự đồng ý trong khu vực pháp lý của bạn",
@@ -2725,5 +2725,7 @@
     "verifiedNumbersDescription": "Khi bạn gọi cho ai đó, họ sẽ thấy số này",
     "verifiedOnDate": "Đã xác minh vào {date}",
     "verifyYourNumber": "Xác minh số của bạn",
-    "yourVerifiedNumbers": "Số đã xác minh của bạn"
+    "yourVerifiedNumbers": "Số đã xác minh của bạn",
+    "showDailyScoreOnHomepage": "Hiển thị Điểm hàng ngày trên trang chủ",
+    "showTasksOnHomepage": "Hiển thị Nhiệm vụ trên trang chủ"
 }

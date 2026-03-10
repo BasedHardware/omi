@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Alla med länken kan visa",
     "tasksCleanTodayTitle": "Rensa dagens uppgifter?",
     "tasksCleanTodayMessage": "Detta tar bara bort deadlines",
-    "tasksOverdue": "Försenade",
+"tasksOverdue": "Försenade",
     "answerTheCallFrom": "Svara pa samtalet fran",
     "callAlreadyInProgress": "Ett samtal pagar redan",
     "callRecordingConsentDisclaimer": "Samtalsinspelning kan krava samtycke i din jurisdiktion",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Nar du ringer nagon ser de detta nummer",
     "verifiedOnDate": "Verifierad {date}",
     "verifyYourNumber": "Verifiera ditt nummer",
-    "yourVerifiedNumbers": "Dina verifierade nummer"
+    "yourVerifiedNumbers": "Dina verifierade nummer",
+    "showDailyScoreOnHomepage": "Visa dagligt poäng på hemsidan",
+    "showTasksOnHomepage": "Visa uppgifter på hemsidan"
 }

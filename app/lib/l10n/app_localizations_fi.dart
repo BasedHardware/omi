@@ -8465,4 +8465,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Tuntematon';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Näytä päivittäinen pistemäärä etusivulla';
+
+  @override
+  String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
 }

@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Chiunque abbia il link può visualizzare",
     "tasksCleanTodayTitle": "Pulire le attività di oggi?",
     "tasksCleanTodayMessage": "Questo rimuoverà solo le scadenze",
-    "tasksOverdue": "Scadute",
+"tasksOverdue": "Scadute",
     "answerTheCallFrom": "Rispondi alla chiamata da",
     "callAlreadyInProgress": "Una chiamata e gia in corso",
     "callRecordingConsentDisclaimer": "La registrazione delle chiamate potrebbe richiedere il consenso nella tua giurisdizione",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Quando chiami qualcuno, vedra questo numero",
     "verifiedOnDate": "Verificato il {date}",
     "verifyYourNumber": "Verifica il tuo numero",
-    "yourVerifiedNumbers": "I tuoi numeri verificati"
+    "yourVerifiedNumbers": "I tuoi numeri verificati",
+    "showDailyScoreOnHomepage": "Mostra punteggio giornaliero nella homepage",
+    "showTasksOnHomepage": "Mostra attività nella homepage"
 }

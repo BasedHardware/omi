@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Будь-хто з посиланням може переглядати",
     "tasksCleanTodayTitle": "Очистити завдання на сьогодні?",
     "tasksCleanTodayMessage": "Це видалить лише дедлайни",
-    "tasksOverdue": "Прострочені",
+"tasksOverdue": "Прострочені",
     "answerTheCallFrom": "Відповідайте на дзвінок від",
     "callAlreadyInProgress": "Дзвінок вже йде",
     "callRecordingConsentDisclaimer": "Запис дзвінків може вимагати згоди у вашій юрисдикції",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Коли ви дзвоните, абонент побачить цей номер",
     "verifiedOnDate": "Підтверджено {date}",
     "verifyYourNumber": "Підтвердіть свій номер",
-    "yourVerifiedNumbers": "Ваші підтверджені номери"
+    "yourVerifiedNumbers": "Ваші підтверджені номери",
+    "showDailyScoreOnHomepage": "Показати щоденний рахунок на головній сторінці",
+    "showTasksOnHomepage": "Показати завдання на головній сторінці"
 }

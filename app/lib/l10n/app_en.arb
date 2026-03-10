@@ -10086,7 +10086,7 @@
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
     },
-    "tasksOverdue": "Overdue",
+"tasksOverdue": "Overdue",
     "phoneCallsWithOmi": "Phone Calls with Omi",
     "phoneCallsSubtitle": "Make calls with real-time transcription",
     "phoneSetupStep1Title": "Verify your phone number",
@@ -10181,5 +10181,13 @@
     "failedToGetCallToken": "Failed to get call token. Verify your phone number first.",
     "failedToInitializeCallService": "Failed to initialize call service",
     "speakerLabelYou": "You",
-    "speakerLabelUnknown": "Unknown"
+    "speakerLabelUnknown": "Unknown",
+    "showDailyScoreOnHomepage": "Show Daily Score on homepage",
+    "@showDailyScoreOnHomepage": {
+        "description": "Description for show daily score toggle in developer settings"
+    },
+    "showTasksOnHomepage": "Show Tasks on homepage",
+    "@showTasksOnHomepage": {
+        "description": "Description for show tasks toggle in developer settings"
+    }
 }

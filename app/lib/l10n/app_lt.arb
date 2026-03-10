@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Bet kas, turintis nuorodą, gali peržiūrėti",
     "tasksCleanTodayTitle": "Išvalyti šiandienos užduotis?",
     "tasksCleanTodayMessage": "Bus pašalinti tik terminai",
-    "tasksOverdue": "Vėluojančios",
+"tasksOverdue": "Vėluojančios",
     "answerTheCallFrom": "Atsiliepkite i skambutai is",
     "callAlreadyInProgress": "Skambutis jau vyksta",
     "callRecordingConsentDisclaimer": "Skambuciu irasymas gali reikalauti sutikimo jusu jurisdikcijoje",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Kai skambinate kam nors, jie matys si numeri",
     "verifiedOnDate": "Patvirtinta {date}",
     "verifyYourNumber": "Patvirtinkite savo numeri",
-    "yourVerifiedNumbers": "Jusu patvirtinti numeriai"
+    "yourVerifiedNumbers": "Jusu patvirtinti numeriai",
+    "showDailyScoreOnHomepage": "Rodyti dienos balą pagrindiniame puslapyje",
+    "showTasksOnHomepage": "Rodyti užduotis pagrindiniame puslapyje"
 }

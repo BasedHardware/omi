@@ -8316,4 +8316,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '未知';
+
+  @override
+  String get showDailyScoreOnHomepage => '在首页显示每日评分';
+
+  @override
+  String get showTasksOnHomepage => '在首页显示任务';
 }

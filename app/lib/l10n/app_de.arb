@@ -2628,7 +2628,7 @@
     "anyoneWithLinkCanView": "Jeder mit dem Link kann ansehen",
     "tasksCleanTodayTitle": "Heutige Aufgaben bereinigen?",
     "tasksCleanTodayMessage": "Dadurch werden nur Fristen entfernt",
-    "tasksOverdue": "Überfällig",
+"tasksOverdue": "Überfällig",
     "answerTheCallFrom": "Nehmen Sie den Anruf an von",
     "callAlreadyInProgress": "Ein Anruf ist bereits aktiv",
     "callRecordingConsentDisclaimer": "Anrufaufzeichnung kann in Ihrer Gerichtsbarkeit eine Einwilligung erfordern",
@@ -2688,5 +2688,7 @@
     "verifiedNumbersDescription": "Wenn Sie jemanden anrufen, sieht er diese Nummer",
     "verifiedOnDate": "Verifiziert am {date}",
     "verifyYourNumber": "Verifizieren Sie Ihre Nummer",
-    "yourVerifiedNumbers": "Ihre verifizierten Nummern"
+    "yourVerifiedNumbers": "Ihre verifizierten Nummern",
+    "showDailyScoreOnHomepage": "Tagespunktzahl auf der Startseite anzeigen",
+    "showTasksOnHomepage": "Aufgaben auf der Startseite anzeigen"
 }
