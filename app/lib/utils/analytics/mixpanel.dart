@@ -236,6 +236,14 @@ class MixpanelManager {
 
   void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
 
+  // Phone Calls Upsell
+  void phoneCallUpsellShown({required String source}) =>
+      track('Phone Call Upsell Shown', properties: {'source': source});
+
+  void phoneCallUpsellUpgradeTapped() => track('Phone Call Upsell Upgrade Tapped');
+
+  void phoneCallUpsellDismissed() => track('Phone Call Upsell Dismissed');
+
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
