@@ -498,6 +498,7 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
     vocabulary: List[str] = []
+    language: str = ''
 
 
 class TranscriptionPreferencesUpdate(BaseModel):
