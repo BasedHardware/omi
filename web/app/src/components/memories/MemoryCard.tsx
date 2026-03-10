@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lightbulb,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryCategory, MemoryVisibility } from '@/types/conversation';
+import { LockedOverlay } from '@/components/ui/LockedOverlay';
 
 interface MemoryCardProps {
   memory: Memory;
@@ -60,6 +62,9 @@ export const MemoryCard = memo(function MemoryCard({
   onToggleSelect,
   onEnterSelectionMode,
 }: MemoryCardProps) {
+  const router = useRouter();
+  const isLocked = memory.is_locked;
+
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(memory.content);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -84,6 +89,10 @@ export const MemoryCard = memo(function MemoryCard({
   }, [isEditing]);
 
   const handleSaveEdit = async () => {
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     if (editContent.trim() && editContent !== memory.content) {
       const success = await onEdit(memory.id, editContent.trim());
       if (success) {
@@ -101,11 +110,19 @@ export const MemoryCard = memo(function MemoryCard({
   };
 
   const handleDelete = async () => {
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     setIsDeleting(true);
     await onDelete(memory.id);
   };
 
   const handleToggleVisibility = async () => {
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     const newVisibility = memory.visibility === 'public' ? 'private' : 'public';
     await onToggleVisibility(memory.id, newVisibility);
   };
@@ -121,10 +138,18 @@ export const MemoryCard = memo(function MemoryCard({
 
   const handleTextDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     setIsEditing(true);
   };
 
   const handleCardDoubleClick = () => {
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     // Double-click on card enters selection mode and selects this memory
     // Only trigger if not already in selection mode and handler is provided
     if (!onToggleSelect && onEnterSelectionMode) {
@@ -315,7 +340,7 @@ export const MemoryCard = memo(function MemoryCard({
 
         {/* Action buttons - show on hover or when card needs review */}
         <AnimatePresence>
-          {(isHovered || needsReview) && !isEditing && (
+          {!isLocked && (isHovered || needsReview) && !isEditing && (
             <motion.div
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
@@ -381,6 +406,10 @@ export const MemoryCard = memo(function MemoryCard({
           )}
         </AnimatePresence>
       </div>
+
+      {isLocked && (
+        <LockedOverlay onUpgrade={() => router.push('/settings?section=account&upgrade=1')} />
+      )}
     </motion.div>
   );
 });

@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Trash2, Clock, Calendar, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
+import { LockedOverlay } from '@/components/ui/LockedOverlay';
 
 interface TaskRowProps {
   task: ActionItem;
@@ -58,6 +60,9 @@ export function TaskRow({
   isFocused = false,
   onEnterSelectionMode,
 }: TaskRowProps) {
+  const router = useRouter();
+  const isLocked = task.is_locked;
+
   const [isHovered, setIsHovered] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -97,6 +102,10 @@ export function TaskRow({
 
   const handleCheckboxClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     setIsCompleting(true);
     await onToggleComplete(task.id, !task.completed);
     setTimeout(() => setIsCompleting(false), 300);
@@ -111,6 +120,10 @@ export function TaskRow({
 
   const handleTextDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     if (!task.completed && onUpdateDescription) {
       setEditValue(task.description);
       setIsEditing(true);
@@ -118,6 +131,10 @@ export function TaskRow({
   };
 
   const handleRowDoubleClick = () => {
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     // Double-click on row enters selection mode and selects this task
     // Only trigger if not already in selection mode and handler is provided
     if (!onSelect && onEnterSelectionMode) {
@@ -143,6 +160,10 @@ export function TaskRow({
 
   const handleDateClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isLocked) {
+      router.push('/settings?section=account&upgrade=1');
+      return;
+    }
     if (!task.completed && onSetDueDate) {
       setShowDatePicker(true);
     }
@@ -168,7 +189,7 @@ export function TaskRow({
       onHoverEnd={() => setIsHovered(false)}
       onDoubleClick={handleRowDoubleClick}
       className={cn(
-        'group flex items-center gap-3 px-3 py-2.5',
+        'group relative flex items-center gap-3 px-3 py-2.5',
         'border-b border-bg-tertiary/50',
         'transition-colors duration-100',
         isHovered && 'bg-white/[0.02]',
@@ -375,6 +396,10 @@ export function TaskRow({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                if (isLocked) {
+                  router.push('/settings?section=account&upgrade=1');
+                  return;
+                }
                 onSnooze(task.id, 1);
               }}
               className="px-1.5 py-0.5 text-xs rounded text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10"
@@ -385,6 +410,10 @@ export function TaskRow({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                if (isLocked) {
+                  router.push('/settings?section=account&upgrade=1');
+                  return;
+                }
                 onDelete(task.id);
               }}
               className="p-1 rounded text-text-quaternary hover:text-error hover:bg-error/10"
@@ -401,6 +430,10 @@ export function TaskRow({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            if (isLocked) {
+              router.push('/settings?section=account&upgrade=1');
+              return;
+            }
             onDelete(task.id);
           }}
           className="p-1 rounded text-text-quaternary hover:text-error hover:bg-error/10 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -408,6 +441,13 @@ export function TaskRow({
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
+      )}
+
+      {isLocked && (
+        <LockedOverlay
+          className="rounded-none"
+          onUpgrade={() => router.push('/settings?section=account&upgrade=1')}
+        />
       )}
     </motion.div>
   );

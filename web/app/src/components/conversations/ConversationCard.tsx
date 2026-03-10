@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, memo } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Star, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
 import type { Conversation } from '@/types/conversation';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
-
+import { LockedOverlay } from '@/components/ui/LockedOverlay';
 
 interface ConversationCardProps {
   conversation: Conversation;
@@ -36,6 +37,7 @@ export const ConversationCard = memo(function ConversationCard({
   isMerging = false,
   onEnterSelectionMode,
 }: ConversationCardProps) {
+  const router = useRouter();
   const [isStarred, setIsStarred] = useState(conversation.starred);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -67,14 +69,26 @@ export const ConversationCard = memo(function ConversationCard({
   };
 
   const handleClick = () => {
+    // In selection mode, preserve existing behavior (merge selection)
     if (isSelectionMode && onSelect) {
       onSelect(conversation.id);
-    } else {
-      MixpanelManager.track('Conversation Viewed', {
+      return;
+    }
+
+    // Locked conversations should push user to upgrade (mobile parity)
+    if (conversation.is_locked) {
+      MixpanelManager.track('Paywall Opened', {
+        source: 'ConversationCard',
         conversation_id: conversation.id,
       });
-      onClick?.();
+      router.push('/settings?section=account&upgrade=1');
+      return;
     }
+
+    MixpanelManager.track('Conversation Viewed', {
+      conversation_id: conversation.id,
+    });
+    onClick?.();
   };
 
   const handleDoubleClick = () => {
@@ -221,6 +235,10 @@ export const ConversationCard = memo(function ConversationCard({
       )}
 
       {/* New badge - positioned inside card bounds */}
+      {conversation.is_locked && (
+        <LockedOverlay onUpgrade={() => router.push('/settings?section=account&upgrade=1')} />
+      )}
+
       {isNew && !conversation.status?.includes('processing') && (
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}

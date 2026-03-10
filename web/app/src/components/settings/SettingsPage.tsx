@@ -819,6 +819,9 @@ function UsageSectionContent({
   onSubscriptionUpdate: () => void;
   cachedPlans: PricingOption[] | null;
 }) {
+  const searchParams = useSearchParams();
+  const shouldOpenUpgrade = searchParams.get('upgrade') === '1' || searchParams.get('upgrade') === 'true';
+
   const [activeTab, setActiveTab] = useState<PlanUsageTab>('plan');
   const [selectedPeriod, setSelectedPeriod] = useState<UsagePeriod>('all_time');
   const [selectedPriceId, setSelectedPriceId] = useState<string | null>(null);
@@ -827,6 +830,13 @@ function UsageSectionContent({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
+
+  // If opened from a locked item CTA, jump straight to upgrade options
+  useEffect(() => {
+    if (!shouldOpenUpgrade) return;
+    setActiveTab('plan');
+    setShowUpgradeOptions(true);
+  }, [shouldOpenUpgrade]);
 
   // Set initial selected price when plans load
   useEffect(() => {
