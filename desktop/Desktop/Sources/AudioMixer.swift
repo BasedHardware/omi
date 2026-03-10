@@ -1,19 +1,26 @@
 import Foundation
 
-/// Mixes microphone and system audio into a stereo stream for multichannel transcription
+/// Mixes microphone and system audio into a combined stream for transcription.
+/// Supports stereo (interleaved mic+system) or mono (averaged) output.
 /// Channel 0 (left) = Microphone (user)
 /// Channel 1 (right) = System audio (others)
 class AudioMixer {
 
     // MARK: - Types
 
-    /// Callback for receiving stereo audio chunks
+    enum OutputMode {
+        case stereo  // Interleaved [mic0, sys0, mic1, sys1, ...] — for Deepgram multichannel
+        case mono    // Averaged (mic + system) / 2 — for backend /v4/listen
+    }
+
+    /// Callback for receiving mixed audio chunks
     typealias StereoAudioHandler = (Data) -> Void
 
     // MARK: - Properties
 
     private var onStereoChunk: StereoAudioHandler?
     private var isRunning = false
+    private(set) var outputMode: OutputMode = .stereo
 
     // Audio buffers (16kHz mono Int16 PCM)
     private var micBuffer = Data()
@@ -29,15 +36,18 @@ class AudioMixer {
     // MARK: - Public Methods
 
     /// Start the mixer
-    /// - Parameter onStereoChunk: Callback receiving interleaved stereo 16-bit PCM at 16kHz
-    func start(onStereoChunk: @escaping StereoAudioHandler) {
+    /// - Parameters:
+    ///   - outputMode: `.stereo` for interleaved multichannel, `.mono` for averaged single-channel
+    ///   - onStereoChunk: Callback receiving mixed 16-bit PCM at 16kHz
+    func start(outputMode: OutputMode = .stereo, onStereoChunk: @escaping StereoAudioHandler) {
         bufferLock.lock()
+        self.outputMode = outputMode
         self.onStereoChunk = onStereoChunk
         self.isRunning = true
         micBuffer = Data()
         systemBuffer = Data()
         bufferLock.unlock()
-        log("AudioMixer: Started")
+        log("AudioMixer: Started (output=\(outputMode))")
     }
 
     /// Stop the mixer and flush remaining audio
@@ -105,12 +115,17 @@ class AudioMixer {
         if flush {
             // When flushing, process whatever is available
             bytesToProcess = max(micBuffer.count, systemBuffer.count)
+        } else if micBuffer.count >= minBufferBytes && systemBuffer.count >= minBufferBytes {
+            // Both buffers have data — use shorter to stay in sync
+            bytesToProcess = (min(micBuffer.count, systemBuffer.count) / 2) * 2
+        } else if micBuffer.count >= minBufferBytes {
+            // Only mic has data (system audio disabled/unavailable) — pad system with silence
+            bytesToProcess = (micBuffer.count / 2) * 2
+        } else if systemBuffer.count >= minBufferBytes {
+            // Only system has data — pad mic with silence
+            bytesToProcess = (systemBuffer.count / 2) * 2
         } else {
-            // Normal operation: process when both have data
-            let minAvailable = min(micBuffer.count, systemBuffer.count)
-            guard minAvailable >= minBufferBytes else { return }
-            // Align to sample boundary (2 bytes per Int16 sample)
-            bytesToProcess = (minAvailable / 2) * 2
+            return
         }
 
         guard bytesToProcess >= 2 else { return }
@@ -137,11 +152,17 @@ class AudioMixer {
             systemBuffer = Data()
         }
 
-        // Interleave into stereo
-        let stereoData = interleave(mic: micData, system: sysData)
+        // Mix according to output mode
+        let mixedData: Data
+        switch outputMode {
+        case .stereo:
+            mixedData = interleave(mic: micData, system: sysData)
+        case .mono:
+            mixedData = mixToMono(mic: micData, system: sysData)
+        }
 
         // Send to callback
-        onStereoChunk?(stereoData)
+        onStereoChunk?(mixedData)
     }
 
     /// Interleave two mono Int16 streams into stereo
@@ -171,6 +192,34 @@ class AudioMixer {
         }
 
         return stereoSamples.withUnsafeBufferPointer { buffer in
+            Data(buffer: buffer)
+        }
+    }
+
+    /// Average two mono Int16 streams into a single mono stream
+    /// Output format: [(mic0+sys0)/2, (mic1+sys1)/2, ...]
+    private func mixToMono(mic: Data, system: Data) -> Data {
+        let sampleCount = mic.count / 2
+
+        var monoSamples = [Int16]()
+        monoSamples.reserveCapacity(sampleCount)
+
+        mic.withUnsafeBytes { micPtr in
+            system.withUnsafeBytes { sysPtr in
+                let micSamples = micPtr.bindMemory(to: Int16.self)
+                let sysSamples = sysPtr.bindMemory(to: Int16.self)
+
+                for i in 0..<sampleCount {
+                    let micSample = Int32(i < micSamples.count ? micSamples[i] : 0)
+                    let sysSample = Int32(i < sysSamples.count ? sysSamples[i] : 0)
+                    // Average and clamp to Int16 range
+                    let mixed = (micSample + sysSample) / 2
+                    monoSamples.append(Int16(clamping: mixed))
+                }
+            }
+        }
+
+        return monoSamples.withUnsafeBufferPointer { buffer in
             Data(buffer: buffer)
         }
     }
