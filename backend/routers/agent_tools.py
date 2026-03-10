@@ -4,13 +4,16 @@ Agent tools router — exposes Python backend tools to the VM agent.
 Endpoints:
 - GET  /v1/agent/tools         — returns tool definitions (name, description, parameters)
 - POST /v1/agent/execute-tool  — executes a named tool and returns the result
-- GET  /v1/agent/vm-status     — returns basic VM status from Firestore
-- POST /v1/agent/vm-ensure     — checks VM status, restarts if stopped, returns current state
+- GET  /v1/agent/vm-status     — returns VM status from Firestore (with restart if stopped)
+- POST /v1/agent/vm-ensure     — ensures user has a VM: creates if missing, restarts if stopped
 - POST /v1/agent/keepalive     — pings the VM to reset its idle auto-stop timer
 """
 
 import asyncio
 import logging
+import os
+import time
+import uuid
 from datetime import datetime, timezone
 
 import google.auth
@@ -19,6 +22,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
+from database._client import db as firestore_db
 from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
@@ -29,7 +33,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-GCE_PROJECT = "based-hardware"
+GCE_PROJECT = os.environ.get("GCE_PROJECT_ID", os.environ.get("GOOGLE_CLOUD_PROJECT", "based-hardware"))
+GCE_ZONE = "us-central1-a"
+GCE_SOURCE_IMAGE = os.environ.get("GCE_SOURCE_IMAGE", f"projects/{GCE_PROJECT}/global/images/family/omi-agent")
+AGENT_GCS_BUCKET = os.environ.get("AGENT_GCS_BUCKET", "based-hardware-agent")
 
 
 # --------------- GCE helpers ---------------
@@ -56,8 +63,6 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and wait for it to get an IP. Returns the new IP."""
-    import time
-
     t0 = time.monotonic()
     token = _get_gce_access_token()
     start_url = (
@@ -120,12 +125,122 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
 
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
     """Update the user's agentVm fields in Firestore."""
-    from database.users import db as firestore_db
-
     update = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
     firestore_db.collection('users').document(uid).update(update)
+
+
+def _set_firestore_vm(uid: str, vm_name: str, zone: str, ip: str | None, status: str, auth_token: str):
+    """Write the full agentVm document to Firestore (for initial provisioning)."""
+    now = datetime.now(timezone.utc).isoformat()
+    vm_data = {
+        "vmName": vm_name,
+        "zone": zone,
+        "status": status,
+        "authToken": auth_token,
+        "createdAt": now,
+    }
+    if ip:
+        vm_data["ip"] = ip
+    firestore_db.collection('users').document(uid).set({"agentVm": vm_data}, merge=True)
+
+
+async def _create_gce_vm(vm_name: str, auth_token: str) -> str:
+    """Create a GCE VM from the omi-agent image family. Returns the external IP."""
+    zone = GCE_ZONE
+    startup_script = (
+        f"#!/bin/bash\ncurl -sf https://storage.googleapis.com/{AGENT_GCS_BUCKET}/startup.sh"
+        f" -o /tmp/omi-startup.sh && bash /tmp/omi-startup.sh\n"
+    )
+
+    url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances"
+    body = {
+        "name": vm_name,
+        "machineType": f"zones/{zone}/machineTypes/e2-small",
+        "disks": [
+            {
+                "boot": True,
+                "autoDelete": True,
+                "initializeParams": {
+                    "sourceImage": GCE_SOURCE_IMAGE,
+                    "diskSizeGb": "50",
+                    "diskType": f"zones/{zone}/diskTypes/pd-ssd",
+                },
+            }
+        ],
+        "networkInterfaces": [
+            {
+                "network": "global/networks/default",
+                "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}],
+            }
+        ],
+        "tags": {"items": ["omi-agent-vm"]},
+        "metadata": {
+            "items": [
+                {"key": "startup-script", "value": startup_script},
+                {"key": "auth-token", "value": auth_token},
+            ]
+        },
+    }
+
+    token = _get_gce_access_token()
+    async with httpx.AsyncClient(timeout=180) as client:
+        resp = await client.post(url, headers={"Authorization": f"Bearer {token}"}, json=body)
+        if resp.status_code not in (200, 204):
+            raise Exception(f"GCE insert failed: {resp.status_code} {sanitize(resp.text)}")
+
+        op_name = resp.json().get("name")
+        if not op_name:
+            raise Exception("Missing operation name in GCE insert response")
+
+        # Poll operation until done (max ~2 minutes)
+        op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
+        op_done = False
+        for i in range(24):
+            await asyncio.sleep(5)
+            token = _get_gce_access_token()
+            status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
+            op_status = status_resp.json()
+            if op_status.get("status") == "DONE":
+                if "error" in op_status:
+                    raise Exception(f"GCE insert operation failed: {op_status['error']}")
+                logger.info(f"[vm-create] {vm_name} operation done after {i + 1} polls")
+                op_done = True
+                break
+        if not op_done:
+            raise Exception(f"GCE insert timed out after 120s for {vm_name}")
+
+        # Get external IP
+        instance_url = (
+            f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
+        )
+        for attempt in range(6):
+            token = _get_gce_access_token()
+            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
+            instance = inst_resp.json()
+            try:
+                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
+                if candidate:
+                    logger.info(f"[vm-create] {vm_name} got IP {candidate} on attempt {attempt + 1}")
+                    return candidate
+            except (KeyError, IndexError):
+                pass
+            if attempt < 5:
+                await asyncio.sleep(3)
+
+        raise Exception(f"Failed to get external IP for {vm_name} after 6 attempts")
+
+
+async def _provision_vm_background(uid: str, vm_name: str, auth_token: str):
+    """Background task: create a new GCE VM, update Firestore when ready."""
+    try:
+        ip = await _create_gce_vm(vm_name, auth_token)
+        _set_firestore_vm(uid, vm_name, GCE_ZONE, ip, "ready", auth_token)
+        logger.info(f"[vm-ensure] VM {vm_name} created, ip={ip}")
+    except Exception as e:
+        logger.error(f"[vm-ensure] Failed to create VM {vm_name}: {e}")
+        _update_firestore_vm(uid, None, "error")
 
 
 async def _restart_vm_background(uid: str, vm_name: str, zone: str):
@@ -142,53 +257,106 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
 # --------------- endpoints ---------------
 
 
-@router.get("/v1/agent/vm-status")
-def get_vm_status(uid: str = Depends(get_current_user_uid)):
-    """Return the user's agent VM info from Firestore."""
-    vm = get_agent_vm(uid)
-    logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
-    if not vm or vm.get("status") != "ready":
-        return {"has_vm": False}
+def _vm_response(vm: dict, status_override: str | None = None) -> dict:
+    """Build a standard VM response dict with all fields the desktop expects."""
     return {
         "has_vm": True,
-        "status": vm.get("status"),
+        "status": status_override or vm.get("status"),
+        "vm_name": vm.get("vmName"),
+        "ip": vm.get("ip"),
+        "auth_token": vm.get("authToken"),
+        "zone": vm.get("zone", GCE_ZONE),
+        "created_at": vm.get("createdAt"),
+        "last_query_at": vm.get("lastQueryAt"),
     }
 
 
-@router.post("/v1/agent/vm-ensure")
-async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
-    """Check VM status; if stopped/terminated, restart it in the background."""
+@router.get("/v1/agent/vm-status")
+async def get_vm_status(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
+    """Return the user's agent VM info from Firestore. Restarts stopped VMs."""
     vm = get_agent_vm(uid)
     if not vm:
         return {"has_vm": False}
 
+    fs_status = vm.get("status", "")
     vm_name = vm.get("vmName")
-    zone = vm.get("zone", "us-central1-a")
+    zone = vm.get("zone", GCE_ZONE)
+
+    # For ready/error/stopped VMs, verify actual GCE status and restart if needed
+    if fs_status in ("ready", "error", "stopped") and vm_name:
+        try:
+            gce_status = await _check_gce_status(vm_name, zone)
+        except Exception as e:
+            logger.warning(f"[vm-status] GCE status check failed for {vm_name}: {e}")
+            return _vm_response(vm)
+
+        if gce_status in ("TERMINATED", "STOPPED"):
+            logger.info(f"[vm-status] VM {vm_name} is {gce_status}, restarting...")
+            _update_firestore_vm(uid, None, "provisioning")
+            background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
+            return _vm_response(vm, status_override="provisioning")
+
+        if gce_status == "RUNNING" and fs_status != "ready":
+            _update_firestore_vm(uid, vm.get("ip"), "ready")
+            return _vm_response(vm, status_override="ready")
+
+    return _vm_response(vm)
+
+
+@router.post("/v1/agent/vm-ensure")
+async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
+    """Ensure user has a VM: create if missing, restart if stopped."""
+    vm = get_agent_vm(uid)
+
+    # No VM exists — provision a new one
+    if not vm:
+        uid_prefix = uid[:12].lower() if len(uid) > 12 else uid.lower()
+        vm_name = f"omi-agent-{uid_prefix}"
+        auth_token = f"omi-{uuid.uuid4()}"
+
+        # Claim the slot in Firestore before spawning background creation
+        _set_firestore_vm(uid, vm_name, GCE_ZONE, None, "provisioning", auth_token)
+        background_tasks.add_task(_provision_vm_background, uid, vm_name, auth_token)
+        logger.info(f"[vm-ensure] Provisioning new VM {vm_name} for uid={uid[:8]}...")
+
+        return {
+            "has_vm": True,
+            "status": "provisioning",
+            "vm_name": vm_name,
+            "ip": None,
+            "auth_token": auth_token,
+            "zone": GCE_ZONE,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_query_at": None,
+        }
+
+    vm_name = vm.get("vmName")
+    zone = vm.get("zone", GCE_ZONE)
     fs_status = vm.get("status", "")
 
     # If Firestore already says provisioning, don't double-start
     if fs_status == "provisioning":
-        return {"has_vm": True, "status": "provisioning"}
+        return _vm_response(vm)
 
     # Check actual GCE status for ready/error/stopped VMs
-    if fs_status in ("ready", "error", "stopped"):
+    if fs_status in ("ready", "error", "stopped") and vm_name:
         try:
             gce_status = await _check_gce_status(vm_name, zone)
         except Exception as e:
             logger.error(f"[vm-ensure] GCE status check failed: {e}")
-            return {"has_vm": True, "status": fs_status}
+            return _vm_response(vm)
 
         if gce_status in ("TERMINATED", "STOPPED"):
             logger.info(f"[vm-ensure] VM {vm_name} is {gce_status}, restarting...")
             _update_firestore_vm(uid, None, "provisioning")
             background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
-            return {"has_vm": True, "status": "provisioning"}
+            return _vm_response(vm, status_override="provisioning")
 
         if gce_status == "RUNNING" and fs_status != "ready":
             _update_firestore_vm(uid, vm.get("ip"), "ready")
-            return {"has_vm": True, "status": "ready"}
+            return _vm_response(vm, status_override="ready")
 
-    return {"has_vm": True, "status": fs_status}
+    return _vm_response(vm)
 
 
 @router.post("/v1/agent/keepalive")

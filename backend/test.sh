@@ -60,3 +60,4 @@ pytest tests/unit/test_desktop_advice.py -v
 pytest tests/unit/test_desktop_live_notes.py -v
 pytest tests/unit/test_desktop_profile.py -v
 pytest tests/unit/test_desktop_task_ops.py -v
+pytest tests/unit/test_agent_vm.py -v
