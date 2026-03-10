@@ -128,9 +128,10 @@ class _PhoneCallsUpsellSheet extends StatelessWidget {
               GestureDetector(
                 onTap: () {
                   HapticFeedback.mediumImpact();
-                  Navigator.of(context).pop();
+                  final navigator = Navigator.of(context);
+                  navigator.pop();
                   showModalBottomSheet(
-                    context: context,
+                    context: navigator.context,
                     isScrollControlled: true,
                     backgroundColor: Colors.black,
                     builder: (_) => const _PlansSheetWrapper(),
