@@ -675,6 +675,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       HapticFeedback.mediumImpact();
                                       MixpanelManager().bottomNavigationTabClicked('Phone Calls');
                                       var usageProvider = context.read<UsageProvider>();
+                                      if (usageProvider.isLoading) return;
                                       var isUnlimited =
                                           usageProvider.subscription?.subscription.plan == PlanType.unlimited;
                                       if (!isUnlimited) {
