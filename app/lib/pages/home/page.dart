@@ -679,6 +679,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       var isUnlimited =
                                           usageProvider.subscription?.subscription.plan == PlanType.unlimited;
                                       if (!isUnlimited) {
+                                        MixpanelManager().phoneCallUpsellShown(source: 'home');
                                         showPhoneCallsUpsell(context);
                                         return;
                                       }
