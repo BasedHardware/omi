@@ -169,11 +169,22 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    _clearCachedAuth();
     await FirebaseAuth.instance.signOut();
+  }
+
+  void _clearCachedAuth() {
+    SharedPreferencesUtil().authToken = '';
+    SharedPreferencesUtil().tokenExpirationTime = 0;
   }
 
   Future<String?> getIdToken() async {
     try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        Logger.debug('getIdToken: currentUser is null, clearing cached token');
+        _clearCachedAuth();
+        return null;
+      }
       IdTokenResult? newToken = await FirebaseAuth.instance.currentUser?.getIdTokenResult(true);
       if (newToken?.token != null) {
         var user = FirebaseAuth.instance.currentUser!;
@@ -194,16 +205,12 @@ class AuthService {
         }
         return newToken?.token;
       }
-      // Fallback: use cached token if Firebase has no user (for dev builds)
-      final cachedToken = SharedPreferencesUtil().authToken;
-      if (cachedToken.isNotEmpty) {
-        print('DEBUG AuthService.getIdToken: Using cached token fallback');
-        return cachedToken;
-      }
+      Logger.debug('getIdToken: token refresh returned null');
       return null;
     } catch (e) {
-      Logger.debug(e.toString());
-      return SharedPreferencesUtil().authToken;
+      Logger.debug('getIdToken: token refresh failed: $e');
+      _clearCachedAuth();
+      return null;
     }
   }
 

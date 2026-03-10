@@ -2,11 +2,13 @@ import json
 import os
 import time
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, WebSocketException
 from fastapi import Request
 from firebase_admin import auth
 from firebase_admin.auth import InvalidIdTokenError
 import logging
+
+from database.redis_db import try_acquire_listen_lock
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,57 @@ def get_current_user_uid(authorization: str = Header(None)):
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+
+def _verify_ws_auth(authorization: str) -> str:
+    """Common WebSocket auth — verifies token, returns uid.
+
+    Raises WebSocketException(code=1008) instead of HTTPException(401) so the
+    ASGI server sends a proper WebSocket close frame (not a handshake crash).
+    """
+    if not authorization:
+        raise WebSocketException(code=1008, reason="Authorization header not found")
+    elif len(str(authorization).split(' ')) != 2:
+        raise WebSocketException(code=1008, reason="Invalid authorization token")
+
+    try:
+        token = authorization.split(' ')[1]
+        return verify_token(token)
+    except InvalidIdTokenError as e:
+        logger.error(f"WebSocket auth failed: {e}")
+        raise WebSocketException(code=1008, reason="Invalid or expired token")
+    except Exception as e:
+        logger.error(f"WebSocket auth error: {e}")
+        raise WebSocketException(code=1008, reason="Auth error")
+
+
+def get_current_user_uid_ws_listen(authorization: str = Header(None)):
+    """WebSocket auth for /v4/listen — NO rate limiting.
+
+    Mobile apps reconnect legitimately on network switch / backgrounding,
+    so the per-UID rate limiter must not block them.
+    """
+    return _verify_ws_auth(authorization)
+
+
+def get_current_user_uid_ws(authorization: str = Header(None)):
+    """WebSocket auth WITH per-UID rate limiting (7s window).
+
+    Use for WebSocket endpoints that need retry-storm protection.
+    """
+    uid = _verify_ws_auth(authorization)
+
+    # Fail-open on Redis errors to avoid reintroducing handshake crashes
+    try:
+        if not try_acquire_listen_lock(uid):
+            logger.warning(f"WebSocket rate limited uid={uid}")
+            raise WebSocketException(code=1008, reason="Rate limited, retry later")
+    except WebSocketException:
+        raise
+    except Exception as e:
+        logger.error(f"Rate limit check failed (allowing connection): {e}")
+
+    return uid
 
 
 def get_current_user_uid_from_ws_message(message: dict) -> str:

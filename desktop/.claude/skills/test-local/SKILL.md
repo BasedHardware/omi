@@ -78,9 +78,36 @@ for i in $(seq 1 40); do
 done
 ```
 
-### Step 5: Test with `macos-use`
+### Step 5: Test with agent-swift (preferred) or macos-use
 
-Once the app is running, use the `macos-use` MCP tools to interact with it:
+Once the app is running, use **agent-swift** to interact with and verify the UI:
+
+```bash
+# Connect to the running app
+agent-swift connect --bundle-id com.omi.desktop-dev
+
+# See interactive elements on screen
+agent-swift snapshot -i
+
+# Interact (re-snapshot after each mutation — refs go stale)
+agent-swift click @e3                # CGEvent click (SwiftUI — triggers NavigationLink)
+agent-swift press @e3                # AXPress (AppKit buttons only)
+agent-swift fill @e5 "search text"   # type into a text field
+agent-swift find role button click   # find + chained action
+agent-swift scroll down              # scroll the view
+agent-swift snapshot -i              # refresh refs after interaction
+
+# Assert & wait
+agent-swift is exists @e3            # exit 0 = true, exit 1 = false
+agent-swift wait text "Settings"     # wait for text to appear
+
+# Capture screenshot evidence
+agent-swift screenshot /tmp/test-result.png  # capture app window
+```
+
+Install once: `brew install beastoin/tap/agent-swift`. Requires Accessibility permission for Terminal.app.
+
+**Alternative: macos-use MCP tools** (if agent-swift is not available):
 
 1. **Open and traverse**: Use `macos-use_open_application_and_traverse` with identifier `"Omi Dev"` to get the accessibility tree
 2. **Read the traversal file**: Use `Grep` or `Read` on the returned file to find specific UI elements

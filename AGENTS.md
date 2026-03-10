@@ -83,12 +83,42 @@ Edit → Verify → Evidence loop:
 
 Key rules:
 - Must reconnect after every hot restart (kills VM Service session).
-- Refs stale after `press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
+- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
 - Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
 - Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
 - When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
-- E2E reference flows: `app/e2e/` (navigation, settings, tabs, language change).
+- App flows & exploration skill: See `app/e2e/SKILL.md` for navigation architecture, widget patterns, and reference flows.
 - Full command reference: `agent-flutter schema` or `agent-flutter --help`.
+
+### Desktop (macOS)
+
+#### Verifying UI Changes (agent-swift)
+
+After any Swift UI edit, verify programmatically with [agent-swift](https://github.com/beastoin/agent-swift). No app-side instrumentation needed — uses macOS Accessibility API. Install once: `brew install beastoin/tap/agent-swift`.
+
+Requires: Accessibility permission for Terminal.app (System Settings → Privacy & Security → Accessibility).
+
+Edit → Verify → Evidence loop:
+1. Edit code, rebuild: `cd desktop && ./run.sh`
+2. Connect: `agent-swift connect --bundle-id com.omi.desktop-dev`
+3. Verify: `agent-swift snapshot -i` (interactive elements only)
+4. Interact: `agent-swift click @e3` / `fill @e5 "text"` / `find role button click`
+5. Assert: `agent-swift is exists @e3` / `wait text "Settings"`
+6. Evidence: `agent-swift screenshot /tmp/evidence.png`
+
+Key rules:
+- `agent-swift doctor` verifies Accessibility permission and target app.
+- Prefer `click` over `press` for SwiftUI — `click` sends CGEvent clicks (triggers NavigationLink), `press` sends AXPress (AppKit only).
+- Refs stale after `click`/`press`/`fill`/`scroll` — re-snapshot before next interaction.
+- Always use `snapshot -i` — full snapshots of complex apps are very verbose.
+- Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
+- JSON output: `--json` flag, `AGENT_SWIFT_JSON=1` env var, or pipe to auto-detect.
+- 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
+- Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
+- Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- App flows & exploration skill: See `desktop/e2e/SKILL.md` for navigation architecture, interaction patterns, and reference flows.
+- Full command reference: `agent-swift --help` or `agent-swift schema`.
 
 ## Formatting
 

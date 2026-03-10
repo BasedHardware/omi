@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { TranscriptSegment } from '@/src/types/memory.types';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { TranscriptSegment, Person } from '@/src/types/memory.types';
 import chatWithMemory from '@/src/actions/memories/chat-with-memory';
 import { Send, UserCircle, Message, ArrowDown } from 'iconoir-react';
 import Markdown from 'markdown-to-jsx';
 
 interface ChatProps {
   transcript: TranscriptSegment[];
+  people?: Person[];
   onClearChatRef?: (clearFn: () => void) => void;
   onMessagesChange?: (hasMessages: boolean) => void;
 }
@@ -17,7 +18,12 @@ interface ChatMessage {
   content: string;
 }
 
-export default function Chat({ transcript, onClearChatRef, onMessagesChange }: ChatProps) {
+export default function Chat({
+  transcript,
+  people,
+  onClearChatRef,
+  onMessagesChange,
+}: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -50,13 +56,25 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
     };
   }, []);
 
-  // Convert transcript segments to a readable string
-  const transcriptText = transcript
-    .map((segment) => {
-      const speaker = segment.is_user ? 'Owner' : `Speaker ${segment.speaker_id}`;
-      return `${speaker}: ${segment.text}`;
-    })
-    .join('\n\n');
+  // Convert transcript segments to a readable string, resolving person names
+  const transcriptText = useMemo(
+    () =>
+      transcript
+        .map((segment) => {
+          let speaker: string;
+          if (segment.is_user) {
+            speaker = 'Owner';
+          } else if (segment.person_id && people) {
+            const person = people.find((p) => p.id === segment.person_id);
+            speaker = person ? person.name : `Speaker ${segment.speaker_id}`;
+          } else {
+            speaker = `Speaker ${segment.speaker_id}`;
+          }
+          return `${speaker}: ${segment.text}`;
+        })
+        .join('\n\n'),
+    [transcript, people],
+  );
 
   const scrollToBottom = (smooth = true) => {
     if (messagesContainerRef.current) {
@@ -181,7 +199,9 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
         <div
           ref={messagesContainerRef}
           onScroll={handleScroll}
-          className={`chat-messages-container relative overflow-y-auto ${messages.length === 0 ? 'pb-2 pt-4 px-4 md:pt-6 md:px-6' : 'p-4 md:p-6'}`}
+          className={`chat-messages-container relative overflow-y-auto ${
+            messages.length === 0 ? 'px-4 pb-2 pt-4 md:px-6 md:pt-6' : 'p-4 md:p-6'
+          }`}
           style={{
             height: '400px',
             overflowY: 'auto',
@@ -189,7 +209,7 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
             scrollBehavior: 'smooth',
             // Custom scrollbar styling for Firefox
             scrollbarWidth: 'thin',
-            scrollbarColor: '#3f3f46 transparent'
+            scrollbarColor: '#3f3f46 transparent',
           }}
         >
           <div className={messages.length === 0 ? 'space-y-0' : 'space-y-6'}>
@@ -205,7 +225,9 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
                   <div className="flex flex-col gap-1">
                     <div className="max-w-[85%] rounded-2xl bg-zinc-800/80 px-4 py-3 text-gray-100 shadow-lg">
                       <p className="text-sm leading-relaxed md:text-base">
-                        Hi! I can help you explore this conversation. Ask me questions about the transcript, key points, or any details you'd like to know more about.
+                        Hi! I can help you explore this conversation. Ask me questions
+                        about the transcript, key points, or any details you'd like to
+                        know more about.
                       </p>
                     </div>
                   </div>
@@ -247,7 +269,8 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
                               ...prev,
                               {
                                 role: 'assistant',
-                                content: 'Sorry, I encountered an error. Please try again.',
+                                content:
+                                  'Sorry, I encountered an error. Please try again.',
                               },
                             ]);
                           }
@@ -274,73 +297,73 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
               </>
             )}
             {messages.map((message, index) => (
+              <div
+                key={index}
+                className={`flex gap-4 ${
+                  message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                }`}
+              >
+                {/* Avatar */}
                 <div
-                  key={index}
-                  className={`flex gap-4 ${
-                    message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    message.role === 'user'
+                      ? 'bg-gradient-to-br from-blue-500 to-blue-600'
+                      : 'bg-gradient-to-br from-purple-500 to-purple-600'
                   }`}
                 >
-                  {/* Avatar */}
+                  {message.role === 'user' ? (
+                    <UserCircle className="h-5 w-5 text-white" />
+                  ) : (
+                    <Message className="h-5 w-5 text-white" />
+                  )}
+                </div>
+
+                {/* Message Content */}
+                <div
+                  className={`flex min-w-0 flex-1 flex-col gap-1 ${
+                    message.role === 'user' ? 'items-end' : 'items-start'
+                  }`}
+                >
                   <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                       message.role === 'user'
-                        ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                        : 'bg-gradient-to-br from-purple-500 to-purple-600'
+                        ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg'
+                        : 'bg-zinc-800/80 text-gray-100 shadow-lg'
                     }`}
                   >
-                    {message.role === 'user' ? (
-                      <UserCircle className="h-5 w-5 text-white" />
+                    {message.role === 'assistant' ? (
+                      <div className="prose prose-sm max-w-none text-gray-100 dark:prose-invert prose-headings:text-gray-100 prose-p:leading-relaxed prose-p:text-gray-100 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-blockquote:border-l-blue-500 prose-blockquote:text-gray-100 prose-strong:text-gray-100 prose-code:text-blue-300 prose-pre:bg-zinc-900 prose-pre:text-gray-200 prose-ol:text-gray-100 prose-ul:text-gray-100 prose-li:text-gray-100">
+                        <Markdown>{message.content}</Markdown>
+                      </div>
                     ) : (
-                      <Message className="h-5 w-5 text-white" />
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed md:text-base">
+                        {message.content}
+                      </p>
                     )}
                   </div>
-
-                  {/* Message Content */}
-                  <div
-                    className={`flex min-w-0 flex-1 flex-col gap-1 ${
-                      message.role === 'user' ? 'items-end' : 'items-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                        message.role === 'user'
-                          ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg'
-                          : 'bg-zinc-800/80 text-gray-100 shadow-lg'
-                      }`}
-                    >
-                      {message.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-gray-100 prose-p:text-gray-100 prose-p:leading-relaxed prose-strong:text-gray-100 prose-ul:text-gray-100 prose-ol:text-gray-100 prose-li:text-gray-100 prose-code:text-blue-300 prose-pre:bg-zinc-900 prose-pre:text-gray-200 prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-blockquote:text-gray-100 prose-blockquote:border-l-blue-500 text-gray-100">
-                          <Markdown>{message.content}</Markdown>
-                        </div>
-                      ) : (
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed md:text-base">
-                          {message.content}
-                        </p>
-                      )}
-                    </div>
-                  </div>
                 </div>
-              ))}
-              {isLoading && (
-                <div className="flex gap-4">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
-                    <Message className="h-5 w-5 text-white" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className="rounded-2xl bg-zinc-800/80 px-4 py-3 shadow-lg">
-                      <div className="flex items-center gap-2">
-                        <div className="flex gap-1">
-                          <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]"></div>
-                          <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]"></div>
-                          <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
-                        </div>
-                        <span className="text-sm text-gray-400">Thinking...</span>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex gap-4">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
+                  <Message className="h-5 w-5 text-white" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="rounded-2xl bg-zinc-800/80 px-4 py-3 shadow-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1">
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
                       </div>
+                      <span className="text-sm text-gray-400">Thinking...</span>
                     </div>
                   </div>
                 </div>
-              )}
-              <div ref={messagesEndRef} />
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Scroll to bottom button */}
@@ -365,13 +388,13 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a question about this conversation..."
-                className="w-full resize-none rounded-xl border border-zinc-700/50 bg-zinc-900/80 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all md:px-4 md:py-3 md:text-base"
+                className="w-full resize-none rounded-xl border border-zinc-700/50 bg-zinc-900/80 px-3 py-2.5 text-sm text-white transition-all placeholder:text-gray-500 focus:border-blue-500/50 focus:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 md:px-4 md:py-3 md:text-base"
                 rows={1}
                 disabled={isLoading}
                 style={{
                   minHeight: '44px',
                   maxHeight: '120px',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
                 }}
               />
             </div>
@@ -390,4 +413,3 @@ export default function Chat({ transcript, onClearChatRef, onMessagesChange }: C
     </div>
   );
 }
-
