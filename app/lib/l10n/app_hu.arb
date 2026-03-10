@@ -2818,5 +2818,13 @@
     "verifyYourNumber": "Ellenorizze a szamat",
     "yourVerifiedNumbers": "Ellenorzott szamai",
     "showDailyScoreOnHomepage": "Napi pontszám megjelenítése a főoldalon",
-    "showTasksOnHomepage": "Feladatok megjelenítése a főoldalon"
+    "showTasksOnHomepage": "Feladatok megjelenítése a főoldalon",
+    "phoneCallsUnlimitedOnly": "Telefonhívások az Omi-n keresztül",
+    "phoneCallsUpsellSubtitle": "Hívjon az Omi-n keresztül, és kapjon valós idejű átírást, automatikus összefoglalókat és még többet.",
+    "phoneCallsUpsellFeature1": "Minden hívás valós idejű átírása",
+    "phoneCallsUpsellFeature2": "Automatikus hívás-összefoglalók és tennivalók",
+    "phoneCallsUpsellFeature3": "A címzettek a valódi számodat látják, nem egy véletlent",
+    "phoneCallsUpsellFeature4": "Hívásai privátok és biztonságosak maradnak",
+    "phoneCallsUpgradeButton": "Váltás Korlátlanra",
+    "phoneCallsMaybeLater": "Talán később"
 }

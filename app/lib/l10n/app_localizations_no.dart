@@ -8467,4 +8467,28 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Vis oppgaver på hjemmesiden';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtaler via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Ring via Omi og få sanntids transkripsjon, automatiske sammendrag og mer.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Sanntids transkripsjon av hver samtale';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiske samtalesammendrag og oppgaver';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottakere ser ditt ekte nummer, ikke et tilfeldig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Samtalene dine forblir private og sikre';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Oppgrader til Ubegrenset';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanskje senere';
 }

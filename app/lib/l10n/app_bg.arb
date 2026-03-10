@@ -2691,5 +2691,13 @@
     "speakerLabelYou": "Вие",
     "speakerLabelUnknown": "Неизвестен",
     "showDailyScoreOnHomepage": "Покажи дневния резултат на началната страница",
-    "showTasksOnHomepage": "Покажи задачите на началната страница"
+    "showTasksOnHomepage": "Покажи задачите на началната страница",
+    "phoneCallsUnlimitedOnly": "Телефонни обаждания чрез Omi",
+    "phoneCallsUpsellSubtitle": "Правете обаждания чрез Omi и получавайте транскрипция в реално време, автоматични резюмета и още. Достъпно само за абонати на план Неограничен.",
+    "phoneCallsUpsellFeature1": "Транскрипция в реално време на всяко обаждане",
+    "phoneCallsUpsellFeature2": "Автоматични резюмета и задачи от обаждания",
+    "phoneCallsUpsellFeature3": "Получателите виждат истинския ви номер, не случаен",
+    "phoneCallsUpsellFeature4": "Вашите обаждания остават лични и сигурни",
+    "phoneCallsUpgradeButton": "Надградете до Неограничен",
+    "phoneCallsMaybeLater": "Може би по-късно"
 }

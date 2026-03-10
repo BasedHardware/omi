@@ -12,6 +12,8 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
+import database.users as users_db
+from models.users import PlanType
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.twilio_service import (
@@ -31,6 +33,13 @@ def _redact_phone(number: str) -> str:
     if len(number) > 4:
         return number[:2] + '***' + number[-4:]
     return '***'
+
+
+def _require_unlimited_plan(uid: str):
+    """Raise 403 if the user is not on the unlimited plan."""
+    subscription = users_db.get_user_valid_subscription(uid)
+    if not subscription or subscription.plan != PlanType.unlimited:
+        raise HTTPException(status_code=403, detail="Phone calls require an Unlimited subscription")
 
 
 router = APIRouter()
@@ -86,6 +95,7 @@ def verify_phone_number(
     _: None = Depends(rate_limit_dependency(endpoint="phone_verify", requests_per_window=5, window_seconds=3600)),
 ):
     """Initiate phone number verification via Twilio caller ID validation."""
+    _require_unlimited_plan(uid)
     phone_number = request.phone_number.strip()
     if not E164_PATTERN.match(phone_number):
         raise HTTPException(status_code=400, detail="Phone number must be in E.164 format (e.g., +15551234567)")
@@ -132,6 +142,7 @@ def check_phone_verification(
     ),
 ):
     """Check if a phone number has been verified. Poll this endpoint every 2s (60s timeout)."""
+    _require_unlimited_plan(uid)
     phone_number = request.phone_number.strip()
 
     # Check if already stored locally (avoid duplicates from repeated polling)
@@ -170,6 +181,7 @@ def check_phone_verification(
 @router.get("/v1/phone/numbers", tags=['phone-calls'])
 def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     """List all verified phone numbers for the user."""
+    _require_unlimited_plan(uid)
     numbers = phone_calls_db.get_phone_numbers(uid)
     return {'numbers': numbers}
 
@@ -177,6 +189,7 @@ def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
 @router.delete("/v1/phone/numbers/{phone_number_id}", tags=['phone-calls'])
 def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Remove a verified phone number."""
+    _require_unlimited_plan(uid)
     phone_number = phone_calls_db.get_phone_number(uid, phone_number_id)
     if not phone_number:
         raise HTTPException(status_code=404, detail="Phone number not found")
@@ -198,6 +211,7 @@ def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_curren
 @router.post("/v1/phone/token", response_model=TokenResponse, tags=['phone-calls'])
 def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
     """Generate a Twilio access token for making VoIP calls."""
+    _require_unlimited_plan(uid)
     # Verify user has at least one verified number
     primary = phone_calls_db.get_primary_phone_number(uid)
     if not primary:

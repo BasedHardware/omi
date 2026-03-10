@@ -433,15 +433,25 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Phone Calls',
-                icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const PhoneCallSettingsPage(),
-                    ),
+              Consumer<UsageProvider>(
+                builder: (context, usageProvider, child) {
+                  final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                  if (!isUnlimited) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      const Divider(height: 1, color: Color(0xFF3C3C43)),
+                      _buildSettingsItem(
+                        title: 'Phone Calls',
+                        icon: const FaIcon(FontAwesomeIcons.phone, color: Color(0xFF8E8E93), size: 20),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const PhoneCallSettingsPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),

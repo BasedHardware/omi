@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Verifieer uw nummer",
     "yourVerifiedNumbers": "Uw geverifieerde nummers",
     "showDailyScoreOnHomepage": "Dagelijkse score weergeven op startpagina",
-    "showTasksOnHomepage": "Taken weergeven op startpagina"
+    "showTasksOnHomepage": "Taken weergeven op startpagina",
+    "phoneCallsUnlimitedOnly": "Telefoongesprekken via Omi",
+    "phoneCallsUpsellSubtitle": "Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer.",
+    "phoneCallsUpsellFeature1": "Realtime transcriptie van elk gesprek",
+    "phoneCallsUpsellFeature2": "Automatische gesprekssamenvattingen en actiepunten",
+    "phoneCallsUpsellFeature3": "Ontvangers zien je echte nummer, niet een willekeurig",
+    "phoneCallsUpsellFeature4": "Je gesprekken blijven privé en veilig",
+    "phoneCallsUpgradeButton": "Upgraden naar Onbeperkt",
+    "phoneCallsMaybeLater": "Misschien later"
 }

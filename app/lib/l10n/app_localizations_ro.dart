@@ -8515,4 +8515,29 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Apeluri telefonice prin Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcriere în timp real a fiecărui apel';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Rezumate automate ale apelurilor și sarcini';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Destinatarii văd numărul dvs. real, nu unul aleatoriu';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Apelurile dvs. rămân private și sigure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Treceți la Nelimitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Poate mai târziu';
 }

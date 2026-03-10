@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Verificejiet savu numuru",
     "yourVerifiedNumbers": "Jusu verificetie numuri",
     "showDailyScoreOnHomepage": "Rādīt dienas rezultātu sākumlapā",
-    "showTasksOnHomepage": "Rādīt uzdevumus sākumlapā"
+    "showTasksOnHomepage": "Rādīt uzdevumus sākumlapā",
+    "phoneCallsUnlimitedOnly": "Tālruņa zvani caur Omi",
+    "phoneCallsUpsellSubtitle": "Veiciet zvanus caur Omi un saņemiet reāllaika transkripciju, automātiskus kopsavilkumus un daudz ko citu.",
+    "phoneCallsUpsellFeature1": "Katra zvana reāllaika transkripcija",
+    "phoneCallsUpsellFeature2": "Automātiski zvanu kopsavilkumi un uzdevumi",
+    "phoneCallsUpsellFeature3": "Saņēmēji redz jūsu īsto numuru, nevis nejaušu",
+    "phoneCallsUpsellFeature4": "Jūsu zvani paliek privāti un droši",
+    "phoneCallsUpgradeButton": "Jaunināt uz Neierobežoto",
+    "phoneCallsMaybeLater": "Varbūt vēlāk"
 }

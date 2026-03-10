@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "ยืนยันหมายเลขของคุณ",
     "yourVerifiedNumbers": "หมายเลขที่ยืนยันแล้วของคุณ",
     "showDailyScoreOnHomepage": "แสดงคะแนนประจำวันบนหน้าหลัก",
-    "showTasksOnHomepage": "แสดงงานบนหน้าหลัก"
+    "showTasksOnHomepage": "แสดงงานบนหน้าหลัก",
+    "phoneCallsUnlimitedOnly": "โทรศัพท์ผ่าน Omi",
+    "phoneCallsUpsellSubtitle": "โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ",
+    "phoneCallsUpsellFeature1": "ถอดเสียงแบบเรียลไทม์ทุกสาย",
+    "phoneCallsUpsellFeature2": "สรุปสายอัตโนมัติและรายการดำเนินการ",
+    "phoneCallsUpsellFeature3": "ผู้รับเห็นหมายเลขจริงของคุณ ไม่ใช่หมายเลขสุ่ม",
+    "phoneCallsUpsellFeature4": "สายของคุณยังคงเป็นส่วนตัวและปลอดภัย",
+    "phoneCallsUpgradeButton": "อัปเกรดเป็น Unlimited",
+    "phoneCallsMaybeLater": "ไว้ทีหลัง"
 }

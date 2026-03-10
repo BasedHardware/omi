@@ -8490,4 +8490,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Mostrar tareas en la página de inicio';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Llamadas telefónicas vía Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Realiza llamadas a través de Omi y obtén transcripción en tiempo real, resúmenes automáticos y más.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripción en tiempo real de cada llamada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resúmenes automáticos de llamadas y tareas';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Los destinatarios ven tu número real, no uno aleatorio';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Tus llamadas se mantienen privadas y seguras';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualizar a Ilimitado';
+
+  @override
+  String get phoneCallsMaybeLater => 'Quizás más tarde';
 }

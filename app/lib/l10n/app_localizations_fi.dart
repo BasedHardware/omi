@@ -8471,4 +8471,29 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Puhelut Omin kautta';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Jokaisen puhelun reaaliaikainen litterointi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automaattiset puheluyhteenvedot ja toimenpiteet';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Vastaanottajat näkevät oikean numerosi, eivät satunnaista';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Puhelusi pysyvät yksityisinä ja turvallisina';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Päivitä Rajattomaan';
+
+  @override
+  String get phoneCallsMaybeLater => 'Ehkä myöhemmin';
 }

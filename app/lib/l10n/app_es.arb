@@ -2723,5 +2723,13 @@
     "verifyYourNumber": "Verifica tu numero",
     "yourVerifiedNumbers": "Tus numeros verificados",
     "showDailyScoreOnHomepage": "Mostrar puntuación diaria en la página de inicio",
-    "showTasksOnHomepage": "Mostrar tareas en la página de inicio"
+    "showTasksOnHomepage": "Mostrar tareas en la página de inicio",
+    "phoneCallsUnlimitedOnly": "Llamadas telefónicas vía Omi",
+    "phoneCallsUpsellSubtitle": "Realiza llamadas a través de Omi y obtén transcripción en tiempo real, resúmenes automáticos y más.",
+    "phoneCallsUpsellFeature1": "Transcripción en tiempo real de cada llamada",
+    "phoneCallsUpsellFeature2": "Resúmenes automáticos de llamadas y tareas",
+    "phoneCallsUpsellFeature3": "Los destinatarios ven tu número real, no uno aleatorio",
+    "phoneCallsUpsellFeature4": "Tus llamadas se mantienen privadas y seguras",
+    "phoneCallsUpgradeButton": "Actualizar a Ilimitado",
+    "phoneCallsMaybeLater": "Quizás más tarde"
 }

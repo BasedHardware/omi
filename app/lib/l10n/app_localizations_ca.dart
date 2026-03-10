@@ -8524,4 +8524,29 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Trucades telefòniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcripció en temps real de cada trucada';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Resums automàtics de trucades i accions a fer';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Els destinataris veuen el teu número real, no un d\'aleatori';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Les teves trucades es mantenen privades i segures';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Actualitza a Il·limitat';
+
+  @override
+  String get phoneCallsMaybeLater => 'Potser més tard';
 }

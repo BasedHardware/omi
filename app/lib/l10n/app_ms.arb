@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Sahkan nombor anda",
     "yourVerifiedNumbers": "Nombor anda yang disahkan",
     "showDailyScoreOnHomepage": "Tunjukkan Skor Harian di laman utama",
-    "showTasksOnHomepage": "Tunjukkan Tugasan di laman utama"
+    "showTasksOnHomepage": "Tunjukkan Tugasan di laman utama",
+    "phoneCallsUnlimitedOnly": "Panggilan Telefon melalui Omi",
+    "phoneCallsUpsellSubtitle": "Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi.",
+    "phoneCallsUpsellFeature1": "Transkripsi masa nyata setiap panggilan",
+    "phoneCallsUpsellFeature2": "Ringkasan panggilan automatik dan item tindakan",
+    "phoneCallsUpsellFeature3": "Penerima melihat nombor sebenar anda, bukan rawak",
+    "phoneCallsUpsellFeature4": "Panggilan anda kekal peribadi dan selamat",
+    "phoneCallsUpgradeButton": "Naik taraf ke Unlimited",
+    "phoneCallsMaybeLater": "Mungkin nanti"
 }

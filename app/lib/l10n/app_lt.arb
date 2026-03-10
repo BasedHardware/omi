@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Patvirtinkite savo numeri",
     "yourVerifiedNumbers": "Jusu patvirtinti numeriai",
     "showDailyScoreOnHomepage": "Rodyti dienos balą pagrindiniame puslapyje",
-    "showTasksOnHomepage": "Rodyti užduotis pagrindiniame puslapyje"
+    "showTasksOnHomepage": "Rodyti užduotis pagrindiniame puslapyje",
+    "phoneCallsUnlimitedOnly": "Telefono skambučiai per Omi",
+    "phoneCallsUpsellSubtitle": "Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau.",
+    "phoneCallsUpsellFeature1": "Kiekvieno skambučio transkripcija realiu laiku",
+    "phoneCallsUpsellFeature2": "Automatinės skambučių santraukos ir veiksmai",
+    "phoneCallsUpsellFeature3": "Gavėjai mato jūsų tikrąjį numerį, ne atsitiktinį",
+    "phoneCallsUpsellFeature4": "Jūsų skambučiai lieka privatūs ir saugūs",
+    "phoneCallsUpgradeButton": "Atnaujinti iki Neriboto",
+    "phoneCallsMaybeLater": "Gal vėliau"
 }

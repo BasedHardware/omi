@@ -2744,5 +2744,13 @@
     "verifyYourNumber": "验证您的号码",
     "yourVerifiedNumbers": "您已验证的号码",
     "showDailyScoreOnHomepage": "在首页显示每日评分",
-    "showTasksOnHomepage": "在首页显示任务"
+    "showTasksOnHomepage": "在首页显示任务",
+    "phoneCallsUnlimitedOnly": "通过 Omi 拨打电话",
+    "phoneCallsUpsellSubtitle": "通过 Omi 拨打电话，获取实时转录、自动摘要等功能。",
+    "phoneCallsUpsellFeature1": "每次通话的实时转录",
+    "phoneCallsUpsellFeature2": "自动通话摘要和待办事项",
+    "phoneCallsUpsellFeature3": "接收方看到的是您的真实号码，而非随机号码",
+    "phoneCallsUpsellFeature4": "您的通话保持私密和安全",
+    "phoneCallsUpgradeButton": "升级到无限计划",
+    "phoneCallsMaybeLater": "以后再说"
 }

@@ -2731,5 +2731,13 @@
     "verifyYourNumber": "Verificer dit nummer",
     "yourVerifiedNumbers": "Dine verificerede numre",
     "showDailyScoreOnHomepage": "Vis daglig score på hjemmesiden",
-    "showTasksOnHomepage": "Vis opgaver på hjemmesiden"
+    "showTasksOnHomepage": "Vis opgaver på hjemmesiden",
+    "phoneCallsUnlimitedOnly": "Telefonopkald via Omi",
+    "phoneCallsUpsellSubtitle": "Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere.",
+    "phoneCallsUpsellFeature1": "Transskription i realtid af hvert opkald",
+    "phoneCallsUpsellFeature2": "Automatiske opkaldsresuméer og handlingspunkter",
+    "phoneCallsUpsellFeature3": "Modtagere ser dit rigtige nummer, ikke et tilfældigt",
+    "phoneCallsUpsellFeature4": "Dine opkald forbliver private og sikre",
+    "phoneCallsUpgradeButton": "Opgrader til Ubegrænset",
+    "phoneCallsMaybeLater": "Måske senere"
 }

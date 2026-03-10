@@ -8485,4 +8485,29 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонні дзвінки через Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Здійснюйте дзвінки через Omi та отримуйте транскрипцію в реальному часі, автоматичні зведення та багато іншого.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипція кожного дзвінка в реальному часі';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматичні зведення дзвінків та завдання';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Одержувачі бачать ваш справжній номер, а не випадковий';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваші дзвінки залишаються приватними та захищеними';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Перейти на Безлімітний';
+
+  @override
+  String get phoneCallsMaybeLater => 'Можливо пізніше';
 }

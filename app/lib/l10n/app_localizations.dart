@@ -15830,6 +15830,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show Tasks on homepage'**
   String get showTasksOnHomepage;
+
+  /// Title for the phone calls upsell sheet shown to non-unlimited users
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls via Omi'**
+  String get phoneCallsUnlimitedOnly;
+
+  /// Subtitle explaining phone calls feature on upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.'**
+  String get phoneCallsUpsellSubtitle;
+
+  /// Phone calls upsell feature 1
+  ///
+  /// In en, this message translates to:
+  /// **'Real-time transcription of every call'**
+  String get phoneCallsUpsellFeature1;
+
+  /// Phone calls upsell feature 2
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic call summaries and action items'**
+  String get phoneCallsUpsellFeature2;
+
+  /// Phone calls upsell feature 3
+  ///
+  /// In en, this message translates to:
+  /// **'Recipients see your real number, not a random one'**
+  String get phoneCallsUpsellFeature3;
+
+  /// Phone calls upsell feature 4
+  ///
+  /// In en, this message translates to:
+  /// **'Your calls stay private and secure'**
+  String get phoneCallsUpsellFeature4;
+
+  /// Button text to upgrade to unlimited plan from phone calls upsell
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Unlimited'**
+  String get phoneCallsUpgradeButton;
+
+  /// Dismiss button text on phone calls upsell sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Maybe later'**
+  String get phoneCallsMaybeLater;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

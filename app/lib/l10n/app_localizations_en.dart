@@ -8469,4 +8469,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Show Tasks on homepage';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Phone Calls via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Real-time transcription of every call';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatic call summaries and action items';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Recipients see your real number, not a random one';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Your calls stay private and secure';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgrade to Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Maybe later';
 }

@@ -2691,5 +2691,13 @@
     "verifyYourNumber": "Overte sve cislo",
     "yourVerifiedNumbers": "Vase overena cisla",
     "showDailyScoreOnHomepage": "Zobrazit denní skóre na domovské stránce",
-    "showTasksOnHomepage": "Zobrazit úkoly na domovské stránce"
+    "showTasksOnHomepage": "Zobrazit úkoly na domovské stránce",
+    "phoneCallsUnlimitedOnly": "Telefonní hovory přes Omi",
+    "phoneCallsUpsellSubtitle": "Volejte přes Omi a získejte přepis v reálném čase, automatické shrnutí a další.",
+    "phoneCallsUpsellFeature1": "Přepis každého hovoru v reálném čase",
+    "phoneCallsUpsellFeature2": "Automatické shrnutí hovorů a úkoly",
+    "phoneCallsUpsellFeature3": "Příjemci vidí vaše skutečné číslo, ne náhodné",
+    "phoneCallsUpsellFeature4": "Vaše hovory zůstávají soukromé a bezpečné",
+    "phoneCallsUpgradeButton": "Upgradovat na Neomezený",
+    "phoneCallsMaybeLater": "Možná později"
 }

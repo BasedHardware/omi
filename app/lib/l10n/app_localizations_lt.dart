@@ -8480,4 +8480,29 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Rodyti užduotis pagrindiniame puslapyje';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefono skambučiai per Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Kiekvieno skambučio transkripcija realiu laiku';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatinės skambučių santraukos ir veiksmai';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Gavėjai mato jūsų tikrąjį numerį, ne atsitiktinį';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Jūsų skambučiai lieka privatūs ir saugūs';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Atnaujinti iki Neriboto';
+
+  @override
+  String get phoneCallsMaybeLater => 'Gal vėliau';
 }

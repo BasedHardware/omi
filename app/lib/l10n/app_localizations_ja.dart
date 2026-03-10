@@ -8332,4 +8332,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '通話の自動要約とアクションアイテム';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '受信者にはあなたの実際の番号が表示されます';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '通話はプライベートで安全';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimitedにアップグレード';
+
+  @override
+  String get phoneCallsMaybeLater => 'また後で';
 }

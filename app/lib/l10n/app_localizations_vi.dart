@@ -8476,4 +8476,29 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Cuộc gọi điện thoại qua Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Phiên âm thời gian thực mọi cuộc gọi';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Tóm tắt cuộc gọi tự động và danh sách hành động';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Người nhận thấy số thật của bạn, không phải số ngẫu nhiên';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Cuộc gọi của bạn luôn riêng tư và an toàn';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Nâng cấp lên Không giới hạn';
+
+  @override
+  String get phoneCallsMaybeLater => 'Để sau';
 }

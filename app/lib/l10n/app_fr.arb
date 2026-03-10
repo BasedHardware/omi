@@ -2757,5 +2757,13 @@
     "verifyYourNumber": "Verifiez votre numero",
     "yourVerifiedNumbers": "Vos numeros verifies",
     "showDailyScoreOnHomepage": "Afficher le score quotidien sur la page d'accueil",
-    "showTasksOnHomepage": "Afficher les tâches sur la page d'accueil"
+    "showTasksOnHomepage": "Afficher les tâches sur la page d'accueil",
+    "phoneCallsUnlimitedOnly": "Appels téléphoniques via Omi",
+    "phoneCallsUpsellSubtitle": "Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore.",
+    "phoneCallsUpsellFeature1": "Transcription en temps réel de chaque appel",
+    "phoneCallsUpsellFeature2": "Résumés automatiques des appels et actions à suivre",
+    "phoneCallsUpsellFeature3": "Les destinataires voient votre vrai numéro, pas un aléatoire",
+    "phoneCallsUpsellFeature4": "Vos appels restent privés et sécurisés",
+    "phoneCallsUpgradeButton": "Passer à Illimité",
+    "phoneCallsMaybeLater": "Peut-être plus tard"
 }

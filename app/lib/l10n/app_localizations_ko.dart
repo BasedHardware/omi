@@ -8334,4 +8334,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => '홈페이지에 작업 표시';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi를 통한 전화 통화';
+
+  @override
+  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 액션 아이템';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '통화는 비공개이고 안전합니다';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Unlimited로 업그레이드';
+
+  @override
+  String get phoneCallsMaybeLater => '나중에';
 }

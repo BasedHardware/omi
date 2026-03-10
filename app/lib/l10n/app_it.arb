@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Verifica il tuo numero",
     "yourVerifiedNumbers": "I tuoi numeri verificati",
     "showDailyScoreOnHomepage": "Mostra punteggio giornaliero nella homepage",
-    "showTasksOnHomepage": "Mostra attività nella homepage"
+    "showTasksOnHomepage": "Mostra attività nella homepage",
+    "phoneCallsUnlimitedOnly": "Chiamate telefoniche tramite Omi",
+    "phoneCallsUpsellSubtitle": "Effettua chiamate tramite Omi e ottieni trascrizione in tempo reale, riassunti automatici e altro.",
+    "phoneCallsUpsellFeature1": "Trascrizione in tempo reale di ogni chiamata",
+    "phoneCallsUpsellFeature2": "Riassunti automatici delle chiamate e azioni da fare",
+    "phoneCallsUpsellFeature3": "I destinatari vedono il tuo vero numero, non uno casuale",
+    "phoneCallsUpsellFeature4": "Le tue chiamate restano private e sicure",
+    "phoneCallsUpgradeButton": "Passa a Illimitato",
+    "phoneCallsMaybeLater": "Forse più tardi"
 }

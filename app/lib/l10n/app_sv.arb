@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Verifiera ditt nummer",
     "yourVerifiedNumbers": "Dina verifierade nummer",
     "showDailyScoreOnHomepage": "Visa dagligt poäng på hemsidan",
-    "showTasksOnHomepage": "Visa uppgifter på hemsidan"
+    "showTasksOnHomepage": "Visa uppgifter på hemsidan",
+    "phoneCallsUnlimitedOnly": "Telefonsamtal via Omi",
+    "phoneCallsUpsellSubtitle": "Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer.",
+    "phoneCallsUpsellFeature1": "Transkription i realtid av varje samtal",
+    "phoneCallsUpsellFeature2": "Automatiska samtalssammanfattningar och uppgifter",
+    "phoneCallsUpsellFeature3": "Mottagare ser ditt riktiga nummer, inte ett slumpmässigt",
+    "phoneCallsUpsellFeature4": "Dina samtal förblir privata och säkra",
+    "phoneCallsUpgradeButton": "Uppgradera till Obegränsad",
+    "phoneCallsMaybeLater": "Kanske senare"
 }

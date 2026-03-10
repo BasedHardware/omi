@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Vahvista numerosi",
     "yourVerifiedNumbers": "Vahvistetut numerosi",
     "showDailyScoreOnHomepage": "Näytä päivittäinen pistemäärä etusivulla",
-    "showTasksOnHomepage": "Näytä tehtävät etusivulla"
+    "showTasksOnHomepage": "Näytä tehtävät etusivulla",
+    "phoneCallsUnlimitedOnly": "Puhelut Omin kautta",
+    "phoneCallsUpsellSubtitle": "Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta.",
+    "phoneCallsUpsellFeature1": "Jokaisen puhelun reaaliaikainen litterointi",
+    "phoneCallsUpsellFeature2": "Automaattiset puheluyhteenvedot ja toimenpiteet",
+    "phoneCallsUpsellFeature3": "Vastaanottajat näkevät oikean numerosi, eivät satunnaista",
+    "phoneCallsUpsellFeature4": "Puhelusi pysyvät yksityisinä ja turvallisina",
+    "phoneCallsUpgradeButton": "Päivitä Rajattomaan",
+    "phoneCallsMaybeLater": "Ehkä myöhemmin"
 }

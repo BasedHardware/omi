@@ -8485,4 +8485,29 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Omi ile Telefon Aramaları';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Her aramanın gerçek zamanlı transkripsiyonu';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Otomatik arama özetleri ve görevler';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Alıcılar rastgele değil, gerçek numaranızı görür';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Aramalarınız gizli ve güvenli kalır';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Sınırsız\'a yükselt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Belki daha sonra';
 }

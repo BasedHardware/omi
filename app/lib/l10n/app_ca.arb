@@ -2691,5 +2691,13 @@
     "verifyYourNumber": "Verifica el teu numero",
     "yourVerifiedNumbers": "Els teus numeros verificats",
     "showDailyScoreOnHomepage": "Mostra la puntuació diària a la pàgina principal",
-    "showTasksOnHomepage": "Mostra les tasques a la pàgina principal"
+    "showTasksOnHomepage": "Mostra les tasques a la pàgina principal",
+    "phoneCallsUnlimitedOnly": "Trucades telefòniques via Omi",
+    "phoneCallsUpsellSubtitle": "Fes trucades a través d'Omi i obtin transcripció en temps real, resums automàtics i més.",
+    "phoneCallsUpsellFeature1": "Transcripció en temps real de cada trucada",
+    "phoneCallsUpsellFeature2": "Resums automàtics de trucades i accions a fer",
+    "phoneCallsUpsellFeature3": "Els destinataris veuen el teu número real, no un d'aleatori",
+    "phoneCallsUpsellFeature4": "Les teves trucades es mantenen privades i segures",
+    "phoneCallsUpgradeButton": "Actualitza a Il·limitat",
+    "phoneCallsMaybeLater": "Potser més tard"
 }

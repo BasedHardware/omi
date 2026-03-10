@@ -8497,4 +8497,29 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Tunjukkan Tugasan di laman utama';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Panggilan Telefon melalui Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkripsi masa nyata setiap panggilan';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Ringkasan panggilan automatik dan item tindakan';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Penerima melihat nombor sebenar anda, bukan rawak';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Panggilan anda kekal peribadi dan selamat';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Naik taraf ke Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'Mungkin nanti';
 }

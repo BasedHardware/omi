@@ -2722,5 +2722,13 @@
     "verifyYourNumber": "Verificati numarul dvs.",
     "yourVerifiedNumbers": "Numerele dvs. verificate",
     "showDailyScoreOnHomepage": "Afișați scorul zilnic pe pagina principală",
-    "showTasksOnHomepage": "Afișați sarcinile pe pagina principală"
+    "showTasksOnHomepage": "Afișați sarcinile pe pagina principală",
+    "phoneCallsUnlimitedOnly": "Apeluri telefonice prin Omi",
+    "phoneCallsUpsellSubtitle": "Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele.",
+    "phoneCallsUpsellFeature1": "Transcriere în timp real a fiecărui apel",
+    "phoneCallsUpsellFeature2": "Rezumate automate ale apelurilor și sarcini",
+    "phoneCallsUpsellFeature3": "Destinatarii văd numărul dvs. real, nu unul aleatoriu",
+    "phoneCallsUpsellFeature4": "Apelurile dvs. rămân private și sigure",
+    "phoneCallsUpgradeButton": "Treceți la Nelimitat",
+    "phoneCallsMaybeLater": "Poate mai târziu"
 }

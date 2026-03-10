@@ -8414,4 +8414,29 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'عرض المهام على الصفحة الرئيسية';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'مكالمات هاتفية عبر Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'قم بإجراء مكالمات عبر Omi واحصل على نسخ نصي فوري وملخصات تلقائية والمزيد. متاح حصرياً لمشتركي خطة غير محدود.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'نسخ نصي فوري لكل مكالمة';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'ملخصات تلقائية للمكالمات وعناصر العمل';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'يرى المتلقون رقمك الحقيقي، وليس رقماً عشوائياً';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'مكالماتك تبقى خاصة وآمنة';
+
+  @override
+  String get phoneCallsUpgradeButton => 'ترقية إلى غير محدود';
+
+  @override
+  String get phoneCallsMaybeLater => 'ربما لاحقاً';
 }

@@ -2757,5 +2757,13 @@
     "verifyYourNumber": "Подтвердите свой номер",
     "yourVerifiedNumbers": "Ваши подтвержденные номера",
     "showDailyScoreOnHomepage": "Показать дневной счёт на главной странице",
-    "showTasksOnHomepage": "Показать задачи на главной странице"
+    "showTasksOnHomepage": "Показать задачи на главной странице",
+    "phoneCallsUnlimitedOnly": "Звонки через Omi",
+    "phoneCallsUpsellSubtitle": "Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое.",
+    "phoneCallsUpsellFeature1": "Транскрипция каждого звонка в реальном времени",
+    "phoneCallsUpsellFeature2": "Автоматические сводки звонков и задачи",
+    "phoneCallsUpsellFeature3": "Получатели видят ваш настоящий номер, а не случайный",
+    "phoneCallsUpsellFeature4": "Ваши звонки остаются конфиденциальными и защищёнными",
+    "phoneCallsUpgradeButton": "Перейти на Безлимитный",
+    "phoneCallsMaybeLater": "Может быть позже"
 }

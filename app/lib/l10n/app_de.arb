@@ -2690,5 +2690,13 @@
     "verifyYourNumber": "Verifizieren Sie Ihre Nummer",
     "yourVerifiedNumbers": "Ihre verifizierten Nummern",
     "showDailyScoreOnHomepage": "Tagespunktzahl auf der Startseite anzeigen",
-    "showTasksOnHomepage": "Aufgaben auf der Startseite anzeigen"
+    "showTasksOnHomepage": "Aufgaben auf der Startseite anzeigen",
+    "phoneCallsUnlimitedOnly": "Telefonanrufe über Omi",
+    "phoneCallsUpsellSubtitle": "Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr.",
+    "phoneCallsUpsellFeature1": "Echtzeit-Transkription jedes Anrufs",
+    "phoneCallsUpsellFeature2": "Automatische Anrufzusammenfassungen und Aufgaben",
+    "phoneCallsUpsellFeature3": "Empfänger sehen deine echte Nummer, keine zufällige",
+    "phoneCallsUpsellFeature4": "Deine Anrufe bleiben privat und sicher",
+    "phoneCallsUpgradeButton": "Auf Unlimited upgraden",
+    "phoneCallsMaybeLater": "Vielleicht später"
 }

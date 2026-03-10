@@ -2764,5 +2764,13 @@
     "verifyYourNumber": "Verifikasi nomor Anda",
     "yourVerifiedNumbers": "Nomor terverifikasi Anda",
     "showDailyScoreOnHomepage": "Tampilkan Skor Harian di beranda",
-    "showTasksOnHomepage": "Tampilkan Tugas di beranda"
+    "showTasksOnHomepage": "Tampilkan Tugas di beranda",
+    "phoneCallsUnlimitedOnly": "Panggilan Telepon via Omi",
+    "phoneCallsUpsellSubtitle": "Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya.",
+    "phoneCallsUpsellFeature1": "Transkripsi real-time setiap panggilan",
+    "phoneCallsUpsellFeature2": "Ringkasan panggilan otomatis dan item tindakan",
+    "phoneCallsUpsellFeature3": "Penerima melihat nomor asli Anda, bukan nomor acak",
+    "phoneCallsUpsellFeature4": "Panggilan Anda tetap pribadi dan aman",
+    "phoneCallsUpgradeButton": "Upgrade ke Unlimited",
+    "phoneCallsMaybeLater": "Mungkin nanti"
 }

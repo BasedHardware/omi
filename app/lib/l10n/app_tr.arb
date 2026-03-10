@@ -2757,5 +2757,13 @@
     "verifyYourNumber": "Numaranizi dogrulayin",
     "yourVerifiedNumbers": "Dogrulanmis numaralariniz",
     "showDailyScoreOnHomepage": "Ana sayfada günlük puanı göster",
-    "showTasksOnHomepage": "Ana sayfada görevleri göster"
+    "showTasksOnHomepage": "Ana sayfada görevleri göster",
+    "phoneCallsUnlimitedOnly": "Omi ile Telefon Aramaları",
+    "phoneCallsUpsellSubtitle": "Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın.",
+    "phoneCallsUpsellFeature1": "Her aramanın gerçek zamanlı transkripsiyonu",
+    "phoneCallsUpsellFeature2": "Otomatik arama özetleri ve görevler",
+    "phoneCallsUpsellFeature3": "Alıcılar rastgele değil, gerçek numaranızı görür",
+    "phoneCallsUpsellFeature4": "Aramalarınız gizli ve güvenli kalır",
+    "phoneCallsUpgradeButton": "Sınırsız'a yükselt",
+    "phoneCallsMaybeLater": "Belki daha sonra"
 }

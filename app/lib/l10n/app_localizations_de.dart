@@ -8544,4 +8544,29 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Aufgaben auf der Startseite anzeigen';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonanrufe über Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Echtzeit-Transkription jedes Anrufs';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische Anrufzusammenfassungen und Aufgaben';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Empfänger sehen deine echte Nummer, keine zufällige';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Deine Anrufe bleiben privat und sicher';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Auf Unlimited upgraden';
+
+  @override
+  String get phoneCallsMaybeLater => 'Vielleicht später';
 }

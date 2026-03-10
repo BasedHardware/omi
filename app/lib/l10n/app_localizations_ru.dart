@@ -8500,4 +8500,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Показать задачи на главной странице';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Звонки через Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипция каждого звонка в реальном времени';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматические сводки звонков и задачи';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Получатели видят ваш настоящий номер, а не случайный';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Ваши звонки остаются конфиденциальными и защищёнными';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Перейти на Безлимитный';
+
+  @override
+  String get phoneCallsMaybeLater => 'Может быть позже';
 }

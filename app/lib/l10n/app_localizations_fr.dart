@@ -8551,4 +8551,29 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Afficher les tâches sur la page d\'accueil';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Appels téléphoniques via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transcription en temps réel de chaque appel';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Résumés automatiques des appels et actions à suivre';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Les destinataires voient votre vrai numéro, pas un aléatoire';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vos appels restent privés et sécurisés';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Passer à Illimité';
+
+  @override
+  String get phoneCallsMaybeLater => 'Peut-être plus tard';
 }

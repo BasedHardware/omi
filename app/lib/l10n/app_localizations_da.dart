@@ -8456,4 +8456,29 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get showTasksOnHomepage => 'Vis opgaver på hjemmesiden';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonopkald via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transskription i realtid af hvert opkald';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiske opkaldsresuméer og handlingspunkter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Modtagere ser dit rigtige nummer, ikke et tilfældigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dine opkald forbliver private og sikre';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Opgrader til Ubegrænset';
+
+  @override
+  String get phoneCallsMaybeLater => 'Måske senere';
 }

@@ -10189,5 +10189,37 @@
     "showTasksOnHomepage": "Show Tasks on homepage",
     "@showTasksOnHomepage": {
         "description": "Description for show tasks toggle in developer settings"
+    },
+    "phoneCallsUnlimitedOnly": "Phone Calls via Omi",
+    "@phoneCallsUnlimitedOnly": {
+        "description": "Title for the phone calls upsell sheet shown to non-unlimited users"
+    },
+    "phoneCallsUpsellSubtitle": "Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.",
+    "@phoneCallsUpsellSubtitle": {
+        "description": "Subtitle explaining phone calls feature on upsell sheet"
+    },
+    "phoneCallsUpsellFeature1": "Real-time transcription of every call",
+    "@phoneCallsUpsellFeature1": {
+        "description": "Phone calls upsell feature 1"
+    },
+    "phoneCallsUpsellFeature2": "Automatic call summaries and action items",
+    "@phoneCallsUpsellFeature2": {
+        "description": "Phone calls upsell feature 2"
+    },
+    "phoneCallsUpsellFeature3": "Recipients see your real number, not a random one",
+    "@phoneCallsUpsellFeature3": {
+        "description": "Phone calls upsell feature 3"
+    },
+    "phoneCallsUpsellFeature4": "Your calls stay private and secure",
+    "@phoneCallsUpsellFeature4": {
+        "description": "Phone calls upsell feature 4"
+    },
+    "phoneCallsUpgradeButton": "Upgrade to Unlimited",
+    "@phoneCallsUpgradeButton": {
+        "description": "Button text to upgrade to unlimited plan from phone calls upsell"
+    },
+    "phoneCallsMaybeLater": "Maybe later",
+    "@phoneCallsMaybeLater": {
+        "description": "Dismiss button text on phone calls upsell sheet"
     }
 }
