@@ -88,8 +88,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   }
 
   Future<void> _makeCall(String phoneNumber, {String? contactName}) async {
-    // Strip spaces, dashes, parens — contacts often have formatted numbers
-    phoneNumber = phoneNumber.replaceAll(RegExp(r'[\s\-\(\)]+'), '');
+    // Strip spaces, dashes, parens, dots — contacts often have formatted numbers
+    phoneNumber = phoneNumber.replaceAll(RegExp(r'[\s\-\(\).]+'), '');
 
     var provider = context.read<PhoneCallProvider>();
 
