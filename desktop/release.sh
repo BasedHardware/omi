@@ -424,8 +424,14 @@ if [ -f "omi_icon.icns" ]; then
     cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 fi
 
-# Copy GoogleService-Info.plist for Firebase
-cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+# Copy Firebase config (prod plist injected from CI secret, dev fallback in git)
+if [ -n "$MACOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
+    echo "$MACOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    echo "Injected prod GoogleService-Info.plist from CI secret"
+else
+    cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+    echo "WARNING: Using dev GoogleService-Info.plist (MACOS_GOOGLE_SERVICE_INFO_PLIST not set)"
+fi
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
 # Note: Bundle goes in Contents/Resources/ - our custom BundleExtension.swift looks for it there

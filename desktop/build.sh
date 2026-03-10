@@ -84,8 +84,14 @@ cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 # Copy app icon
 cp omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
 
-# Copy Firebase config for desktop auth
-cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+# Copy Firebase config (prod plist injected from CI secret, dev fallback in git)
+if [ -n "$MACOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
+    echo "$MACOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    echo "Injected prod GoogleService-Info.plist from CI secret"
+else
+    cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    echo "WARNING: Using dev GoogleService-Info.plist (MACOS_GOOGLE_SERVICE_INFO_PLIST not set)"
+fi
 
 # Update Info.plist with actual values
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $BINARY_NAME" "$APP_BUNDLE/Contents/Info.plist"
