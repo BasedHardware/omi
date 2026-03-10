@@ -26,7 +26,7 @@ sys.modules.setdefault('database.users', MagicMock())
 sys.modules.setdefault('utils.retrieval.agentic', MagicMock(agent_config_context=MagicMock(), CORE_TOOLS=[]))
 sys.modules.setdefault('utils.retrieval.tools.app_tools', MagicMock())
 
-from routers.agent_tools import router, _vm_response, GCE_ZONE
+from routers.agent_tools import router, _vm_response, _provision_vm_background, _restart_vm_background, GCE_ZONE
 from utils.other.endpoints import get_current_user_uid
 
 app = FastAPI()
@@ -231,3 +231,95 @@ def test_vm_name_short_uid(mock_get, mock_set_fs, mock_provision):
         assert data["vm_name"] == "omi-agent-shortuid"
     finally:
         app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+
+
+# --------------- UID boundary tests ---------------
+
+
+@patch("routers.agent_tools._provision_vm_background")
+@patch("routers.agent_tools._set_firestore_vm")
+@patch("routers.agent_tools.get_agent_vm", return_value=None)
+def test_vm_name_whitespace_uid(mock_get, mock_set_fs, mock_provision):
+    """UID with whitespace is lowercased and truncated normally."""
+    app.dependency_overrides[get_current_user_uid] = lambda: "User With Spaces"
+    try:
+        resp = client.post("/v1/agent/vm-ensure")
+        data = resp.json()
+        assert data["vm_name"] == "omi-agent-user with sp"
+    finally:
+        app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+
+
+@patch("routers.agent_tools._provision_vm_background")
+@patch("routers.agent_tools._set_firestore_vm")
+@patch("routers.agent_tools.get_agent_vm", return_value=None)
+def test_vm_name_empty_string_uid(mock_get, mock_set_fs, mock_provision):
+    """Empty-string UID produces omi-agent- prefix with empty suffix."""
+    app.dependency_overrides[get_current_user_uid] = lambda: ""
+    try:
+        resp = client.post("/v1/agent/vm-ensure")
+        data = resp.json()
+        assert data["vm_name"] == "omi-agent-"
+    finally:
+        app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
+
+
+# --------------- background task error handling tests ---------------
+
+
+@pytest.mark.asyncio
+@patch("routers.agent_tools._update_firestore_vm")
+@patch("routers.agent_tools._create_gce_vm", new_callable=AsyncMock, side_effect=Exception("GCE insert timed out"))
+async def test_provision_vm_background_sets_error_on_failure(mock_create, mock_update):
+    """_provision_vm_background sets Firestore status to 'error' when GCE creation fails."""
+    await _provision_vm_background("uid123", "omi-agent-uid123", "omi-token")
+    mock_update.assert_called_once_with("uid123", None, "error")
+
+
+@pytest.mark.asyncio
+@patch("routers.agent_tools._update_firestore_vm")
+@patch("routers.agent_tools._start_vm_and_wait", new_callable=AsyncMock, side_effect=Exception("GCE start timed out"))
+async def test_restart_vm_background_sets_error_on_failure(mock_start, mock_update):
+    """_restart_vm_background sets Firestore status to 'error' when restart fails."""
+    await _restart_vm_background("uid123", "omi-agent-uid123", "us-central1-a")
+    mock_update.assert_called_once_with("uid123", None, "error")
+
+
+@pytest.mark.asyncio
+@patch("routers.agent_tools._set_firestore_vm")
+@patch("routers.agent_tools._create_gce_vm", new_callable=AsyncMock, return_value="10.0.0.1")
+async def test_provision_vm_background_sets_ready_on_success(mock_create, mock_set_fs):
+    """_provision_vm_background writes 'ready' status with IP on success."""
+    await _provision_vm_background("uid123", "omi-agent-uid123", "omi-token")
+    mock_set_fs.assert_called_once_with("uid123", "omi-agent-uid123", GCE_ZONE, "10.0.0.1", "ready", "omi-token")
+
+
+# --------------- incomplete Firestore payload tests ---------------
+
+
+@patch("routers.agent_tools.get_agent_vm", return_value={"status": "ready"})
+def test_vm_status_handles_missing_vm_name(mock_get):
+    """vm-status does not crash when vmName is missing from Firestore."""
+    resp = client.get("/v1/agent/vm-status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_vm"] is True
+    assert data["vm_name"] is None
+
+
+@patch("routers.agent_tools.get_agent_vm", return_value={"vmName": "omi-agent-x", "status": "ready"})
+def test_vm_status_handles_missing_ip_and_auth(mock_get):
+    """vm-status returns None for ip and auth_token when missing from Firestore."""
+    resp = client.get("/v1/agent/vm-status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ip"] is None
+    assert data["auth_token"] is None
+    assert data["vm_name"] == "omi-agent-x"
+
+
+@patch("routers.agent_tools.get_agent_vm", return_value={})
+def test_vm_ensure_handles_empty_firestore_vm(mock_get):
+    """vm-ensure with empty Firestore dict (no status field) doesn't crash."""
+    resp = client.post("/v1/agent/vm-ensure")
+    assert resp.status_code == 200
