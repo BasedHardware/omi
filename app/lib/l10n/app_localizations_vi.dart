@@ -8472,11 +8472,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get speakerLabelUnknown => 'Không xác định';
 
   @override
+  String get showDailyScoreOnHomepage => 'Hiển thị Điểm hàng ngày trên trang chủ';
+
+  @override
+  String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Cuộc gọi điện thoại qua Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa. Chỉ dành cho người đăng ký gói Không giới hạn.';
+      'Gọi điện qua Omi và nhận phiên âm thời gian thực, tóm tắt tự động và nhiều hơn nữa.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Phiên âm thời gian thực mọi cuộc gọi';

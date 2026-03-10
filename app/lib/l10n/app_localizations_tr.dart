@@ -8481,11 +8481,17 @@ class AppLocalizationsTr extends AppLocalizations {
   String get speakerLabelUnknown => 'Bilinmiyor';
 
   @override
+  String get showDailyScoreOnHomepage => 'Ana sayfada günlük puanı göster';
+
+  @override
+  String get showTasksOnHomepage => 'Ana sayfada görevleri göster';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Omi ile Telefon Aramaları';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın. Yalnızca Sınırsız plan aboneleri için kullanılabilir.';
+      'Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Her aramanın gerçek zamanlı transkripsiyonu';

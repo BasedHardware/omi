@@ -8486,11 +8486,17 @@ class AppLocalizationsLv extends AppLocalizations {
   String get speakerLabelUnknown => 'Nezinams';
 
   @override
+  String get showDailyScoreOnHomepage => 'Rādīt dienas rezultātu sākumlapā';
+
+  @override
+  String get showTasksOnHomepage => 'Rādīt uzdevumus sākumlapā';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Tālruņa zvani caur Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Veiciet zvanus caur Omi un saņemiet reāllaika transkripciju, automātiskus kopsavilkumus un daudz ko citu. Pieejams tikai Neierobežotā plāna abonentiem.';
+      'Veiciet zvanus caur Omi un saņemiet reāllaika transkripciju, automātiskus kopsavilkumus un daudz ko citu.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Katra zvana reāllaika transkripcija';

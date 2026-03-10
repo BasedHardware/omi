@@ -8479,11 +8479,17 @@ class AppLocalizationsId extends AppLocalizations {
   String get speakerLabelUnknown => 'Tidak dikenal';
 
   @override
+  String get showDailyScoreOnHomepage => 'Tampilkan Skor Harian di beranda';
+
+  @override
+  String get showTasksOnHomepage => 'Tampilkan Tugas di beranda';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Panggilan Telepon via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya. Tersedia eksklusif untuk pelanggan paket Unlimited.';
+      'Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transkripsi real-time setiap panggilan';

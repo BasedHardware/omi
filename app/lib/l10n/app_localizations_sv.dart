@@ -8472,11 +8472,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String get speakerLabelUnknown => 'Okand';
 
   @override
+  String get showDailyScoreOnHomepage => 'Visa dagligt poäng på hemsidan';
+
+  @override
+  String get showTasksOnHomepage => 'Visa uppgifter på hemsidan';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonsamtal via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer. Tillgängligt exklusivt för prenumeranter av Obegränsad-planen.';
+      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transkription i realtid av varje samtal';

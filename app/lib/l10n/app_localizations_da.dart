@@ -8452,11 +8452,17 @@ class AppLocalizationsDa extends AppLocalizations {
   String get speakerLabelUnknown => 'Ukendt';
 
   @override
+  String get showDailyScoreOnHomepage => 'Vis daglig score på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis opgaver på hjemmesiden';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonopkald via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere. Udelukkende tilgængeligt for abonnenter af Ubegrænset-planen.';
+      'Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transskription i realtid af hvert opkald';

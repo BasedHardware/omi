@@ -8504,6 +8504,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get speakerLabelUnknown => 'Неизвестен';
 
   @override
+  String get showDailyScoreOnHomepage => 'Покажи дневния резултат на началната страница';
+
+  @override
+  String get showTasksOnHomepage => 'Покажи задачите на началната страница';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Телефонни обаждания чрез Omi';
 
   @override

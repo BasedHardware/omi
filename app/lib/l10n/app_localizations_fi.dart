@@ -8467,11 +8467,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String get speakerLabelUnknown => 'Tuntematon';
 
   @override
+  String get showDailyScoreOnHomepage => 'Näytä päivittäinen pistemäärä etusivulla';
+
+  @override
+  String get showTasksOnHomepage => 'Näytä tehtävät etusivulla';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Puhelut Omin kautta';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta. Saatavilla yksinomaan Rajaton-tilauksen tilaajille.';
+      'Soita puheluita Omin kautta ja saa reaaliaikainen litterointi, automaattiset yhteenvedot ja paljon muuta.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Jokaisen puhelun reaaliaikainen litterointi';

@@ -8471,11 +8471,17 @@ class AppLocalizationsPt extends AppLocalizations {
   String get speakerLabelUnknown => 'Desconhecido';
 
   @override
+  String get showDailyScoreOnHomepage => 'Mostrar pontuação diária na página inicial';
+
+  @override
+  String get showTasksOnHomepage => 'Mostrar tarefas na página inicial';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Chamadas telefónicas via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Faça chamadas pelo Omi e obtenha transcrição em tempo real, resumos automáticos e muito mais. Disponível exclusivamente para assinantes do plano Ilimitado.';
+      'Faça chamadas pelo Omi e obtenha transcrição em tempo real, resumos automáticos e muito mais.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transcrição em tempo real de cada chamada';

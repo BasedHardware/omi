@@ -8506,11 +8506,17 @@ class AppLocalizationsHu extends AppLocalizations {
   String get speakerLabelUnknown => 'Ismeretlen';
 
   @override
+  String get showDailyScoreOnHomepage => 'Napi pontszám megjelenítése a főoldalon';
+
+  @override
+  String get showTasksOnHomepage => 'Feladatok megjelenítése a főoldalon';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonhívások az Omi-n keresztül';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Hívjon az Omi-n keresztül, és kapjon valós idejű átírást, automatikus összefoglalókat és még többet. Kizárólag a Korlátlan csomag előfizetői számára elérhető.';
+      'Hívjon az Omi-n keresztül, és kapjon valós idejű átírást, automatikus összefoglalókat és még többet.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Minden hívás valós idejű átírása';

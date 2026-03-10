@@ -8493,11 +8493,17 @@ class AppLocalizationsMs extends AppLocalizations {
   String get speakerLabelUnknown => 'Tidak diketahui';
 
   @override
+  String get showDailyScoreOnHomepage => 'Tunjukkan Skor Harian di laman utama';
+
+  @override
+  String get showTasksOnHomepage => 'Tunjukkan Tugasan di laman utama';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Panggilan Telefon melalui Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi. Tersedia eksklusif untuk pelanggan pelan Unlimited.';
+      'Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transkripsi masa nyata setiap panggilan';

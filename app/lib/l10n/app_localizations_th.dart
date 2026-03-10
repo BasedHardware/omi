@@ -8425,11 +8425,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get speakerLabelUnknown => 'ไม่ทราบ';
 
   @override
+  String get showDailyScoreOnHomepage => 'แสดงคะแนนประจำวันบนหน้าหลัก';
+
+  @override
+  String get showTasksOnHomepage => 'แสดงงานบนหน้าหลัก';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'โทรศัพท์ผ่าน Omi';
 
   @override
-  String get phoneCallsUpsellSubtitle =>
-      'โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ สำหรับสมาชิกแผน Unlimited เท่านั้น';
+  String get phoneCallsUpsellSubtitle => 'โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ';
 
   @override
   String get phoneCallsUpsellFeature1 => 'ถอดเสียงแบบเรียลไทม์ทุกสาย';

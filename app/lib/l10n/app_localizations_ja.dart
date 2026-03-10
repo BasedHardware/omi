@@ -8328,10 +8328,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get speakerLabelUnknown => '不明';
 
   @override
+  String get showDailyScoreOnHomepage => 'ホームページにデイリースコアを表示';
+
+  @override
+  String get showTasksOnHomepage => 'ホームページにタスクを表示';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Omiで電話をかける';
 
   @override
-  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。Unlimitedプラン加入者限定です。';
+  String get phoneCallsUpsellSubtitle => 'Omiで通話し、リアルタイム文字起こし、自動要約などを取得。';
 
   @override
   String get phoneCallsUpsellFeature1 => 'すべての通話のリアルタイム文字起こし';

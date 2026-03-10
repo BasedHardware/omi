@@ -8520,11 +8520,17 @@ class AppLocalizationsCa extends AppLocalizations {
   String get speakerLabelUnknown => 'Desconegut';
 
   @override
+  String get showDailyScoreOnHomepage => 'Mostra la puntuació diària a la pàgina principal';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Trucades telefòniques via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més. Disponible exclusivament per als subscriptors del pla Il·limitat.';
+      'Fes trucades a través d\'Omi i obtin transcripció en temps real, resums automàtics i més.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transcripció en temps real de cada trucada';

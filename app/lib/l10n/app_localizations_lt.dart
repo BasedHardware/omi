@@ -8476,11 +8476,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String get speakerLabelUnknown => 'Nezinomas';
 
   @override
+  String get showDailyScoreOnHomepage => 'Rodyti dienos balą pagrindiniame puslapyje';
+
+  @override
+  String get showTasksOnHomepage => 'Rodyti užduotis pagrindiniame puslapyje';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefono skambučiai per Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau. Prieinama tik Neriboto plano prenumeratoriams.';
+      'Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Kiekvieno skambučio transkripcija realiu laiku';

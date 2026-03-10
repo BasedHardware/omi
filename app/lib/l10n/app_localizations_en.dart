@@ -8465,6 +8465,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speakerLabelUnknown => 'Unknown';
 
   @override
+  String get showDailyScoreOnHomepage => 'Show Daily Score on homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Show Tasks on homepage';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Phone Calls via Omi';
 
   @override

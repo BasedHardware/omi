@@ -8330,10 +8330,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get speakerLabelUnknown => '알 수 없음';
 
   @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Omi를 통한 전화 통화';
 
   @override
-  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요. Unlimited 플랜 구독자 전용입니다.';
+  String get phoneCallsUpsellSubtitle => 'Omi를 통해 전화를 걸고 실시간 텍스트 변환, 자동 요약 등을 받으세요.';
 
   @override
   String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';

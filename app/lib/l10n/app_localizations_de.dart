@@ -8540,11 +8540,17 @@ class AppLocalizationsDe extends AppLocalizations {
   String get speakerLabelUnknown => 'Unbekannt';
 
   @override
+  String get showDailyScoreOnHomepage => 'Tagespunktzahl auf der Startseite anzeigen';
+
+  @override
+  String get showTasksOnHomepage => 'Aufgaben auf der Startseite anzeigen';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonanrufe über Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr. Exklusiv für Abonnenten des Unlimited-Plans verfügbar.';
+      'Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Echtzeit-Transkription jedes Anrufs';

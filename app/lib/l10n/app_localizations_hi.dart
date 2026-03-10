@@ -8449,11 +8449,17 @@ class AppLocalizationsHi extends AppLocalizations {
   String get speakerLabelUnknown => 'अज्ञात';
 
   @override
+  String get showDailyScoreOnHomepage => 'होमपेज पर दैनिक स्कोर दिखाएं';
+
+  @override
+  String get showTasksOnHomepage => 'होमपेज पर कार्य दिखाएं';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Omi से फ़ोन कॉल';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Omi से कॉल करें और रियल-टाइम ट्रांसक्रिप्शन, स्वचालित सारांश और बहुत कुछ पाएं। केवल अनलिमिटेड प्लान सब्सक्राइबर्स के लिए उपलब्ध।';
+      'Omi से कॉल करें और रियल-टाइम ट्रांसक्रिप्शन, स्वचालित सारांश और बहुत कुछ पाएं।';
 
   @override
   String get phoneCallsUpsellFeature1 => 'हर कॉल की रियल-टाइम ट्रांसक्रिप्शन';

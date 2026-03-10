@@ -1564,6 +1564,30 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
+                        // Daily Score
+                        _buildExperimentalItem(
+                          title: context.l10n.dailyScore,
+                          description: context.l10n.showDailyScoreOnHomepage,
+                          icon: FontAwesomeIcons.chartLine,
+                          value: provider.showDailyScoreEnabled,
+                          onChanged: provider.onShowDailyScoreChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Tasks
+                        _buildExperimentalItem(
+                          title: context.l10n.tasks,
+                          description: context.l10n.showTasksOnHomepage,
+                          icon: FontAwesomeIcons.listCheck,
+                          value: provider.showTasksEnabled,
+                          onChanged: provider.onShowTasksChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
                         // VAD Gate
                         _buildExperimentalItem(
                           title: 'VAD Gate',

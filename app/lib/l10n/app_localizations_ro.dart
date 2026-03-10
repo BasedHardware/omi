@@ -8511,11 +8511,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String get speakerLabelUnknown => 'Necunoscut';
 
   @override
+  String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
+
+  @override
+  String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Apeluri telefonice prin Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele. Disponibil exclusiv pentru abonații planului Nelimitat.';
+      'Efectuați apeluri prin Omi și obțineți transcriere în timp real, rezumate automate și multe altele.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transcriere în timp real a fiecărui apel';

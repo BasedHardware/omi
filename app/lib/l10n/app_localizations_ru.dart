@@ -8496,11 +8496,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get speakerLabelUnknown => 'Неизвестный';
 
   @override
+  String get showDailyScoreOnHomepage => 'Показать дневной счёт на главной странице';
+
+  @override
+  String get showTasksOnHomepage => 'Показать задачи на главной странице';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Звонки через Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое. Доступно только для подписчиков тарифа Безлимитный.';
+      'Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Транскрипция каждого звонка в реальном времени';

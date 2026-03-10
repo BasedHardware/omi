@@ -8463,11 +8463,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get speakerLabelUnknown => 'Ukjent';
 
   @override
+  String get showDailyScoreOnHomepage => 'Vis daglig poengsum på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis oppgaver på hjemmesiden';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonsamtaler via Omi';
 
   @override
-  String get phoneCallsUpsellSubtitle =>
-      'Ring via Omi og få sanntids transkripsjon, automatiske sammendrag og mer. Kun tilgjengelig for abonnenter av Ubegrenset-planen.';
+  String get phoneCallsUpsellSubtitle => 'Ring via Omi og få sanntids transkripsjon, automatiske sammendrag og mer.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Sanntids transkripsjon av hver samtale';

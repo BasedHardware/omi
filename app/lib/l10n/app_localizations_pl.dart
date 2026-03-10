@@ -8487,11 +8487,17 @@ class AppLocalizationsPl extends AppLocalizations {
   String get speakerLabelUnknown => 'Nieznany';
 
   @override
+  String get showDailyScoreOnHomepage => 'Pokaż dzienny wynik na stronie głównej';
+
+  @override
+  String get showTasksOnHomepage => 'Pokaż zadania na stronie głównej';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Połączenia telefoniczne przez Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Dzwoń przez Omi i otrzymuj transkrypcję w czasie rzeczywistym, automatyczne podsumowania i wiele więcej. Dostępne wyłącznie dla subskrybentów planu Bez limitu.';
+      'Dzwoń przez Omi i otrzymuj transkrypcję w czasie rzeczywistym, automatyczne podsumowania i wiele więcej.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transkrypcja w czasie rzeczywistym każdego połączenia';

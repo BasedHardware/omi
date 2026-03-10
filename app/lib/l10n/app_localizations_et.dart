@@ -8466,11 +8466,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String get speakerLabelUnknown => 'Tundmatu';
 
   @override
+  String get showDailyScoreOnHomepage => 'Kuva päevapunktid avalehel';
+
+  @override
+  String get showTasksOnHomepage => 'Kuva ülesanded avalehel';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonikõned Omi kaudu';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Tehke kõnesid Omi kaudu ja saage reaalajas transkriptsioon, automaatsed kokkuvõtted ja palju muud. Saadaval ainult Piiramatu plaani tellijatele.';
+      'Tehke kõnesid Omi kaudu ja saage reaalajas transkriptsioon, automaatsed kokkuvõtted ja palju muud.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Iga kõne reaalajas transkriptsioon';

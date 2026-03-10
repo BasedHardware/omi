@@ -8481,11 +8481,17 @@ class AppLocalizationsUk extends AppLocalizations {
   String get speakerLabelUnknown => 'Невідомий';
 
   @override
+  String get showDailyScoreOnHomepage => 'Показати щоденний рахунок на головній сторінці';
+
+  @override
+  String get showTasksOnHomepage => 'Показати завдання на головній сторінці';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Телефонні дзвінки через Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Здійснюйте дзвінки через Omi та отримуйте транскрипцію в реальному часі, автоматичні зведення та багато іншого. Доступно виключно для підписників тарифу Безлімітний.';
+      'Здійснюйте дзвінки через Omi та отримуйте транскрипцію в реальному часі, автоматичні зведення та багато іншого.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Транскрипція кожного дзвінка в реальному часі';

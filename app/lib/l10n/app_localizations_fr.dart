@@ -8547,11 +8547,17 @@ class AppLocalizationsFr extends AppLocalizations {
   String get speakerLabelUnknown => 'Inconnu';
 
   @override
+  String get showDailyScoreOnHomepage => 'Afficher le score quotidien sur la page d\'accueil';
+
+  @override
+  String get showTasksOnHomepage => 'Afficher les tâches sur la page d\'accueil';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Appels téléphoniques via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore. Disponible exclusivement pour les abonnés au forfait Illimité.';
+      'Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Transcription en temps réel de chaque appel';

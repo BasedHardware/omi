@@ -8496,11 +8496,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String get speakerLabelUnknown => 'Onbekend';
 
   @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefoongesprekken via Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer. Exclusief beschikbaar voor abonnees van het Onbeperkt-abonnement.';
+      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Realtime transcriptie van elk gesprek';

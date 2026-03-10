@@ -8458,11 +8458,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get speakerLabelUnknown => 'Neznamy';
 
   @override
+  String get showDailyScoreOnHomepage => 'Zobraziť denné skóre na domovskej stránke';
+
+  @override
+  String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonáty cez Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie. Dostupné výhradne pre predplatiteľov tarifu Neobmedzený.';
+      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Prepis každého hovoru v reálnom čase';

@@ -8318,10 +8318,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get speakerLabelUnknown => '未知';
 
   @override
+  String get showDailyScoreOnHomepage => '在首页显示每日评分';
+
+  @override
+  String get showTasksOnHomepage => '在首页显示任务';
+
+  @override
   String get phoneCallsUnlimitedOnly => '通过 Omi 拨打电话';
 
   @override
-  String get phoneCallsUpsellSubtitle => '通过 Omi 拨打电话，获取实时转录、自动摘要等功能。仅限无限计划订阅者使用。';
+  String get phoneCallsUpsellSubtitle => '通过 Omi 拨打电话，获取实时转录、自动摘要等功能。';
 
   @override
   String get phoneCallsUpsellFeature1 => '每次通话的实时转录';

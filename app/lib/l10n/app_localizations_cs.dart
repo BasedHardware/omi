@@ -8464,11 +8464,17 @@ class AppLocalizationsCs extends AppLocalizations {
   String get speakerLabelUnknown => 'Neznamy';
 
   @override
+  String get showDailyScoreOnHomepage => 'Zobrazit denní skóre na domovské stránce';
+
+  @override
+  String get showTasksOnHomepage => 'Zobrazit úkoly na domovské stránce';
+
+  @override
   String get phoneCallsUnlimitedOnly => 'Telefonní hovory přes Omi';
 
   @override
   String get phoneCallsUpsellSubtitle =>
-      'Volejte přes Omi a získejte přepis v reálném čase, automatické shrnutí a další. Dostupné výhradně pro předplatitele tarifu Neomezený.';
+      'Volejte přes Omi a získejte přepis v reálném čase, automatické shrnutí a další.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Přepis každého hovoru v reálném čase';
