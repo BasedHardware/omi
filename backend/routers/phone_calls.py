@@ -265,9 +265,9 @@ async def twiml_voice_webhook(request: Request):
         response.say('No verified caller ID found. Please verify a phone number first.')
         return Response(content=str(response), media_type='text/xml')
 
-    # Ensure clean E.164 format (strip any whitespace)
-    caller_number = caller_number.strip()
-    to_number = to_number.strip()
+    # Ensure clean E.164 format (remove all whitespace, dashes, parens, dots)
+    caller_number = re.sub(r'[\s\-\(\).]+', '', caller_number)
+    to_number = re.sub(r'[\s\-\(\).]+', '', to_number)
 
     # Validate destination number format
     if not E164_PATTERN.match(to_number):
