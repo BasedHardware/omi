@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { TranscriptSegment, Person } from '@/src/types/memory.types';
 import chatWithMemory from '@/src/actions/memories/chat-with-memory';
 import { Send, UserCircle, Message, ArrowDown } from 'iconoir-react';
@@ -57,20 +57,24 @@ export default function Chat({
   }, []);
 
   // Convert transcript segments to a readable string, resolving person names
-  const transcriptText = transcript
-    .map((segment) => {
-      let speaker: string;
-      if (segment.is_user) {
-        speaker = 'Owner';
-      } else if (segment.person_id && people) {
-        const person = people.find((p) => p.id === segment.person_id);
-        speaker = person ? person.name : `Speaker ${segment.speaker_id}`;
-      } else {
-        speaker = `Speaker ${segment.speaker_id}`;
-      }
-      return `${speaker}: ${segment.text}`;
-    })
-    .join('\n\n');
+  const transcriptText = useMemo(
+    () =>
+      transcript
+        .map((segment) => {
+          let speaker: string;
+          if (segment.is_user) {
+            speaker = 'Owner';
+          } else if (segment.person_id && people) {
+            const person = people.find((p) => p.id === segment.person_id);
+            speaker = person ? person.name : `Speaker ${segment.speaker_id}`;
+          } else {
+            speaker = `Speaker ${segment.speaker_id}`;
+          }
+          return `${speaker}: ${segment.text}`;
+        })
+        .join('\n\n'),
+    [transcript, people],
+  );
 
   const scrollToBottom = (smooth = true) => {
     if (messagesContainerRef.current) {
