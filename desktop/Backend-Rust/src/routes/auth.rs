@@ -652,14 +652,50 @@ async fn generate_custom_token(
 
     tracing::info!("Firebase sign-in successful, UID: {}", firebase_uid);
 
-    // For custom token generation, we need Firebase Admin SDK
-    // In Rust, we'd need to use the service account to create a custom token
-    // For now, return an error indicating this needs server-side implementation
-    // The Python version uses firebase_admin.auth.create_custom_token()
+    // Generate Firebase custom token using service account credentials from GOOGLE_APPLICATION_CREDENTIALS
+    let sa_path = state
+        .config
+        .google_application_credentials
+        .as_ref()
+        .ok_or("GOOGLE_APPLICATION_CREDENTIALS not configured")?;
 
-    // TODO: Implement custom token generation using service account
-    // This requires signing a JWT with the service account private key
-    Err("Custom token generation requires Firebase Admin SDK - not yet implemented in Rust".into())
+    #[derive(Deserialize)]
+    struct ServiceAccount {
+        client_email: String,
+        private_key: String,
+        project_id: String,
+    }
+
+    let sa_json = tokio::fs::read_to_string(sa_path).await?;
+    let sa: ServiceAccount = serde_json::from_str(&sa_json)?;
+
+    #[derive(Serialize)]
+    struct FirebaseCustomTokenClaims<'a> {
+        iss: &'a str,
+        sub: &'a str,
+        aud: &'a str,
+        uid: &'a str,
+        iat: i64,
+        exp: i64,
+    }
+
+    let now = Utc::now().timestamp();
+    let claims = FirebaseCustomTokenClaims {
+        iss: &sa.client_email,
+        sub: &sa.client_email,
+        aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
+        uid: &firebase_uid,
+        iat: now,
+        exp: now + 3600,
+    };
+
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = None;
+
+    let key = EncodingKey::from_rsa_pem(sa.private_key.as_bytes())?;
+    let token = encode(&header, &claims, &key)?;
+
+    Ok(token)
 }
 
 fn render_auth_callback(code: &str, state: &str, redirect_uri: &str, error: Option<&str>) -> String {
