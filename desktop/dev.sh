@@ -85,8 +85,12 @@ cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 omi-computer-dev" "$APP_BUNDLE/Contents/Info.plist"
 
-# Copy GoogleService-Info.plist for Firebase
-cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+# Copy GoogleService-Info.plist for Firebase (dev version for com.omi.desktop-dev)
+if [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
+    cp -f Desktop/Sources/GoogleService-Info-Dev.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+else
+    cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
+fi
 
 # Copy resource bundle (contains app assets like herologo.png, omi-with-rope-no-padding.webp, etc.)
 SWIFT_BUILD_DIR="Desktop/.build/debug"

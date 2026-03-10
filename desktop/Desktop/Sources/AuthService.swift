@@ -90,7 +90,11 @@ class AuthService {
            let key = dict["API_KEY"] as? String {
             return key
         }
-        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"  // fallback to prod
+        // Dev builds must not silently fall back to prod credentials
+        if Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true {
+            fatalError("AuthService: GoogleService-Info.plist missing or has no API_KEY in dev build — check that run.sh copied GoogleService-Info-Dev.plist")
+        }
+        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"  // fallback to prod (prod builds only)
     }()
 
     // MARK: - User Name Properties
