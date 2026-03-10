@@ -422,7 +422,11 @@ async def _stream_handler(
                 or credits_invalidated
                 or now - remaining_seconds_cache_ts >= CREDITS_REFRESH_SECONDS
                 # Fast-refresh when credits exhausted (user may upgrade or month may roll over)
-                or (remaining_seconds_cache is not None and remaining_seconds_cache <= 0 and now - remaining_seconds_cache_ts >= 60)
+                or (
+                    remaining_seconds_cache is not None
+                    and remaining_seconds_cache <= 0
+                    and now - remaining_seconds_cache_ts >= 60
+                )
             )
             if needs_refresh:
                 remaining_seconds_cache = get_remaining_transcription_seconds(uid)
@@ -1443,19 +1447,22 @@ async def _stream_handler(
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
     translation_language_base = translation_language.split('-')[0] if translation_language else None
 
-    # Debounce state: segment_id -> {text_hash, task, version}
-    pending_translations = {}
+    # Temporal debounce state: accumulate segments, translate after quiet period
+    pending_translations = {}  # segment_id -> {text_hash, version} for stale-write protection
     TRANSLATION_DEBOUNCE_SECONDS = 1.0
     translation_persist_lock = asyncio.Lock()
     translation_flushing = False
     translation_version_counter = 0  # Monotonic counter to avoid version reuse after prune
+    _debounce_buffer = []  # [(segment, conversation_id, version), ...]
+    _debounce_task = None  # asyncio.Task for the pending batch timer
+    _inflight_translate_tasks = []  # tracked tasks from _flush_debounce_buffer
 
     # Translation metrics counters
     translate_metrics = {
         'api_calls': 0,
         'cache_hits_memory': 0,
         'cache_hits_redis': 0,
-        'debounce_skips': 0,
+        'segments_buffered': 0,
         'lang_cache_skips': 0,
         'same_text_skips': 0,
         'segments_translated': 0,
@@ -1463,7 +1470,7 @@ async def _stream_handler(
     }
 
     async def _translate_segment(segment: TranscriptSegment, conversation_id: str, version: int):
-        """Translate a single segment and persist/notify. Used by debounce."""
+        """Translate a single segment and persist/notify."""
         if not translation_language:
             return
         # Allow translation during flush (translation_flushing=True) but not after full shutdown
@@ -1542,15 +1549,25 @@ async def _stream_handler(
             if pending and pending.get('version', 0) == version:
                 pending_translations.pop(segment.id, None)
 
-    def _is_segment_final(segment_text: str) -> bool:
-        """Check if segment text indicates a finalized utterance from STT.
+    async def _flush_debounce_buffer():
+        """Translate all segments accumulated in the debounce buffer."""
+        nonlocal _debounce_task
+        batch = list(_debounce_buffer)
+        _debounce_buffer.clear()
+        _debounce_task = None
 
-        Deepgram with punctuate=True and endpointing=300ms adds terminal punctuation
-        when an utterance is complete. Text ending with .?! signals the segment is final.
-        """
-        return bool(segment_text) and segment_text[-1] in '.?!'
+        if not batch:
+            return
+
+        translate_metrics['segments_translated'] += len(batch)
+        logger.info(f"translate [batch] segments={len(batch)} {uid}")
+
+        for seg, conv_id, ver in batch:
+            task = asyncio.ensure_future(_translate_segment(seg, conv_id, ver))
+            _inflight_translate_tasks.append(task)
 
     async def translate(segments: List[TranscriptSegment], conversation_id: str):
+        nonlocal _debounce_task
         if not translation_language:
             return
 
@@ -1582,59 +1599,61 @@ async def _stream_handler(
             translation_version_counter += 1
             new_version = translation_version_counter
 
-            # Cancel any pending debounce task for this segment
-            if pending and pending.get('task') and not pending['task'].done():
-                pending['task'].cancel()
+            # Register in pending_translations for stale-write protection in _translate_segment
+            pending_translations[segment.id] = {
+                'text_hash': text_hash,
+                'version': new_version,
+            }
 
-            # Detect if STT has finalized this segment (terminal punctuation)
-            segment_is_final = _is_segment_final(segment_text)
+            # Add to temporal debounce buffer
+            translate_metrics['segments_buffered'] += 1
+            _debounce_buffer.append((segment, conversation_id, new_version))
+            logger.info(f"translate [buffered] seg={segment.id[:8]} v={new_version} buf={len(_debounce_buffer)} {uid}")
 
-            if not pending or segment_is_final:
-                # First appearance or final segment — translate immediately (zero UX delay)
-                translate_metrics['segments_translated'] += 1
-                action = 'immediate_first' if not pending else 'immediate_final'
-                logger.info(f"translate [{action}] seg={segment.id[:8]} v={new_version} {uid}")
-                pending_translations[segment.id] = {
-                    'text_hash': text_hash,
-                    'version': new_version,
-                    'task': asyncio.ensure_future(_translate_segment(segment, conversation_id, new_version)),
-                }
-            else:
-                # Update — debounce with trailing window
-                translate_metrics['debounce_skips'] += 1
-                logger.info(f"translate [debounce] seg={segment.id[:8]} v={new_version} {uid}")
+        # (Re)start the debounce timer — fires after TRANSLATION_DEBOUNCE_SECONDS of quiet
+        if _debounce_buffer:
+            if _debounce_task and not _debounce_task.done():
+                _debounce_task.cancel()
 
-                async def _debounced_translate(seg=segment, conv_id=conversation_id, ver=new_version):
-                    await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
-                    await _translate_segment(seg, conv_id, ver)
+            async def _debounce_timer():
+                await asyncio.sleep(TRANSLATION_DEBOUNCE_SECONDS)
+                await _flush_debounce_buffer()
 
-                pending_translations[segment.id] = {
-                    'text_hash': text_hash,
-                    'version': new_version,
-                    'task': asyncio.ensure_future(_debounced_translate()),
-                }
+            _debounce_task = asyncio.ensure_future(_debounce_timer())
 
     async def flush_pending_translations():
         """Flush all pending debounced translations before cleanup."""
-        nonlocal translation_flushing
+        nonlocal translation_flushing, _debounce_task
         translation_flushing = True
-        for seg_id, pending in list(pending_translations.items()):
-            task = pending.get('task')
-            if task and not task.done():
+
+        # Cancel debounce timer and immediately flush the buffer
+        if _debounce_task and not _debounce_task.done():
+            _debounce_task.cancel()
+            _debounce_task = None
+        await _flush_debounce_buffer()
+
+        # Await all in-flight _translate_segment tasks with bounded timeout
+        if _inflight_translate_tasks:
+            pending = [t for t in _inflight_translate_tasks if not t.done()]
+            if pending:
                 try:
-                    await asyncio.wait_for(task, timeout=5.0)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pass
+                    await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning(f"translate flush timeout: {len(pending)} tasks still pending {uid} {session_id}")
+            _inflight_translate_tasks.clear()
+
         pending_translations.clear()
+        _debounce_buffer.clear()
         translation_flushing = False
         # Log session translation metrics summary
+        # total_segments = segments that entered translate() (buffered + lang_skip + same_text_skip)
+        # segments_translated = subset of buffered that were dispatched to _translate_segment
         m = translate_metrics
-        total_handled = m['segments_translated'] + m['debounce_skips'] + m['lang_cache_skips'] + m['same_text_skips']
+        total_segments = m['segments_buffered'] + m['lang_cache_skips'] + m['same_text_skips']
         logger.info(
             f"translate_summary {uid} session={session_id} "
-            f"translated={m['segments_translated']} debounced={m['debounce_skips']} "
-            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']} "
-            f"total_events={total_handled}"
+            f"total={total_segments} buffered={m['segments_buffered']} translated={m['segments_translated']} "
+            f"lang_skip={m['lang_cache_skips']} same_text_skip={m['same_text_skips']}"
         )
 
     async def conversation_lifecycle_manager():
