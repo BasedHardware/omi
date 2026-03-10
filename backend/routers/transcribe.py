@@ -40,7 +40,6 @@ from database import redis_db
 from database.redis_db import (
     check_credits_invalidation,
     get_cached_user_geolocation,
-    try_acquire_listen_lock,
 )
 from models.conversation import (
     Conversation,
@@ -2693,7 +2692,7 @@ async def _listen(
 @router.websocket("/v4/listen")
 async def listen_handler(
     websocket: WebSocket,
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.get_current_user_uid_ws_listen),
     language: str = 'en',
     sample_rate: int = 8000,
     codec: str = 'pcm8',
