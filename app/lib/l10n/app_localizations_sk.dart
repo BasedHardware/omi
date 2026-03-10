@@ -8456,4 +8456,29 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Neznamy';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonáty cez Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie. Dostupné výhradne pre predplatiteľov tarifu Neobmedzený.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Prepis každého hovoru v reálnom čase';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatické zhrnutia hovorov a úlohy';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Príjemcovia vidia vaše skutočné číslo, nie náhodné';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Vaše hovory zostávajú súkromné a bezpečné';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Prejsť na Neobmedzený';
+
+  @override
+  String get phoneCallsMaybeLater => 'Možno neskôr';
 }

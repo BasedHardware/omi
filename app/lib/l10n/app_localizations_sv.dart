@@ -8470,4 +8470,29 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Okand';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonsamtal via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer. Tillgängligt exklusivt för prenumeranter av Obegränsad-planen.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkription i realtid av varje samtal';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatiska samtalssammanfattningar och uppgifter';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Mottagare ser ditt riktiga nummer, inte ett slumpmässigt';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Dina samtal förblir privata och säkra';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uppgradera till Obegränsad';
+
+  @override
+  String get phoneCallsMaybeLater => 'Kanske senare';
 }

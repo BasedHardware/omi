@@ -8485,4 +8485,29 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nieznany';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Połączenia telefoniczne przez Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Dzwoń przez Omi i otrzymuj transkrypcję w czasie rzeczywistym, automatyczne podsumowania i wiele więcej. Dostępne wyłącznie dla subskrybentów planu Bez limitu.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Transkrypcja w czasie rzeczywistym każdego połączenia';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatyczne podsumowania połączeń i zadania';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Odbiorcy widzą twój prawdziwy numer, nie losowy';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Twoje połączenia pozostają prywatne i bezpieczne';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Przejdź na Bez limitu';
+
+  @override
+  String get phoneCallsMaybeLater => 'Może później';
 }

@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Nar du ringer nagon ser de detta nummer",
     "verifiedOnDate": "Verifierad {date}",
     "verifyYourNumber": "Verifiera ditt nummer",
-    "yourVerifiedNumbers": "Dina verifierade nummer"
+    "yourVerifiedNumbers": "Dina verifierade nummer",
+    "phoneCallsUnlimitedOnly": "Telefonsamtal via Omi",
+    "phoneCallsUpsellSubtitle": "Ring via Omi och få transkription i realtid, automatiska sammanfattningar och mer. Tillgängligt exklusivt för prenumeranter av Obegränsad-planen.",
+    "phoneCallsUpsellFeature1": "Transkription i realtid av varje samtal",
+    "phoneCallsUpsellFeature2": "Automatiska samtalssammanfattningar och uppgifter",
+    "phoneCallsUpsellFeature3": "Mottagare ser ditt riktiga nummer, inte ett slumpmässigt",
+    "phoneCallsUpsellFeature4": "Dina samtal förblir privata och säkra",
+    "phoneCallsUpgradeButton": "Uppgradera till Obegränsad",
+    "phoneCallsMaybeLater": "Kanske senare"
 }

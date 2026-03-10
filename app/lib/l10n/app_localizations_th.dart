@@ -8423,4 +8423,29 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'ไม่ทราบ';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'โทรศัพท์ผ่าน Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ สำหรับสมาชิกแผน Unlimited เท่านั้น';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'ถอดเสียงแบบเรียลไทม์ทุกสาย';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'สรุปสายอัตโนมัติและรายการดำเนินการ';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'ผู้รับเห็นหมายเลขจริงของคุณ ไม่ใช่หมายเลขสุ่ม';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'สายของคุณยังคงเป็นส่วนตัวและปลอดภัย';
+
+  @override
+  String get phoneCallsUpgradeButton => 'อัปเกรดเป็น Unlimited';
+
+  @override
+  String get phoneCallsMaybeLater => 'ไว้ทีหลัง';
 }

@@ -2729,5 +2729,13 @@
     "verifiedNumbersDescription": "Nar du ringer til nogen, vil de se dette nummer",
     "verifiedOnDate": "Verificeret den {date}",
     "verifyYourNumber": "Verificer dit nummer",
-    "yourVerifiedNumbers": "Dine verificerede numre"
+    "yourVerifiedNumbers": "Dine verificerede numre",
+    "phoneCallsUnlimitedOnly": "Telefonopkald via Omi",
+    "phoneCallsUpsellSubtitle": "Foretag opkald via Omi og få transskription i realtid, automatiske resuméer og mere. Udelukkende tilgængeligt for abonnenter af Ubegrænset-planen.",
+    "phoneCallsUpsellFeature1": "Transskription i realtid af hvert opkald",
+    "phoneCallsUpsellFeature2": "Automatiske opkaldsresuméer og handlingspunkter",
+    "phoneCallsUpsellFeature3": "Modtagere ser dit rigtige nummer, ikke et tilfældigt",
+    "phoneCallsUpsellFeature4": "Dine opkald forbliver private og sikre",
+    "phoneCallsUpgradeButton": "Opgrader til Ubegrænset",
+    "phoneCallsMaybeLater": "Måske senere"
 }

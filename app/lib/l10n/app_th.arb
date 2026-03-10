@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "เมื่อคุณโทรหาใครสักคน พวกเขาจะเห็นหมายเลขนี้",
     "verifiedOnDate": "ยืนยันเมื่อ {date}",
     "verifyYourNumber": "ยืนยันหมายเลขของคุณ",
-    "yourVerifiedNumbers": "หมายเลขที่ยืนยันแล้วของคุณ"
+    "yourVerifiedNumbers": "หมายเลขที่ยืนยันแล้วของคุณ",
+    "phoneCallsUnlimitedOnly": "โทรศัพท์ผ่าน Omi",
+    "phoneCallsUpsellSubtitle": "โทรผ่าน Omi และรับการถอดเสียงแบบเรียลไทม์ สรุปอัตโนมัติ และอื่นๆ สำหรับสมาชิกแผน Unlimited เท่านั้น",
+    "phoneCallsUpsellFeature1": "ถอดเสียงแบบเรียลไทม์ทุกสาย",
+    "phoneCallsUpsellFeature2": "สรุปสายอัตโนมัติและรายการดำเนินการ",
+    "phoneCallsUpsellFeature3": "ผู้รับเห็นหมายเลขจริงของคุณ ไม่ใช่หมายเลขสุ่ม",
+    "phoneCallsUpsellFeature4": "สายของคุณยังคงเป็นส่วนตัวและปลอดภัย",
+    "phoneCallsUpgradeButton": "อัปเกรดเป็น Unlimited",
+    "phoneCallsMaybeLater": "ไว้ทีหลัง"
 }

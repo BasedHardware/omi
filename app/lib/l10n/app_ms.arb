@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Apabila anda menghubungi seseorang, mereka akan melihat nombor ini",
     "verifiedOnDate": "Disahkan pada {date}",
     "verifyYourNumber": "Sahkan nombor anda",
-    "yourVerifiedNumbers": "Nombor anda yang disahkan"
+    "yourVerifiedNumbers": "Nombor anda yang disahkan",
+    "phoneCallsUnlimitedOnly": "Panggilan Telefon melalui Omi",
+    "phoneCallsUpsellSubtitle": "Buat panggilan melalui Omi dan dapatkan transkripsi masa nyata, ringkasan automatik dan banyak lagi. Tersedia eksklusif untuk pelanggan pelan Unlimited.",
+    "phoneCallsUpsellFeature1": "Transkripsi masa nyata setiap panggilan",
+    "phoneCallsUpsellFeature2": "Ringkasan panggilan automatik dan item tindakan",
+    "phoneCallsUpsellFeature3": "Penerima melihat nombor sebenar anda, bukan rawak",
+    "phoneCallsUpsellFeature4": "Panggilan anda kekal peribadi dan selamat",
+    "phoneCallsUpgradeButton": "Naik taraf ke Unlimited",
+    "phoneCallsMaybeLater": "Mungkin nanti"
 }

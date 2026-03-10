@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Kai skambinate kam nors, jie matys si numeri",
     "verifiedOnDate": "Patvirtinta {date}",
     "verifyYourNumber": "Patvirtinkite savo numeri",
-    "yourVerifiedNumbers": "Jusu patvirtinti numeriai"
+    "yourVerifiedNumbers": "Jusu patvirtinti numeriai",
+    "phoneCallsUnlimitedOnly": "Telefono skambučiai per Omi",
+    "phoneCallsUpsellSubtitle": "Skambinkite per Omi ir gaukite transkripcijas realiu laiku, automatinius santraukas ir daugiau. Prieinama tik Neriboto plano prenumeratoriams.",
+    "phoneCallsUpsellFeature1": "Kiekvieno skambučio transkripcija realiu laiku",
+    "phoneCallsUpsellFeature2": "Automatinės skambučių santraukos ir veiksmai",
+    "phoneCallsUpsellFeature3": "Gavėjai mato jūsų tikrąjį numerį, ne atsitiktinį",
+    "phoneCallsUpsellFeature4": "Jūsų skambučiai lieka privatūs ir saugūs",
+    "phoneCallsUpgradeButton": "Atnaujinti iki Neriboto",
+    "phoneCallsMaybeLater": "Gal vėliau"
 }

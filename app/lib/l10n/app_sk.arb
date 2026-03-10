@@ -2725,5 +2725,13 @@
     "verifiedNumbersDescription": "Ked niekomu zavolate, uvidi toto cislo",
     "verifiedOnDate": "Overene {date}",
     "verifyYourNumber": "Overte svoje cislo",
-    "yourVerifiedNumbers": "Vase overene cisla"
+    "yourVerifiedNumbers": "Vase overene cisla",
+    "phoneCallsUnlimitedOnly": "Telefonáty cez Omi",
+    "phoneCallsUpsellSubtitle": "Telefonujte cez Omi a získajte prepis v reálnom čase, automatické zhrnutia a ďalšie. Dostupné výhradne pre predplatiteľov tarifu Neobmedzený.",
+    "phoneCallsUpsellFeature1": "Prepis každého hovoru v reálnom čase",
+    "phoneCallsUpsellFeature2": "Automatické zhrnutia hovorov a úlohy",
+    "phoneCallsUpsellFeature3": "Príjemcovia vidia vaše skutočné číslo, nie náhodné",
+    "phoneCallsUpsellFeature4": "Vaše hovory zostávajú súkromné a bezpečné",
+    "phoneCallsUpgradeButton": "Prejsť na Neobmedzený",
+    "phoneCallsMaybeLater": "Možno neskôr"
 }

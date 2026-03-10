@@ -2688,5 +2688,13 @@
     "verifiedNumbersDescription": "Wenn Sie jemanden anrufen, sieht er diese Nummer",
     "verifiedOnDate": "Verifiziert am {date}",
     "verifyYourNumber": "Verifizieren Sie Ihre Nummer",
-    "yourVerifiedNumbers": "Ihre verifizierten Nummern"
+    "yourVerifiedNumbers": "Ihre verifizierten Nummern",
+    "phoneCallsUnlimitedOnly": "Telefonanrufe über Omi",
+    "phoneCallsUpsellSubtitle": "Telefoniere über Omi und erhalte Echtzeit-Transkription, automatische Zusammenfassungen und mehr. Exklusiv für Abonnenten des Unlimited-Plans verfügbar.",
+    "phoneCallsUpsellFeature1": "Echtzeit-Transkription jedes Anrufs",
+    "phoneCallsUpsellFeature2": "Automatische Anrufzusammenfassungen und Aufgaben",
+    "phoneCallsUpsellFeature3": "Empfänger sehen deine echte Nummer, keine zufällige",
+    "phoneCallsUpsellFeature4": "Deine Anrufe bleiben privat und sicher",
+    "phoneCallsUpgradeButton": "Auf Unlimited upgraden",
+    "phoneCallsMaybeLater": "Vielleicht später"
 }

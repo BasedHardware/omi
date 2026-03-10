@@ -2721,5 +2721,13 @@
     "verifiedNumbersDescription": "Cuando llames a alguien, veran este numero en su telefono",
     "verifiedOnDate": "Verificado el {date}",
     "verifyYourNumber": "Verifica tu numero",
-    "yourVerifiedNumbers": "Tus numeros verificados"
+    "yourVerifiedNumbers": "Tus numeros verificados",
+    "phoneCallsUnlimitedOnly": "Llamadas telefónicas vía Omi",
+    "phoneCallsUpsellSubtitle": "Realiza llamadas a través de Omi y obtén transcripción en tiempo real, resúmenes automáticos y más. Disponible exclusivamente para suscriptores del plan Ilimitado.",
+    "phoneCallsUpsellFeature1": "Transcripción en tiempo real de cada llamada",
+    "phoneCallsUpsellFeature2": "Resúmenes automáticos de llamadas y tareas",
+    "phoneCallsUpsellFeature3": "Los destinatarios ven tu número real, no uno aleatorio",
+    "phoneCallsUpsellFeature4": "Tus llamadas se mantienen privadas y seguras",
+    "phoneCallsUpgradeButton": "Actualizar a Ilimitado",
+    "phoneCallsMaybeLater": "Quizás más tarde"
 }

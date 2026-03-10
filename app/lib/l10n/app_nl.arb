@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Wanneer u iemand belt, zien zij dit nummer",
     "verifiedOnDate": "Geverifieerd op {date}",
     "verifyYourNumber": "Verifieer uw nummer",
-    "yourVerifiedNumbers": "Uw geverifieerde nummers"
+    "yourVerifiedNumbers": "Uw geverifieerde nummers",
+    "phoneCallsUnlimitedOnly": "Telefoongesprekken via Omi",
+    "phoneCallsUpsellSubtitle": "Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer. Exclusief beschikbaar voor abonnees van het Onbeperkt-abonnement.",
+    "phoneCallsUpsellFeature1": "Realtime transcriptie van elk gesprek",
+    "phoneCallsUpsellFeature2": "Automatische gesprekssamenvattingen en actiepunten",
+    "phoneCallsUpsellFeature3": "Ontvangers zien je echte nummer, niet een willekeurig",
+    "phoneCallsUpsellFeature4": "Je gesprekken blijven privé en veilig",
+    "phoneCallsUpgradeButton": "Upgraden naar Onbeperkt",
+    "phoneCallsMaybeLater": "Misschien later"
 }

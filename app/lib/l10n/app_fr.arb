@@ -2755,5 +2755,13 @@
     "verifiedNumbersDescription": "Quand vous appelez quelqu'un, il verra ce numero",
     "verifiedOnDate": "Verifie le {date}",
     "verifyYourNumber": "Verifiez votre numero",
-    "yourVerifiedNumbers": "Vos numeros verifies"
+    "yourVerifiedNumbers": "Vos numeros verifies",
+    "phoneCallsUnlimitedOnly": "Appels téléphoniques via Omi",
+    "phoneCallsUpsellSubtitle": "Passez des appels via Omi et obtenez une transcription en temps réel, des résumés automatiques et plus encore. Disponible exclusivement pour les abonnés au forfait Illimité.",
+    "phoneCallsUpsellFeature1": "Transcription en temps réel de chaque appel",
+    "phoneCallsUpsellFeature2": "Résumés automatiques des appels et actions à suivre",
+    "phoneCallsUpsellFeature3": "Les destinataires voient votre vrai numéro, pas un aléatoire",
+    "phoneCallsUpsellFeature4": "Vos appels restent privés et sécurisés",
+    "phoneCallsUpgradeButton": "Passer à Illimité",
+    "phoneCallsMaybeLater": "Peut-être plus tard"
 }

@@ -8502,4 +8502,29 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Неизвестен';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Телефонни обаждания чрез Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Правете обаждания чрез Omi и получавайте транскрипция в реално време, автоматични резюмета и още. Достъпно само за абонати на план Неограничен.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Транскрипция в реално време на всяко обаждане';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Автоматични резюмета и задачи от обаждания';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Получателите виждат истинския ви номер, не случаен';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Вашите обаждания остават лични и сигурни';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Надградете до Неограничен';
+
+  @override
+  String get phoneCallsMaybeLater => 'Може би по-късно';
 }

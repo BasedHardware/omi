@@ -2755,5 +2755,13 @@
     "verifiedNumbersDescription": "Когда вы звоните, абонент увидит этот номер",
     "verifiedOnDate": "Подтверждено {date}",
     "verifyYourNumber": "Подтвердите свой номер",
-    "yourVerifiedNumbers": "Ваши подтвержденные номера"
+    "yourVerifiedNumbers": "Ваши подтвержденные номера",
+    "phoneCallsUnlimitedOnly": "Звонки через Omi",
+    "phoneCallsUpsellSubtitle": "Совершайте звонки через Omi и получайте транскрипцию в реальном времени, автоматические сводки и многое другое. Доступно только для подписчиков тарифа Безлимитный.",
+    "phoneCallsUpsellFeature1": "Транскрипция каждого звонка в реальном времени",
+    "phoneCallsUpsellFeature2": "Автоматические сводки звонков и задачи",
+    "phoneCallsUpsellFeature3": "Получатели видят ваш настоящий номер, а не случайный",
+    "phoneCallsUpsellFeature4": "Ваши звонки остаются конфиденциальными и защищёнными",
+    "phoneCallsUpgradeButton": "Перейти на Безлимитный",
+    "phoneCallsMaybeLater": "Может быть позже"
 }

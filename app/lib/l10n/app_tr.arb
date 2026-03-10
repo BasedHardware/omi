@@ -2755,5 +2755,13 @@
     "verifiedNumbersDescription": "Birini aradiginizda bu numarayi gorecekler",
     "verifiedOnDate": "{date} tarihinde dogrulandi",
     "verifyYourNumber": "Numaranizi dogrulayin",
-    "yourVerifiedNumbers": "Dogrulanmis numaralariniz"
+    "yourVerifiedNumbers": "Dogrulanmis numaralariniz",
+    "phoneCallsUnlimitedOnly": "Omi ile Telefon Aramaları",
+    "phoneCallsUpsellSubtitle": "Omi üzerinden arama yapın ve gerçek zamanlı transkripsiyon, otomatik özetler ve daha fazlasını alın. Yalnızca Sınırsız plan aboneleri için kullanılabilir.",
+    "phoneCallsUpsellFeature1": "Her aramanın gerçek zamanlı transkripsiyonu",
+    "phoneCallsUpsellFeature2": "Otomatik arama özetleri ve görevler",
+    "phoneCallsUpsellFeature3": "Alıcılar rastgele değil, gerçek numaranızı görür",
+    "phoneCallsUpsellFeature4": "Aramalarınız gizli ve güvenli kalır",
+    "phoneCallsUpgradeButton": "Sınırsız'a yükselt",
+    "phoneCallsMaybeLater": "Belki daha sonra"
 }

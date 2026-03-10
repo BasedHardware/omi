@@ -8464,4 +8464,29 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Tundmatu';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefonikõned Omi kaudu';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Tehke kõnesid Omi kaudu ja saage reaalajas transkriptsioon, automaatsed kokkuvõtted ja palju muud. Saadaval ainult Piiramatu plaani tellijatele.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Iga kõne reaalajas transkriptsioon';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automaatsed kõnekokkuvõtted ja tegevusülesanded';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Saajad näevad teie pärisnumbrit, mitte juhuslikku';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Teie kõned jäävad privaatseks ja turvaliseks';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Uuenda Piiramatuks';
+
+  @override
+  String get phoneCallsMaybeLater => 'Võib-olla hiljem';
 }

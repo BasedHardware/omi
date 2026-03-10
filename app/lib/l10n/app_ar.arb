@@ -2687,5 +2687,13 @@
     "failedToGetCallToken": "فشل الحصول على رمز المكالمة. تحقق من رقم هاتفك أولاً.",
     "failedToInitializeCallService": "فشل تهيئة خدمة المكالمات",
     "speakerLabelYou": "أنت",
-    "speakerLabelUnknown": "غير معروف"
+    "speakerLabelUnknown": "غير معروف",
+    "phoneCallsUnlimitedOnly": "مكالمات هاتفية عبر Omi",
+    "phoneCallsUpsellSubtitle": "قم بإجراء مكالمات عبر Omi واحصل على نسخ نصي فوري وملخصات تلقائية والمزيد. متاح حصرياً لمشتركي خطة غير محدود.",
+    "phoneCallsUpsellFeature1": "نسخ نصي فوري لكل مكالمة",
+    "phoneCallsUpsellFeature2": "ملخصات تلقائية للمكالمات وعناصر العمل",
+    "phoneCallsUpsellFeature3": "يرى المتلقون رقمك الحقيقي، وليس رقماً عشوائياً",
+    "phoneCallsUpsellFeature4": "مكالماتك تبقى خاصة وآمنة",
+    "phoneCallsUpgradeButton": "ترقية إلى غير محدود",
+    "phoneCallsMaybeLater": "ربما لاحقاً"
 }

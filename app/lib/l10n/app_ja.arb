@@ -2721,5 +2721,13 @@
     "verifiedNumbersDescription": "電話をかけると、相手にこの番号が表示されます",
     "verifiedOnDate": "{date}に認証",
     "verifyYourNumber": "番号を認証",
-    "yourVerifiedNumbers": "認証済みの番号"
+    "yourVerifiedNumbers": "認証済みの番号",
+    "phoneCallsUnlimitedOnly": "Omiで電話をかける",
+    "phoneCallsUpsellSubtitle": "Omiで通話し、リアルタイム文字起こし、自動要約などを取得。Unlimitedプラン加入者限定です。",
+    "phoneCallsUpsellFeature1": "すべての通話のリアルタイム文字起こし",
+    "phoneCallsUpsellFeature2": "通話の自動要約とアクションアイテム",
+    "phoneCallsUpsellFeature3": "受信者にはあなたの実際の番号が表示されます",
+    "phoneCallsUpsellFeature4": "通話はプライベートで安全",
+    "phoneCallsUpgradeButton": "Unlimitedにアップグレード",
+    "phoneCallsMaybeLater": "また後で"
 }

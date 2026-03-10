@@ -8494,4 +8494,29 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Onbekend';
+
+  @override
+  String get phoneCallsUnlimitedOnly => 'Telefoongesprekken via Omi';
+
+  @override
+  String get phoneCallsUpsellSubtitle =>
+      'Bel via Omi en krijg realtime transcriptie, automatische samenvattingen en meer. Exclusief beschikbaar voor abonnees van het Onbeperkt-abonnement.';
+
+  @override
+  String get phoneCallsUpsellFeature1 => 'Realtime transcriptie van elk gesprek';
+
+  @override
+  String get phoneCallsUpsellFeature2 => 'Automatische gesprekssamenvattingen en actiepunten';
+
+  @override
+  String get phoneCallsUpsellFeature3 => 'Ontvangers zien je echte nummer, niet een willekeurig';
+
+  @override
+  String get phoneCallsUpsellFeature4 => 'Je gesprekken blijven privé en veilig';
+
+  @override
+  String get phoneCallsUpgradeButton => 'Upgraden naar Onbeperkt';
+
+  @override
+  String get phoneCallsMaybeLater => 'Misschien later';
 }

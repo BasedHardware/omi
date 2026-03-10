@@ -8316,4 +8316,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '未知';
+
+  @override
+  String get phoneCallsUnlimitedOnly => '通过 Omi 拨打电话';
+
+  @override
+  String get phoneCallsUpsellSubtitle => '通过 Omi 拨打电话，获取实时转录、自动摘要等功能。仅限无限计划订阅者使用。';
+
+  @override
+  String get phoneCallsUpsellFeature1 => '每次通话的实时转录';
+
+  @override
+  String get phoneCallsUpsellFeature2 => '自动通话摘要和待办事项';
+
+  @override
+  String get phoneCallsUpsellFeature3 => '接收方看到的是您的真实号码，而非随机号码';
+
+  @override
+  String get phoneCallsUpsellFeature4 => '您的通话保持私密和安全';
+
+  @override
+  String get phoneCallsUpgradeButton => '升级到无限计划';
+
+  @override
+  String get phoneCallsMaybeLater => '以后再说';
 }

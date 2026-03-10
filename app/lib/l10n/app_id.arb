@@ -2762,5 +2762,13 @@
     "verifiedNumbersDescription": "Saat Anda menelepon seseorang, mereka akan melihat nomor ini",
     "verifiedOnDate": "Diverifikasi pada {date}",
     "verifyYourNumber": "Verifikasi nomor Anda",
-    "yourVerifiedNumbers": "Nomor terverifikasi Anda"
+    "yourVerifiedNumbers": "Nomor terverifikasi Anda",
+    "phoneCallsUnlimitedOnly": "Panggilan Telepon via Omi",
+    "phoneCallsUpsellSubtitle": "Lakukan panggilan melalui Omi dan dapatkan transkripsi real-time, ringkasan otomatis, dan lainnya. Tersedia eksklusif untuk pelanggan paket Unlimited.",
+    "phoneCallsUpsellFeature1": "Transkripsi real-time setiap panggilan",
+    "phoneCallsUpsellFeature2": "Ringkasan panggilan otomatis dan item tindakan",
+    "phoneCallsUpsellFeature3": "Penerima melihat nomor asli Anda, bukan nomor acak",
+    "phoneCallsUpsellFeature4": "Panggilan Anda tetap pribadi dan aman",
+    "phoneCallsUpgradeButton": "Upgrade ke Unlimited",
+    "phoneCallsMaybeLater": "Mungkin nanti"
 }

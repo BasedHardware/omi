@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Όταν καλείτε κάποιον, θα βλέπει αυτόν τον αριθμό",
     "verifiedOnDate": "Επαληθεύτηκε στις {date}",
     "verifyYourNumber": "Επαληθεύστε τον αριθμό σας",
-    "yourVerifiedNumbers": "Οι επαληθευμένοι αριθμοί σας"
+    "yourVerifiedNumbers": "Οι επαληθευμένοι αριθμοί σας",
+    "phoneCallsUnlimitedOnly": "Τηλεφωνικές κλήσεις μέσω Omi",
+    "phoneCallsUpsellSubtitle": "Κάντε κλήσεις μέσω Omi και λάβετε μεταγραφή σε πραγματικό χρόνο, αυτόματες περιλήψεις και πολλά άλλα. Διαθέσιμο αποκλειστικά για συνδρομητές του πλάνου Απεριόριστο.",
+    "phoneCallsUpsellFeature1": "Μεταγραφή σε πραγματικό χρόνο κάθε κλήσης",
+    "phoneCallsUpsellFeature2": "Αυτόματες περιλήψεις κλήσεων και ενέργειες",
+    "phoneCallsUpsellFeature3": "Οι παραλήπτες βλέπουν τον πραγματικό σας αριθμό, όχι τυχαίο",
+    "phoneCallsUpsellFeature4": "Οι κλήσεις σας παραμένουν ιδιωτικές και ασφαλείς",
+    "phoneCallsUpgradeButton": "Αναβάθμιση σε Απεριόριστο",
+    "phoneCallsMaybeLater": "Ίσως αργότερα"
 }

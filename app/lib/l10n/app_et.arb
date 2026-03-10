@@ -2720,5 +2720,13 @@
     "verifiedNumbersDescription": "Kui helistate kellelegi, naevad nad seda numbrit",
     "verifiedOnDate": "Kinnitatud {date}",
     "verifyYourNumber": "Kinnitage oma number",
-    "yourVerifiedNumbers": "Teie kinnitatud numbrid"
+    "yourVerifiedNumbers": "Teie kinnitatud numbrid",
+    "phoneCallsUnlimitedOnly": "Telefonikõned Omi kaudu",
+    "phoneCallsUpsellSubtitle": "Tehke kõnesid Omi kaudu ja saage reaalajas transkriptsioon, automaatsed kokkuvõtted ja palju muud. Saadaval ainult Piiramatu plaani tellijatele.",
+    "phoneCallsUpsellFeature1": "Iga kõne reaalajas transkriptsioon",
+    "phoneCallsUpsellFeature2": "Automaatsed kõnekokkuvõtted ja tegevusülesanded",
+    "phoneCallsUpsellFeature3": "Saajad näevad teie pärisnumbrit, mitte juhuslikku",
+    "phoneCallsUpsellFeature4": "Teie kõned jäävad privaatseks ja turvaliseks",
+    "phoneCallsUpgradeButton": "Uuenda Piiramatuks",
+    "phoneCallsMaybeLater": "Võib-olla hiljem"
 }
