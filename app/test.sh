@@ -51,3 +51,4 @@ flutter test test/unit/audio_player_utils_test.dart
 flutter test test/unit/env_test.dart
 flutter test test/unit/testflight_preferences_test.dart
 flutter test test/unit/multipart_401_retry_test.dart
+flutter test test/unit/token_refresh_loop_test.dart
