@@ -448,8 +448,6 @@ class TasksStore: ObservableObject {
         // Then retry pushing any locally-created tasks that failed to sync
         Task {
             await performFullSyncIfNeeded()
-            await migrateAITasksToStagedIfNeeded()
-            await migrateConversationItemsToStagedIfNeeded()
             await retryUnsyncedItems()
         }
         // Backfill relevance scores for unscored tasks (independent of full sync)
@@ -805,69 +803,6 @@ class TasksStore: ObservableObject {
 
         } catch {
             logError("TasksStore: Full sync failed (will retry next launch)", error: error)
-        }
-    }
-
-    /// In-memory guard to prevent duplicate migration calls within the same app session
-    private static var isMigrating = false
-
-    /// One-time migration: tell backend to move excess AI tasks to staged_tasks subcollection.
-    /// The SQLite migration handles local data; this handles Firestore.
-    /// Sets the flag optimistically before the request to avoid retry loops on timeout.
-    private func migrateAITasksToStagedIfNeeded() async {
-        let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "stagedTasksMigrationCompleted_v4_\(userId)"
-
-        guard !UserDefaults.standard.bool(forKey: migrationKey) else {
-            log("TasksStore: Staged tasks migration already completed for user \(userId)")
-            return
-        }
-
-        // In-memory guard: loadTasks() can be called from multiple pages
-        guard !Self.isMigrating else {
-            log("TasksStore: Staged tasks migration already in progress, skipping")
-            return
-        }
-        Self.isMigrating = true
-
-        // Set flag optimistically — the migration is idempotent and safe to skip on re-run.
-        // This prevents infinite retry loops when the backend succeeds but the client times out.
-        UserDefaults.standard.set(true, forKey: migrationKey)
-
-        log("TasksStore: Starting staged tasks backend migration for user \(userId)")
-
-        do {
-            try await APIClient.shared.migrateStagedTasks()
-            log("TasksStore: Staged tasks backend migration completed")
-        } catch {
-            log("TasksStore: Staged tasks backend migration fired (may complete in background): \(error.localizedDescription)")
-        }
-        Self.isMigrating = false
-    }
-
-    /// One-time migration of conversation-extracted action items (no source field) to staged_tasks.
-    /// These were created by the old save_action_items path that bypassed the staging pipeline.
-    private func migrateConversationItemsToStagedIfNeeded() async {
-        let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-        let migrationKey = "conversationItemsMigrationCompleted_v4_\(userId)"
-
-        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
-
-        UserDefaults.standard.set(true, forKey: migrationKey)
-        log("TasksStore: Starting conversation items migration for user \(userId)")
-
-        do {
-            try await APIClient.shared.migrateConversationItemsToStaged()
-            log("TasksStore: Conversation items migration completed, resetting full sync to clean up local SQLite")
-
-            // Reset full sync flag so it re-runs and marks migrated items as staged locally
-            let syncKey = "tasksFullSyncCompleted_v9_\(userId)"
-            UserDefaults.standard.set(false, forKey: syncKey)
-
-            // Run full sync now to clean up local SQLite
-            await performFullSyncIfNeeded()
-        } catch {
-            log("TasksStore: Conversation items migration fired (may complete in background): \(error.localizedDescription)")
         }
     }
 
