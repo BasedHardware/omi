@@ -21,6 +21,7 @@ import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
+from database._client import db as firestore_db
 from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
@@ -125,8 +126,6 @@ async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
 
 def _update_firestore_vm(uid: str, ip: str | None, status: str):
     """Update the user's agentVm fields in Firestore."""
-    from database.users import db as firestore_db
-
     update = {"agentVm.status": status}
     if ip:
         update["agentVm.ip"] = ip
@@ -135,8 +134,6 @@ def _update_firestore_vm(uid: str, ip: str | None, status: str):
 
 def _set_firestore_vm(uid: str, vm_name: str, zone: str, ip: str | None, status: str, auth_token: str):
     """Write the full agentVm document to Firestore (for initial provisioning)."""
-    from database.users import db as firestore_db
-
     now = datetime.now(timezone.utc).isoformat()
     vm_data = {
         "vmName": vm_name,
@@ -200,6 +197,7 @@ async def _create_gce_vm(vm_name: str, auth_token: str) -> str:
 
         # Poll operation until done (max ~2 minutes)
         op_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
+        op_done = False
         for i in range(24):
             await asyncio.sleep(5)
             token = _get_gce_access_token()
@@ -209,29 +207,30 @@ async def _create_gce_vm(vm_name: str, auth_token: str) -> str:
                 if "error" in op_status:
                     raise Exception(f"GCE insert operation failed: {op_status['error']}")
                 logger.info(f"[vm-create] {vm_name} operation done after {i + 1} polls")
+                op_done = True
                 break
+        if not op_done:
+            raise Exception(f"GCE insert timed out after 120s for {vm_name}")
 
         # Get external IP
         instance_url = (
             f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
         )
-        ip = None
         for attempt in range(6):
             token = _get_gce_access_token()
             inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
             instance = inst_resp.json()
             try:
                 candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-                if candidate and candidate != "unknown":
-                    ip = candidate
-                    logger.info(f"[vm-create] {vm_name} got IP {ip} on attempt {attempt + 1}")
-                    break
+                if candidate:
+                    logger.info(f"[vm-create] {vm_name} got IP {candidate} on attempt {attempt + 1}")
+                    return candidate
             except (KeyError, IndexError):
                 pass
             if attempt < 5:
                 await asyncio.sleep(3)
 
-        return ip or "unknown"
+        raise Exception(f"Failed to get external IP for {vm_name} after 6 attempts")
 
 
 async def _provision_vm_background(uid: str, vm_name: str, auth_token: str):
