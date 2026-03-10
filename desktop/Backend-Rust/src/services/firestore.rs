@@ -2165,6 +2165,7 @@ impl FirestoreService {
         completed: Option<bool>,
         description: Option<&str>,
         due_at: Option<DateTime<Utc>>,
+        clear_due_at: bool,
         priority: Option<&str>,
         category: Option<&str>,
         goal_id: Option<&str>,
@@ -2198,7 +2199,10 @@ impl FirestoreService {
             fields["description"] = json!({"stringValue": d});
         }
 
-        if let Some(due) = due_at {
+        if clear_due_at {
+            field_paths.push("due_at");
+            fields["due_at"] = json!({"nullValue": null});
+        } else if let Some(due) = due_at {
             field_paths.push("due_at");
             fields["due_at"] = json!({"timestampValue": due.to_rfc3339()});
         }
@@ -7114,6 +7118,131 @@ impl FirestoreService {
             app_id
         );
         Ok(count)
+    }
+
+    /// Delete all documents in a user subcollection and return deleted count.
+    pub async fn delete_all_documents_in_subcollection(
+        &self,
+        uid: &str,
+        subcollection: &str,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+        let query = json!({
+            "structuredQuery": {
+                "from": [{"collectionId": subcollection}],
+                "limit": 5000
+            }
+        });
+
+        let response = self
+            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .await?
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Firestore query error for {}: {}", subcollection, error_text).into());
+        }
+
+        let results: Vec<Value> = response.json().await?;
+        let mut deleted = 0usize;
+
+        for result in results {
+            let Some(name) = result
+                .get("document")
+                .and_then(|d| d.get("name"))
+                .and_then(|n| n.as_str())
+            else {
+                continue;
+            };
+
+            let Some(doc_id) = name.rsplit('/').next() else {
+                continue;
+            };
+
+            let url = format!(
+                "{}/{}/{}/{}/{}",
+                self.base_url(),
+                USERS_COLLECTION,
+                uid,
+                subcollection,
+                doc_id
+            );
+
+            let delete_response = self
+                .build_request(reqwest::Method::DELETE, &url)
+                .await?
+                .send()
+                .await?;
+
+            if delete_response.status().is_success() || delete_response.status() == reqwest::StatusCode::NOT_FOUND {
+                deleted += 1;
+            } else {
+                let error_text = delete_response.text().await?;
+                return Err(format!("Firestore delete error for {}/{}: {}", subcollection, doc_id, error_text).into());
+            }
+        }
+
+        tracing::info!("Deleted {} docs from {}/{}", deleted, uid, subcollection);
+        Ok(deleted)
+    }
+
+    /// Delete the user root document (`users/{uid}`).
+    pub async fn delete_user_root_document(
+        &self,
+        uid: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let url = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+
+        let response = self
+            .build_request(reqwest::Method::DELETE, &url)
+            .await?
+            .send()
+            .await?;
+
+        if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
+            let error_text = response.text().await?;
+            return Err(format!("Firestore delete user root error: {}", error_text).into());
+        }
+
+        tracing::info!("Deleted user root doc for {}", uid);
+        Ok(())
+    }
+
+    /// Delete Firebase Auth user by UID using service-account OAuth (admin path).
+    pub async fn delete_firebase_auth_user(
+        &self,
+        project_id: &str,
+        uid: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let access_token = self.get_access_token().await?;
+        let url = format!(
+            "https://identitytoolkit.googleapis.com/v1/projects/{}/accounts:delete",
+            project_id
+        );
+
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(access_token)
+            .json(&json!({ "localId": uid }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            // Idempotent delete: if auth user is already gone, treat as success.
+            if error_text.contains("USER_NOT_FOUND") {
+                tracing::info!("Firebase Auth user {} already deleted", uid);
+                return Ok(());
+            }
+            return Err(format!("Firebase admin accounts:delete failed: {}", error_text).into());
+        }
+
+        tracing::info!("Deleted Firebase Auth user {}", uid);
+        Ok(())
     }
 
     /// Update a message's rating (thumbs up/down)

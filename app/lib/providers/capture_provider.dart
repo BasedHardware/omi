@@ -16,6 +16,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -1334,6 +1335,12 @@ class CaptureProvider extends ChangeNotifier
 
       _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
+        t.cancel();
+        return;
+      }
+
+      if (!AuthService.instance.isSignedIn()) {
+        Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
         return;
       }

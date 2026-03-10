@@ -237,10 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final updatedItem = await api.updateActionItem(
-        item.id,
-        description: newDescription,
-      );
+      final updatedItem = await api.updateActionItem(item.id, description: newDescription);
 
       if (updatedItem != null) {
         // Update the local item with server response
@@ -288,11 +285,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final updatedItem = await api.updateActionItem(
-        item.id,
-        dueAt: dueDate,
-        clearDueAt: dueDate == null,
-      );
+      final updatedItem = await api.updateActionItem(item.id, dueAt: dueDate, clearDueAt: dueDate == null);
 
       if (updatedItem != null) {
         final idx = _actionItems.indexWhere((i) => i.id == item.id);
@@ -320,13 +313,13 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<int> clearTodayDeadlinesForIncompleteTasks() async {
     final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = startOfToday.add(const Duration(days: 1));
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
 
     final itemsToClear = _actionItems.where((item) {
       final dueAt = item.dueAt;
       if (item.completed || dueAt == null) return false;
-      return !dueAt.isBefore(startOfToday) && dueAt.isBefore(startOfTomorrow);
+      // Keep clean behavior aligned with the tasks listed under "Today" in UI.
+      return dueAt.isBefore(startOfTomorrow);
     }).toList();
 
     if (itemsToClear.isEmpty) return 0;
@@ -344,10 +337,7 @@ class ActionItemsProvider extends ChangeNotifier {
     int successCount = 0;
     for (final item in itemsToClear) {
       try {
-        final updatedItem = await api.updateActionItem(
-          item.id,
-          clearDueAt: true,
-        );
+        final updatedItem = await api.updateActionItem(item.id, clearDueAt: true);
 
         final index = _actionItems.indexWhere((i) => i.id == item.id);
         if (updatedItem != null) {
@@ -383,9 +373,7 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await api.deleteActionItem(
-        item.id,
-      );
+      final success = await api.deleteActionItem(item.id);
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
@@ -450,10 +438,7 @@ class ActionItemsProvider extends ChangeNotifier {
   void _updateItemInPlace(String id, {int? sortOrder, int? indentLevel}) {
     final index = _actionItems.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _actionItems[index] = _actionItems[index].copyWith(
-        sortOrder: sortOrder,
-        indentLevel: indentLevel,
-      );
+      _actionItems[index] = _actionItems[index].copyWith(sortOrder: sortOrder, indentLevel: indentLevel);
     }
   }
 
@@ -649,8 +634,9 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_selectedItems.isEmpty) return false;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
-    final success = await Future.wait(itemsToDelete.map((item) => deleteActionItem(item)))
-        .then((results) => results.every((success) => success));
+    final success = await Future.wait(
+      itemsToDelete.map((item) => deleteActionItem(item)),
+    ).then((results) => results.every((success) => success));
 
     if (success) {
       _selectedItems.clear();

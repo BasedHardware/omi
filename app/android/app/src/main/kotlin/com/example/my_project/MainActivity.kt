@@ -20,6 +20,9 @@ class MainActivity: FlutterActivity() {
         // Register WiFi Network Plugin
         WifiNetworkPlugin.registerWith(flutterEngine, this)
 
+        // Register Phone Calls Plugin
+        PhoneCallsPlugin.registerWith(flutterEngine, this)
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
             if(call.method == "setNotificationOnKillService"){

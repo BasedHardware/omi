@@ -1,4 +1,5 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
+
 import sys
 import xml.etree.ElementTree as ET
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -38,6 +39,7 @@ _test_app.include_router(updates_router)
 
 # --- _parse_desktop_version ---
 
+
 class TestParseDesktopVersion:
     def test_standard_macos_tag(self):
         result = _parse_desktop_version("v1.0.77+464-macos")
@@ -73,6 +75,7 @@ class TestParseDesktopVersion:
 
 # --- _parse_changelog_to_changes ---
 
+
 class TestParseChangelog:
     def test_structured_changelog(self):
         changes = _parse_changelog_to_changes(["Fixed a crash on startup", "Added dark mode"], "")
@@ -99,6 +102,7 @@ class TestParseChangelog:
 
 # --- _xml_attr ---
 
+
 class TestXmlAttr:
     def test_escapes_quotes(self):
         assert '&quot;' in _xml_attr('value with "quotes"')
@@ -112,6 +116,7 @@ class TestXmlAttr:
 
 
 # --- _generate_appcast_xml ---
+
 
 class TestGenerateAppcastXml:
     def _make_item(self, channel="beta", version="1.0.0+100", url="https://example.com/Omi.zip"):
@@ -172,6 +177,7 @@ class TestGenerateAppcastXml:
 
 # --- Asset URL helpers ---
 
+
 class TestAssetHelpers:
     def test_sparkle_zip_found(self):
         release = {"assets": [{"name": "Omi.zip", "browser_download_url": "https://example.com/Omi.zip"}]}
@@ -196,6 +202,7 @@ class TestAssetHelpers:
 
 # --- Channel validation ---
 
+
 class TestFormatChangelogHtml:
     def test_empty_changes(self):
         html = _format_changelog_html([])
@@ -218,6 +225,7 @@ class TestFormatChangelogHtml:
 
 # --- Channel validation ---
 
+
 class TestChannelValidation:
     def test_valid_channels(self):
         assert "beta" in VALID_CHANNELS
@@ -228,6 +236,7 @@ class TestChannelValidation:
 
 
 # --- Fixtures for endpoint tests ---
+
 
 def _make_github_release(tag, body_kv=None, assets=None, published_at="2026-03-01T00:00:00Z", draft=False):
     """Build a mock GitHub release dict."""
@@ -253,6 +262,7 @@ def _dmg_asset(url="https://example.com/Omi.dmg"):
 
 
 # --- _get_live_desktop_releases ---
+
 
 class TestGetLiveDesktopReleases:
     @pytest.mark.asyncio
@@ -358,6 +368,7 @@ class TestGetLiveDesktopReleases:
 
 # --- Appcast XML endpoint ---
 
+
 class TestAppcastEndpoint:
     @pytest.mark.asyncio
     async def test_returns_xml_with_items(self):
@@ -393,13 +404,21 @@ class TestAppcastEndpoint:
         mock_releases = [
             {
                 "channel": "beta",
-                "release": {"published_at": "2026-03-02T00:00:00Z", "body": "", "assets": [_zip_asset("https://a.com/Omi.zip")]},
+                "release": {
+                    "published_at": "2026-03-02T00:00:00Z",
+                    "body": "",
+                    "assets": [_zip_asset("https://a.com/Omi.zip")],
+                },
                 "version_info": {"version": "2.0.0+200", "build": "200"},
                 "metadata": {},
             },
             {
                 "channel": "beta",
-                "release": {"published_at": "2026-03-01T00:00:00Z", "body": "", "assets": [_zip_asset("https://b.com/Omi.zip")]},
+                "release": {
+                    "published_at": "2026-03-01T00:00:00Z",
+                    "body": "",
+                    "assets": [_zip_asset("https://b.com/Omi.zip")],
+                },
                 "version_info": {"version": "1.0.0+100", "build": "100"},
                 "metadata": {},
             },
@@ -444,6 +463,7 @@ class TestAppcastEndpoint:
 
 # --- Download endpoint ---
 
+
 class TestDownloadEndpoint:
     @pytest.mark.asyncio
     async def test_redirects_to_dmg(self):
@@ -454,7 +474,9 @@ class TestDownloadEndpoint:
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False) as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
+            ) as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
         assert resp.status_code == 302
         assert resp.headers["location"] == "https://example.com/Omi-stable.dmg"
@@ -475,7 +497,9 @@ class TestDownloadEndpoint:
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False) as client:
+            async with AsyncClient(
+                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
+            ) as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
         assert resp.status_code == 302
         assert "beta.dmg" in resp.headers["location"]
@@ -509,6 +533,7 @@ class TestDownloadEndpoint:
 
 
 # --- Clear cache endpoint ---
+
 
 class TestClearCacheEndpoint:
     @pytest.mark.asyncio

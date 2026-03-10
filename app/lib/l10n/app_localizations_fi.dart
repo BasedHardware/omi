@@ -8275,4 +8275,194 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Myöhässä';
+
+  @override
+  String get phoneCallsWithOmi => 'Puhelut Omin kanssa';
+
+  @override
+  String get phoneCallsSubtitle => 'Soita reaaliaikaisella litteroinnilla';
+
+  @override
+  String get phoneSetupStep1Title => 'Vahvista puhelinnumerosi';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Soitamme sinulle vahvistusta varten';
+
+  @override
+  String get phoneSetupStep2Title => 'Syota vahvistuskoodi';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Lyhyt koodi, jonka syotat puhelun aikana';
+
+  @override
+  String get phoneSetupStep3Title => 'Aloita soittaminen yhteystiedoillesi';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Sisaanrakennetulla reaaliaikaisella litteroinnilla';
+
+  @override
+  String get phoneGetStarted => 'Aloita';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Puheluiden nauhoittaminen voi vaatia suostumuksen lainkaytoalueellasi';
+
+  @override
+  String get enterYourNumber => 'Syota numerosi';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Vahvistuksen jalkeen tasta tulee soittajatunnuksesi';
+
+  @override
+  String get phoneNumberHint => 'Puhelinnumero';
+
+  @override
+  String get failedToStartVerification => 'Vahvistuksen aloitus epaonnistui';
+
+  @override
+  String get phoneContinue => 'Jatka';
+
+  @override
+  String get verifyYourNumber => 'Vahvista numerosi';
+
+  @override
+  String get answerTheCallFrom => 'Vastaa puheluun numerosta';
+
+  @override
+  String get onTheCallEnterThisCode => 'Syota tama koodi puhelun aikana';
+
+  @override
+  String get followTheVoiceInstructions => 'Seuraa aaniohjelta';
+
+  @override
+  String get statusCalling => 'Soitetaan...';
+
+  @override
+  String get statusCallInProgress => 'Puhelu kaynnissa';
+
+  @override
+  String get statusVerifiedLabel => 'Vahvistettu';
+
+  @override
+  String get statusCallMissed => 'Vastaamaton puhelu';
+
+  @override
+  String get statusTimedOut => 'Aikakatkaisu';
+
+  @override
+  String get phoneTryAgain => 'Yrita uudelleen';
+
+  @override
+  String get phonePageTitle => 'Puhelin';
+
+  @override
+  String get phoneContactsTab => 'Yhteystiedot';
+
+  @override
+  String get phoneKeypadTab => 'Nappaimisto';
+
+  @override
+  String get grantContactsAccess => 'Anna paasy yhteystietoihisi';
+
+  @override
+  String get phoneAllow => 'Salli';
+
+  @override
+  String get phoneSearchHint => 'Hae';
+
+  @override
+  String get phoneNoContactsFound => 'Yhteystietoja ei loydy';
+
+  @override
+  String get phoneEnterNumber => 'Syota numero';
+
+  @override
+  String get failedToStartCall => 'Puhelun aloitus epaonnistui';
+
+  @override
+  String get callStateConnecting => 'Yhdistetaan...';
+
+  @override
+  String get callStateRinging => 'Soi...';
+
+  @override
+  String get callStateEnded => 'Puhelu paattynyt';
+
+  @override
+  String get callStateFailed => 'Puhelu epaonnistui';
+
+  @override
+  String get transcriptPlaceholder => 'Litterointi nakyy taalla...';
+
+  @override
+  String get phoneUnmute => 'Poista mykistys';
+
+  @override
+  String get phoneMute => 'Mykista';
+
+  @override
+  String get phoneSpeaker => 'Kaiutin';
+
+  @override
+  String get phoneEndCall => 'Lopeta';
+
+  @override
+  String get phoneCallSettingsTitle => 'Puheluasetukset';
+
+  @override
+  String get yourVerifiedNumbers => 'Vahvistetut numerosi';
+
+  @override
+  String get verifiedNumbersDescription => 'Kun soitat jollekulle, he nakevat taman numeron';
+
+  @override
+  String get noVerifiedNumbers => 'Ei vahvistettuja numeroita';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Poista $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Sinun taytyy vahvistaa uudelleen soittaaksesi';
+
+  @override
+  String get phoneDeleteButton => 'Poista';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Vahvistettu ${minutes}min sitten';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Vahvistettu ${hours}t sitten';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Vahvistettu ${days}pv sitten';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Vahvistettu $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Vahvistettu';
+
+  @override
+  String get callAlreadyInProgress => 'Puhelu on jo kaynnissa';
+
+  @override
+  String get failedToGetCallToken => 'Tokenin haku epaonnistui. Vahvista numerosi ensin.';
+
+  @override
+  String get failedToInitializeCallService => 'Puhelupalvelun alustus epaonnistui';
+
+  @override
+  String get speakerLabelYou => 'Sina';
+
+  @override
+  String get speakerLabelUnknown => 'Tuntematon';
 }

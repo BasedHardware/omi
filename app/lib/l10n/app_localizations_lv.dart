@@ -8294,4 +8294,194 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Nokavētas';
+
+  @override
+  String get phoneCallsWithOmi => 'Zvani ar Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Zvaniet ar realaika transkripciju';
+
+  @override
+  String get phoneSetupStep1Title => 'Verificejiet savu talruna numuru';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Mes jums piezvanisim, lai apstiprinātu';
+
+  @override
+  String get phoneSetupStep2Title => 'Ievadiet verificesanas kodu';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Iss kods, ko ievadisiet zvana laika';
+
+  @override
+  String get phoneSetupStep3Title => 'Saciet zvanit saviem kontaktiem';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Ar iebuvetu tiessaistes transkripciju';
+
+  @override
+  String get phoneGetStarted => 'Sakt';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Zvanu ierakstisanai var but nepieciesama piekrišana jusu jurisdikcija';
+
+  @override
+  String get enterYourNumber => 'Ievadiet savu numuru';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Pec verificesanas tas kluus par jusu zvanitaja ID';
+
+  @override
+  String get phoneNumberHint => 'Talruna numurs';
+
+  @override
+  String get failedToStartVerification => 'Neizdevas sakt verificesanu';
+
+  @override
+  String get phoneContinue => 'Turpinat';
+
+  @override
+  String get verifyYourNumber => 'Verificejiet savu numuru';
+
+  @override
+  String get answerTheCallFrom => 'Atbildiet uz zvanu no';
+
+  @override
+  String get onTheCallEnterThisCode => 'Zvana laika ievadiet šo kodu';
+
+  @override
+  String get followTheVoiceInstructions => 'Sekojiet balss noraadiajumiem';
+
+  @override
+  String get statusCalling => 'Zvana...';
+
+  @override
+  String get statusCallInProgress => 'Zvans notiek';
+
+  @override
+  String get statusVerifiedLabel => 'Verificets';
+
+  @override
+  String get statusCallMissed => 'Neatbildets zvans';
+
+  @override
+  String get statusTimedOut => 'Laiks beidzies';
+
+  @override
+  String get phoneTryAgain => 'Meginet velreiz';
+
+  @override
+  String get phonePageTitle => 'Talrunis';
+
+  @override
+  String get phoneContactsTab => 'Kontakti';
+
+  @override
+  String get phoneKeypadTab => 'Tastatatura';
+
+  @override
+  String get grantContactsAccess => 'Pieškkiriet pieeju kontaktiem';
+
+  @override
+  String get phoneAllow => 'Atliaut';
+
+  @override
+  String get phoneSearchHint => 'Meklet';
+
+  @override
+  String get phoneNoContactsFound => 'Kontakti nav atrasti';
+
+  @override
+  String get phoneEnterNumber => 'Ievadiet numuru';
+
+  @override
+  String get failedToStartCall => 'Neizdevas sakt zvanu';
+
+  @override
+  String get callStateConnecting => 'Savienojums...';
+
+  @override
+  String get callStateRinging => 'Zvana...';
+
+  @override
+  String get callStateEnded => 'Zvans beidzies';
+
+  @override
+  String get callStateFailed => 'Zvans neizdevas';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripcija paradisies šeit...';
+
+  @override
+  String get phoneUnmute => 'Iesleegt skanu';
+
+  @override
+  String get phoneMute => 'Izslegt skanu';
+
+  @override
+  String get phoneSpeaker => 'Skalrunis';
+
+  @override
+  String get phoneEndCall => 'Beigt';
+
+  @override
+  String get phoneCallSettingsTitle => 'Zvanu iestatijumi';
+
+  @override
+  String get yourVerifiedNumbers => 'Jusu verificetie numuri';
+
+  @override
+  String get verifiedNumbersDescription => 'Kad zvanisiet kadam, vinš redzees šo numuru';
+
+  @override
+  String get noVerifiedNumbers => 'Nav verificetu numuru';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Dzest $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Jums bus javerifice atkal, lai zvanitu';
+
+  @override
+  String get phoneDeleteButton => 'Dzest';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificets pirms ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificets pirms ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificets pirms ${days}d';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificets $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificets';
+
+  @override
+  String get callAlreadyInProgress => 'Zvans jau notiek';
+
+  @override
+  String get failedToGetCallToken => 'Neizdevas iegut pilnvaru. Vispirms verificejiet savu numuru.';
+
+  @override
+  String get failedToInitializeCallService => 'Neizdevas inicializet zvanu pakalpojumu';
+
+  @override
+  String get speakerLabelYou => 'Jus';
+
+  @override
+  String get speakerLabelUnknown => 'Nezinams';
 }

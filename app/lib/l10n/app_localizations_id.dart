@@ -8287,4 +8287,194 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Terlambat';
+
+  @override
+  String get phoneCallsWithOmi => 'Panggilan dengan Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Telepon dengan transkripsi real-time';
+
+  @override
+  String get phoneSetupStep1Title => 'Verifikasi nomor telepon Anda';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Kami akan menelepon untuk mengonfirmasi';
+
+  @override
+  String get phoneSetupStep2Title => 'Masukkan kode verifikasi';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Kode pendek yang Anda ketik saat panggilan';
+
+  @override
+  String get phoneSetupStep3Title => 'Mulai menelepon kontak Anda';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Dengan transkripsi langsung bawaan';
+
+  @override
+  String get phoneGetStarted => 'Mulai';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'Rekaman panggilan mungkin memerlukan persetujuan di yurisdiksi Anda';
+
+  @override
+  String get enterYourNumber => 'Masukkan nomor Anda';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Setelah diverifikasi, ini menjadi ID penelepon Anda';
+
+  @override
+  String get phoneNumberHint => 'Nomor telepon';
+
+  @override
+  String get failedToStartVerification => 'Gagal memulai verifikasi';
+
+  @override
+  String get phoneContinue => 'Lanjutkan';
+
+  @override
+  String get verifyYourNumber => 'Verifikasi nomor Anda';
+
+  @override
+  String get answerTheCallFrom => 'Jawab panggilan dari';
+
+  @override
+  String get onTheCallEnterThisCode => 'Saat panggilan, masukkan kode ini';
+
+  @override
+  String get followTheVoiceInstructions => 'Ikuti petunjuk suara';
+
+  @override
+  String get statusCalling => 'Memanggil...';
+
+  @override
+  String get statusCallInProgress => 'Panggilan berlangsung';
+
+  @override
+  String get statusVerifiedLabel => 'Terverifikasi';
+
+  @override
+  String get statusCallMissed => 'Panggilan tak terjawab';
+
+  @override
+  String get statusTimedOut => 'Waktu habis';
+
+  @override
+  String get phoneTryAgain => 'Coba lagi';
+
+  @override
+  String get phonePageTitle => 'Telepon';
+
+  @override
+  String get phoneContactsTab => 'Kontak';
+
+  @override
+  String get phoneKeypadTab => 'Keypad';
+
+  @override
+  String get grantContactsAccess => 'Berikan akses ke kontak Anda';
+
+  @override
+  String get phoneAllow => 'Izinkan';
+
+  @override
+  String get phoneSearchHint => 'Cari';
+
+  @override
+  String get phoneNoContactsFound => 'Tidak ada kontak ditemukan';
+
+  @override
+  String get phoneEnterNumber => 'Masukkan nomor';
+
+  @override
+  String get failedToStartCall => 'Gagal memulai panggilan';
+
+  @override
+  String get callStateConnecting => 'Menghubungkan...';
+
+  @override
+  String get callStateRinging => 'Berdering...';
+
+  @override
+  String get callStateEnded => 'Panggilan berakhir';
+
+  @override
+  String get callStateFailed => 'Panggilan gagal';
+
+  @override
+  String get transcriptPlaceholder => 'Transkripsi akan muncul di sini...';
+
+  @override
+  String get phoneUnmute => 'Bunyikan';
+
+  @override
+  String get phoneMute => 'Bisukan';
+
+  @override
+  String get phoneSpeaker => 'Speaker';
+
+  @override
+  String get phoneEndCall => 'Akhiri';
+
+  @override
+  String get phoneCallSettingsTitle => 'Pengaturan panggilan';
+
+  @override
+  String get yourVerifiedNumbers => 'Nomor terverifikasi Anda';
+
+  @override
+  String get verifiedNumbersDescription => 'Saat Anda menelepon seseorang, mereka akan melihat nomor ini';
+
+  @override
+  String get noVerifiedNumbers => 'Tidak ada nomor terverifikasi';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Hapus $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Anda perlu memverifikasi lagi untuk menelepon';
+
+  @override
+  String get phoneDeleteButton => 'Hapus';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Diverifikasi ${minutes}m lalu';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Diverifikasi ${hours}j lalu';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Diverifikasi ${days}h lalu';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Diverifikasi pada $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Terverifikasi';
+
+  @override
+  String get callAlreadyInProgress => 'Panggilan sedang berlangsung';
+
+  @override
+  String get failedToGetCallToken => 'Gagal mendapatkan token. Verifikasi nomor Anda terlebih dahulu.';
+
+  @override
+  String get failedToInitializeCallService => 'Gagal menginisialisasi layanan panggilan';
+
+  @override
+  String get speakerLabelYou => 'Anda';
+
+  @override
+  String get speakerLabelUnknown => 'Tidak dikenal';
 }

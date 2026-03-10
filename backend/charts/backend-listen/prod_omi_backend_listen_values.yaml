@@ -277,6 +277,31 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
+  - name: TWILIO_ACCOUNT_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_ACCOUNT_SID
+  - name: TWILIO_AUTH_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_AUTH_TOKEN
+  - name: TWILIO_API_KEY_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_API_KEY_SID
+  - name: TWILIO_API_KEY_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_API_KEY_SECRET
+  - name: TWILIO_TWIML_APP_SID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TWILIO_TWIML_APP_SID
   - name: VAD_GATE_MODE
     value: "active"
 

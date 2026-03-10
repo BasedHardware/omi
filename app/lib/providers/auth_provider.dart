@@ -50,10 +50,10 @@ class AuthenticationProvider extends BaseProvider {
       });
       _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
         if (user == null) {
-          Logger.debug('User is currently signed out or the token has been revoked! ${user == null}');
-          // Don't clear cached token - allows fallback for dev builds
-          // SharedPreferencesUtil().authToken = '';
-          // authToken = null;
+          Logger.debug('User is currently signed out or the token has been revoked!');
+          SharedPreferencesUtil().authToken = '';
+          SharedPreferencesUtil().tokenExpirationTime = 0;
+          authToken = null;
         } else {
           Logger.debug('User is signed in at ${DateTime.now()} with user ${user.uid}');
           try {
@@ -72,20 +72,7 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
-    // Check Firebase SDK first
-    if (_auth.currentUser != null && !_auth.currentUser!.isAnonymous) {
-      return true;
-    }
-    // Fallback: check cached credentials (for dev builds where Keychain doesn't persist)
-    // This matches the Swift desktop app behavior
-    final cachedUid = SharedPreferencesUtil().uid;
-    final cachedToken = SharedPreferencesUtil().authToken;
-    print('DEBUG AuthProvider.isSignedIn: cachedUid="${cachedUid}", tokenLength=${cachedToken.length}');
-    if (cachedUid.isNotEmpty && cachedToken.isNotEmpty) {
-      print('DEBUG AuthProvider: Using cached credentials fallback - uid=$cachedUid');
-      return true;
-    }
-    return false;
+    return _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
   }
 
   void setLoading(bool value) {

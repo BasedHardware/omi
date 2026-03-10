@@ -8314,4 +8314,194 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get tasksOverdue => 'Lejárt';
+
+  @override
+  String get phoneCallsWithOmi => 'Hivasok az Omival';
+
+  @override
+  String get phoneCallsSubtitle => 'Hivjon valos ideju atirassal';
+
+  @override
+  String get phoneSetupStep1Title => 'Ellenorizze telefonszamat';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Felhivjuk a megerositeshez';
+
+  @override
+  String get phoneSetupStep2Title => 'Adjon meg egy ellenorzo kodot';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Egy rovid kod, amit a hivas soran ad meg';
+
+  @override
+  String get phoneSetupStep3Title => 'Kezdjen el hivni nevjegyeit';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Beepitett elo atirassal';
+
+  @override
+  String get phoneGetStarted => 'Kezdes';
+
+  @override
+  String get callRecordingConsentDisclaimer => 'A hivasrogzites hozzajarulast igenyelhet az On joghatosagaban';
+
+  @override
+  String get enterYourNumber => 'Adja meg a szamat';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Ellenorzes utan ez lesz a hivo azonositoja';
+
+  @override
+  String get phoneNumberHint => 'Telefonszam';
+
+  @override
+  String get failedToStartVerification => 'Nem sikerult elindatani az ellenorzest';
+
+  @override
+  String get phoneContinue => 'Folytatas';
+
+  @override
+  String get verifyYourNumber => 'Ellenorizze a szamat';
+
+  @override
+  String get answerTheCallFrom => 'Fogadja a hivast innen';
+
+  @override
+  String get onTheCallEnterThisCode => 'A hivas soran adja meg ezt a kodot';
+
+  @override
+  String get followTheVoiceInstructions => 'Kovesse a hangutasitasokat';
+
+  @override
+  String get statusCalling => 'Hivas...';
+
+  @override
+  String get statusCallInProgress => 'Hivas folyamatban';
+
+  @override
+  String get statusVerifiedLabel => 'Ellenorizve';
+
+  @override
+  String get statusCallMissed => 'Nem fogadott hivas';
+
+  @override
+  String get statusTimedOut => 'Idotullepes';
+
+  @override
+  String get phoneTryAgain => 'Ujraproba';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Nevjegyek';
+
+  @override
+  String get phoneKeypadTab => 'Billentyuzet';
+
+  @override
+  String get grantContactsAccess => 'Adjon hozzaferest a nevjegyeihez';
+
+  @override
+  String get phoneAllow => 'Engedelyezes';
+
+  @override
+  String get phoneSearchHint => 'Kereses';
+
+  @override
+  String get phoneNoContactsFound => 'Nem talalhato nevjegy';
+
+  @override
+  String get phoneEnterNumber => 'Szam megadasa';
+
+  @override
+  String get failedToStartCall => 'Nem sikerult elindatani a hivast';
+
+  @override
+  String get callStateConnecting => 'Csatlakozas...';
+
+  @override
+  String get callStateRinging => 'Csenges...';
+
+  @override
+  String get callStateEnded => 'Hivas befejezve';
+
+  @override
+  String get callStateFailed => 'Hivas sikertelen';
+
+  @override
+  String get transcriptPlaceholder => 'Az atiras itt jelenik meg...';
+
+  @override
+  String get phoneUnmute => 'Nemitas feloldasa';
+
+  @override
+  String get phoneMute => 'Nemitas';
+
+  @override
+  String get phoneSpeaker => 'Hangszoro';
+
+  @override
+  String get phoneEndCall => 'Befejezes';
+
+  @override
+  String get phoneCallSettingsTitle => 'Hivasbeallitasok';
+
+  @override
+  String get yourVerifiedNumbers => 'Ellenorzott szamai';
+
+  @override
+  String get verifiedNumbersDescription => 'Amikor hivja valakit, ezt a szamot latjak';
+
+  @override
+  String get noVerifiedNumbers => 'Nincsenek ellenorzott szamok';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber torlese?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Ujra ellenoriznie kell a hivasokhoz';
+
+  @override
+  String get phoneDeleteButton => 'Torles';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes perce ellenorizve';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours oraja ellenorizve';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days napja ellenorizve';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Ellenorizve: $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Ellenorizve';
+
+  @override
+  String get callAlreadyInProgress => 'Egy hivas mar folyamatban van';
+
+  @override
+  String get failedToGetCallToken => 'Nem sikerult megszerezni a tokent. Eloszor ellenorizze a szamat.';
+
+  @override
+  String get failedToInitializeCallService => 'Nem sikerult inicializalni a hivasszolgaltatast';
+
+  @override
+  String get speakerLabelYou => 'On';
+
+  @override
+  String get speakerLabelUnknown => 'Ismeretlen';
 }

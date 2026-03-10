@@ -149,6 +149,9 @@ extension FlutterError: Error {}
       result(nil)
     }
 
+    // Register Phone Calls plugin
+    PhoneCallsPlugin.register(with: self.registrar(forPlugin: "PhoneCallsPlugin")!)
+
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
