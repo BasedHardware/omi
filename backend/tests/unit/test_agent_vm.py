@@ -299,7 +299,7 @@ async def test_provision_vm_background_sets_ready_on_success(mock_create, mock_s
 
 @patch("routers.agent_tools.get_agent_vm", return_value={"status": "ready"})
 def test_vm_status_handles_missing_vm_name(mock_get):
-    """vm-status does not crash when vmName is missing from Firestore."""
+    """vm-status does not crash when vmName is missing from Firestore (skips GCE check)."""
     resp = client.get("/v1/agent/vm-status")
     assert resp.status_code == 200
     data = resp.json()
@@ -307,8 +307,9 @@ def test_vm_status_handles_missing_vm_name(mock_get):
     assert data["vm_name"] is None
 
 
+@patch("routers.agent_tools._check_gce_status", new_callable=AsyncMock, return_value="RUNNING")
 @patch("routers.agent_tools.get_agent_vm", return_value={"vmName": "omi-agent-x", "status": "ready"})
-def test_vm_status_handles_missing_ip_and_auth(mock_get):
+def test_vm_status_handles_missing_ip_and_auth(mock_get, mock_gce):
     """vm-status returns None for ip and auth_token when missing from Firestore."""
     resp = client.get("/v1/agent/vm-status")
     assert resp.status_code == 200
@@ -320,6 +321,8 @@ def test_vm_status_handles_missing_ip_and_auth(mock_get):
 
 @patch("routers.agent_tools.get_agent_vm", return_value={})
 def test_vm_ensure_handles_empty_firestore_vm(mock_get):
-    """vm-ensure with empty Firestore dict (no status field) doesn't crash."""
+    """vm-ensure with empty Firestore dict (no status, falls through to _vm_response)."""
     resp = client.post("/v1/agent/vm-ensure")
     assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_vm"] is True
