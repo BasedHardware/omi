@@ -83,8 +83,19 @@ class AuthService {
     private let kAuthTokenExpiry = "auth_tokenExpiry"
     private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
 
-    // Firebase Web API key (from GoogleService-Info.plist)
-    private let firebaseApiKey = "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    // Firebase Web API key (read from active GoogleService-Info.plist at runtime)
+    private let firebaseApiKey: String = {
+        if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+           let dict = NSDictionary(contentsOfFile: path),
+           let key = dict["API_KEY"] as? String {
+            return key
+        }
+        // Dev builds must not silently fall back to prod credentials
+        if Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true {
+            fatalError("AuthService: GoogleService-Info.plist missing or has no API_KEY in dev build — check that run.sh copied GoogleService-Info-Dev.plist")
+        }
+        return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"  // fallback to prod (prod builds only)
+    }()
 
     // MARK: - User Name Properties
 
