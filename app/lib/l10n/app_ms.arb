@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Sesiapa yang mempunyai pautan boleh melihat",
     "tasksCleanTodayTitle": "Bersihkan tugasan hari ini?",
     "tasksCleanTodayMessage": "Ini hanya akan mengalih keluar tarikh akhir",
-    "tasksOverdue": "Tertunggak",
+"tasksOverdue": "Tertunggak",
     "answerTheCallFrom": "Jawab panggilan dari",
     "callAlreadyInProgress": "Panggilan sudah berlangsung",
     "callRecordingConsentDisclaimer": "Rakaman panggilan mungkin memerlukan persetujuan di bidang kuasa anda",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Apabila anda menghubungi seseorang, mereka akan melihat nombor ini",
     "verifiedOnDate": "Disahkan pada {date}",
     "verifyYourNumber": "Sahkan nombor anda",
-    "yourVerifiedNumbers": "Nombor anda yang disahkan"
+    "yourVerifiedNumbers": "Nombor anda yang disahkan",
+    "showDailyScoreOnHomepage": "Tunjukkan Skor Harian di laman utama",
+    "showTasksOnHomepage": "Tunjukkan Tugasan di laman utama"
 }

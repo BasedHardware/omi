@@ -8328,4 +8328,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => '알 수 없음';
+
+  @override
+  String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
+
+  @override
+  String get showTasksOnHomepage => '홈페이지에 작업 표시';
 }

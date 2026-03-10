@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "ใครก็ตามที่มีลิงก์สามารถดูได้",
     "tasksCleanTodayTitle": "ล้างงานของวันนี้ไหม?",
     "tasksCleanTodayMessage": "การดำเนินการนี้จะลบเฉพาะกำหนดส่ง",
-    "tasksOverdue": "เกินกำหนด",
+"tasksOverdue": "เกินกำหนด",
     "answerTheCallFrom": "รับสายจาก",
     "callAlreadyInProgress": "มีสายโทรศัพท์อยู่แล้ว",
     "callRecordingConsentDisclaimer": "การบันทึกสายอาจต้องได้รับความยินยอมในเขตอำนาจศาลของคุณ",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "เมื่อคุณโทรหาใครสักคน พวกเขาจะเห็นหมายเลขนี้",
     "verifiedOnDate": "ยืนยันเมื่อ {date}",
     "verifyYourNumber": "ยืนยันหมายเลขของคุณ",
-    "yourVerifiedNumbers": "หมายเลขที่ยืนยันแล้วของคุณ"
+    "yourVerifiedNumbers": "หมายเลขที่ยืนยันแล้วของคุณ",
+    "showDailyScoreOnHomepage": "แสดงคะแนนประจำวันบนหน้าหลัก",
+    "showTasksOnHomepage": "แสดงงานบนหน้าหลัก"
 }

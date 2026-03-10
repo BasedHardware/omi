@@ -2627,7 +2627,7 @@
     "anyoneWithLinkCanView": "يمكن لأي شخص لديه الرابط العرض",
     "tasksCleanTodayTitle": "تنظيف مهام اليوم؟",
     "tasksCleanTodayMessage": "سيؤدي هذا فقط إلى إزالة المواعيد النهائية",
-    "tasksOverdue": "متأخرة",
+"tasksOverdue": "متأخرة",
     "phoneCallsWithOmi": "المكالمات الهاتفية مع Omi",
     "phoneCallsSubtitle": "إجراء مكالمات مع النسخ الفوري",
     "phoneSetupStep1Title": "تحقق من رقم هاتفك",
@@ -2687,5 +2687,7 @@
     "failedToGetCallToken": "فشل الحصول على رمز المكالمة. تحقق من رقم هاتفك أولاً.",
     "failedToInitializeCallService": "فشل تهيئة خدمة المكالمات",
     "speakerLabelYou": "أنت",
-    "speakerLabelUnknown": "غير معروف"
+    "speakerLabelUnknown": "غير معروف",
+    "showDailyScoreOnHomepage": "عرض النتيجة اليومية على الصفحة الرئيسية",
+    "showTasksOnHomepage": "عرض المهام على الصفحة الرئيسية"
 }

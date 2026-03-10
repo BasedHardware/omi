@@ -2629,7 +2629,7 @@
     "anyoneWithLinkCanView": "Kdokoli s odkazem může zobrazit",
     "tasksCleanTodayTitle": "Vyčistit dnešní úkoly?",
     "tasksCleanTodayMessage": "Tímto se odstraní pouze termíny",
-    "tasksOverdue": "Po termínu",
+"tasksOverdue": "Po termínu",
     "answerTheCallFrom": "Prijmete hovor od",
     "callAlreadyInProgress": "Hovor jiz probiha",
     "callRecordingConsentDisclaimer": "Nahravani hovoru muze vyzadovat souhlas ve vasi jurisdikci",
@@ -2689,5 +2689,7 @@
     "verifiedNumbersDescription": "Kdyz nekomu zavolate, uvidi toto cislo na svem telefonu",
     "verifiedOnDate": "Overeno {date}",
     "verifyYourNumber": "Overte sve cislo",
-    "yourVerifiedNumbers": "Vase overena cisla"
+    "yourVerifiedNumbers": "Vase overena cisla",
+    "showDailyScoreOnHomepage": "Zobrazit denní skóre na domovské stránce",
+    "showTasksOnHomepage": "Zobrazit úkoly na domovské stránce"
 }

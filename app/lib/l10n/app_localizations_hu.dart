@@ -8504,4 +8504,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Ismeretlen';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Napi pontszám megjelenítése a főoldalon';
+
+  @override
+  String get showTasksOnHomepage => 'Feladatok megjelenítése a főoldalon';
 }

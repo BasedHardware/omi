@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Igaüks, kellel on link, saab vaadata",
     "tasksCleanTodayTitle": "Puhastada tänased ülesanded?",
     "tasksCleanTodayMessage": "See eemaldab ainult tähtajad",
-    "tasksOverdue": "Tähtaja ületanud",
+"tasksOverdue": "Tähtaja ületanud",
     "answerTheCallFrom": "Vasta konesle numbrilt",
     "callAlreadyInProgress": "Kone on juba pooleli",
     "callRecordingConsentDisclaimer": "Kone salvestamine voib teie jurisdiktsioonis nousoleku nousolekut",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Kui helistate kellelegi, naevad nad seda numbrit",
     "verifiedOnDate": "Kinnitatud {date}",
     "verifyYourNumber": "Kinnitage oma number",
-    "yourVerifiedNumbers": "Teie kinnitatud numbrid"
+    "yourVerifiedNumbers": "Teie kinnitatud numbrid",
+    "showDailyScoreOnHomepage": "Kuva päevapunktid avalehel",
+    "showTasksOnHomepage": "Kuva ülesanded avalehel"
 }

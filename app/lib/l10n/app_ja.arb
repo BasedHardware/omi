@@ -2661,7 +2661,7 @@
     "anyoneWithLinkCanView": "リンクを知っている人は誰でも閲覧できます",
     "tasksCleanTodayTitle": "今日のタスクを整理しますか？",
     "tasksCleanTodayMessage": "期限のみ削除されます",
-    "tasksOverdue": "期限切れ",
+"tasksOverdue": "期限切れ",
     "answerTheCallFrom": "この番号からの着信に応答",
     "callAlreadyInProgress": "通話中です",
     "callRecordingConsentDisclaimer": "通話録音にはお住まいの地域で同意が必要な場合があります",
@@ -2721,5 +2721,7 @@
     "verifiedNumbersDescription": "電話をかけると、相手にこの番号が表示されます",
     "verifiedOnDate": "{date}に認証",
     "verifyYourNumber": "番号を認証",
-    "yourVerifiedNumbers": "認証済みの番号"
+    "yourVerifiedNumbers": "認証済みの番号",
+    "showDailyScoreOnHomepage": "ホームページにデイリースコアを表示",
+    "showTasksOnHomepage": "ホームページにタスクを表示"
 }

@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Iedereen met de link kan bekijken",
     "tasksCleanTodayTitle": "Taken van vandaag opschonen?",
     "tasksCleanTodayMessage": "Hiermee worden alleen deadlines verwijderd",
-    "tasksOverdue": "Achterstallig",
+"tasksOverdue": "Achterstallig",
     "answerTheCallFrom": "Beantwoord het gesprek van",
     "callAlreadyInProgress": "Er is al een gesprek gaande",
     "callRecordingConsentDisclaimer": "Gespreksopname kan toestemming vereisen in uw rechtsgebied",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Wanneer u iemand belt, zien zij dit nummer",
     "verifiedOnDate": "Geverifieerd op {date}",
     "verifyYourNumber": "Verifieer uw nummer",
-    "yourVerifiedNumbers": "Uw geverifieerde nummers"
+    "yourVerifiedNumbers": "Uw geverifieerde nummers",
+    "showDailyScoreOnHomepage": "Dagelijkse score weergeven op startpagina",
+    "showTasksOnHomepage": "Taken weergeven op startpagina"
 }

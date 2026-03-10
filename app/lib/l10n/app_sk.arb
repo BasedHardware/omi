@@ -2665,7 +2665,7 @@
     "anyoneWithLinkCanView": "Ktokoľvek s odkazom môže zobraziť",
     "tasksCleanTodayTitle": "Vyčistiť dnešné úlohy?",
     "tasksCleanTodayMessage": "Týmto sa odstránia iba termíny",
-    "tasksOverdue": "Po termíne",
+"tasksOverdue": "Po termíne",
     "answerTheCallFrom": "Odpovedzte na hovor od",
     "callAlreadyInProgress": "Hovor uz prebieha",
     "callRecordingConsentDisclaimer": "Nahravanie hovorov moze vyzadovat suhlas vo vasej jurisdikcii",
@@ -2725,5 +2725,7 @@
     "verifiedNumbersDescription": "Ked niekomu zavolate, uvidi toto cislo",
     "verifiedOnDate": "Overene {date}",
     "verifyYourNumber": "Overte svoje cislo",
-    "yourVerifiedNumbers": "Vase overene cisla"
+    "yourVerifiedNumbers": "Vase overene cisla",
+    "showDailyScoreOnHomepage": "Zobraziť denné skóre na domovskej stránke",
+    "showTasksOnHomepage": "Zobraziť úlohy na domovskej stránke"
 }

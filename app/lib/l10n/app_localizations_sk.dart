@@ -8456,4 +8456,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Neznamy';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Zobraziť denné skóre na domovskej stránke';
+
+  @override
+  String get showTasksOnHomepage => 'Zobraziť úlohy na domovskej stránke';
 }

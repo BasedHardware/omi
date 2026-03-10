@@ -8518,4 +8518,10 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Desconegut';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra la puntuació diària a la pàgina principal';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra les tasques a la pàgina principal';
 }

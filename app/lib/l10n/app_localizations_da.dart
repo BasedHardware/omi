@@ -8450,4 +8450,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Ukendt';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Vis daglig score på hjemmesiden';
+
+  @override
+  String get showTasksOnHomepage => 'Vis opgaver på hjemmesiden';
 }

@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Οποιοσδήποτε έχει τον σύνδεσμο μπορεί να δει",
     "tasksCleanTodayTitle": "Να καθαριστούν οι σημερινές εργασίες;",
     "tasksCleanTodayMessage": "Αυτό θα αφαιρέσει μόνο τις προθεσμίες",
-    "tasksOverdue": "Εκπρόθεσμα",
+"tasksOverdue": "Εκπρόθεσμα",
     "answerTheCallFrom": "Απαντήστε στην κλήση από",
     "callAlreadyInProgress": "Μια κλήση είναι ήδη σε εξέλιξη",
     "callRecordingConsentDisclaimer": "Η εγγραφή κλήσεων μπορεί να απαιτεί συγκατάθεση στη δικαιοδοσία σας",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Όταν καλείτε κάποιον, θα βλέπει αυτόν τον αριθμό",
     "verifiedOnDate": "Επαληθεύτηκε στις {date}",
     "verifyYourNumber": "Επαληθεύστε τον αριθμό σας",
-    "yourVerifiedNumbers": "Οι επαληθευμένοι αριθμοί σας"
+    "yourVerifiedNumbers": "Οι επαληθευμένοι αριθμοί σας",
+    "showDailyScoreOnHomepage": "Εμφάνιση ημερήσιας βαθμολογίας στην αρχική σελίδα",
+    "showTasksOnHomepage": "Εμφάνιση εργασιών στην αρχική σελίδα"
 }

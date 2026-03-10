@@ -8447,4 +8447,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'अज्ञात';
+
+  @override
+  String get showDailyScoreOnHomepage => 'होमपेज पर दैनिक स्कोर दिखाएं';
+
+  @override
+  String get showTasksOnHomepage => 'होमपेज पर कार्य दिखाएं';
 }

@@ -8494,4 +8494,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Onbekend';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Dagelijkse score weergeven op startpagina';
+
+  @override
+  String get showTasksOnHomepage => 'Taken weergeven op startpagina';
 }

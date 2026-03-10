@@ -8494,4 +8494,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Неизвестный';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Показать дневной счёт на главной странице';
+
+  @override
+  String get showTasksOnHomepage => 'Показать задачи на главной странице';
 }

@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Oricine are linkul poate vizualiza",
     "tasksCleanTodayTitle": "Curăți sarcinile de azi?",
     "tasksCleanTodayMessage": "Aceasta va elimina doar termenele limită",
-    "tasksOverdue": "Întârziate",
+"tasksOverdue": "Întârziate",
     "answerTheCallFrom": "Raspundeti la apelul de la",
     "callAlreadyInProgress": "Un apel este deja in curs",
     "callRecordingConsentDisclaimer": "Inregistrarea apelurilor poate necesita consimtamant in jurisdictia dvs.",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Cand apelati pe cineva, va vedea acest numar",
     "verifiedOnDate": "Verificat pe {date}",
     "verifyYourNumber": "Verificati numarul dvs.",
-    "yourVerifiedNumbers": "Numerele dvs. verificate"
+    "yourVerifiedNumbers": "Numerele dvs. verificate",
+    "showDailyScoreOnHomepage": "Afișați scorul zilnic pe pagina principală",
+    "showTasksOnHomepage": "Afișați sarcinile pe pagina principală"
 }
