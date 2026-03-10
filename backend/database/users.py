@@ -1120,4 +1120,4 @@ def get_users_shared_with(owner_uid: str):
     """Return a list of user IDs with whom the owner has shared their speech profile and not revoked."""
     shared_ref = db.collection('users').document(owner_uid).collection('shared_speech_profiles')
     shares_query = shared_ref.where(filter=FieldFilter('revoked_at', '==', None))
-    return [doc.to_dict()['shared_with_uid'] for doc in shares_query.stream()]
+    return [uid for doc in shares_query.stream() if (uid := doc.to_dict().get('shared_with_uid'))]
