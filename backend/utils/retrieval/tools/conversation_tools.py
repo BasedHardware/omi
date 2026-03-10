@@ -247,10 +247,41 @@ def get_conversations_tool(
             f"📚 get_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
-        # Return formatted string
+        # Return formatted string with context size guard
+        # Cap output at ~400K tokens (~1.6M chars) to stay well under 500K token safety guard limit.
+        # This prevents both the "narrow down" error and 504 timeouts on large date ranges.
+        MAX_RESULT_CHARS = 1_600_000
         result = Conversation.conversations_to_string(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
+
+        if len(result) > MAX_RESULT_CHARS:
+            # Rebuild with truncation: include conversations until we hit the limit
+            truncated_parts = []
+            total_chars = 0
+            included_count = 0
+            separator = "\n\n---------------------\n\n"
+            for i, conversation in enumerate(conversations):
+                part = Conversation.conversations_to_string(
+                    [conversation],
+                    use_transcript=include_transcript,
+                    include_timestamps=include_timestamps,
+                    people=people,
+                )
+                if total_chars + len(part) + len(separator) > MAX_RESULT_CHARS and included_count > 0:
+                    break
+                truncated_parts.append(part)
+                total_chars += len(part) + len(separator)
+                included_count += 1
+
+            omitted = len(conversations) - included_count
+            result = separator.join(truncated_parts)
+            if omitted > 0:
+                result += f"\n\n[Note: {omitted} older conversations omitted to fit context. Ask about a shorter time period for full details.]"
+            logger.info(
+                f"🔍 get_conversations_tool - Truncated result: included {included_count}/{len(conversations)}, omitted {omitted}"
+            )
+
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
         return result
 
@@ -462,12 +493,40 @@ def search_conversations_tool(
             f"📚 search_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
-        # Return formatted string
+        # Return formatted string with context size guard
+        MAX_RESULT_CHARS = 1_600_000
         result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
-        result += Conversation.conversations_to_string(
+        formatted = Conversation.conversations_to_string(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
 
+        if len(formatted) > MAX_RESULT_CHARS:
+            truncated_parts = []
+            total_chars = 0
+            included_count = 0
+            separator = "\n\n---------------------\n\n"
+            for conversation in conversations:
+                part = Conversation.conversations_to_string(
+                    [conversation],
+                    use_transcript=include_transcript,
+                    include_timestamps=include_timestamps,
+                    people=people,
+                )
+                if total_chars + len(part) + len(separator) > MAX_RESULT_CHARS and included_count > 0:
+                    break
+                truncated_parts.append(part)
+                total_chars += len(part) + len(separator)
+                included_count += 1
+
+            omitted = len(conversations) - included_count
+            formatted = separator.join(truncated_parts)
+            if omitted > 0:
+                formatted += f"\n\n[Note: {omitted} conversations omitted to fit context. Try a more specific query.]"
+            logger.info(
+                f"🔍 search_conversations_tool - Truncated: included {included_count}/{len(conversations)}, omitted {omitted}"
+            )
+
+        result += formatted
         logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
 
         return result
