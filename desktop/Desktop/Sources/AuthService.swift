@@ -78,9 +78,8 @@ class AuthService {
             return key
         }
         // Dev builds must not silently fall back to prod credentials
-        let isDev = Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true
-        if isDev {
-            log("AuthService: FATAL — GoogleService-Info.plist missing or has no API_KEY in dev build")
+        if Bundle.main.bundleIdentifier?.hasSuffix("-dev") == true {
+            fatalError("AuthService: GoogleService-Info.plist missing or has no API_KEY in dev build — check that run.sh copied GoogleService-Info-Dev.plist")
         }
         return "AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"  // fallback to prod (prod builds only)
     }()
