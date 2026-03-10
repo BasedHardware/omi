@@ -189,6 +189,7 @@ def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
 @router.delete("/v1/phone/numbers/{phone_number_id}", tags=['phone-calls'])
 def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Remove a verified phone number."""
+    _require_unlimited_plan(uid)
     phone_number = phone_calls_db.get_phone_number(uid, phone_number_id)
     if not phone_number:
         raise HTTPException(status_code=404, detail="Phone number not found")
