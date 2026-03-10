@@ -8509,4 +8509,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Necunoscut';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
+
+  @override
+  String get showTasksOnHomepage => 'Afișați sarcinile pe pagina principală';
 }

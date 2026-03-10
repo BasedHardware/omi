@@ -8470,4 +8470,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Không xác định';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Hiển thị Điểm hàng ngày trên trang chủ';
+
+  @override
+  String get showTasksOnHomepage => 'Hiển thị Nhiệm vụ trên trang chủ';
 }

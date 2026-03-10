@@ -8518,4 +8518,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Sconosciuto';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostra punteggio giornaliero nella homepage';
+
+  @override
+  String get showTasksOnHomepage => 'Mostra attività nella homepage';
 }

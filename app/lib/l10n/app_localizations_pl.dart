@@ -8485,4 +8485,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nieznany';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Pokaż dzienny wynik na stronie głównej';
+
+  @override
+  String get showTasksOnHomepage => 'Pokaż zadania na stronie głównej';
 }

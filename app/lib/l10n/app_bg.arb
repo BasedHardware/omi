@@ -2629,7 +2629,7 @@
     "anyoneWithLinkCanView": "Всеки с връзката може да преглежда",
     "tasksCleanTodayTitle": "Да изчистим днешните задачи?",
     "tasksCleanTodayMessage": "Това само ще премахне крайните срокове",
-    "tasksOverdue": "Просрочени",
+"tasksOverdue": "Просрочени",
     "phoneCallsWithOmi": "Телефонни обаждания с Omi",
     "phoneCallsSubtitle": "Обаждайте се с транскрипция в реално време",
     "phoneSetupStep1Title": "Потвърдете телефонния си номер",
@@ -2689,5 +2689,7 @@
     "failedToGetCallToken": "Неуспешно получаване на токен за обаждане. Първо потвърдете телефонния си номер.",
     "failedToInitializeCallService": "Неуспешна инициализация на услугата за обаждания",
     "speakerLabelYou": "Вие",
-    "speakerLabelUnknown": "Неизвестен"
+    "speakerLabelUnknown": "Неизвестен",
+    "showDailyScoreOnHomepage": "Покажи дневния резултат на началната страница",
+    "showTasksOnHomepage": "Покажи задачите на началната страница"
 }

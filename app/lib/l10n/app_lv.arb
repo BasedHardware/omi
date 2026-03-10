@@ -2660,7 +2660,7 @@
     "anyoneWithLinkCanView": "Ikviens, kam ir saite, var skatīt",
     "tasksCleanTodayTitle": "Notīrīt šodienas uzdevumus?",
     "tasksCleanTodayMessage": "Tas noņems tikai termiņus",
-    "tasksOverdue": "Nokavētas",
+"tasksOverdue": "Nokavētas",
     "answerTheCallFrom": "Atbildiet uz zvanu no",
     "callAlreadyInProgress": "Zvans jau notiek",
     "callRecordingConsentDisclaimer": "Zvanu ierakstisanai var but nepieciesama piekrišana jusu jurisdikcija",
@@ -2720,5 +2720,7 @@
     "verifiedNumbersDescription": "Kad zvanisiet kadam, vinš redzees šo numuru",
     "verifiedOnDate": "Verificets {date}",
     "verifyYourNumber": "Verificejiet savu numuru",
-    "yourVerifiedNumbers": "Jusu verificetie numuri"
+    "yourVerifiedNumbers": "Jusu verificetie numuri",
+    "showDailyScoreOnHomepage": "Rādīt dienas rezultātu sākumlapā",
+    "showTasksOnHomepage": "Rādīt uzdevumus sākumlapā"
 }

@@ -1,0 +1,36 @@
+# E2E Flow: Bottom tab navigation
+# Tests: bottom nav bar InkWell detection, 4-tab switching, scroll
+
+name: tab-navigation
+description: Bottom nav bar detection, switch between 4 tabs, scroll in tab, return to home
+covers:
+  - app/lib/pages/home/page.dart
+setup: normal
+
+steps:
+  - name: Verify home tab and nav bar
+    assert:
+      interactive_count: { min: 5 }
+      bottom_nav_tabs: { min: 2 }
+    screenshot: tab-home
+
+  - name: Switch to tab 2
+    press: { bottom_nav_tab: 1 }
+    screenshot: tab-2
+
+  - name: Switch to tab 3
+    press: { bottom_nav_tab: 2 }
+    screenshot: tab-3
+
+  - name: Scroll in current tab
+    scroll: down
+
+  - name: Switch to tab 4
+    press: { bottom_nav_tab: 3 }
+    screenshot: tab-4
+
+  - name: Return to home tab
+    press: { bottom_nav_tab: 0 }
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: final

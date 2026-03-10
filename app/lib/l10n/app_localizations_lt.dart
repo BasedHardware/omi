@@ -8474,4 +8474,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nezinomas';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rodyti dienos balą pagrindiniame puslapyje';
+
+  @override
+  String get showTasksOnHomepage => 'Rodyti užduotis pagrindiniame puslapyje';
 }

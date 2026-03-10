@@ -8484,4 +8484,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Nezinams';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Rādīt dienas rezultātu sākumlapā';
+
+  @override
+  String get showTasksOnHomepage => 'Rādīt uzdevumus sākumlapā';
 }

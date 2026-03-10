@@ -8469,4 +8469,10 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'Desconhecido';
+
+  @override
+  String get showDailyScoreOnHomepage => 'Mostrar pontuação diária na página inicial';
+
+  @override
+  String get showTasksOnHomepage => 'Mostrar tarefas na página inicial';
 }

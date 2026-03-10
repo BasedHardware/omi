@@ -2702,7 +2702,7 @@
     "anyoneWithLinkCanView": "Siapa pun yang memiliki tautan dapat melihat",
     "tasksCleanTodayTitle": "Bersihkan tugas hari ini?",
     "tasksCleanTodayMessage": "Ini hanya akan menghapus tenggat waktu",
-    "tasksOverdue": "Terlambat",
+"tasksOverdue": "Terlambat",
     "answerTheCallFrom": "Jawab panggilan dari",
     "callAlreadyInProgress": "Panggilan sedang berlangsung",
     "callRecordingConsentDisclaimer": "Rekaman panggilan mungkin memerlukan persetujuan di yurisdiksi Anda",
@@ -2762,5 +2762,7 @@
     "verifiedNumbersDescription": "Saat Anda menelepon seseorang, mereka akan melihat nomor ini",
     "verifiedOnDate": "Diverifikasi pada {date}",
     "verifyYourNumber": "Verifikasi nomor Anda",
-    "yourVerifiedNumbers": "Nomor terverifikasi Anda"
+    "yourVerifiedNumbers": "Nomor terverifikasi Anda",
+    "showDailyScoreOnHomepage": "Tampilkan Skor Harian di beranda",
+    "showTasksOnHomepage": "Tampilkan Tugas di beranda"
 }

@@ -2669,7 +2669,7 @@
     "anyoneWithLinkCanView": "Alle med linket kan se",
     "tasksCleanTodayTitle": "Ryd dagens opgaver?",
     "tasksCleanTodayMessage": "Dette fjerner kun deadlines",
-    "tasksOverdue": "Forfaldne",
+"tasksOverdue": "Forfaldne",
     "answerTheCallFrom": "Besvar opkaldet fra",
     "callAlreadyInProgress": "Et opkald er allerede i gang",
     "callRecordingConsentDisclaimer": "Optagelse af opkald kan kraeve samtykke i din jurisdiktion",
@@ -2729,5 +2729,7 @@
     "verifiedNumbersDescription": "Nar du ringer til nogen, vil de se dette nummer",
     "verifiedOnDate": "Verificeret den {date}",
     "verifyYourNumber": "Verificer dit nummer",
-    "yourVerifiedNumbers": "Dine verificerede numre"
+    "yourVerifiedNumbers": "Dine verificerede numre",
+    "showDailyScoreOnHomepage": "Vis daglig score på hjemmesiden",
+    "showTasksOnHomepage": "Vis opgaver på hjemmesiden"
 }

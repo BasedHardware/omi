@@ -8408,4 +8408,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get speakerLabelUnknown => 'غير معروف';
+
+  @override
+  String get showDailyScoreOnHomepage => 'عرض النتيجة اليومية على الصفحة الرئيسية';
+
+  @override
+  String get showTasksOnHomepage => 'عرض المهام على الصفحة الرئيسية';
 }
