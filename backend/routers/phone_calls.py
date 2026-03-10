@@ -228,7 +228,7 @@ async def twiml_voice_webhook(request: Request):
     signature = request.headers.get('X-Twilio-Signature', '')
     base_api_url = os.getenv('BASE_API_URL', '').rstrip('/')
     if base_api_url:
-        url = f"{base_api_url}/v1/phone/twiml"
+        url = f"{base_api_url}{request.url.path}"
     else:
         url = str(request.url)
     form_data = await request.form()
