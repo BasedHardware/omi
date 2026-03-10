@@ -121,7 +121,7 @@ agent-flutter screenshot /tmp/after-change.png
 - `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
 - When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
 - Android: auto-detects via ADB. iOS: requires `AGENT_FLUTTER_LOG` or explicit URI.
-- E2E flow examples: `app/e2e/` (4 flows covering navigation, settings, tabs, language change).
+- **App flows & exploration skill**: See `app/e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and known flows. Read this when developing features or exploring the app.
 
 ### Firebase Prod Config
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
@@ -171,6 +171,7 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+- **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
 
 ## Formatting
 <!-- Maintainers: @Thinh (Jan 19) -->

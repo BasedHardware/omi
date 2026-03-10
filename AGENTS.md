@@ -88,7 +88,7 @@ Key rules:
 - Use `AGENT_FLUTTER_LOG` pointing to flutter run stdout (not logcat) for auto-detect.
 - Prefer `find type X` or `find key "name"` over hardcoded `@ref` for stability.
 - When adding interactive widgets, use `Key('descriptive_name')` for agent discoverability.
-- E2E reference flows: `app/e2e/` (navigation, settings, tabs, language change).
+- App flows & exploration skill: See `app/e2e/SKILL.md` for navigation architecture, widget patterns, and reference flows.
 - Full command reference: `agent-flutter schema` or `agent-flutter --help`.
 
 ### Desktop (macOS)
@@ -117,6 +117,7 @@ Key rules:
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — zero app-side setup.
 - Dev bundle ID: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos`.
+- App flows & exploration skill: See `desktop/e2e/SKILL.md` for navigation architecture, interaction patterns, and reference flows.
 - Full command reference: `agent-swift --help` or `agent-swift schema`.
 
 ## Formatting
