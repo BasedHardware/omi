@@ -1,3 +1,4 @@
+import os
 import re
 import traceback
 import uuid
@@ -225,7 +226,11 @@ async def twiml_voice_webhook(request: Request):
     """
     # Validate Twilio signature
     signature = request.headers.get('X-Twilio-Signature', '')
-    url = str(request.url)
+    base_api_url = os.getenv('BASE_API_URL', '').rstrip('/')
+    if base_api_url:
+        url = f"{base_api_url}/v1/phone/twiml"
+    else:
+        url = str(request.url)
     form_data = await request.form()
     params = dict(form_data)
 
