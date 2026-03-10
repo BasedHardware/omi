@@ -27,21 +27,14 @@ sys.modules.setdefault('utils.retrieval.agentic', MagicMock(agent_config_context
 sys.modules.setdefault('utils.retrieval.tools.app_tools', MagicMock())
 
 from routers.agent_tools import router, _vm_response, GCE_ZONE
+from utils.other.endpoints import get_current_user_uid
 
 app = FastAPI()
 app.include_router(router)
 
 TEST_UID = "testuser1234abcd"
 
-
-def _mock_auth():
-    """Override auth dependency to return a test UID."""
-    from utils.other.endpoints import get_current_user_uid
-
-    app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
-
-
-_mock_auth()
+app.dependency_overrides[get_current_user_uid] = lambda: TEST_UID
 client = TestClient(app)
 
 
@@ -217,8 +210,6 @@ def test_vm_response_status_override():
 @patch("routers.agent_tools.get_agent_vm", return_value=None)
 def test_vm_name_truncates_long_uid(mock_get, mock_set_fs, mock_provision):
     """VM name uses first 12 chars of UID, lowercased."""
-    from utils.other.endpoints import get_current_user_uid
-
     app.dependency_overrides[get_current_user_uid] = lambda: "ABCDEFghijklmnopqrstuvwxyz"
     try:
         resp = client.post("/v1/agent/vm-ensure")
@@ -233,8 +224,6 @@ def test_vm_name_truncates_long_uid(mock_get, mock_set_fs, mock_provision):
 @patch("routers.agent_tools.get_agent_vm", return_value=None)
 def test_vm_name_short_uid(mock_get, mock_set_fs, mock_provision):
     """Short UIDs use the full UID in VM name."""
-    from utils.other.endpoints import get_current_user_uid
-
     app.dependency_overrides[get_current_user_uid] = lambda: "ShortUid"
     try:
         resp = client.post("/v1/agent/vm-ensure")
