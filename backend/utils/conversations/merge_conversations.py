@@ -26,6 +26,7 @@ from utils.other.storage import (
     list_audio_chunks,
     storage_client,
     private_cloud_sync_bucket,
+    _get_extension_for_path,
 )
 import logging
 
@@ -362,8 +363,8 @@ def _copy_audio_chunks_for_merge(
                 has_chunks = True
                 original_ts = chunk['timestamp']
 
-                # Determine extension from original path
-                ext = 'enc' if chunk['path'].endswith('.enc') else 'bin'
+                # Determine extension from original path (supports .opus.enc, .opus, .enc, .bin)
+                ext = _get_extension_for_path(chunk['path'])
 
                 # Copy to new path with same timestamp (it's absolute Unix time)
                 new_path = f'chunks/{uid}/{new_conversation_id}/{original_ts:.3f}.{ext}'
