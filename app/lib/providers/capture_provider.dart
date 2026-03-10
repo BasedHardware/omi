@@ -1597,7 +1597,7 @@ class CaptureProvider extends ChangeNotifier
 
     // Add backend-created person to local cache for UI display (backward compatibility)
     final isUser = event.personId == 'user';
-    if (!isUser && event.personId.isNotEmpty && SharedPreferencesUtil().getPersonById(event.personId) == null) {
+    if (!isUser && event.personId.isNotEmpty && !event.personId.startsWith('shared:') && SharedPreferencesUtil().getPersonById(event.personId) == null) {
       SharedPreferencesUtil().addCachedPerson(
         Person(
           id: event.personId,
@@ -1647,6 +1647,7 @@ class CaptureProvider extends ChangeNotifier
       // Add person to local cache if not exists (backward compatibility for old apps)
       if (finalPersonId.isNotEmpty &&
           finalPersonId != 'user' &&
+          !finalPersonId.startsWith('shared:') &&
           SharedPreferencesUtil().getPersonById(finalPersonId) == null) {
         SharedPreferencesUtil().addCachedPerson(
           Person(

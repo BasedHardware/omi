@@ -24,7 +24,11 @@ def resolve_shared_people(person_ids: list, uid: str) -> List[Person]:
     ))
     if not valid_owner_uids:
         return []
-    profiles = users_db.get_user_profiles_batch(valid_owner_uids)
+    try:
+        profiles = users_db.get_user_profiles_batch(valid_owner_uids)
+    except Exception as e:
+        logger.error(f"resolve_shared_people: failed to batch-load profiles for {uid}: {e}")
+        return []
     people = []
     for owner_uid in valid_owner_uids:
         profile = profiles.get(owner_uid)

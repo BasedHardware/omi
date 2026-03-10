@@ -184,8 +184,12 @@ def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depend
 @router.get('/v1/speech-profile/shared-with-me', tags=['v1'])
 def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid)):
     """List users who have shared their speech profile with the current user"""
-    owner_uids = get_profiles_shared_with_user(uid)
-    profiles = get_user_profiles_batch(owner_uids) if owner_uids else {}
+    try:
+        owner_uids = get_profiles_shared_with_user(uid)
+        profiles = get_user_profiles_batch(owner_uids) if owner_uids else {}
+    except Exception as e:
+        logger.error(f"Failed to fetch shared profiles for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
     return {
         "shared_with_me": [
             {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
@@ -197,8 +201,12 @@ def api_get_profiles_shared_with_me(uid: str = Depends(auth.get_current_user_uid
 @router.get('/v1/speech-profile/i-have-shared', tags=['v1'])
 def api_get_users_i_have_shared_with(uid: str = Depends(auth.get_current_user_uid)):
     """List users with whom the current user has shared their speech profile"""
-    target_uids = get_users_shared_with(uid)
-    profiles = get_user_profiles_batch(target_uids) if target_uids else {}
+    try:
+        target_uids = get_users_shared_with(uid)
+        profiles = get_user_profiles_batch(target_uids) if target_uids else {}
+    except Exception as e:
+        logger.error(f"Failed to fetch shared-with list for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
     return {
         "i_have_shared_with": [
             {'uid': u, 'name': (profiles.get(u) or {}).get('name') or get_user_name(u, use_default=False) or ''}
