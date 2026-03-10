@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
@@ -12,8 +12,10 @@ from models.conversation import (
     CalendarMeetingContext,
     Conversation,
     ConversationPhoto,
+    ConversationSource,
     ConversationStatus,
     ConversationVisibility,
+    CreateConversation,
     CreateConversationResponse,
     Geolocation,
     MergeConversationsRequest,
@@ -90,6 +92,98 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
+class FromSegmentsTranscriptSegment(BaseModel):
+    text: str
+    speaker: Optional[str] = 'SPEAKER_00'
+    speaker_id: Optional[int] = None
+    is_user: bool = False
+    person_id: Optional[str] = None
+    start: float
+    end: float
+
+
+class CreateConversationFromSegmentsRequest(BaseModel):
+    transcript_segments: List[FromSegmentsTranscriptSegment]
+    source: Optional[ConversationSource] = ConversationSource.desktop
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    language: Optional[str] = 'en'
+    geolocation: Optional[Geolocation] = None
+
+
+class FromSegmentsResponse(BaseModel):
+    id: str
+    status: str
+    discarded: bool
+
+
+@router.post("/v1/conversations/from-segments", response_model=FromSegmentsResponse, tags=['conversations'])
+def create_conversation_from_segments(
+    request: CreateConversationFromSegmentsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if not request.transcript_segments:
+        raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
+
+    if len(request.transcript_segments) > 500:
+        raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    for idx, segment in enumerate(request.transcript_segments):
+        if segment.end <= segment.start:
+            raise HTTPException(status_code=422, detail=f"Segment {idx}: end time must be after start time")
+        if segment.start < 0:
+            raise HTTPException(status_code=422, detail=f"Segment {idx}: start time cannot be negative")
+        if not segment.text or len(segment.text.strip()) == 0:
+            raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
+
+    transcript_segments = [
+        TranscriptSegment(
+            text=seg.text.strip(),
+            speaker=seg.speaker or 'SPEAKER_00',
+            speaker_id=seg.speaker_id,
+            is_user=seg.is_user,
+            person_id=seg.person_id,
+            start=seg.start,
+            end=seg.end,
+        )
+        for seg in request.transcript_segments
+    ]
+
+    started_at = request.started_at or datetime.now(timezone.utc)
+    if request.finished_at is not None:
+        finished_at = request.finished_at
+    else:
+        last_segment = request.transcript_segments[-1]
+        finished_at = started_at + timedelta(seconds=last_segment.end)
+
+    if finished_at <= started_at:
+        raise HTTPException(status_code=422, detail="finished_at must be after started_at")
+
+    geolocation = request.geolocation
+    if geolocation and not geolocation.google_place_id:
+        try:
+            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+        except Exception as e:
+            logger.error(f"Error enriching geolocation: {e}")
+
+    create_conversation_obj = CreateConversation(
+        transcript_segments=transcript_segments,
+        started_at=started_at,
+        finished_at=finished_at,
+        language=request.language or 'en',
+        geolocation=geolocation,
+        source=request.source or ConversationSource.desktop,
+    )
+
+    conversation = process_conversation(uid, request.language or 'en', create_conversation_obj)
+
+    return FromSegmentsResponse(
+        id=conversation.id,
+        status=conversation.status.value if conversation.status else 'completed',
+        discarded=conversation.discarded,
+    )
+
+
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
     conversation_id: str,
@@ -153,6 +247,23 @@ def get_conversations(
             conv['plugins_results'] = []
             conv['suggested_summarization_apps'] = []
     return conversations
+
+
+@router.get('/v1/conversations/count', tags=['conversations'])
+def get_conversations_count(
+    statuses: Optional[str] = Query("processing,completed"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Count conversations matching optional status filters."""
+    status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
+    if len(status_list) > 10:
+        raise HTTPException(status_code=400, detail="Too many status values (max 10)")
+    try:
+        count = conversations_db.count_conversations(uid, statuses=status_list)
+    except Exception as e:
+        logger.warning(f'count_conversations aggregation fallback: {e}')
+        count = sum(1 for _ in conversations_db.stream_conversations(uid, statuses=status_list))
+    return {'count': count}
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
