@@ -12,6 +12,7 @@ Endpoints:
 import asyncio
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -62,8 +63,6 @@ async def _check_gce_status(vm_name: str, zone: str) -> str:
 
 async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
     """Start a stopped/terminated GCE VM and wait for it to get an IP. Returns the new IP."""
-    import time
-
     t0 = time.monotonic()
     token = _get_gce_access_token()
     start_url = (
