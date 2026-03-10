@@ -1,0 +1,31 @@
+# E2E Flow: Home screen navigation
+# Tests: snapshot, settings button, scroll, back navigation
+
+name: home-navigation
+description: Home screen snapshot, settings gear press, scroll in settings, back to home
+covers:
+  - app/lib/pages/home/page.dart
+  - app/lib/pages/settings/settings_drawer.dart
+setup: normal
+
+steps:
+  - name: Snapshot home screen
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: home
+
+  - name: Press settings gear (rightmost button in top bar)
+    press: { type: button, position: rightmost }
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: settings
+
+  - name: Scroll down in settings
+    scroll: down
+    screenshot: settings-scrolled
+
+  - name: Back to home
+    back: true
+    assert:
+      interactive_count: { min: 5 }
+    screenshot: final
