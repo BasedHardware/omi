@@ -121,7 +121,7 @@ agent-flutter screenshot /tmp/after-change.png
 - `find type X` or `find text "label"` is more stable than hardcoded `@ref` numbers.
 - When adding new interactive widgets, use `Key('descriptive_name')` so agents can use `find key` (survives i18n and theme changes).
 - Android: auto-detects via ADB. iOS: requires `AGENT_FLUTTER_LOG` or explicit URI.
-- E2E flow examples: `app/e2e/` (4 flows covering navigation, settings, tabs, language change).
+- **App flows & exploration skill**: See `app/e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and known flows. Read this when developing features or exploring the app.
 
 ### Firebase Prod Config
 Never run `flutterfire configure` — it overwrites prod credentials. Prod config files in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, `app/android/app/src/prod/`.
@@ -171,6 +171,7 @@ agent-swift screenshot /tmp/after-change.png  # capture app window
 - 15 commands: `doctor`, `connect`, `disconnect`, `status`, `snapshot`, `press`, `click`, `fill`, `get`, `find`, `screenshot`, `is`, `wait`, `scroll`, `schema`.
 - Works with any macOS app (SwiftUI, AppKit, Electron) — no Marionette or app-side setup.
 - Bundle ID for dev: `com.omi.desktop-dev`. For prod: `com.omi.computer-macos`.
+- **App flows & exploration skill**: See `desktop/e2e/SKILL.md` for navigation architecture, screen map, interaction patterns (click vs press), and known flows. Read this when developing features or exploring the app.
 
 ## Formatting
 <!-- Maintainers: @Thinh (Jan 19) -->
@@ -194,29 +195,14 @@ clang-format -i <files>
 ```
 
 ## Git
-
-### After Completing Work
-When you finish implementing a task, **commit and push your changes** before ending the conversation:
-
-1. Stage only the files you modified:
-   ```bash
-   git add <file1> <file2> ...
-   ```
-2. Commit with a clear message (verb-first, max 72 chars):
-   ```bash
-   git commit -m "Fix race condition in VAD gate service"
-   ```
-3. Push to the current branch:
-   ```bash
-   git push
-   ```
+<!-- Maintainers: @AaravGarg (original, Feb 2), @NikShevchenko (push rules, Mar 3) -->
 
 ### Rules
-- **Always commit to the current branch** — never switch branches
-- **Never squash merge PRs** — use regular merge
-- Make individual commits per file, not bulk commits
-- The pre-commit hook auto-formats staged code — no need to format manually before committing
-- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`
+- Always commit to the current branch — never switch branches.
+- Never squash merge PRs — use regular merge.
+- Make individual commits per file, not bulk commits.
+- The pre-commit hook auto-formats staged code — no need to format manually before committing.
+- If push fails because the remote is ahead, pull with rebase first: `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE command

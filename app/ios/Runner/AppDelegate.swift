@@ -128,19 +128,14 @@ extension FlutterError: Error {}
         defaults?.set(args["isConnected"] as? Bool ?? false, forKey: "widget_is_connected")
         defaults?.set(Date(), forKey: "widget_last_updated")
         // NOTE: isMuted is intentionally NOT written here — only updateMuteState controls it
-        defaults?.synchronize()
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }
       case "updateMuteState":
         let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
         defaults?.set(isMuted, forKey: "widget_is_muted")
-        defaults?.synchronize()
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            WidgetCenter.shared.reloadAllTimelines()
-          }
         }
       default:
         result(FlutterMethodNotImplemented)
