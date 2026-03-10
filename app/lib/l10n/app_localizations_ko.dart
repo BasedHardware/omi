@@ -8140,6 +8140,196 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksOverdue => '기한 초과';
 
   @override
+  String get phoneCallsWithOmi => 'Omi로 통화';
+
+  @override
+  String get phoneCallsSubtitle => '실시간 전사와 함께 전화하기';
+
+  @override
+  String get phoneSetupStep1Title => '전화번호를 인증하세요';
+
+  @override
+  String get phoneSetupStep1Subtitle => '확인을 위해 전화드리겠습니다';
+
+  @override
+  String get phoneSetupStep2Title => '인증 코드 입력';
+
+  @override
+  String get phoneSetupStep2Subtitle => '통화 중 입력할 짧은 코드';
+
+  @override
+  String get phoneSetupStep3Title => '연락처에 전화 시작';
+
+  @override
+  String get phoneSetupStep3Subtitle => '실시간 전사 기능 내장';
+
+  @override
+  String get phoneGetStarted => '시작하기';
+
+  @override
+  String get callRecordingConsentDisclaimer => '통화 녹음은 관할 지역에서 동의가 필요할 수 있습니다';
+
+  @override
+  String get enterYourNumber => '번호를 입력하세요';
+
+  @override
+  String get phoneNumberCallerIdHint => '인증 후 이것이 발신자 ID가 됩니다';
+
+  @override
+  String get phoneNumberHint => '전화번호';
+
+  @override
+  String get failedToStartVerification => '인증을 시작하지 못했습니다';
+
+  @override
+  String get phoneContinue => '계속';
+
+  @override
+  String get verifyYourNumber => '번호 인증';
+
+  @override
+  String get answerTheCallFrom => '이 번호의 전화를 받으세요';
+
+  @override
+  String get onTheCallEnterThisCode => '통화 중 이 코드를 입력하세요';
+
+  @override
+  String get followTheVoiceInstructions => '음성 안내를 따르세요';
+
+  @override
+  String get statusCalling => '전화 중...';
+
+  @override
+  String get statusCallInProgress => '통화 진행 중';
+
+  @override
+  String get statusVerifiedLabel => '인증됨';
+
+  @override
+  String get statusCallMissed => '부재중 전화';
+
+  @override
+  String get statusTimedOut => '시간 초과';
+
+  @override
+  String get phoneTryAgain => '다시 시도';
+
+  @override
+  String get phonePageTitle => '전화';
+
+  @override
+  String get phoneContactsTab => '연락처';
+
+  @override
+  String get phoneKeypadTab => '키패드';
+
+  @override
+  String get grantContactsAccess => '연락처 접근 권한을 부여하세요';
+
+  @override
+  String get phoneAllow => '허용';
+
+  @override
+  String get phoneSearchHint => '검색';
+
+  @override
+  String get phoneNoContactsFound => '연락처를 찾을 수 없습니다';
+
+  @override
+  String get phoneEnterNumber => '번호 입력';
+
+  @override
+  String get failedToStartCall => '통화를 시작하지 못했습니다';
+
+  @override
+  String get callStateConnecting => '연결 중...';
+
+  @override
+  String get callStateRinging => '벨 울리는 중...';
+
+  @override
+  String get callStateEnded => '통화 종료';
+
+  @override
+  String get callStateFailed => '통화 실패';
+
+  @override
+  String get transcriptPlaceholder => '전사가 여기에 표시됩니다...';
+
+  @override
+  String get phoneUnmute => '음소거 해제';
+
+  @override
+  String get phoneMute => '음소거';
+
+  @override
+  String get phoneSpeaker => '스피커';
+
+  @override
+  String get phoneEndCall => '종료';
+
+  @override
+  String get phoneCallSettingsTitle => '통화 설정';
+
+  @override
+  String get yourVerifiedNumbers => '인증된 번호';
+
+  @override
+  String get verifiedNumbersDescription => '전화를 걸면 상대방에게 이 번호가 표시됩니다';
+
+  @override
+  String get noVerifiedNumbers => '인증된 번호 없음';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '$phoneNumber 삭제하시겠습니까?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '전화를 걸려면 다시 인증해야 합니다';
+
+  @override
+  String get phoneDeleteButton => '삭제';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes분 전 인증됨';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours시간 전 인증됨';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days일 전 인증됨';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '$date에 인증됨';
+  }
+
+  @override
+  String get verifiedFallback => '인증됨';
+
+  @override
+  String get callAlreadyInProgress => '통화가 이미 진행 중입니다';
+
+  @override
+  String get failedToGetCallToken => '토큰을 가져오지 못했습니다. 먼저 번호를 인증하세요.';
+
+  @override
+  String get failedToInitializeCallService => '통화 서비스를 초기화하지 못했습니다';
+
+  @override
+  String get speakerLabelYou => '나';
+
+  @override
+  String get speakerLabelUnknown => '알 수 없음';
+
+  @override
   String get showDailyScoreOnHomepage => '홈페이지에 일일 점수 표시';
 
   @override

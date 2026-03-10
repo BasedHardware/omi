@@ -180,6 +180,7 @@ async fn update_action_item(
             request.completed,
             request.description.as_deref(),
             request.due_at,
+            request.clear_due_at.unwrap_or(false),
             request.priority.as_deref(),
             request.category.as_deref(),
             request.goal_id.as_deref(),

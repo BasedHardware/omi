@@ -3647,7 +3647,7 @@
     "@report": {
         "description": "Button to report message"
     },
-    "microphonePermissionRequired": "Microphone permission is required for voice recording.",
+    "microphonePermissionRequired": "Microphone permission is required to make calls",
     "@microphonePermissionRequired": {
         "description": "Error message when microphone permission is not granted"
     },
@@ -6116,7 +6116,7 @@
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
-    "searchCountries": "Search countries...",
+    "searchCountries": "Search countries",
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
@@ -10086,7 +10086,102 @@
     "@tasksCleanTodayMessage": {
         "description": "Confirmation dialog message for cleaning today task deadlines"
     },
-  "tasksOverdue": "Overdue",
+"tasksOverdue": "Overdue",
+    "phoneCallsWithOmi": "Phone Calls with Omi",
+    "phoneCallsSubtitle": "Make calls with real-time transcription",
+    "phoneSetupStep1Title": "Verify your phone number",
+    "phoneSetupStep1Subtitle": "We'll call you to confirm it's yours",
+    "phoneSetupStep2Title": "Enter a verification code",
+    "phoneSetupStep2Subtitle": "A short code you'll type on the call",
+    "phoneSetupStep3Title": "Start calling your contacts",
+    "phoneSetupStep3Subtitle": "With live transcription built in",
+    "phoneGetStarted": "Get Started",
+    "callRecordingConsentDisclaimer": "Call recording may require consent in your jurisdiction",
+    "enterYourNumber": "Enter your number",
+    "phoneNumberCallerIdHint": "Once verified, this becomes your caller ID",
+    "phoneNumberHint": "Phone number",
+    "failedToStartVerification": "Failed to start verification",
+    "phoneContinue": "Continue",
+    "verifyYourNumber": "Verify your number",
+    "answerTheCallFrom": "Answer the call from",
+    "onTheCallEnterThisCode": "On the call, enter this code",
+    "followTheVoiceInstructions": "Follow the voice instructions",
+    "statusCalling": "Calling...",
+    "statusCallInProgress": "Call in progress",
+    "statusVerifiedLabel": "Verified",
+    "statusCallMissed": "Call missed",
+    "statusTimedOut": "Timed out",
+    "phoneTryAgain": "Try Again",
+    "phonePageTitle": "Phone",
+    "phoneContactsTab": "Contacts",
+    "phoneKeypadTab": "Keypad",
+    "grantContactsAccess": "Grant access to your contacts",
+    "phoneAllow": "Allow",
+    "phoneSearchHint": "Search",
+    "phoneNoContactsFound": "No contacts found",
+    "phoneEnterNumber": "Enter number",
+    "failedToStartCall": "Failed to start call",
+    "callStateConnecting": "Connecting...",
+    "callStateRinging": "Ringing...",
+    "callStateEnded": "Call Ended",
+    "callStateFailed": "Call Failed",
+    "transcriptPlaceholder": "Transcript will appear here...",
+    "phoneUnmute": "Unmute",
+    "phoneMute": "Mute",
+    "phoneSpeaker": "Speaker",
+    "phoneEndCall": "End",
+    "phoneCallSettingsTitle": "Phone Call Settings",
+    "yourVerifiedNumbers": "Your Verified Numbers",
+    "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
+    "noVerifiedNumbers": "No verified numbers",
+    "deletePhoneNumberConfirm": "Delete {phoneNumber}?",
+    "@deletePhoneNumberConfirm": {
+        "placeholders": {
+            "phoneNumber": {
+                "type": "String"
+            }
+        }
+    },
+    "deletePhoneNumberWarning": "You'll need to verify again to make calls",
+    "phoneDeleteButton": "Delete",
+    "verifiedMinutesAgo": "Verified {minutes}m ago",
+    "@verifiedMinutesAgo": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "verifiedHoursAgo": "Verified {hours}h ago",
+    "@verifiedHoursAgo": {
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "verifiedDaysAgo": "Verified {days}d ago",
+    "@verifiedDaysAgo": {
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "verifiedOnDate": "Verified on {date}",
+    "@verifiedOnDate": {
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "verifiedFallback": "Verified",
+    "callAlreadyInProgress": "A call is already in progress",
+    "failedToGetCallToken": "Failed to get call token. Verify your phone number first.",
+    "failedToInitializeCallService": "Failed to initialize call service",
+    "speakerLabelYou": "You",
+    "speakerLabelUnknown": "Unknown",
     "showDailyScoreOnHomepage": "Show Daily Score on homepage",
     "@showDailyScoreOnHomepage": {
         "description": "Description for show daily score toggle in developer settings"

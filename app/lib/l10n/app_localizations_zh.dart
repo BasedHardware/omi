@@ -8128,6 +8128,196 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tasksOverdue => '逾期';
 
   @override
+  String get phoneCallsWithOmi => '使用 Omi 通话';
+
+  @override
+  String get phoneCallsSubtitle => '实时转录通话';
+
+  @override
+  String get phoneSetupStep1Title => '验证您的电话号码';
+
+  @override
+  String get phoneSetupStep1Subtitle => '我们将致电您进行确认';
+
+  @override
+  String get phoneSetupStep2Title => '输入验证码';
+
+  @override
+  String get phoneSetupStep2Subtitle => '通话中输入的短代码';
+
+  @override
+  String get phoneSetupStep3Title => '开始拨打您的联系人';
+
+  @override
+  String get phoneSetupStep3Subtitle => '内置实时转录';
+
+  @override
+  String get phoneGetStarted => '开始';
+
+  @override
+  String get callRecordingConsentDisclaimer => '通话录音可能需要在您的管辖区获得同意';
+
+  @override
+  String get enterYourNumber => '输入您的号码';
+
+  @override
+  String get phoneNumberCallerIdHint => '验证后，这将成为您的来电显示';
+
+  @override
+  String get phoneNumberHint => '电话号码';
+
+  @override
+  String get failedToStartVerification => '无法开始验证';
+
+  @override
+  String get phoneContinue => '继续';
+
+  @override
+  String get verifyYourNumber => '验证您的号码';
+
+  @override
+  String get answerTheCallFrom => '接听来自以下号码的电话';
+
+  @override
+  String get onTheCallEnterThisCode => '通话中输入此代码';
+
+  @override
+  String get followTheVoiceInstructions => '请按照语音指示操作';
+
+  @override
+  String get statusCalling => '拨号中...';
+
+  @override
+  String get statusCallInProgress => '通话中';
+
+  @override
+  String get statusVerifiedLabel => '已验证';
+
+  @override
+  String get statusCallMissed => '未接来电';
+
+  @override
+  String get statusTimedOut => '超时';
+
+  @override
+  String get phoneTryAgain => '重试';
+
+  @override
+  String get phonePageTitle => '电话';
+
+  @override
+  String get phoneContactsTab => '通讯录';
+
+  @override
+  String get phoneKeypadTab => '键盘';
+
+  @override
+  String get grantContactsAccess => '授予通讯录访问权限';
+
+  @override
+  String get phoneAllow => '允许';
+
+  @override
+  String get phoneSearchHint => '搜索';
+
+  @override
+  String get phoneNoContactsFound => '未找到联系人';
+
+  @override
+  String get phoneEnterNumber => '输入号码';
+
+  @override
+  String get failedToStartCall => '无法开始通话';
+
+  @override
+  String get callStateConnecting => '连接中...';
+
+  @override
+  String get callStateRinging => '响铃中...';
+
+  @override
+  String get callStateEnded => '通话结束';
+
+  @override
+  String get callStateFailed => '通话失败';
+
+  @override
+  String get transcriptPlaceholder => '转录将在此显示...';
+
+  @override
+  String get phoneUnmute => '取消静音';
+
+  @override
+  String get phoneMute => '静音';
+
+  @override
+  String get phoneSpeaker => '扬声器';
+
+  @override
+  String get phoneEndCall => '结束';
+
+  @override
+  String get phoneCallSettingsTitle => '通话设置';
+
+  @override
+  String get yourVerifiedNumbers => '您已验证的号码';
+
+  @override
+  String get verifiedNumbersDescription => '当您拨打电话时，对方将看到此号码';
+
+  @override
+  String get noVerifiedNumbers => '没有已验证的号码';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return '删除 $phoneNumber？';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => '您需要重新验证才能拨打电话';
+
+  @override
+  String get phoneDeleteButton => '删除';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return '$minutes分钟前验证';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return '$hours小时前验证';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return '$days天前验证';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return '验证于 $date';
+  }
+
+  @override
+  String get verifiedFallback => '已验证';
+
+  @override
+  String get callAlreadyInProgress => '通话已在进行中';
+
+  @override
+  String get failedToGetCallToken => '获取令牌失败。请先验证您的号码。';
+
+  @override
+  String get failedToInitializeCallService => '无法初始化通话服务';
+
+  @override
+  String get speakerLabelYou => '您';
+
+  @override
+  String get speakerLabelUnknown => '未知';
+
+  @override
   String get showDailyScoreOnHomepage => '在首页显示每日评分';
 
   @override

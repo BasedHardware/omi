@@ -7,6 +7,8 @@ import ScreenCaptureKit
 final class ScreenCaptureService: Sendable {
   private let maxSize: CGFloat = 3000
   private let jpegQuality: CGFloat = 0.8
+  private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
+  private static let activeWindowCacheTTL: TimeInterval = 10
 
   /// Serializes all reads and writes to axFailureCountByBundleID and axSystemwideDisabled.
   /// Both vars are accessed from the MainActor (captureFrame start) AND the cooperative
@@ -22,6 +24,17 @@ final class ScreenCaptureService: Sendable {
   /// to avoid spamming a failing call on every capture cycle (every ~1 second).
   /// Must be accessed only while holding axStateLock.
   nonisolated(unsafe) private static var axSystemwideDisabled = false
+
+  /// Cache the last successfully resolved active window to avoid losing capture
+  /// when the resolver times out or transiently fails.
+  private struct ActiveWindowSnapshot {
+    let appName: String?
+    let windowTitle: String?
+    let windowID: CGWindowID?
+    let resolvedAt: Date
+  }
+  nonisolated(unsafe) private static var lastActiveWindowSnapshot: ActiveWindowSnapshot?
+  nonisolated(unsafe) private static var isActiveWindowResolutionInFlight = false
 
   init() {}
 
@@ -371,6 +384,87 @@ final class ScreenCaptureService: Sendable {
     return windowID
   }
 
+  /// Resolve active window info asynchronously with timeout and cache fallback.
+  /// This prevents rare SkyLight/CGWindowList stalls from blocking capture.
+  static func getActiveWindowInfoAsync() async -> (
+    appName: String?, windowTitle: String?, windowID: CGWindowID?
+  ) {
+    // Avoid stacking multiple slow window enumeration tasks if one is already in flight.
+    let shouldStartNewResolution = axStateLock.withLock { () -> Bool in
+      if isActiveWindowResolutionInFlight {
+        return false
+      }
+      isActiveWindowResolutionInFlight = true
+      return true
+    }
+
+    if !shouldStartNewResolution {
+      if let cached = getCachedActiveWindowSnapshot() {
+        return (cached.appName, cached.windowTitle, cached.windowID)
+      }
+      return (nil, nil, nil)
+    }
+
+    defer {
+      axStateLock.withLock {
+        isActiveWindowResolutionInFlight = false
+      }
+    }
+
+    let resolved = await resolveActiveWindowInfoWithTimeout()
+    if let resolved {
+      let snapshot = ActiveWindowSnapshot(
+        appName: resolved.appName,
+        windowTitle: resolved.windowTitle,
+        windowID: resolved.windowID,
+        resolvedAt: Date()
+      )
+      axStateLock.withLock {
+        lastActiveWindowSnapshot = snapshot
+      }
+      return resolved
+    }
+
+    if let cached = getCachedActiveWindowSnapshot() {
+      log("ScreenCaptureService: Active window lookup timed out, using cached window info")
+      return (cached.appName, cached.windowTitle, cached.windowID)
+    }
+
+    log("ScreenCaptureService: Active window lookup timed out with no cached fallback")
+    return (nil, nil, nil)
+  }
+
+  private static func resolveActiveWindowInfoWithTimeout() async -> (
+    appName: String?, windowTitle: String?, windowID: CGWindowID?
+  )? {
+    await withTaskGroup(of: (appName: String?, windowTitle: String?, windowID: CGWindowID?)?.self) { group in
+      group.addTask(priority: .userInitiated) {
+        let info = getActiveWindowInfo()
+        if info.appName == nil && info.windowTitle == nil && info.windowID == nil {
+          return nil
+        }
+        return info
+      }
+
+      group.addTask {
+        try? await Task.sleep(nanoseconds: activeWindowResolveTimeoutNs)
+        return nil
+      }
+
+      let firstCompleted = await group.next() ?? nil
+      group.cancelAll()
+      return firstCompleted
+    }
+  }
+
+  private static func getCachedActiveWindowSnapshot() -> ActiveWindowSnapshot? {
+    axStateLock.withLock {
+      guard let snapshot = lastActiveWindowSnapshot else { return nil }
+      guard Date().timeIntervalSince(snapshot.resolvedAt) <= activeWindowCacheTTL else { return nil }
+      return snapshot
+    }
+  }
+
   /// Get the active app name, window title, and window ID
   static func getActiveWindowInfo() -> (
     appName: String?, windowTitle: String?, windowID: CGWindowID?
@@ -554,7 +648,8 @@ final class ScreenCaptureService: Sendable {
 
   /// Async capture - main entry point
   func captureActiveWindowAsync() async -> Data? {
-    guard let windowID = Self.getActiveWindowID() else {
+    let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
+    guard let windowID else {
       log("No active window ID found")
       return nil
     }
@@ -628,7 +723,8 @@ final class ScreenCaptureService: Sendable {
   /// Use this on macOS 14+ to avoid redundant encode/decode round-trips.
   @available(macOS 14.0, *)
   func captureActiveWindowCGImage() async -> CGImage? {
-    guard let windowID = Self.getActiveWindowID() else {
+    let (_, _, windowID) = await Self.getActiveWindowInfoAsync()
+    guard let windowID else {
       log("No active window ID found")
       return nil
     }

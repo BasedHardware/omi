@@ -8320,6 +8320,197 @@ class AppLocalizationsRo extends AppLocalizations {
   String get tasksOverdue => 'Întârziate';
 
   @override
+  String get phoneCallsWithOmi => 'Apeluri cu Omi';
+
+  @override
+  String get phoneCallsSubtitle => 'Apelati cu transcriere in timp real';
+
+  @override
+  String get phoneSetupStep1Title => 'Verificati numarul de telefon';
+
+  @override
+  String get phoneSetupStep1Subtitle => 'Va vom suna pentru a confirma';
+
+  @override
+  String get phoneSetupStep2Title => 'Introduceti un cod de verificare';
+
+  @override
+  String get phoneSetupStep2Subtitle => 'Un cod scurt pe care il introduceti in timpul apelului';
+
+  @override
+  String get phoneSetupStep3Title => 'Incepeti sa apelati contactele';
+
+  @override
+  String get phoneSetupStep3Subtitle => 'Cu transcriere live integrata';
+
+  @override
+  String get phoneGetStarted => 'Incepe';
+
+  @override
+  String get callRecordingConsentDisclaimer =>
+      'Inregistrarea apelurilor poate necesita consimtamant in jurisdictia dvs.';
+
+  @override
+  String get enterYourNumber => 'Introduceti numarul dvs.';
+
+  @override
+  String get phoneNumberCallerIdHint => 'Dupa verificare, acesta devine ID-ul dvs. de apelant';
+
+  @override
+  String get phoneNumberHint => 'Numar de telefon';
+
+  @override
+  String get failedToStartVerification => 'Nu s-a putut initia verificarea';
+
+  @override
+  String get phoneContinue => 'Continua';
+
+  @override
+  String get verifyYourNumber => 'Verificati numarul dvs.';
+
+  @override
+  String get answerTheCallFrom => 'Raspundeti la apelul de la';
+
+  @override
+  String get onTheCallEnterThisCode => 'In timpul apelului, introduceti acest cod';
+
+  @override
+  String get followTheVoiceInstructions => 'Urmati instructiunile vocale';
+
+  @override
+  String get statusCalling => 'Se apeleaza...';
+
+  @override
+  String get statusCallInProgress => 'Apel in curs';
+
+  @override
+  String get statusVerifiedLabel => 'Verificat';
+
+  @override
+  String get statusCallMissed => 'Apel pierdut';
+
+  @override
+  String get statusTimedOut => 'Timp expirat';
+
+  @override
+  String get phoneTryAgain => 'Incercati din nou';
+
+  @override
+  String get phonePageTitle => 'Telefon';
+
+  @override
+  String get phoneContactsTab => 'Contacte';
+
+  @override
+  String get phoneKeypadTab => 'Tastatura';
+
+  @override
+  String get grantContactsAccess => 'Acordati acces la contactele dvs.';
+
+  @override
+  String get phoneAllow => 'Permite';
+
+  @override
+  String get phoneSearchHint => 'Cauta';
+
+  @override
+  String get phoneNoContactsFound => 'Niciun contact gasit';
+
+  @override
+  String get phoneEnterNumber => 'Introduceti numarul';
+
+  @override
+  String get failedToStartCall => 'Nu s-a putut initia apelul';
+
+  @override
+  String get callStateConnecting => 'Se conecteaza...';
+
+  @override
+  String get callStateRinging => 'Suna...';
+
+  @override
+  String get callStateEnded => 'Apel incheiat';
+
+  @override
+  String get callStateFailed => 'Apel esuat';
+
+  @override
+  String get transcriptPlaceholder => 'Transcrierea va aparea aici...';
+
+  @override
+  String get phoneUnmute => 'Activeaza sunetul';
+
+  @override
+  String get phoneMute => 'Dezactiveaza sunetul';
+
+  @override
+  String get phoneSpeaker => 'Difuzor';
+
+  @override
+  String get phoneEndCall => 'Incheie';
+
+  @override
+  String get phoneCallSettingsTitle => 'Setari apeluri';
+
+  @override
+  String get yourVerifiedNumbers => 'Numerele dvs. verificate';
+
+  @override
+  String get verifiedNumbersDescription => 'Cand apelati pe cineva, va vedea acest numar';
+
+  @override
+  String get noVerifiedNumbers => 'Niciun numar verificat';
+
+  @override
+  String deletePhoneNumberConfirm(String phoneNumber) {
+    return 'Stergeti $phoneNumber?';
+  }
+
+  @override
+  String get deletePhoneNumberWarning => 'Va trebui sa verificati din nou pentru a apela';
+
+  @override
+  String get phoneDeleteButton => 'Sterge';
+
+  @override
+  String verifiedMinutesAgo(int minutes) {
+    return 'Verificat acum ${minutes}min';
+  }
+
+  @override
+  String verifiedHoursAgo(int hours) {
+    return 'Verificat acum ${hours}h';
+  }
+
+  @override
+  String verifiedDaysAgo(int days) {
+    return 'Verificat acum ${days}z';
+  }
+
+  @override
+  String verifiedOnDate(String date) {
+    return 'Verificat pe $date';
+  }
+
+  @override
+  String get verifiedFallback => 'Verificat';
+
+  @override
+  String get callAlreadyInProgress => 'Un apel este deja in curs';
+
+  @override
+  String get failedToGetCallToken => 'Nu s-a putut obtine tokenul. Verificati mai intai numarul.';
+
+  @override
+  String get failedToInitializeCallService => 'Nu s-a putut initializa serviciul de apeluri';
+
+  @override
+  String get speakerLabelYou => 'Dvs.';
+
+  @override
+  String get speakerLabelUnknown => 'Necunoscut';
+
+  @override
   String get showDailyScoreOnHomepage => 'Afișați scorul zilnic pe pagina principală';
 
   @override
