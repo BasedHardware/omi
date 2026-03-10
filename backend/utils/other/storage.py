@@ -2,11 +2,13 @@ import datetime
 import io
 import json
 import os
+import struct
 import wave
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
+import opuslib
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.storage import transfer_manager
@@ -19,6 +21,18 @@ from database import users as users_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Feature flag for Opus encoding in private cloud sync
+PRIVATE_CLOUD_OPUS_ENABLED = os.getenv('PRIVATE_CLOUD_OPUS_ENABLED', 'false').lower() == 'true'
+
+# Opus encoding constants
+OPUS_SAMPLE_RATE = 16000
+OPUS_CHANNELS = 1
+OPUS_FRAME_DURATION_MS = 20  # 20ms frames (standard for voice)
+OPUS_FRAME_SIZE = OPUS_SAMPLE_RATE * OPUS_FRAME_DURATION_MS // 1000  # 320 samples per frame
+
+# Valid private cloud sync extensions
+PRIVATE_CLOUD_EXTENSIONS = ['.enc', '.bin', '.opus.enc', '.opus']
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -309,6 +323,101 @@ def delete_syncing_temporal_file(file_path: str):
 # ************************************************
 
 
+def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
+    """
+    Encode PCM16 audio to Opus.
+
+    Format: 4-byte little-endian packet count, then for each packet:
+    2-byte little-endian length prefix followed by the Opus packet bytes.
+    This allows exact reconstruction on decode.
+
+    Args:
+        pcm_data: Raw PCM16 audio bytes
+        sample_rate: Sample rate in Hz (default 16000)
+        channels: Number of audio channels (default 1)
+
+    Returns:
+        Length-prefixed Opus packets as bytes
+    """
+    encoder = opuslib.Encoder(sample_rate, channels, opuslib.APPLICATION_VOIP)
+    frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
+    bytes_per_frame = frame_size * channels * 2  # 16-bit = 2 bytes per sample
+
+    packets = []
+    offset = 0
+    while offset + bytes_per_frame <= len(pcm_data):
+        frame = pcm_data[offset : offset + bytes_per_frame]
+        encoded = encoder.encode(frame, frame_size)
+        packets.append(encoded)
+        offset += bytes_per_frame
+
+    # Encode remaining samples (pad with silence)
+    if offset < len(pcm_data):
+        remaining = pcm_data[offset:]
+        padded = remaining + b'\x00' * (bytes_per_frame - len(remaining))
+        encoded = encoder.encode(padded, frame_size)
+        packets.append(encoded)
+
+    # Pack: [packet_count (4 bytes)] + [len (2 bytes) + data] per packet
+    output = struct.pack('<I', len(packets))
+    for pkt in packets:
+        output += struct.pack('<H', len(pkt)) + pkt
+
+    return output
+
+
+def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
+    """
+    Decode length-prefixed Opus packets back to PCM16.
+
+    Args:
+        opus_data: Length-prefixed Opus packets (from encode_pcm_to_opus)
+        sample_rate: Sample rate in Hz (default 16000)
+        channels: Number of audio channels (default 1)
+
+    Returns:
+        Raw PCM16 audio bytes
+    """
+    decoder = opuslib.Decoder(sample_rate, channels)
+    frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
+
+    offset = 0
+    packet_count = struct.unpack_from('<I', opus_data, offset)[0]
+    offset += 4
+
+    pcm_parts = []
+    for _ in range(packet_count):
+        pkt_len = struct.unpack_from('<H', opus_data, offset)[0]
+        offset += 2
+        pkt_data = opus_data[offset : offset + pkt_len]
+        offset += pkt_len
+        decoded = decoder.decode(pkt_data, frame_size)
+        pcm_parts.append(decoded)
+
+    return b''.join(pcm_parts)
+
+
+def _get_extension_for_path(path: str) -> str:
+    """Extract the private cloud sync extension from a GCS path."""
+    if path.endswith('.opus.enc'):
+        return 'opus.enc'
+    elif path.endswith('.opus'):
+        return 'opus'
+    elif path.endswith('.enc'):
+        return 'enc'
+    elif path.endswith('.bin'):
+        return 'bin'
+    return 'bin'
+
+
+def _strip_extension(filename: str) -> str:
+    """Strip private cloud sync extension to get the timestamp string."""
+    for ext in ('.opus.enc', '.opus', '.enc', '.bin'):
+        if filename.endswith(ext):
+            return filename[: -len(ext)]
+    return filename.rsplit('.', 1)[0]
+
+
 def upload_audio_chunk(
     chunk_data: bytes, uid: str, conversation_id: str, timestamp: float, data_protection_level: str = None
 ) -> str:
@@ -334,18 +443,27 @@ def upload_audio_chunk(
     # Format timestamp to 3 decimal places for cleaner filenames
     formatted_timestamp = f'{timestamp:.3f}'
 
+    # Opus encode if enabled
+    if PRIVATE_CLOUD_OPUS_ENABLED:
+        upload_data = encode_pcm_to_opus(chunk_data)
+    else:
+        upload_data = chunk_data
+
     if protection_level == 'enhanced':
         # Encrypt as length-prefixed binary
-        encrypted_chunk = encryption.encrypt_audio_chunk(chunk_data, uid)
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
+        encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
+        ext = 'opus.enc' if PRIVATE_CLOUD_OPUS_ENABLED else 'enc'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
         blob = bucket.blob(path)
         blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
     else:
         # Standard - no encryption
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
+        ext = 'opus' if PRIVATE_CLOUD_OPUS_ENABLED else 'bin'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
         blob = bucket.blob(path)
-        blob.upload_from_string(chunk_data, content_type='application/octet-stream')
+        blob.upload_from_string(upload_data, content_type='application/octet-stream')
 
+    del upload_data
     return path
 
 
@@ -355,8 +473,8 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
     for timestamp in timestamps:
         # Format timestamp to match upload format (3 decimal places)
         formatted_timestamp = f'{timestamp:.3f}'
-        # Try both encrypted and unencrypted paths
-        for extension in ['.enc', '.bin']:
+        # Try all possible extensions (opus + legacy)
+        for extension in PRIVATE_CLOUD_EXTENSIONS:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
@@ -376,12 +494,14 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
 
     chunks = []
     for blob in blobs:
-        # Extract timestamp from filename (e.g., '1234567890.123.bin' or '1234567890.123.enc')
+        # Extract timestamp from filename
+        # Supports: '1234567890.123.bin', '1234567890.123.enc',
+        #           '1234567890.123.opus', '1234567890.123.opus.enc'
         filename = blob.name.split('/')[-1]
-        if filename.endswith('.bin') or filename.endswith('.enc'):
+        has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
+        if has_valid_ext:
             try:
-                # Remove extension (.bin or .enc)
-                timestamp_str = filename.rsplit('.', 1)[0]
+                timestamp_str = _strip_extension(filename)
                 timestamp = float(timestamp_str)
                 chunks.append(
                     {
@@ -440,29 +560,44 @@ def download_audio_chunks_and_merge(
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single chunk and return (timestamp, pcm_data)."""
         formatted_timestamp = f'{timestamp:.3f}'
-        chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
-        chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
+
+        # Try all extensions in priority order: opus.enc, enc, opus, bin
+        extensions_to_try = [
+            ('opus.enc', True, True),  # (ext, encrypted, opus)
+            ('enc', True, False),
+            ('opus', False, True),
+            ('bin', False, False),
+        ]
 
         chunk_data = None
         is_encrypted = False
+        is_opus = False
 
-        # Try encrypted first, then unencrypted
-        try:
-            chunk_data = bucket.blob(chunk_path_enc).download_as_bytes()
-            is_encrypted = True
-        except NotFound:
+        for ext, encrypted, opus in extensions_to_try:
+            chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
             try:
-                chunk_data = bucket.blob(chunk_path_bin).download_as_bytes()
-                is_encrypted = False
+                chunk_data = bucket.blob(chunk_path).download_as_bytes()
+                is_encrypted = encrypted
+                is_opus = opus
+                break
             except NotFound:
-                logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-                return (timestamp, None)
+                continue
 
-        # Normalize to PCM (decrypt if needed
+        if chunk_data is None:
+            logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+            return (timestamp, None)
+
+        # Normalize to PCM: decrypt if needed, then decode Opus if needed
         if is_encrypted:
-            pcm_data = encryption.decrypt_audio_file(chunk_data, uid)
+            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
         else:
-            pcm_data = chunk_data
+            raw_data = chunk_data
+
+        if is_opus:
+            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+            del raw_data
+        else:
+            pcm_data = raw_data
 
         return (timestamp, pcm_data)
 
