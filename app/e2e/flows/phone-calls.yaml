@@ -1,0 +1,65 @@
+# E2E Flow: Phone Calls — setup, contacts, keypad, calling
+# Tests: phone setup intro, number entry, contacts tab, keypad, call button
+
+name: phone-calls
+description: Phone calls feature — setup wizard, contacts search, keypad dialing
+covers:
+  - app/lib/pages/phone_calls/phone_calls_page.dart
+  - app/lib/pages/phone_calls/phone_setup_intro_page.dart
+  - app/lib/pages/phone_calls/phone_setup_number_page.dart
+  - app/lib/pages/phone_calls/phone_setup_verify_page.dart
+  - app/lib/pages/phone_calls/active_call_page.dart
+setup: normal
+
+steps:
+  - name: Navigate to Phone Calls
+    note: "Settings drawer → Phone Calls item"
+    press: { type: gesture, hint: "settings gear icon top-right" }
+    screenshot: settings-open
+
+  - name: Open Phone Calls setting
+    press: { type: gesture, hint: "Phone Calls row in settings" }
+    screenshot: phone-calls-entry
+
+  - name: Verify phone setup or calls page
+    assert:
+      interactive_count: { min: 3 }
+    note: >
+      If phone not set up: shows PhoneSetupIntroPage with hero icon,
+      3 step rows, and "Get Started" button.
+      If already set up: shows PhoneCallsPage with Contacts/Keypad tabs.
+    screenshot: phone-calls-main
+
+  - name: Phone setup intro (if not set up)
+    note: >
+      Hero phone icon, 3 steps (get number, dial, contacts),
+      "Get Started" button, disclaimer text.
+      Press "Get Started" to go to number entry.
+    press: { type: button, hint: "Get Started button" }
+    screenshot: phone-setup-number
+
+  - name: Phone number entry page
+    assert:
+      interactive_count: { min: 4, hint: "country picker, phone input, continue button" }
+    note: >
+      Country picker with flag + code, phone TextField,
+      Continue button (purple when valid, gray when empty).
+    screenshot: phone-number-entry
+
+  - name: Back to phone calls
+    back: true
+
+  - name: Contacts tab (if set up)
+    note: "Tab 0: Contacts with search field and contact list"
+    press: { type: tab, hint: "Contacts tab" }
+    screenshot: phone-contacts
+
+  - name: Keypad tab
+    press: { type: tab, hint: "Keypad tab" }
+    assert:
+      interactive_count: { min: 12, hint: "12 dialpad keys + call button + backspace" }
+    screenshot: phone-keypad
+
+  - name: Back to home
+    back: true
+    back: true
