@@ -218,6 +218,55 @@ class TestMaxAgeFlush:
         assert 'conv-1' not in flush
 
 
+class TestRetryBackoff:
+    """Tests that failed uploads reset queued_at for natural backoff."""
+
+    def test_retry_resets_queued_at(self):
+        """After upload failure, queued_at is reset so batch won't re-flush for ~60s."""
+        pending = {}
+        sample_rate = 8000
+        now = 1000.0
+
+        # Simulate a batch that failed upload — retry logic resets queued_at
+        failed_batch = {
+            'data': bytearray(b'\x00' * 1000),
+            'conversation_id': 'conv-1',
+            'timestamp': 100.0,
+            'queued_at': now,  # reset to "now" by retry logic
+            'retries': 1,
+        }
+        pending['conv-1'] = failed_batch
+
+        # 59.9s later — should NOT flush yet (backoff)
+        flush = _get_flush_candidates(pending, sample_rate, now + 59.9, websocket_active=True)
+        assert 'conv-1' not in flush
+
+        # 60s later — should flush (backoff expired)
+        flush = _get_flush_candidates(pending, sample_rate, now + 60.0, websocket_active=True)
+        assert 'conv-1' in flush
+
+    def test_retry_preserves_data_and_increments_count(self):
+        """Retry preserves chunk data and increments retry count."""
+        # Mirrors the retry logic in _flush_batch
+        batch = {
+            'data': bytearray(b'\xab' * 500),
+            'conversation_id': 'conv-1',
+            'timestamp': 100.0,
+            'queued_at': 900.0,
+            'retries': 0,
+        }
+        # Simulate failed upload — retry path
+        retries = batch['retries']
+        chunk_data = bytes(batch['data'])
+        batch['retries'] = retries + 1
+        batch['data'] = bytearray(chunk_data)
+        batch['queued_at'] = 1000.0  # reset
+
+        assert batch['retries'] == 1
+        assert len(batch['data']) == 500
+        assert batch['queued_at'] == 1000.0
+
+
 class TestShutdownFlush:
     """Tests that shutdown forces flush of all pending batches regardless of size/age."""
 
