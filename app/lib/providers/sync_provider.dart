@@ -25,7 +25,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isLoadingWals = false;
   bool get isLoadingWals => _isLoadingWals;
 
-  // Storage filter (used by RecordingsListPage)
+  // Storage filter
   WalStorage? _storageFilter;
   WalStorage? get storageFilter => _storageFilter;
 
@@ -175,6 +175,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> deleteAllSyncedWals() async {
     await _walService.getSyncs().deleteAllSyncedWals();
+    await refreshWals();
+  }
+
+  Future<void> deleteAllPendingWals() async {
+    await _walService.getSyncs().deleteAllPendingWals();
     await refreshWals();
   }
 
