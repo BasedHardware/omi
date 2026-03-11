@@ -1,0 +1,48 @@
+# E2E Flow: Speech Profile — voice recording and management
+# Tests: speech profile setup, question flow, progress tracking
+
+name: speech-profile
+description: Speech profile — voice sample recording, question flow, progress bar, skip/complete
+covers:
+  - app/lib/pages/speech_profile/page.dart
+  - app/lib/pages/speech_profile/percentage_bar_progress.dart
+  - app/lib/pages/speech_profile/user_speech_samples.dart
+setup: normal
+
+steps:
+  - name: Navigate to Speech Profile
+    note: "Settings → Profile → Speech Profile"
+    press: { type: gesture, hint: "settings gear icon top-right" }
+    screenshot: settings-open
+
+  - name: Open Profile settings
+    press: { type: gesture, hint: "Profile row — first item in settings" }
+    screenshot: profile-open
+
+  - name: Open Speech Profile
+    scroll: down
+    press: { type: gesture, hint: "Speech Profile row in profile settings" }
+    screenshot: speech-profile-main
+
+  - name: Verify speech profile page
+    assert:
+      interactive_count: { min: 3, hint: "Get Started/Do It Again button, Listen button, Recognizing Others" }
+    note: >
+      Shows device animation widget at top, intro text in center,
+      "Get Started" or "Do It Again" button at bottom.
+      Optional "Listen to Speech Profile" if samples exist.
+      "Recognizing Others" text button links to people page.
+    screenshot: speech-profile-view
+
+  - name: Start recording (if not completed)
+    press: { type: button, hint: "Get Started or Do It Again button" }
+    note: >
+      Starts question flow: shows question text (22pt) with fade animation,
+      progress bar with percentage, "Keep Going Great" encouragement,
+      "Skip This Question" button.
+    screenshot: speech-profile-recording
+
+  - name: Back from speech profile
+    back: true
+    back: true
+    back: true
