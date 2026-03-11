@@ -8501,4 +8501,59 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Để sau';
+
+  @override
+  String get deleteSynced => 'Xóa đã đồng bộ';
+
+  @override
+  String get deleteSyncedFiles => 'Xóa bản ghi đã đồng bộ';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Các bản ghi này đã được đồng bộ với điện thoại của bạn. Không thể hoàn tác.';
+
+  @override
+  String get syncedFilesDeleted => 'Đã xóa bản ghi đồng bộ';
+
+  @override
+  String get deletePending => 'Xóa đang chờ';
+
+  @override
+  String get deletePendingFiles => 'Xóa bản ghi đang chờ';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Các bản ghi này CHƯA được đồng bộ với điện thoại của bạn và sẽ bị mất vĩnh viễn. Không thể hoàn tác.';
+
+  @override
+  String get pendingFilesDeleted => 'Đã xóa bản ghi đang chờ';
+
+  @override
+  String get deleteAllFiles => 'Xóa tất cả bản ghi';
+
+  @override
+  String get deleteAll => 'Xóa tất cả';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Thao tác này sẽ xóa các bản ghi đã đồng bộ và đang chờ. Bản ghi đang chờ CHƯA được đồng bộ và sẽ bị mất vĩnh viễn.';
+
+  @override
+  String get allFilesDeleted => 'Đã xóa tất cả bản ghi';
+
+  @override
+  String nFiles(int count) {
+    return '$count bản ghi';
+  }
+
+  @override
+  String get manageStorage => 'Quản lý lưu trữ';
+
+  @override
+  String get safelyBackedUp => 'Đã sao lưu an toàn vào điện thoại';
+
+  @override
+  String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
+
+  @override
+  String get clearAll => 'Xóa tất cả';
 }
