@@ -8493,4 +8493,60 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Možná později';
+
+  @override
+  String get deleteSynced => 'Smazat synchronizované';
+
+  @override
+  String get deleteSyncedFiles => 'Smazat synchronizované nahrávky';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Tyto nahrávky jsou již synchronizovány s vaším telefonem. Toto nelze vrátit zpět.';
+
+  @override
+  String get syncedFilesDeleted => 'Synchronizované nahrávky smazány';
+
+  @override
+  String get deletePending => 'Smazat čekající';
+
+  @override
+  String get deletePendingFiles => 'Smazat čekající nahrávky';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Tyto nahrávky NEJSOU synchronizovány s vaším telefonem a budou trvale ztraceny. Toto nelze vrátit zpět.';
+
+  @override
+  String get pendingFilesDeleted => 'Čekající nahrávky smazány';
+
+  @override
+  String get deleteAllFiles => 'Smazat všechny nahrávky';
+
+  @override
+  String get deleteAll => 'Smazat vše';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Toto smaže synchronizované i čekající nahrávky. Čekající nahrávky NEJSOU synchronizovány a budou trvale ztraceny.';
+
+  @override
+  String get allFilesDeleted => 'Všechny nahrávky smazány';
+
+  @override
+  String nFiles(int count) {
+    return '$count nahrávek';
+  }
+
+  @override
+  String get manageStorage => 'Správa úložiště';
+
+  @override
+  String get safelyBackedUp => 'Bezpečně zálohováno na vašem telefonu';
+
+  @override
+  String get notYetSynced => 'Zatím nesynchronizováno s vaším telefonem';
+
+  @override
+  String get clearAll => 'Vymazat vše';
 }
