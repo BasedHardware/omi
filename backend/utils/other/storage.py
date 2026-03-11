@@ -37,6 +37,9 @@ app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
+# Feature flags
+PRIVATE_CLOUD_BATCH_ENABLED = os.getenv('PRIVATE_CLOUD_BATCH_ENABLED', 'false').lower() == 'true'
+
 
 # *******************************************
 # ************* SPEECH PROFILE **************
@@ -347,6 +350,81 @@ def upload_audio_chunk(
         blob.upload_from_string(chunk_data, content_type='application/octet-stream')
 
     return path
+
+
+def upload_audio_chunks_batch(
+    chunks: List[dict],
+    uid: str,
+    conversation_id: str,
+    data_protection_level: str = None,
+) -> List[str]:
+    """
+    Upload multiple audio chunks to GCS in a single operation per batch.
+
+    When PRIVATE_CLOUD_BATCH_ENABLED is true, concatenates all chunk data into one
+    GCS object (1 write op instead of N). When false, falls back to individual
+    upload_audio_chunk() calls.
+
+    Args:
+        chunks: List of dicts with 'data' (bytes) and 'timestamp' (float).
+        uid: User ID.
+        conversation_id: Conversation ID.
+        data_protection_level: Optional cached protection level. When provided,
+            skips the Firestore read. Falls back to DB read when None.
+
+    Returns:
+        List of GCS paths for the uploaded chunks/batch.
+    """
+    if not chunks:
+        return []
+
+    # Sort by timestamp for consistent ordering
+    sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
+
+    if not PRIVATE_CLOUD_BATCH_ENABLED:
+        # Flag disabled — fall back to per-chunk uploads
+        paths = []
+        for chunk in sorted_chunks:
+            path = upload_audio_chunk(
+                chunk_data=chunk['data'],
+                uid=uid,
+                conversation_id=conversation_id,
+                timestamp=chunk['timestamp'],
+                data_protection_level=data_protection_level,
+            )
+            paths.append(path)
+        return paths
+
+    # Resolve protection level once for the entire batch
+    protection_level = (
+        data_protection_level if data_protection_level is not None else users_db.get_data_protection_level(uid)
+    )
+
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    # Build batch filename from first and last timestamps
+    first_ts = f'{sorted_chunks[0]["timestamp"]:.3f}'
+    last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
+    batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
+
+    if protection_level == 'enhanced':
+        # Encrypt each chunk individually (length-prefixed), stream to GCS
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
+        blob = bucket.blob(path)
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
+                f.write(encrypted_chunk)
+                del encrypted_chunk
+    else:
+        # Standard — stream raw PCM data to GCS
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
+        blob = bucket.blob(path)
+        with blob.open('wb', content_type='application/octet-stream') as f:
+            for chunk in sorted_chunks:
+                f.write(chunk['data'])
+
+    return [path]
 
 
 def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float]) -> None:
