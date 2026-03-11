@@ -8515,4 +8515,59 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Varbūt vēlāk';
+
+  @override
+  String get deleteSynced => 'Dzēst sinhronizētos';
+
+  @override
+  String get deleteSyncedFiles => 'Dzēst sinhronizētos ierakstus';
+
+  @override
+  String get deleteSyncedFilesMessage => 'Šie ieraksti jau ir sinhronizēti ar jūsu tālruni. To nevar atsaukt.';
+
+  @override
+  String get syncedFilesDeleted => 'Sinhronizētie ieraksti dzēsti';
+
+  @override
+  String get deletePending => 'Dzēst gaidošos';
+
+  @override
+  String get deletePendingFiles => 'Dzēst gaidošos ierakstus';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Šie ieraksti NAV sinhronizēti ar jūsu tālruni un tiks neatgriezeniski zaudēti. To nevar atsaukt.';
+
+  @override
+  String get pendingFilesDeleted => 'Gaidošie ieraksti dzēsti';
+
+  @override
+  String get deleteAllFiles => 'Dzēst visus ierakstus';
+
+  @override
+  String get deleteAll => 'Dzēst visu';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Tas dzēsīs sinhronizētos un gaidošos ierakstus. Gaidošie ieraksti NAV sinhronizēti un tiks neatgriezeniski zaudēti.';
+
+  @override
+  String get allFilesDeleted => 'Visi ieraksti dzēsti';
+
+  @override
+  String nFiles(int count) {
+    return '$count ierakstu';
+  }
+
+  @override
+  String get manageStorage => 'Pārvaldīt krātuvi';
+
+  @override
+  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+
+  @override
+  String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
+
+  @override
+  String get clearAll => 'Notīrīt visu';
 }
