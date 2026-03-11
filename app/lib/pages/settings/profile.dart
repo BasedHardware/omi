@@ -37,7 +37,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _prefetchProfileStatus();
   }
 
-  void _prefetchProfileStatus() async {
+  Future<void> _prefetchProfileStatus() async {
     final hasProfile = await userHasSpeakerProfile();
     if (mounted) setState(() => _hasProfile = hasProfile);
   }
@@ -45,7 +45,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void _showSpeechProfileSharingDialog(BuildContext context) {
     showShareSpeechProfileDialog(context, cachedHasProfile: _hasProfile);
   }
-
 
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(

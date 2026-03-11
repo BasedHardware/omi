@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Optional
 
@@ -39,7 +40,6 @@ from utils.other.storage import (
 )
 from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,11 @@ def api_share_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depends
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
-    share_speech_profile(uid, data.target_uid)
+    try:
+        share_speech_profile(uid, data.target_uid)
+    except Exception as e:
+        logger.error(f"Failed to share speech profile: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
     return {"status": "ok"}
 
 
@@ -166,7 +170,11 @@ def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depend
     """Revoke a previously shared speech profile"""
     if data.target_uid == uid:
         raise HTTPException(status_code=400, detail="Invalid target user ID.")
-    result = revoke_speech_profile_share(uid, data.target_uid)
+    try:
+        result = revoke_speech_profile_share(uid, data.target_uid)
+    except Exception as e:
+        logger.error(f"Failed to revoke speech profile share: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
     if not result:
         raise HTTPException(status_code=404, detail="No active share found.")
     return {"status": "ok"}
@@ -175,7 +183,11 @@ def api_revoke_speech_profile(data: ShareSpeechProfileRequest, uid: str = Depend
 @router.post('/v1/speech-profile/remove-shared', tags=['v1'])
 def api_remove_shared_profile(data: ShareSpeechProfileRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Allow the current user to remove a speech profile that was shared with them"""
-    result = remove_shared_profile_from_me(data.target_uid, uid)
+    try:
+        result = remove_shared_profile_from_me(data.target_uid, uid)
+    except Exception as e:
+        logger.error(f"Failed to remove shared profile: {e} {uid}")
+        raise HTTPException(status_code=503, detail="Temporarily unavailable.")
     if not result:
         raise HTTPException(status_code=404, detail="No active share found.")
     return {"status": "ok"}

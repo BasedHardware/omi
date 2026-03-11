@@ -35,7 +35,7 @@ Future<void> showShareSpeechProfileDialog(
 
   final controller = TextEditingController();
   if (!context.mounted) return;
-  showDialog(
+  showDialog<void>(
     context: context,
     builder: (ctx) {
       bool isSharing = false;
@@ -123,5 +123,5 @@ Future<void> showShareSpeechProfileDialog(
         },
       );
     },
-  );
+  ).whenComplete(() => controller.dispose());
 }

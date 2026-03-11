@@ -1616,6 +1616,10 @@ class CaptureProvider extends ChangeNotifier
           seg.personId = isUser ? null : event.personId;
         }
       }
+      // cache shared speaker names for transcript display
+      if (event.personId.startsWith('shared:')) {
+        sharedSpeakerNames[event.speakerId] = event.personName;
+      }
       _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
     }
     notifyListeners();
