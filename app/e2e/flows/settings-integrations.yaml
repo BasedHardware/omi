@@ -1,0 +1,42 @@
+# E2E Flow: Settings → Integrations — connect external services
+# Tests: integration list, connect/disconnect flow
+
+name: settings-integrations
+description: Settings → Integrations — view available integrations (Google Calendar, Gmail, Apple Health), connect/disconnect
+covers:
+  - app/lib/pages/settings/settings_drawer.dart
+  - app/lib/pages/settings/integrations_page.dart
+setup: normal
+
+steps:
+  - name: Open settings drawer
+    press: { type: button, position: rightmost }
+
+  - name: Open Integrations
+    press: { type: gesture, hint: "Integrations row — has BETA badge, in Profile section" }
+    screenshot: integrations-page
+
+  - name: Verify integrations page
+    assert:
+      interactive_count: { min: 3 }
+    note: >
+      Integration apps: Google Calendar, Gmail, Apple Health.
+      Each shows: icon, logo, status indicator, connect/disconnect button.
+
+  - name: Scroll integrations
+    scroll: down
+    screenshot: integrations-scrolled
+
+  - name: Tap connect on first integration
+    note: "Triggers OAuth flow (Google Calendar) or permissions (Apple Health)"
+    press: { type: gesture, hint: "Connect button on first integration item" }
+    screenshot: connect-flow
+
+  - name: Back from connect flow
+    back: true
+
+  - name: Back to settings
+    back: true
+
+  - name: Close settings
+    back: true
