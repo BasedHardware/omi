@@ -540,12 +540,23 @@ def delete_audio_chunks(uid: str, conversation_id: str, timestamps: List[float])
     for timestamp in timestamps:
         # Format timestamp to match upload format (3 decimal places)
         formatted_timestamp = f'{timestamp:.3f}'
-        # Try all possible extensions (opus + legacy)
-        for extension in PRIVATE_CLOUD_EXTENSIONS:
+        # Try all possible extensions (opus + legacy + batch)
+        for extension in ['.opus.enc', '.batch.enc', '.opus', '.batch.bin', '.enc', '.bin']:
             chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}{extension}'
             blob = bucket.blob(chunk_path)
             if blob.exists():
                 blob.delete()
+    # Also delete any batch files with timestamp ranges that start with any of the given timestamps
+    prefix = f'chunks/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=prefix):
+        filename = blob.name.split('/')[-1]
+        if '.batch.' not in filename:
+            continue
+        batch_start = filename.split('.batch.')[0].split('-')[0]
+        for timestamp in timestamps:
+            if batch_start == f'{timestamp:.3f}':
+                blob.delete()
+                break
 
 
 def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
@@ -562,23 +573,35 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[dict]:
     chunks = []
     for blob in blobs:
         # Extract timestamp from filename
-        # Supports: '1234567890.123.bin', '1234567890.123.enc',
-        #           '1234567890.123.opus', '1234567890.123.opus.enc'
+        # Per-chunk: '1234567890.123.bin', '.enc', '.opus', '.opus.enc'
+        # Batch: '1234567890.123-1234567895.123.batch.bin' or '.batch.enc'
         filename = blob.name.split('/')[-1]
-        has_valid_ext = any(filename.endswith(ext) for ext in PRIVATE_CLOUD_EXTENSIONS)
-        if has_valid_ext:
-            try:
-                timestamp_str = _strip_extension(filename)
-                timestamp = float(timestamp_str)
-                chunks.append(
-                    {
-                        'timestamp': timestamp,
-                        'path': blob.name,
-                        'size': blob.size,
-                    }
-                )
-            except ValueError:
-                continue
+        if not (filename.endswith('.bin') or filename.endswith('.enc') or filename.endswith('.opus')):
+            continue
+        try:
+            # Strip extension: .batch.enc/.batch.bin first, then .opus.enc/.opus, then .enc/.bin
+            if '.batch.' in filename:
+                timestamp_str = filename.split('.batch.')[0]
+            elif filename.endswith('.opus.enc'):
+                timestamp_str = filename[: -len('.opus.enc')]
+            elif filename.endswith('.opus'):
+                timestamp_str = filename[: -len('.opus')]
+            else:
+                timestamp_str = filename.rsplit('.', 1)[0]
+            # For batch files with range (e.g., '1000.000-1005.000'), use the first timestamp
+            if '-' in timestamp_str:
+                timestamp_str = timestamp_str.split('-')[0]
+            timestamp = float(timestamp_str)
+            chunks.append(
+                {
+                    'timestamp': timestamp,
+                    'path': blob.name,
+                    'size': blob.size,
+                    'is_batch': '.batch.' in filename,
+                }
+            )
+        except ValueError:
+            continue
 
     return sorted(chunks, key=lambda x: x['timestamp'])
 
@@ -624,59 +647,78 @@ def download_audio_chunks_and_merge(
 
     bucket = storage_client.bucket(private_cloud_sync_bucket)
 
-    def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
-        """Download a single chunk and return (timestamp, pcm_data)."""
-        formatted_timestamp = f'{timestamp:.3f}'
+    # Resolve actual GCS paths via list_audio_chunks to handle batch blobs
+    all_chunks = list_audio_chunks(uid, conversation_id)
+    timestamp_set = {f'{ts:.3f}' for ts in timestamps}
 
-        # Try all extensions in priority order: opus.enc, enc, opus, bin
-        extensions_to_try = [
-            ('opus.enc', True, True),  # (ext, encrypted, opus)
-            ('enc', True, False),
-            ('opus', False, True),
-            ('bin', False, False),
-        ]
+    # Map requested timestamps to actual paths (deduplicating batch blobs)
+    path_to_timestamp = {}  # path -> earliest timestamp (for ordering)
+    timestamp_to_path = {}  # formatted timestamp -> path
+    for chunk_info in all_chunks:
+        formatted_ts = f'{chunk_info["timestamp"]:.3f}'
+        if formatted_ts in timestamp_set:
+            path = chunk_info['path']
+            timestamp_to_path[formatted_ts] = path
+            if path not in path_to_timestamp:
+                path_to_timestamp[path] = chunk_info['timestamp']
 
-        for ext, encrypted, opus in extensions_to_try:
-            chunk_path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
-            try:
-                chunk_data = bucket.blob(chunk_path).download_as_bytes()
-            except NotFound:
-                continue
+    # For timestamps not found via list, fall back to per-chunk path construction
+    for ts in timestamps:
+        formatted_ts = f'{ts:.3f}'
+        if formatted_ts not in timestamp_to_path:
+            # Try per-chunk paths (legacy files)
+            for ext in ['.opus.enc', '.enc', '.opus', '.bin']:
+                path = f'chunks/{uid}/{conversation_id}/{formatted_ts}{ext}'
+                timestamp_to_path[formatted_ts] = path
+                path_to_timestamp[path] = ts
+                break
 
-            # Try decrypt + decode; on failure, fall back to next extension
-            try:
-                if encrypted:
-                    raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-                else:
-                    raw_data = chunk_data
+    def download_single_path(path: str) -> tuple[str, bytes | None]:
+        """Download a single blob path and return (path, pcm_data)."""
+        try:
+            chunk_data = bucket.blob(path).download_as_bytes()
+        except NotFound:
+            logger.warning(f"Chunk not found: {path}")
+            return (path, None)
 
-                if opus:
-                    pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                    del raw_data
-                else:
-                    pcm_data = raw_data
+        # Decrypt if encrypted (.enc or .batch.enc)
+        if path.endswith('.enc'):
+            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
+        else:
+            raw_data = chunk_data
 
-                return (timestamp, pcm_data)
-            except Exception as e:
-                logger.warning(
-                    f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"
-                )
-                continue
+        # Decode Opus if applicable (.opus or .opus.enc)
+        if '.opus' in path and '.batch.' not in path:
+            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+            del raw_data
+        else:
+            pcm_data = raw_data
 
-        logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-        return (timestamp, None)
+        return (path, pcm_data)
 
-    # Download chunks in parallel
-    chunk_results = {}
-    max_workers = min(10, len(timestamps))
+    # Download unique paths in parallel (batch blobs downloaded once)
+    unique_paths = list(path_to_timestamp.keys())
+    path_results = {}
+    max_workers = min(10, len(unique_paths)) if unique_paths else 1
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_timestamp = {executor.submit(download_single_chunk, ts): ts for ts in timestamps}
+        future_to_path = {executor.submit(download_single_path, p): p for p in unique_paths}
 
-        for future in as_completed(future_to_timestamp):
-            timestamp, pcm_data = future.result()
+        for future in as_completed(future_to_path):
+            path, pcm_data = future.result()
             if pcm_data is not None:
-                chunk_results[timestamp] = pcm_data
+                path_results[path] = pcm_data
+
+    # Map back to timestamp-keyed results for merge logic
+    chunk_results = {}
+    for ts in timestamps:
+        formatted_ts = f'{ts:.3f}'
+        path = timestamp_to_path.get(formatted_ts)
+        if path and path in path_results:
+            chunk_results[ts] = path_results[path]
+
+    # Free path_results to avoid double memory
+    path_results.clear()
 
     # Merge chunks
     merged_data = bytearray()
