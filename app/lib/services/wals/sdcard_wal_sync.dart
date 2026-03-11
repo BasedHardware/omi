@@ -676,6 +676,14 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   @override
+  Future<void> deleteAllPendingWals() async {
+    final pendingWals = _wals.where((w) => w.status == WalStatus.miss || w.status == WalStatus.corrupted).toList();
+    for (final wal in pendingWals) {
+      await deleteWal(wal);
+    }
+  }
+
+  @override
   Future<bool> isWifiSyncSupported() async {
     if (_device == null) {
       Logger.debug("SDCardWalSync WiFi: No device connected");
