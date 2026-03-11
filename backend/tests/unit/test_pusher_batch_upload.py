@@ -4,16 +4,14 @@ Tests the batching behavior in process_private_cloud_queue() without importing
 the full pusher module. Mirrors the pattern used in test_pusher_private_cloud_data_protection.py.
 """
 
-import os
 import time
 
 import pytest
 
-# --- Reimplemented constants (mirrors pusher.py, feature-flagged) ---
+# --- Reimplemented constants (mirrors pusher.py) ---
 
-PRIVATE_CLOUD_BATCH_PUSHER_ENABLED = os.environ.get('PRIVATE_CLOUD_BATCH_PUSHER_ENABLED', 'false').lower() == 'true'
-PRIVATE_CLOUD_CHUNK_DURATION = 60.0 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 5.0
-PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 0.0
+PRIVATE_CLOUD_CHUNK_DURATION = 60.0
+PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
 
@@ -32,17 +30,15 @@ def _add_to_batch(pending, chunk_info):
     batch['data'].extend(chunk_info['data'])
 
 
-def _get_flush_candidates(pending, sample_rate, now, websocket_active=True, chunk_duration=None, batch_max_age=None):
+def _get_flush_candidates(pending, sample_rate, now, websocket_active=True):
     """Mirrors the flush decision logic in process_private_cloud_queue."""
-    _chunk_duration = chunk_duration if chunk_duration is not None else PRIVATE_CLOUD_CHUNK_DURATION
-    _batch_max_age = batch_max_age if batch_max_age is not None else PRIVATE_CLOUD_BATCH_MAX_AGE
-    batch_size_threshold = sample_rate * 2 * _chunk_duration
+    batch_size_threshold = sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION
     conv_ids_to_flush = []
     for conv_id, batch in pending.items():
         batch_age = now - batch['queued_at']
         is_shutdown = not websocket_active
         is_size_ready = len(batch['data']) >= batch_size_threshold
-        is_age_ready = batch_age >= _batch_max_age
+        is_age_ready = batch_age >= PRIVATE_CLOUD_BATCH_MAX_AGE
         if is_shutdown or is_size_ready or is_age_ready:
             conv_ids_to_flush.append(conv_id)
     return conv_ids_to_flush
@@ -93,7 +89,7 @@ class TestBatchAccumulation:
 
 
 class TestSizeFlush:
-    """Tests that batches flush when they reach 60s of audio data (enabled mode)."""
+    """Tests that batches flush when they reach 60s of audio data."""
 
     def test_flush_at_60s_threshold(self):
         """Batch flushes when accumulated data reaches 60s at sample_rate=8000."""
@@ -110,13 +106,11 @@ class TestSizeFlush:
                 '_queued_at': now,
             },
         )
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' in flush
 
     def test_no_flush_just_below_threshold(self):
-        """Batch does NOT flush when 1 byte below the 60s threshold (enabled mode)."""
+        """Batch does NOT flush when 1 byte below the 60s threshold."""
         pending = {}
         sample_rate = 8000
         now = time.monotonic()
@@ -130,13 +124,11 @@ class TestSizeFlush:
                 '_queued_at': now,
             },
         )
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' not in flush
 
     def test_no_flush_below_threshold(self):
-        """Batch does NOT flush when below 60s of data and within max age (enabled mode)."""
+        """Batch does NOT flush when below 60s of data and within max age."""
         pending = {}
         sample_rate = 8000
         now = time.monotonic()
@@ -150,14 +142,12 @@ class TestSizeFlush:
                 '_queued_at': now,
             },
         )
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' not in flush
 
 
 class TestMaxAgeFlush:
-    """Tests that the 60s max-age timer forces flush of idle conversations (enabled mode)."""
+    """Tests that the 60s max-age timer forces flush of idle conversations."""
 
     def test_flush_after_max_age(self):
         """Sub-threshold batch flushes when oldest chunk exceeds 60s age."""
@@ -174,9 +164,7 @@ class TestMaxAgeFlush:
             },
         )
         now = time.monotonic()
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' in flush
 
     def test_flush_at_exact_max_age(self):
@@ -192,9 +180,7 @@ class TestMaxAgeFlush:
             'queued_at': queued_at,
             'retries': 0,
         }
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' in flush
 
     def test_no_flush_just_before_max_age(self):
@@ -210,13 +196,11 @@ class TestMaxAgeFlush:
             'queued_at': queued_at,
             'retries': 0,
         }
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' not in flush
 
     def test_no_flush_before_max_age(self):
-        """Batch within max-age window does not flush (enabled mode)."""
+        """Batch within max-age window does not flush."""
         pending = {}
         sample_rate = 8000
         recent_time = time.monotonic() - 30.0  # 30 seconds ago
@@ -230,9 +214,7 @@ class TestMaxAgeFlush:
             },
         )
         now = time.monotonic()
-        flush = _get_flush_candidates(
-            pending, sample_rate, now, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
         assert 'conv-1' not in flush
 
 
@@ -240,7 +222,7 @@ class TestRetryBackoff:
     """Tests that failed uploads reset queued_at for natural backoff."""
 
     def test_retry_resets_queued_at(self):
-        """After upload failure, queued_at is reset so batch won't re-flush for ~60s (enabled mode)."""
+        """After upload failure, queued_at is reset so batch won't re-flush for ~60s."""
         pending = {}
         sample_rate = 8000
         now = 1000.0
@@ -256,15 +238,11 @@ class TestRetryBackoff:
         pending['conv-1'] = failed_batch
 
         # 59.9s later — should NOT flush yet (backoff)
-        flush = _get_flush_candidates(
-            pending, sample_rate, now + 59.9, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now + 59.9, websocket_active=True)
         assert 'conv-1' not in flush
 
         # 60s later — should flush (backoff expired)
-        flush = _get_flush_candidates(
-            pending, sample_rate, now + 60.0, websocket_active=True, chunk_duration=60.0, batch_max_age=60.0
-        )
+        flush = _get_flush_candidates(pending, sample_rate, now + 60.0, websocket_active=True)
         assert 'conv-1' in flush
 
     def test_retry_preserves_data_and_increments_count(self):
@@ -431,7 +409,7 @@ def _finalize_audio_file_group_duration(chunk_group):
     return duration
 
 
-def _group_chunks_by_gap(chunks, gap_threshold=90 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 30):
+def _group_chunks_by_gap(chunks, gap_threshold=90):
     """Mirrors create_audio_files_from_chunks gap grouping from conversations.py."""
     groups = []
     current_group = []
@@ -451,10 +429,10 @@ def _group_chunks_by_gap(chunks, gap_threshold=90 if PRIVATE_CLOUD_BATCH_PUSHER_
 
 
 class TestAudioFileGapThreshold:
-    """Tests for gap threshold in create_audio_files_from_chunks (both flag states)."""
+    """Tests for the 90s gap threshold in create_audio_files_from_chunks."""
 
-    def test_gap_at_90s_no_split_when_enabled(self):
-        """With batching enabled (threshold=90), chunks 90s apart should NOT split."""
+    def test_gap_at_90s_no_split(self):
+        """Chunks 90s apart should NOT split (gap <= threshold)."""
         chunks = [
             {'timestamp': 1000.0, 'size': 960_000},
             {'timestamp': 1090.0, 'size': 960_000},
@@ -463,8 +441,8 @@ class TestAudioFileGapThreshold:
         assert len(groups) == 1
         assert len(groups[0]) == 2
 
-    def test_gap_at_91s_splits_when_enabled(self):
-        """With batching enabled (threshold=90), chunks 91s apart should split."""
+    def test_gap_at_91s_splits(self):
+        """Chunks 91s apart should split (gap > threshold)."""
         chunks = [
             {'timestamp': 1000.0, 'size': 960_000},
             {'timestamp': 1091.0, 'size': 960_000},
@@ -474,37 +452,19 @@ class TestAudioFileGapThreshold:
         assert len(groups[0]) == 1
         assert len(groups[1]) == 1
 
-    def test_60s_chunks_stay_grouped_when_enabled(self):
-        """With batching enabled, consecutive 60s chunks stay in one group."""
+    def test_60s_chunks_stay_grouped(self):
+        """Consecutive 60s chunks (normal batching pattern) stay in one group."""
         chunks = [{'timestamp': 1000.0 + i * 60.0, 'size': 960_000} for i in range(5)]
         groups = _group_chunks_by_gap(chunks, gap_threshold=90)
         assert len(groups) == 1
         assert len(groups[0]) == 5
 
     def test_5s_chunks_stay_grouped(self):
-        """Legacy 5s chunks group correctly with either threshold."""
+        """Legacy 5s chunks still group correctly."""
         chunks = [{'timestamp': 1000.0 + i * 5.0, 'size': 80_000} for i in range(12)]
         groups = _group_chunks_by_gap(chunks, gap_threshold=90)
         assert len(groups) == 1
         assert len(groups[0]) == 12
-
-    def test_legacy_threshold_30s_splits_at_31s(self):
-        """With batching disabled (threshold=30), chunks 31s apart should split."""
-        chunks = [
-            {'timestamp': 1000.0, 'size': 80_000},
-            {'timestamp': 1031.0, 'size': 80_000},
-        ]
-        groups = _group_chunks_by_gap(chunks, gap_threshold=30)
-        assert len(groups) == 2
-
-    def test_legacy_threshold_30s_no_split_at_30s(self):
-        """With batching disabled (threshold=30), chunks 30s apart should NOT split."""
-        chunks = [
-            {'timestamp': 1000.0, 'size': 80_000},
-            {'timestamp': 1030.0, 'size': 80_000},
-        ]
-        groups = _group_chunks_by_gap(chunks, gap_threshold=30)
-        assert len(groups) == 1
 
 
 class TestAudioFileDurationFromSize:
@@ -544,35 +504,13 @@ class TestAudioFileDurationFromSize:
         assert abs(duration - 180.0) < 0.01
 
 
-class TestFeatureFlagDefaults:
-    """Tests that PRIVATE_CLOUD_BATCH_PUSHER_ENABLED defaults to false with safe values."""
+class TestConstants:
+    """Tests that batch constants are set correctly."""
 
-    def test_flag_default_is_false(self):
-        """Without env var, feature flag defaults to false."""
-        # Tests run without PRIVATE_CLOUD_BATCH_PUSHER_ENABLED set
-        assert PRIVATE_CLOUD_BATCH_PUSHER_ENABLED is False
+    def test_chunk_duration_is_60s(self):
+        """Chunk duration is 60s for batch upload."""
+        assert PRIVATE_CLOUD_CHUNK_DURATION == 60.0
 
-    def test_chunk_duration_default_is_5s(self):
-        """Without feature flag, chunk duration is 5s (legacy behavior)."""
-        assert PRIVATE_CLOUD_CHUNK_DURATION == 5.0
-
-    def test_batch_max_age_default_is_zero(self):
-        """Without feature flag, batch max age is 0 (flush immediately, no batching)."""
-        assert PRIVATE_CLOUD_BATCH_MAX_AGE == 0.0
-
-    def test_gap_threshold_default_is_30(self):
-        """Without feature flag, gap threshold is 30s (legacy behavior)."""
-        gap = 90 if PRIVATE_CLOUD_BATCH_PUSHER_ENABLED else 30
-        assert gap == 30
-
-    def test_immediate_flush_when_disabled(self):
-        """With BATCH_MAX_AGE=0.0, every chunk flushes immediately (no batching)."""
-        pending = {}
-        sample_rate = 8000
-        now = time.monotonic()
-        _add_to_batch(
-            pending, {'data': b'\x00' * 1000, 'conversation_id': 'conv-1', 'timestamp': 1.0, '_queued_at': now}
-        )
-        # With MAX_AGE=0.0, batch_age >= 0.0 is always true → immediate flush
-        flush = _get_flush_candidates(pending, sample_rate, now, websocket_active=True)
-        assert 'conv-1' in flush
+    def test_batch_max_age_is_60s(self):
+        """Batch max age is 60s."""
+        assert PRIVATE_CLOUD_BATCH_MAX_AGE == 60.0
