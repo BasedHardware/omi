@@ -2678,7 +2678,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šodien nav uzdevumu.\\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
+      'Šodien nav uzdevumu.\nJautājiet Omi par vairāk uzdevumiem vai izveidojiet tos manuāli.';
 
   @override
   String get dailyScore => 'DIENAS REZULTĀTS';

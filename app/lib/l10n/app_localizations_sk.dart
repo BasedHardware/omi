@@ -2678,7 +2678,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get showAll => 'Zobraziť všetko →';
 
   @override
-  String get noTasksForToday => 'Žiadne úlohy na dnes.\\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
+  String get noTasksForToday => 'Žiadne úlohy na dnes.\nSpýtajte sa Omi na ďalšie úlohy alebo ich vytvorte manuálne.';
 
   @override
   String get dailyScore => 'DENNÉ SKÓRE';

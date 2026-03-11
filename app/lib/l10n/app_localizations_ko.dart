@@ -2630,7 +2630,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showAll => '모두 표시 →';
 
   @override
-  String get noTasksForToday => '오늘의 작업이 없습니다.\\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
+  String get noTasksForToday => '오늘의 작업이 없습니다.\nOmi에게 더 많은 작업을 요청하거나 수동으로 생성하세요.';
 
   @override
   String get dailyScore => '일일 점수';

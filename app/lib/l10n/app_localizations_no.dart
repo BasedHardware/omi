@@ -2670,7 +2670,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get showAll => 'Vis alle →';
 
   @override
-  String get noTasksForToday => 'Ingen oppgaver for i dag.\\nSpør Omi om flere oppgaver eller opprett manuelt.';
+  String get noTasksForToday => 'Ingen oppgaver for i dag.\nSpør Omi om flere oppgaver eller opprett manuelt.';
 
   @override
   String get dailyScore => 'DAGLIG POENGSUM';

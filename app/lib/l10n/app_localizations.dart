@@ -5142,7 +5142,7 @@ abstract class AppLocalizations {
   /// Message shown when there are no tasks due today
   ///
   /// In en, this message translates to:
-  /// **'No tasks for today.\\nAsk Omi for more tasks or create manually.'**
+  /// **'No tasks for today.\nAsk Omi for more tasks or create manually.'**
   String get noTasksForToday;
 
   /// Header for daily score widget

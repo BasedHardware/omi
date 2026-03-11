@@ -2695,7 +2695,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get showAll => 'Alle anzeigen →';
 
   @override
-  String get noTasksForToday => 'Keine Aufgaben für heute.\\nFrage Omi nach mehr Aufgaben oder erstelle sie manuell.';
+  String get noTasksForToday => 'Keine Aufgaben für heute.\nFrage Omi nach mehr Aufgaben oder erstelle sie manuell.';
 
   @override
   String get dailyScore => 'TAGES-SCORE';

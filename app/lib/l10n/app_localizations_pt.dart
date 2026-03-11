@@ -2648,7 +2648,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get showAll => 'Mostrar tudo →';
 
   @override
-  String get noTasksForToday => 'Nenhuma tarefa para hoje.\\nPergunte ao Omi por mais tarefas ou crie manualmente.';
+  String get noTasksForToday => 'Nenhuma tarefa para hoje.\nPergunte ao Omi por mais tarefas ou crie manualmente.';
 
   @override
   String get dailyScore => 'PONTUAÇÃO DIÁRIA';

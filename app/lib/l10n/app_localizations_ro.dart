@@ -2687,7 +2687,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Nicio sarcină pentru astăzi.\\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
+      'Nicio sarcină pentru astăzi.\nÎntrebați Omi pentru mai multe sarcini sau creați manual.';
 
   @override
   String get dailyScore => 'SCOR ZILNIC';

@@ -2673,7 +2673,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Šiandien nėra užduočių.\\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
+      'Šiandien nėra užduočių.\nPaprašykite Omi daugiau užduočių arba sukurkite rankiniu būdu.';
 
   @override
   String get dailyScore => 'DIENOS BALAS';

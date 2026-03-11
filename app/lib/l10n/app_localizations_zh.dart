@@ -2625,7 +2625,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get showAll => '显示全部 →';
 
   @override
-  String get noTasksForToday => '今天没有任务。\\n向Omi询问更多任务或手动创建。';
+  String get noTasksForToday => '今天没有任务。\n向Omi询问更多任务或手动创建。';
 
   @override
   String get dailyScore => '每日评分';

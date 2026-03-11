@@ -2682,7 +2682,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Tiada tugasan untuk hari ini.\\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.';
+      'Tiada tugasan untuk hari ini.\nTanya Omi untuk lebih banyak tugasan atau cipta secara manual.';
 
   @override
   String get dailyScore => 'SKOR HARIAN';

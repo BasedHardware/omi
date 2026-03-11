@@ -2695,7 +2695,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noTasksForToday =>
-      'Aucune tâche pour aujourd\'hui.\\nDemandez à Omi plus de tâches ou créez-les manuellement.';
+      'Aucune tâche pour aujourd\'hui.\nDemandez à Omi plus de tâches ou créez-les manuellement.';
 
   @override
   String get dailyScore => 'SCORE QUOTIDIEN';

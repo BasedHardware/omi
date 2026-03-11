@@ -2677,7 +2677,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get showAll => 'Hiển thị tất cả →';
 
   @override
-  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
+  String get noTasksForToday => 'Không có nhiệm vụ cho hôm nay.\nHỏi Omi để có thêm nhiệm vụ hoặc tạo thủ công.';
 
   @override
   String get dailyScore => 'ĐIỂM HÀNG NGÀY';

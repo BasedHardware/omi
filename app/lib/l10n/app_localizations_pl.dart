@@ -2677,7 +2677,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get showAll => 'Pokaż wszystko →';
 
   @override
-  String get noTasksForToday => 'Brak zadań na dziś.\\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.';
+  String get noTasksForToday => 'Brak zadań na dziś.\nZapytaj Omi o więcej zadań lub utwórz je ręcznie.';
 
   @override
   String get dailyScore => 'DZIENNY WYNIK';

@@ -2686,7 +2686,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get showAll => 'Mostra-ho tot →';
 
   @override
-  String get noTasksForToday => 'No hi ha tasques per avui.\\nDemana a Omi més tasques o crea-les manualment.';
+  String get noTasksForToday => 'No hi ha tasques per avui.\nDemana a Omi més tasques o crea-les manualment.';
 
   @override
   String get dailyScore => 'PUNTUACIÓ DIÀRIA';

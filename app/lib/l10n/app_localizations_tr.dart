@@ -2678,7 +2678,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get showAll => 'Hepsini göster →';
 
   @override
-  String get noTasksForToday => 'Bugün için görev yok.\\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
+  String get noTasksForToday => 'Bugün için görev yok.\nDaha fazla görev için Omi\'ye sorun veya manuel oluşturun.';
 
   @override
   String get dailyScore => 'GÜNLÜK SKOR';
