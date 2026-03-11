@@ -465,7 +465,7 @@ async def _websocket_util_trigger(
                             private_cloud_chunk_start_time = buffer_start_timestamp
 
                         private_cloud_sync_buffer.extend(audio_data)
-                        # Queue chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
+                        # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
                             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_WARN_SIZE:
                                 logger.warning(f"Warning: private_cloud_queue size {len(private_cloud_queue)} {uid}")
