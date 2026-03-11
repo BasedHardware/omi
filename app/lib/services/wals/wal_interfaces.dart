@@ -68,6 +68,7 @@ abstract class LocalWalSync implements IWalSync {
   Future<void> addExternalWal(Wal wal);
   Future<List<Wal>> getAllWals();
   Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
   void onByteStream(List<int> value);
   void onBytesSync(List<int> value);
   Future onAudioCodecChanged(BleAudioCodec codec);
@@ -78,6 +79,7 @@ abstract class SDCardWalSync implements IWalSync {
   void setLocalSync(LocalWalSync localSync);
   void setDevice(BtDevice? device);
   Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
   bool get isSyncing;
   double get currentSpeedKBps;
 
@@ -96,5 +98,6 @@ abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);
   Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
   bool get isSyncing;
 }
