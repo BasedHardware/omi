@@ -249,7 +249,7 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get close;
 
-  /// Clear button
+  /// Button label to clear files
   ///
   /// In en, this message translates to:
   /// **'Clear'**
@@ -15878,6 +15878,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Maybe later'**
   String get phoneCallsMaybeLater;
+
+  /// Menu option to delete synced recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced'**
+  String get deleteSynced;
+
+  /// Dialog title for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Synced Recordings'**
+  String get deleteSyncedFiles;
+
+  /// Confirmation message for deleting synced files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have already been synced to your phone. This cannot be undone.'**
+  String get deleteSyncedFilesMessage;
+
+  /// Snackbar message after synced files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Synced recordings deleted'**
+  String get syncedFilesDeleted;
+
+  /// Menu option to delete pending recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending'**
+  String get deletePending;
+
+  /// Dialog title for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Pending Recordings'**
+  String get deletePendingFiles;
+
+  /// Warning message for deleting pending files
+  ///
+  /// In en, this message translates to:
+  /// **'These recordings have NOT been synced to your phone and will be permanently lost. This cannot be undone.'**
+  String get deletePendingFilesWarning;
+
+  /// Snackbar message after pending files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Pending recordings deleted'**
+  String get pendingFilesDeleted;
+
+  /// Dialog title for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All Recordings'**
+  String get deleteAllFiles;
+
+  /// Menu option to delete all recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Delete All'**
+  String get deleteAll;
+
+  /// Warning message for deleting all files
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This cannot be undone.'**
+  String get deleteAllFilesWarning;
+
+  /// Snackbar message after all files deleted
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings deleted'**
+  String get allFilesDeleted;
+
+  /// Count of files
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recordings'**
+  String nFiles(int count);
+
+  /// Menu option and sheet title for managing recording storage
+  ///
+  /// In en, this message translates to:
+  /// **'Manage Storage'**
+  String get manageStorage;
+
+  /// Description for synced files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Safely backed up to your phone'**
+  String get safelyBackedUp;
+
+  /// Description for pending files in manage storage sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Not yet synced to your phone'**
+  String get notYetSynced;
+
+  /// Button label to clear all files
+  ///
+  /// In en, this message translates to:
+  /// **'Clear All'**
+  String get clearAll;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
