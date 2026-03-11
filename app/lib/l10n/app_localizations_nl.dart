@@ -8525,4 +8525,60 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get phoneCallsMaybeLater => 'Misschien later';
+
+  @override
+  String get deleteSynced => 'Gesynchroniseerde verwijderen';
+
+  @override
+  String get deleteSyncedFiles => 'Gesynchroniseerde opnames verwijderen';
+
+  @override
+  String get deleteSyncedFilesMessage =>
+      'Deze opnames zijn al gesynchroniseerd met uw telefoon. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get syncedFilesDeleted => 'Gesynchroniseerde opnames verwijderd';
+
+  @override
+  String get deletePending => 'Wachtende verwijderen';
+
+  @override
+  String get deletePendingFiles => 'Wachtende opnames verwijderen';
+
+  @override
+  String get deletePendingFilesWarning =>
+      'Deze opnames zijn NIET gesynchroniseerd met uw telefoon en gaan permanent verloren. Dit kan niet ongedaan worden gemaakt.';
+
+  @override
+  String get pendingFilesDeleted => 'Wachtende opnames verwijderd';
+
+  @override
+  String get deleteAllFiles => 'Alle opnames verwijderen';
+
+  @override
+  String get deleteAll => 'Alles verwijderen';
+
+  @override
+  String get deleteAllFilesWarning =>
+      'Dit verwijdert gesynchroniseerde en wachtende opnames. Wachtende opnames zijn NIET gesynchroniseerd en gaan permanent verloren.';
+
+  @override
+  String get allFilesDeleted => 'Alle opnames verwijderd';
+
+  @override
+  String nFiles(int count) {
+    return '$count opnames';
+  }
+
+  @override
+  String get manageStorage => 'Opslag beheren';
+
+  @override
+  String get safelyBackedUp => 'Veilig opgeslagen op uw telefoon';
+
+  @override
+  String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
+
+  @override
+  String get clearAll => 'Alles wissen';
 }
