@@ -429,8 +429,8 @@ if [ -n "$MACOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
     echo "$MACOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
     echo "Injected prod GoogleService-Info.plist from CI secret"
 else
-    cp Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
-    echo "WARNING: Using dev GoogleService-Info.plist (MACOS_GOOGLE_SERVICE_INFO_PLIST not set)"
+    echo "ERROR: MACOS_GOOGLE_SERVICE_INFO_PLIST not set — refusing release build without prod Firebase config"
+    exit 1
 fi
 
 # Copy resource bundle (contains app assets like permissions.gif, herologo.png, etc.)
