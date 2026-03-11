@@ -22,9 +22,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Feature flag for Opus encoding in private cloud sync
-PRIVATE_CLOUD_OPUS_ENABLED = os.getenv('PRIVATE_CLOUD_OPUS_ENABLED', 'false').lower() == 'true'
-
 # Opus encoding constants
 OPUS_SAMPLE_RATE = 16000
 OPUS_CHANNELS = 1
@@ -462,23 +459,15 @@ def upload_audio_chunk(
     # Format timestamp to 3 decimal places for cleaner filenames
     formatted_timestamp = f'{timestamp:.3f}'
 
-    # Opus encode if enabled
-    if PRIVATE_CLOUD_OPUS_ENABLED:
-        upload_data = encode_pcm_to_opus(chunk_data)
-    else:
-        upload_data = chunk_data
+    upload_data = encode_pcm_to_opus(chunk_data)
 
     if protection_level == 'enhanced':
-        # Encrypt as length-prefixed binary
         encrypted_chunk = encryption.encrypt_audio_chunk(upload_data, uid)
-        ext = 'opus.enc' if PRIVATE_CLOUD_OPUS_ENABLED else 'enc'
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus.enc'
         blob = bucket.blob(path)
         blob.upload_from_string(encrypted_chunk, content_type='application/octet-stream')
     else:
-        # Standard - no encryption
-        ext = 'opus' if PRIVATE_CLOUD_OPUS_ENABLED else 'bin'
-        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.{ext}'
+        path = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.opus'
         blob = bucket.blob(path)
         blob.upload_from_string(upload_data, content_type='application/octet-stream')
 
